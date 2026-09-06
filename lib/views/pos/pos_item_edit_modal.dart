@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../models/models.dart';
 
@@ -485,7 +484,7 @@ class _PosItemEditModalState extends State<PosItemEditModal> {
                                   boxShadow: _discountType == 'flat'
                                       ? [
                                           BoxShadow(
-                                            color: Colors.black.withOpacity(0.06),
+                                            color: Colors.black.withValues(alpha: 0.06),
                                             blurRadius: 4,
                                             offset: const Offset(0, 1),
                                           )
@@ -512,7 +511,7 @@ class _PosItemEditModalState extends State<PosItemEditModal> {
                                   boxShadow: _discountType == 'percentage'
                                       ? [
                                           BoxShadow(
-                                            color: Colors.black.withOpacity(0.06),
+                                            color: Colors.black.withValues(alpha: 0.06),
                                             blurRadius: 4,
                                             offset: const Offset(0, 1),
                                           )

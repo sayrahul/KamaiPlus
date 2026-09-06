@@ -4,8 +4,10 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:uuid/uuid.dart';
 import '../../core/database/local_database.dart';
+import '../../core/utils/app_validators.dart';
 import '../../core/utils/money_formatter.dart';
 import '../../models/models.dart';
+import '../../services/firestore_sync_service.dart';
 import '../common/kamai_bottom_nav.dart';
 
 class CustomersScreen extends StatefulWidget {
@@ -123,18 +125,33 @@ class _CustomersScreenState extends State<CustomersScreen> {
               height: 48,
               child: ElevatedButton(
                 onPressed: () async {
-                  if (nameCtrl.text.trim().isEmpty || phoneCtrl.text.trim().length < 10) {
+                  final name = nameCtrl.text.trim();
+                  if (name.isEmpty) {
                     ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Please enter a valid customer name and 10-digit phone number')),
+                      const SnackBar(
+                        content: Text('Please enter customer full name'),
+                        backgroundColor: Color(0xFFDC2626),
+                      ),
                     );
                     return;
                   }
+                  final phoneErr = AppValidators.validatePhone(phoneCtrl.text.trim());
+                  if (phoneErr != null) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text(phoneErr),
+                        backgroundColor: const Color(0xFFDC2626),
+                      ),
+                    );
+                    return;
+                  }
+                  final cleanPhone = AppValidators.cleanPhone(phoneCtrl.text.trim());
                   final limit = int.tryParse(limitCtrl.text.trim()) ?? 5000;
                   final newCust = CustomerModel(
                     id: const Uuid().v4(),
-                    businessId: 'default_business',
-                    name: nameCtrl.text.trim(),
-                    phone: phoneCtrl.text.trim(),
+                    businessId: FirestoreSyncService.instance.activeBusinessId,
+                    name: name,
+                    phone: cleanPhone,
                     creditLimitPaise: limit * 100,
                   );
                   await LocalDatabase.instance.upsertCustomer(newCust);

@@ -351,13 +351,14 @@ class _CashRegisterScreenState extends State<CashRegisterScreen> {
                       note: '',
                     );
 
+                    final messenger = ScaffoldMessenger.of(context);
                     await LocalDatabase.instance.addExpense(exp);
-                    if (!mounted) return;
                     if (ctx.mounted) Navigator.pop(ctx);
-                    await _loadRegisterData();
-
                     if (!mounted) return;
-                    ScaffoldMessenger.of(context).showSnackBar(
+                    await _loadRegisterData();
+                    if (!mounted) return;
+
+                    messenger.showSnackBar(
                       SnackBar(
                         content: Text('Petty expense recorded: -₹$amtRupees ($selectedCat)'),
                         backgroundColor: const Color(0xFFDC2626),

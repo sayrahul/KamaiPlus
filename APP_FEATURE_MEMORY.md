@@ -150,3 +150,15 @@ The Bottom Navigation Bar has 5 items. The navigation contract is strictly defin
    When adding `KamaiBottomNav` to screens, ensure it is ONLY on pushed standalone sub-screens. Primary tabs in `HomeDashboardScreen` must NEVER have inner `bottomNavigationBar`.
 3. **NO Automatic APK Compiles:**
    Only compile and install APK on device when the user explicitly commands it (*"har baar APK compile mat karo.. me jab bolunga tabhi"*).
+
+---
+
+## 🔒 5. VALIDATION ENGINE & RETAIL STANDARDS (`lib/core/utils/app_validators.dart`)
+Standardized Indian retail input validation across the app:
+* **Mobile Numbers:** TRAI 10-digit format (`^[6-9]\d{9}$`). Handles cleaning of `+91`, spaces, hyphens, and leading zeros.
+* **OTP Verification:** Strict 4-digit numeric verification (`^\d{4}$`).
+* **UPI VPAs:** Dynamic NPCI VPA format (`^[a-zA-Z0-9.\-_]{2,256}@[a-zA-Z]{2,64}$`).
+* **GSTIN:** 15-character Indian GST format (`^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$`).
+* **FSSAI License:** 14-digit food business standard (`^\d{14}$`).
+* **Pincode:** Indian Postal 6-digit standard (`^[1-9][0-9]{5}$`).
+* **Active Bindings:** Wired into `LoginScreen`, `SignupStoreScreen`, `StoreProfileScreen`, `PosCheckoutModal` (quick customer add), and `CustomersScreen` / `KhataScreen`.

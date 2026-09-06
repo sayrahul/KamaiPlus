@@ -3,6 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:uuid/uuid.dart';
 import '../../core/database/local_database.dart';
 import '../../models/models.dart';
+import '../../services/firestore_sync_service.dart';
 import 'barcode_scanner_modal.dart';
 
 class AddProductModal extends StatefulWidget {
@@ -163,7 +164,7 @@ class _AddProductModalState extends State<AddProductModal> {
               if (name.isNotEmpty) {
                 final newCat = CategoryModel(
                   id: 'cat_${DateTime.now().millisecondsSinceEpoch}',
-                  businessId: 'biz_default',
+                  businessId: FirestoreSyncService.instance.activeBusinessId,
                   name: name,
                 );
                 await LocalDatabase.instance.upsertCategory(newCat);
@@ -202,7 +203,7 @@ class _AddProductModalState extends State<AddProductModal> {
 
       final p = ProductModel(
         id: widget.existingProduct?.id ?? const Uuid().v4(),
-        businessId: widget.existingProduct?.businessId ?? 'biz_default',
+        businessId: widget.existingProduct?.businessId ?? FirestoreSyncService.instance.activeBusinessId,
         name: _nameCtrl.text.trim(),
         barcode: _barcodeCtrl.text.trim().isNotEmpty ? _barcodeCtrl.text.trim() : null,
         categoryId: _selectedCategoryId,

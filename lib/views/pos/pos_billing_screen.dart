@@ -570,7 +570,7 @@ class _PosBillingScreenState extends State<PosBillingScreen> {
               ),
               boxShadow: [
                 BoxShadow(
-                  color: isInCart ? const Color(0xFFFBBF24).withOpacity(0.12) : Colors.black.withOpacity(0.02),
+                  color: isInCart ? const Color(0xFFFBBF24).withValues(alpha: 0.12) : Colors.black.withValues(alpha: 0.02),
                   blurRadius: 6,
                   offset: const Offset(0, 2),
                 ),
@@ -695,7 +695,7 @@ class _PosBillingScreenState extends State<PosBillingScreen> {
         border: Border.all(color: const Color(0xFFE2E8F0)),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.08),
+            color: Colors.black.withValues(alpha: 0.08),
             blurRadius: 18,
             offset: const Offset(0, 4),
           ),

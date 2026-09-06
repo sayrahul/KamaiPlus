@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../core/database/local_database.dart';
+import '../../core/utils/app_validators.dart';
 import '../../models/models.dart';
 import '../dashboard/home_dashboard_screen.dart';
 import '../purchases/purchases_screen.dart';
@@ -292,7 +293,7 @@ class _SignupStoreScreenState extends State<SignupStoreScreen> {
                     TextFormField(
                       controller: _phoneCtrl,
                       keyboardType: TextInputType.phone,
-                      validator: (v) => v!.replaceAll(' ', '').length < 10 ? '10-digit number required' : null,
+                      validator: (v) => AppValidators.validatePhone(v),
                       style: GoogleFonts.inter(fontSize: 14, color: Colors.white, fontWeight: FontWeight.w600),
                       decoration: InputDecoration(
                         filled: true,
@@ -360,7 +361,7 @@ class _SignupStoreScreenState extends State<SignupStoreScreen> {
                     const SizedBox(height: 6),
                     TextFormField(
                       controller: _upiCtrl,
-                      validator: (v) => v!.trim().isEmpty ? 'UPI VPA required' : null,
+                      validator: (v) => AppValidators.validateUpi(v),
                       style: GoogleFonts.inter(fontSize: 14, color: Colors.white),
                       decoration: _buildInputDecoration(
                         hint: 'e.g. 9876543210@paytm or store@okaxis',

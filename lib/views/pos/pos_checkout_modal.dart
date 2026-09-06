@@ -6,6 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
 import '../../models/models.dart';
 import '../../core/database/local_database.dart';
+import '../../core/utils/app_validators.dart';
 import '../../services/soundbox_service.dart';
 import '../../services/firestore_sync_service.dart';
 import '../../services/thermal_printer_service.dart';
@@ -239,17 +240,45 @@ class _PosCheckoutModalState extends State<PosCheckoutModal> {
           ElevatedButton(
             onPressed: () async {
               final name = nameCtrl.text.trim();
-              if (name.isEmpty) return;
+              if (name.isEmpty) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Customer name is required'),
+                    backgroundColor: Color(0xFFDC2626),
+                    behavior: SnackBarBehavior.floating,
+                  ),
+                );
+                return;
+              }
+              final rawPhone = phoneCtrl.text.trim();
+              String cleanPhone = '';
+              if (rawPhone.isNotEmpty) {
+                final phoneErr = AppValidators.validatePhone(rawPhone);
+                if (phoneErr != null) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text(phoneErr),
+                      backgroundColor: const Color(0xFFDC2626),
+                      behavior: SnackBarBehavior.floating,
+                    ),
+                  );
+                  return;
+                }
+                cleanPhone = AppValidators.cleanPhone(rawPhone);
+              }
+
               final newCust = CustomerModel(
                 id: const Uuid().v4(),
                 businessId: FirestoreSyncService.instance.activeBusinessId,
                 name: name,
-                phone: phoneCtrl.text.trim(),
+                phone: cleanPhone,
               );
               await LocalDatabase.instance.upsertCustomer(newCust);
+              if (ctx.mounted) {
+                Navigator.of(ctx).pop();
+              }
               if (mounted) {
                 _selectCustomer(newCust);
-                Navigator.of(ctx).pop();
               }
             },
             style: ElevatedButton.styleFrom(
@@ -485,7 +514,7 @@ class _PosCheckoutModalState extends State<PosCheckoutModal> {
                             border: Border.all(color: const Color(0xFFCBD5E1)),
                             boxShadow: [
                               BoxShadow(
-                                color: Colors.black.withOpacity(0.04),
+                                color: Colors.black.withValues(alpha: 0.04),
                                 blurRadius: 4,
                                 offset: const Offset(0, 1),
                               ),
@@ -662,7 +691,7 @@ class _PosCheckoutModalState extends State<PosCheckoutModal> {
                               border: Border.all(color: const Color(0xFFE2E8F0)),
                               boxShadow: [
                                 BoxShadow(
-                                  color: Colors.black.withOpacity(0.08),
+                                  color: Colors.black.withValues(alpha: 0.08),
                                   blurRadius: 8,
                                   offset: const Offset(0, 2),
                                 ),
@@ -775,7 +804,7 @@ class _PosCheckoutModalState extends State<PosCheckoutModal> {
                           border: Border.all(color: const Color(0xFFF1F5F9)),
                           boxShadow: [
                             BoxShadow(
-                              color: Colors.black.withOpacity(0.02),
+                              color: Colors.black.withValues(alpha: 0.02),
                               blurRadius: 4,
                               offset: const Offset(0, 1),
                             ),
@@ -906,7 +935,7 @@ class _PosCheckoutModalState extends State<PosCheckoutModal> {
                           ],
                         ),
                       );
-                    }).toList(),
+                    }),
                   const SizedBox(height: 16),
 
                   // 4. Payment Mode Selector

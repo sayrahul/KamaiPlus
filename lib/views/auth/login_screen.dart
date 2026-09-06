@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../../core/utils/app_validators.dart';
 import '../dashboard/home_dashboard_screen.dart';
 import 'signup_store_screen.dart';
 
@@ -62,17 +63,23 @@ class _LoginScreenState extends State<LoginScreen> {
 
   void _sendOtp() {
     final phone = _phoneController.text.trim();
-    if (phone.length < 10) {
+    final error = AppValidators.validatePhone(phone);
+    if (error != null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please enter a valid 10-digit mobile number')),
+        SnackBar(
+          content: Text(error),
+          backgroundColor: const Color(0xFFDC2626),
+          behavior: SnackBarBehavior.floating,
+        ),
       );
       return;
     }
+    final cleanPhone = AppValidators.cleanPhone(phone);
     HapticFeedback.lightImpact();
     setState(() => _otpSent = true);
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text('✓ WhatsApp OTP sent to +91 $phone (Demo OTP: 1234)'),
+        content: Text('✓ WhatsApp OTP sent to +91 $cleanPhone (Demo OTP: 1234)'),
         backgroundColor: const Color(0xFF059669),
         behavior: SnackBarBehavior.floating,
       ),
@@ -81,13 +88,18 @@ class _LoginScreenState extends State<LoginScreen> {
 
   void _verifyOtp() {
     final otp = _otpController.text.trim();
-    if (otp.length < 4) {
+    final error = AppValidators.validateOtp(otp, length: 4);
+    if (error != null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please enter 4-digit OTP')),
+        SnackBar(
+          content: Text(error),
+          backgroundColor: const Color(0xFFDC2626),
+          behavior: SnackBarBehavior.floating,
+        ),
       );
       return;
     }
-    _proceedLogin(phone: _phoneController.text.trim());
+    _proceedLogin(phone: AppValidators.cleanPhone(_phoneController.text.trim()));
   }
 
   void _showResetConfirmDialog() {

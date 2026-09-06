@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import '../../core/database/local_database.dart';
+import '../../core/utils/app_validators.dart';
 import '../../models/models.dart';
 import '../common/pro_upgrade_modal.dart';
 import '../common/upi_standee_modal.dart';
@@ -179,9 +180,14 @@ class _StoreProfileScreenState extends State<StoreProfileScreen> {
     final label = _addUpiLabelCtrl.text.trim();
     final vpa = _addUpiVpaCtrl.text.trim();
 
-    if (vpa.isEmpty) {
+    final vpaError = AppValidators.validateUpi(vpa);
+    if (vpaError != null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please enter a valid UPI VPA (e.g. store@okaxis)')),
+        SnackBar(
+          content: Text(vpaError),
+          backgroundColor: const Color(0xFFDC2626),
+          behavior: SnackBarBehavior.floating,
+        ),
       );
       return;
     }
@@ -754,7 +760,7 @@ class _StoreProfileScreenState extends State<StoreProfileScreen> {
               TextFormField(
                 controller: _phoneCtrl,
                 keyboardType: TextInputType.phone,
-                validator: (v) => v!.trim().length < 10 ? '10-digit mobile number required' : null,
+                validator: (v) => AppValidators.validatePhone(v),
                 style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.w600),
                 decoration: _fieldInputDecoration(hint: '9595997711'),
               ),
@@ -766,6 +772,7 @@ class _StoreProfileScreenState extends State<StoreProfileScreen> {
               TextFormField(
                 controller: _emailCtrl,
                 keyboardType: TextInputType.emailAddress,
+                validator: (v) => AppValidators.validateEmail(v),
                 style: GoogleFonts.inter(fontSize: 14),
                 decoration: _fieldInputDecoration(hint: 'iamdivyaang@gmail.com'),
               ),
@@ -782,11 +789,12 @@ class _StoreProfileScreenState extends State<StoreProfileScreen> {
               const SizedBox(height: 16),
 
               // Pincode
-              _buildFieldLabel('Pincode'),
+              _buildFieldLabel('Pincode (Optional)'),
               const SizedBox(height: 6),
               TextFormField(
                 controller: _pincodeCtrl,
                 keyboardType: TextInputType.number,
+                validator: (v) => AppValidators.validatePincode(v),
                 style: GoogleFonts.inter(fontSize: 14),
                 decoration: _fieldInputDecoration(hint: 'e.g. 400001'),
               ),
@@ -804,22 +812,24 @@ class _StoreProfileScreenState extends State<StoreProfileScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               // GSTIN Number
-              _buildFieldLabel('GSTIN Number (For GST Tax Invoices)'),
+              _buildFieldLabel('GSTIN Number (Optional - For GST Tax Invoices)'),
               const SizedBox(height: 6),
               TextFormField(
                 controller: _gstinCtrl,
                 textCapitalization: TextCapitalization.characters,
+                validator: (v) => AppValidators.validateGstin(v),
                 style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.w600),
                 decoration: _fieldInputDecoration(hint: 'e.g. 27AAAAA0000A1Z5'),
               ),
               const SizedBox(height: 16),
 
               // FSSAI License Number
-              _buildFieldLabel('FSSAI License Number (Food & Restaurant)'),
+              _buildFieldLabel('FSSAI License Number (Optional - Food & Restaurant)'),
               const SizedBox(height: 6),
               TextFormField(
                 controller: _fssaiCtrl,
                 keyboardType: TextInputType.number,
+                validator: (v) => AppValidators.validateFssai(v),
                 style: GoogleFonts.inter(fontSize: 14),
                 decoration: _fieldInputDecoration(hint: 'e.g. 10019022009876'),
               ),
@@ -1365,7 +1375,7 @@ class _StoreProfileScreenState extends State<StoreProfileScreen> {
                   ),
                 ),
               ),
-              if (trailing != null) trailing,
+              ?trailing,
             ],
           ),
           const SizedBox(height: 14),

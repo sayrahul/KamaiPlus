@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:uuid/uuid.dart';
 import '../../core/database/local_database.dart';
+import '../../core/utils/app_validators.dart';
 import '../../core/utils/money_formatter.dart';
 import '../../models/models.dart';
 import '../../services/firestore_sync_service.dart';
@@ -1706,18 +1707,32 @@ class _KhataScreenState extends State<KhataScreen> {
                 final double openBalRupees = double.tryParse(balanceCtrl.text.trim()) ?? 0.0;
                 final int openBalPaise = (openBalRupees * 100).round();
 
-                if (name.isEmpty || phone.isEmpty) {
+                if (name.isEmpty) {
                   ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Please enter customer name and phone number.')),
+                    const SnackBar(
+                      content: Text('Please enter customer full name.'),
+                      backgroundColor: Color(0xFFDC2626),
+                    ),
                   );
                   return;
                 }
+                final phoneErr = AppValidators.validatePhone(phone);
+                if (phoneErr != null) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text(phoneErr),
+                      backgroundColor: const Color(0xFFDC2626),
+                    ),
+                  );
+                  return;
+                }
+                final cleanPhone = AppValidators.cleanPhone(phone);
 
                 final newCustomer = CustomerModel(
                   id: 'cust_${const Uuid().v4().substring(0, 8)}',
                   businessId: FirestoreSyncService.instance.activeBusinessId,
                   name: name,
-                  phone: phone,
+                  phone: cleanPhone,
                   address: address.isNotEmpty ? address : null,
                   currentBalancePaise: openBalPaise,
                   creditLimitPaise: 500000,

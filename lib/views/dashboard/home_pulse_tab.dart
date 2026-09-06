@@ -362,7 +362,7 @@ class _HomePulseTabState extends State<HomePulseTab> {
                 title: "TODAY'S SALES",
                 titleColor: const Color(0xFF059669),
                 titleIcon: Icons.trending_up_rounded,
-                badgeText: '${_todayBillsCount} Bills',
+                badgeText: '$_todayBillsCount Bills',
                 badgeBg: const Color(0xFFECFDF5),
                 badgeColor: const Color(0xFF059669),
                 amount: _formatDisplayPaise(_todaySalesPaise),
@@ -378,21 +378,22 @@ class _HomePulseTabState extends State<HomePulseTab> {
               ),
             ),
             const SizedBox(width: 8),
-            // Card 2: Today's Profit
+            // Card 2: Estimated Net Profit
             Expanded(
               child: _buildMetricCard(
-                title: "TODAY'S PROFIT",
+                title: 'EST. PROFIT',
                 titleColor: const Color(0xFF0284C7),
-                titleIcon: Icons.monetization_on_outlined,
-                badgeText: '~14% Margin',
-                badgeBg: const Color(0xFFEFF6FF),
+                titleIcon: Icons.currency_rupee_rounded,
+                badgeText: 'Live Margin',
+                badgeBg: const Color(0xFFF0F9FF),
                 badgeColor: const Color(0xFF0284C7),
                 amount: _formatDisplayPaise(_todayProfitPaise),
-                amountColor: const Color(0xFF0F172A),
-                footerLabel: 'Gross Margin',
-                actionLabel: 'Owner Only',
+                amountColor: const Color(0xFF0284C7),
+                footerLabel: 'Net Margin',
+                actionLabel: _isProfitHidden ? 'Show' : 'Hide',
                 actionColor: const Color(0xFF0284C7),
                 borderColor: const Color(0xFFBAE6FD),
+                onActionTap: () => setState(() => _isProfitHidden = !_isProfitHidden),
               ),
             ),
           ],
@@ -400,24 +401,24 @@ class _HomePulseTabState extends State<HomePulseTab> {
         const SizedBox(height: 8),
         Row(
           children: [
-            // Card 3: Cash In Hand
+            // Card 3: Total Orders
             Expanded(
               child: _buildMetricCard(
-                title: 'CASH IN HAND',
-                titleColor: const Color(0xFFD97706),
-                titleIcon: Icons.account_balance_wallet_outlined,
-                badgeText: 'Till / Galla',
-                badgeBg: const Color(0xFFFEF3C7),
-                badgeColor: const Color(0xFFD97706),
-                amount: _formatDisplayPaise(_cashInHandPaise),
+                title: 'TOTAL BILLS',
+                titleColor: const Color(0xFF7C3AED),
+                titleIcon: Icons.receipt_long_rounded,
+                badgeText: 'Counter POS',
+                badgeBg: const Color(0xFFF5F3FF),
+                badgeColor: const Color(0xFF7C3AED),
+                amount: '$_todayBillsCount',
                 amountColor: const Color(0xFF0F172A),
-                footerLabel: 'Cash Sales - Exp',
-                actionLabel: 'Register →',
-                actionColor: const Color(0xFFD97706),
-                borderColor: const Color(0xFFFDE68A),
+                footerLabel: 'Invoices Issued',
+                actionLabel: 'Report →',
+                actionColor: const Color(0xFF7C3AED),
+                borderColor: const Color(0xFFDDD6FE),
                 onActionTap: () => Navigator.push(
                   context,
-                  MaterialPageRoute(builder: (_) => const CashRegisterScreen()),
+                  MaterialPageRoute(builder: (_) => const TransactionsScreen()),
                 ),
               ),
             ),
@@ -428,7 +429,7 @@ class _HomePulseTabState extends State<HomePulseTab> {
                 title: 'MARKET UDHAR',
                 titleColor: const Color(0xFFE11D48),
                 titleIcon: Icons.menu_book_outlined,
-                badgeText: '${_debtorsCount} Debtors',
+                badgeText: '$_debtorsCount Debtors',
                 badgeBg: const Color(0xFFFEE2E2),
                 badgeColor: const Color(0xFFE11D48),
                 amount: _formatDisplayPaise(_marketUdharPaise),
@@ -903,7 +904,7 @@ class _HomePulseTabState extends State<HomePulseTab> {
                 iconColor: const Color(0xFF2563EB),
                 iconBg: const Color(0xFFEFF6FF),
                 title: 'Products Master',
-                subtitle: '${_totalProductsCount} SKUs',
+                subtitle: '$_totalProductsCount SKUs',
                 onTap: widget.onNavigateToProducts,
               ),
             ),
@@ -1393,7 +1394,7 @@ class _HomePulseTabState extends State<HomePulseTab> {
     final hour = sale.createdAt.hour.toString().padLeft(2, "0");
     final minute = sale.createdAt.minute.toString().padLeft(2, "0");
     final ampm = sale.createdAt.hour >= 12 ? "pm" : "am";
-    final timeStr = hour + ':' + minute + ' ' + ampm;
+    final timeStr = '$hour:$minute $ampm';
     final itemsCount = sale.items.length;
 
     return Container(
@@ -1408,16 +1409,15 @@ class _HomePulseTabState extends State<HomePulseTab> {
         children: [
           // Tag badge #001
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 5),
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
             decoration: BoxDecoration(
-              color: const Color(0xFFF8FAFC),
+              color: const Color(0xFFF1F5F9),
               borderRadius: BorderRadius.circular(6),
-              border: Border.all(color: const Color(0xFFE2E8F0)),
             ),
             child: Text(
-              tagNumber,
+              '#${sale.invoiceNumber.replaceAll(RegExp(r'[^0-9]'), '').padLeft(3, '0').substring(sale.invoiceNumber.replaceAll(RegExp(r'[^0-9]'), '').padLeft(3, '0').length - 3)}',
               style: GoogleFonts.outfit(
-                fontSize: 10.5,
+                fontSize: 10,
                 fontWeight: FontWeight.w700,
                 color: const Color(0xFF475569),
               ),
@@ -1425,7 +1425,7 @@ class _HomePulseTabState extends State<HomePulseTab> {
           ),
           const SizedBox(width: 8),
 
-          // Details: Invoice #, Customer, Time, Items
+          // Customer / Bill Details
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -1434,29 +1434,28 @@ class _HomePulseTabState extends State<HomePulseTab> {
                   children: [
                     Flexible(
                       child: Text(
-                        (sale.customerName != null && sale.customerName!.trim().isNotEmpty)
-                            ? sale.customerName!
-                            : 'Cash Customer',
+                        sale.customerName ?? 'Walk-in Customer',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                         style: GoogleFonts.outfit(
-                          fontSize: 11.5,
+                          fontSize: 12.5,
                           fontWeight: FontWeight.w700,
                           color: const Color(0xFF0F172A),
                         ),
-                        overflow: TextOverflow.ellipsis,
                       ),
                     ),
-                    const SizedBox(width: 5),
+                    const SizedBox(width: 6),
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
                       decoration: BoxDecoration(
                         color: paymentBadgeBg,
-                        borderRadius: BorderRadius.circular(3),
+                        borderRadius: BorderRadius.circular(4),
                       ),
                       child: Text(
                         paymentBadgeText,
                         style: GoogleFonts.inter(
-                          fontSize: 7.5,
-                          fontWeight: FontWeight.w800,
+                          fontSize: 8.5,
+                          fontWeight: FontWeight.w700,
                           color: paymentBadgeColor,
                         ),
                       ),
@@ -1469,7 +1468,7 @@ class _HomePulseTabState extends State<HomePulseTab> {
                     const Icon(Icons.access_time_rounded, size: 10, color: Color(0xFF94A3B8)),
                     const SizedBox(width: 3),
                     Text(
-                      timeStr + ' • ' + itemsCount.toString() + ' items',
+                      '$timeStr • $itemsCount items',
                       style: GoogleFonts.inter(
                         fontSize: 9.5,
                         color: const Color(0xFF64748B),
@@ -1494,7 +1493,7 @@ class _HomePulseTabState extends State<HomePulseTab> {
                 ),
               ),
               Text(
-                isCredit ? ('Due: ' + MoneyFormatter.formatPaise(sale.totalAmountPaise)) : 'Paid',
+                isCredit ? 'Due: ${MoneyFormatter.formatPaise(sale.totalAmountPaise)}' : 'Paid',
                 style: GoogleFonts.inter(
                   fontSize: 8.5,
                   fontWeight: isCredit ? FontWeight.w700 : FontWeight.w500,
@@ -1554,7 +1553,7 @@ class _HomePulseTabState extends State<HomePulseTab> {
   void _shareBillOnWhatsapp(SaleModel sale) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text('WhatsApp receipt ready for ' + sale.invoiceNumber + ' (' + MoneyFormatter.formatPaise(sale.totalAmountPaise) + ')'),
+        content: Text('WhatsApp receipt ready for ${sale.invoiceNumber} (${MoneyFormatter.formatPaise(sale.totalAmountPaise)})'),
         backgroundColor: const Color(0xFF10B981),
       ),
     );
@@ -1576,7 +1575,7 @@ class _HomePulseTabState extends State<HomePulseTab> {
       ),
       builder: (ctx) {
         final now = DateTime.now();
-        final dateStr = now.day.toString() + '/' + now.month.toString() + '/' + now.year.toString();
+        final dateStr = '${now.day}/${now.month}/${now.year}';
         return SafeArea(
           child: Padding(
             padding: const EdgeInsets.all(18),
@@ -1599,12 +1598,12 @@ class _HomePulseTabState extends State<HomePulseTab> {
                 ),
                 const SizedBox(height: 10),
                 Text(
-                  'Today: ' + dateStr,
+                  'Today: $dateStr',
                   style: GoogleFonts.inter(fontSize: 11, color: const Color(0xFF64748B)),
                 ),
                 const SizedBox(height: 14),
                 _buildSummaryRow('Total Sales Revenue', MoneyFormatter.formatPaise(_todaySalesPaise)),
-                _buildSummaryRow('Total Bills Generated', _todayBillsCount.toString() + ' Bills'),
+                _buildSummaryRow('Total Bills Generated', '$_todayBillsCount Bills'),
                 _buildSummaryRow('Estimated Profit', _isProfitHidden ? '••••••' : MoneyFormatter.formatPaise(_todayProfitPaise)),
                 _buildSummaryRow('Cash in Till/Galla', MoneyFormatter.formatPaise(_cashInHandPaise)),
                 _buildSummaryRow('Outstanding Udhar', MoneyFormatter.formatPaise(_marketUdharPaise)),
