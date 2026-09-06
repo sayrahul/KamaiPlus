@@ -9,7 +9,6 @@ import '../common/owner_privacy_modal.dart';
 import 'ai_inward_modal.dart';
 import 'add_product_modal.dart';
 import 'barcode_scanner_modal.dart';
-import '../common/kamai_bottom_nav.dart';
 
 class ProductsScreen extends StatefulWidget {
   const ProductsScreen({super.key});
@@ -205,7 +204,6 @@ class _ProductsScreenState extends State<ProductsScreen> {
           ],
         ),
       ),
-      bottomNavigationBar: const KamaiBottomNav(currentIndex: 1),
     );
   }
 

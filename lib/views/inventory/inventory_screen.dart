@@ -6,7 +6,7 @@ import '../../core/database/local_database.dart';
 import '../../core/utils/money_formatter.dart';
 import '../../models/models.dart';
 import '../common/kamai_bottom_nav.dart';
-import '../products/products_screen.dart';
+import '../dashboard/home_dashboard_screen.dart';
 import '../purchases/ai_inward_sheet.dart';
 
 class InventoryScreen extends StatefulWidget {
@@ -98,10 +98,7 @@ class _InventoryScreenState extends State<InventoryScreen> {
 
   void _navigateToProducts() {
     HapticFeedback.selectionClick();
-    Navigator.push(
-      context,
-      MaterialPageRoute(builder: (_) => const ProductsScreen()),
-    ).then((_) => _loadData());
+    HomeDashboardScreen.switchTab(context, 1);
   }
 
   void _exportStockAuditCsv() {

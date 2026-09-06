@@ -75,7 +75,7 @@ class KamaiBottomNav extends StatelessWidget {
     IconData inactiveIcon,
     String label,
   ) {
-    final isSelected = currentIndex == index && index != 4;
+    final isSelected = currentIndex == index;
     const activeColor = Color(0xFF059669);
     const inactiveColor = Color(0xFF64748B);
 

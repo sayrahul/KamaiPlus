@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
-import '../common/kamai_bottom_nav.dart';
 import '../common/pro_upgrade_modal.dart';
 import '../cash_register/cash_register_screen.dart';
 import '../transactions/transactions_screen.dart';
@@ -437,7 +436,6 @@ class _MenuScreenState extends State<MenuScreen> {
         top: false,
         child: bodyContent,
       ),
-      bottomNavigationBar: const KamaiBottomNav(currentIndex: 4),
     );
 
   }
