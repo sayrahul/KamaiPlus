@@ -1,7 +1,9 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../dashboard/home_dashboard_screen.dart';
+import '../auth/login_screen.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -35,12 +37,22 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
 
     _controller.forward();
 
-    Timer(const Duration(milliseconds: 2200), () {
+    Timer(const Duration(milliseconds: 2200), () async {
       if (mounted) {
+        final prefs = await SharedPreferences.getInstance();
+        final isLoggedIn = prefs.getBool('is_logged_in') ?? false;
+        final isOnboarded = prefs.getBool('is_onboarded') ?? false;
+
+        final Widget target = (isLoggedIn && isOnboarded)
+            ? HomeDashboardScreen(key: HomeDashboardScreen.dashboardKey)
+            : const LoginScreen();
+
+
+        if (!mounted) return;
         Navigator.of(context).pushReplacement(
           PageRouteBuilder(
             transitionDuration: const Duration(milliseconds: 600),
-            pageBuilder: (context, animation, secondaryAnimation) => const HomeDashboardScreen(),
+            pageBuilder: (context, animation, secondaryAnimation) => target,
             transitionsBuilder: (context, animation, secondaryAnimation, child) {
               return FadeTransition(opacity: animation, child: child);
             },

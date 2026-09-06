@@ -4,9 +4,11 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:uuid/uuid.dart';
-import '../../models/models.dart';
 import '../../core/database/local_database.dart';
+import '../../core/utils/money_formatter.dart';
+import '../../models/models.dart';
 import '../../services/firestore_sync_service.dart';
+import '../customers/customers_screen.dart';
 
 class KhataScreen extends StatefulWidget {
   const KhataScreen({super.key});
@@ -16,47 +18,106 @@ class KhataScreen extends StatefulWidget {
 }
 
 class _KhataScreenState extends State<KhataScreen> {
-  final currencyFormat = NumberFormat.currency(locale: 'en_IN', symbol: '₹', decimalDigits: 0);
-
   List<CustomerModel> _customers = [];
   bool _isLoading = true;
   String _searchQuery = '';
+  String _selectedFilter = 'All'; // 'All' | 'Due' | 'Clear' | 'VIP'
+  CustomerModel? _selectedCustomer;
+  StoreProfileModel _storeProfile = StoreProfileModel();
+
+  // Selected customer data
+  List<LedgerTransactionModel> _customerLedger = [];
+  List<SaleModel> _customerBills = [];
+  int _activeCustomerSubTab = 0; // 0: Ledger Timeline, 1: Pending Bills
+  String _billsFilter = 'Pending'; // 'Pending' | 'All' | 'Settled'
 
   @override
   void initState() {
     super.initState();
-    _loadCustomers();
+    _loadData();
   }
 
-  Future<void> _loadCustomers() async {
-    final custs = await LocalDatabase.instance.getAllCustomers();
-    if (mounted) {
-      setState(() {
-        _customers = custs;
-        _isLoading = false;
-      });
+  Future<void> _loadData() async {
+    try {
+      final customers = await LocalDatabase.instance.getAllCustomers();
+      final profile = await LocalDatabase.instance.getStoreProfile();
+
+      if (mounted) {
+        setState(() {
+          _customers = customers;
+          _storeProfile = profile;
+          _isLoading = false;
+
+          // If a customer was selected, refresh their current state
+          if (_selectedCustomer != null) {
+            final updated = customers.where((c) => c.id == _selectedCustomer!.id).firstOrNull;
+            if (updated != null) {
+              _selectedCustomer = updated;
+            }
+          }
+        });
+
+        if (_selectedCustomer != null) {
+          _loadCustomerDetails(_selectedCustomer!);
+        }
+      }
+    } catch (_) {
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
-  int get totalPendingUdharPaise {
-    int sum = 0;
-    for (var c in _customers) {
-      if (c.currentBalancePaise > 0) sum += c.currentBalancePaise;
-    }
-    return sum;
+  Future<void> _loadCustomerDetails(CustomerModel customer) async {
+    try {
+      final ledger = await LocalDatabase.instance.getLedgerForCustomer(customer.id);
+      final bills = await LocalDatabase.instance.getSalesForCustomer(customer.id, phone: customer.phone);
+      if (mounted) {
+        setState(() {
+          _customerLedger = ledger;
+          _customerBills = bills;
+        });
+      }
+    } catch (_) {}
   }
 
-  int get customersWithDuesCount {
+  int get _totalMarketUdharPaise {
+    return _customers.where((c) => c.currentBalancePaise > 0).fold(0, (sum, c) => sum + c.currentBalancePaise);
+  }
+
+  int get _dueCustomersCount {
     return _customers.where((c) => c.currentBalancePaise > 0).length;
+  }
+
+  List<CustomerModel> get _filteredCustomers {
+    return _customers.where((c) {
+      if (_searchQuery.isNotEmpty) {
+        final q = _searchQuery.toLowerCase();
+        final matchName = c.name.toLowerCase().contains(q);
+        final matchPhone = c.phone.contains(q);
+        final matchAddress = (c.address ?? '').toLowerCase().contains(q);
+        if (!matchName && !matchPhone && !matchAddress) return false;
+      }
+
+      if (_selectedFilter == 'Due') return c.currentBalancePaise > 0;
+      if (_selectedFilter == 'Clear') return c.currentBalancePaise <= 0;
+      if (_selectedFilter == 'VIP') return c.creditLimitPaise >= 1000000;
+
+      return true;
+    }).toList();
   }
 
   void _sendWhatsAppReminder(CustomerModel customer) async {
     HapticFeedback.lightImpact();
-    final rupees = customer.currentBalancePaise ~/ 100;
-    final msg = Uri.encodeComponent(
-      'Namaste ${customer.name} ji! KamaiPlus store par aapka ₹$rupees udhar baki hai. Kripya samay par UPI ya cash me chukta karein. UPI: proventure@icici. Dhanyawad!',
-    );
-    final url = Uri.parse('https://wa.me/91${customer.phone}?text=$msg');
+    final int rupees = customer.currentBalancePaise ~/ 100;
+    final storeName = _storeProfile.storeName.isNotEmpty ? _storeProfile.storeName : 'KamaiPlus Store';
+    final upiId = _storeProfile.upiVpa.isNotEmpty ? _storeProfile.upiVpa : 'proventure@icici';
+
+    final text = 'Namaste ${customer.name} ji! 🙏\n\n'
+        '$storeName par aapka baki hisaab ₹$rupees hai.\n'
+        'Kripya samay par chukta karein.\n\n'
+        '📌 Pay via UPI: $upiId\n'
+        'Dhanyawad!';
+
+    final url = Uri.parse('https://wa.me/91${customer.phone}?text=${Uri.encodeComponent(text)}');
     try {
       if (await canLaunchUrl(url)) {
         await launchUrl(url, mode: LaunchMode.externalApplication);
@@ -64,487 +125,975 @@ class _KhataScreenState extends State<KhataScreen> {
     } catch (_) {}
   }
 
-  void _openAddCustomerDialog() {
-    final nameCtrl = TextEditingController();
-    final phoneCtrl = TextEditingController();
+  void _makePhoneCall(String phone) async {
+    HapticFeedback.lightImpact();
+    final url = Uri.parse('tel:$phone');
+    try {
+      if (await canLaunchUrl(url)) {
+        await launchUrl(url);
+      }
+    } catch (_) {}
+  }
 
-    showDialog(
-      context: context,
-      builder: (dialogCtx) {
-        return AlertDialog(
-          backgroundColor: const Color(0xFF131B2A),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-          title: Text(
-            "Add Khata Customer",
-            style: GoogleFonts.outfit(fontWeight: FontWeight.w700, color: Colors.white),
-          ),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
+  void _shareLedgerSlip(LedgerTransactionModel tx, CustomerModel customer) async {
+    HapticFeedback.lightImpact();
+    final isUdhar = tx.type == 'credit';
+    final amtRupees = tx.amountPaise ~/ 100;
+    final balRupees = tx.balanceAfterPaise ~/ 100;
+    final storeName = _storeProfile.storeName.isNotEmpty ? _storeProfile.storeName : 'KamaiPlus Store';
+    final dateStr = DateFormat('d MMM yyyy, hh:mm a').format(tx.createdAt);
+
+    final text = '🧾 *HISAB PARCHA / HISAAB SLIP*\n'
+        '🏪 *$storeName*\n'
+        '👤 Customer: ${customer.name}\n'
+        '📅 Date: $dateStr\n'
+        '--------------------------\n'
+        '${isUdhar ? "🔴 Udhar Diya (Given)" : "🟢 Jama Mila (Received)"}: ₹$amtRupees\n'
+        '📝 Note: ${tx.description.isNotEmpty ? tx.description : "Khata Transaction"}\n'
+        '--------------------------\n'
+        '💰 *Kul Baki (Balance): ₹$balRupees*\n\n'
+        'Dhanyawad!';
+
+    final url = Uri.parse('https://wa.me/91${customer.phone}?text=${Uri.encodeComponent(text)}');
+    try {
+      if (await canLaunchUrl(url)) {
+        await launchUrl(url, mode: LaunchMode.externalApplication);
+      }
+    } catch (_) {}
+  }
+
+  void _shareBillViaWhatsApp(SaleModel bill, CustomerModel customer) async {
+    HapticFeedback.lightImpact();
+    final amtRupees = bill.totalAmountPaise ~/ 100;
+    final storeName = _storeProfile.storeName.isNotEmpty ? _storeProfile.storeName : 'KamaiPlus Store';
+    final dateStr = DateFormat('d MMM yyyy, hh:mm a').format(bill.createdAt);
+
+    final buffer = StringBuffer();
+    buffer.writeln('🧾 *INVOICE #${bill.invoiceNumber}*');
+    buffer.writeln('🏪 *$storeName*');
+    buffer.writeln('👤 Customer: ${customer.name}');
+    buffer.writeln('📅 Date: $dateStr');
+    buffer.writeln('--------------------------');
+    for (final it in bill.items) {
+      final itemPrice = ((it['price'] as int? ?? 0) * (it['qty'] as num? ?? 1).toInt()) ~/ 100;
+      buffer.writeln('• ${it['qty']}x ${it['name']} = ₹$itemPrice');
+    }
+    buffer.writeln('--------------------------');
+    buffer.writeln('💰 *Total Amount: ₹$amtRupees*');
+    buffer.writeln('📌 Status: ${bill.status.toUpperCase()}');
+    buffer.writeln('\nDhanyawad!');
+
+    final url = Uri.parse('https://wa.me/91${customer.phone}?text=${Uri.encodeComponent(buffer.toString())}');
+    try {
+      if (await canLaunchUrl(url)) {
+        await launchUrl(url, mode: LaunchMode.externalApplication);
+      }
+    } catch (_) {}
+  }
+
+  // =========================================================================
+  // BUILD METHOD
+  // =========================================================================
+  @override
+  Widget build(BuildContext context) {
+    if (_isLoading) {
+      return const Scaffold(
+        backgroundColor: Color(0xFFF8FAFC),
+        body: Center(child: CircularProgressIndicator(color: Color(0xFF059669))),
+      );
+    }
+
+    return Scaffold(
+      backgroundColor: const Color(0xFFF8FAFC),
+      body: SafeArea(
+        child: _selectedCustomer == null
+            ? _buildMainKhataDashboard()
+            : _buildCustomerDetailView(_selectedCustomer!),
+      ),
+    );
+  }
+
+  // =========================================================================
+  // LEVEL 1: MAIN KHATA DASHBOARD (OVERVIEW & CUSTOMER LIST)
+  // =========================================================================
+  Widget _buildMainKhataDashboard() {
+    final filtered = _filteredCustomers;
+
+    return RefreshIndicator(
+      color: const Color(0xFF059669),
+      onRefresh: _loadData,
+      child: ListView(
+        padding: const EdgeInsets.fromLTRB(14, 12, 14, 100),
+        physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
+        children: [
+          // 1. Top Header Bar
+          _buildTopBar(),
+          const SizedBox(height: 14),
+
+          // 2. Total Market Udhar Hero Card
+          _buildMarketUdharHeroCard(),
+          const SizedBox(height: 14),
+
+          // 3. Search Bar
+          _buildSearchBar(),
+          const SizedBox(height: 10),
+
+          // 4. Quick Filter Chips
+          _buildFilterChips(),
+          const SizedBox(height: 14),
+
+          // 5. Customer Section Header
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              TextField(
-                controller: nameCtrl,
-                style: GoogleFonts.inter(color: Colors.white),
-                decoration: InputDecoration(
-                  labelText: "Customer Name",
-                  labelStyle: GoogleFonts.inter(color: const Color(0xFF94A3B8)),
-                  enabledBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide: const BorderSide(color: Color(0xFF1E293B)),
-                  ),
-                  focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide: const BorderSide(color: Color(0xFF10B981)),
-                  ),
+              Text(
+                'CUSTOMER ACCOUNTS (${filtered.length})',
+                style: GoogleFonts.inter(
+                  fontSize: 11.5,
+                  fontWeight: FontWeight.w800,
+                  color: const Color(0xFF64748B),
+                  letterSpacing: 0.8,
                 ),
               ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: phoneCtrl,
-                keyboardType: TextInputType.phone,
-                style: GoogleFonts.inter(color: Colors.white),
-                decoration: InputDecoration(
-                  labelText: "Phone (10 digits)",
-                  labelStyle: GoogleFonts.inter(color: const Color(0xFF94A3B8)),
-                  enabledBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide: const BorderSide(color: Color(0xFF1E293B)),
+              if (_selectedFilter != 'All')
+                GestureDetector(
+                  onTap: () => setState(() => _selectedFilter = 'All'),
+                  child: Text(
+                    'Clear Filter',
+                    style: GoogleFonts.inter(
+                      fontSize: 11.5,
+                      fontWeight: FontWeight.w700,
+                      color: const Color(0xFF059669),
+                    ),
                   ),
-                  focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide: const BorderSide(color: Color(0xFF10B981)),
-                  ),
+                ),
+            ],
+          ),
+          const SizedBox(height: 10),
+
+          // 6. Customer List Cards
+          if (filtered.isEmpty)
+            _buildEmptyCustomersState()
+          else
+            ...filtered.map((cust) => _buildCustomerCard(cust)),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTopBar() {
+    final totalAccounts = _customers.length;
+    final dueCount = _dueCustomersCount;
+
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        // Book Icon
+        Container(
+          width: 40,
+          height: 40,
+          decoration: BoxDecoration(
+            color: const Color(0xFFFFFBEB),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: const Color(0xFFFDE68A)),
+          ),
+          child: const Icon(Icons.menu_book_rounded, color: Color(0xFFD97706), size: 22),
+        ),
+        const SizedBox(width: 10),
+
+        // Title & Subtitle
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Digital Khata',
+                style: GoogleFonts.outfit(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w800,
+                  color: const Color(0xFF0F172A),
+                  letterSpacing: -0.3,
+                ),
+              ),
+              Text(
+                '$dueCount Due • $totalAccounts Accounts',
+                style: GoogleFonts.inter(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w500,
+                  color: const Color(0xFF64748B),
                 ),
               ),
             ],
           ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(dialogCtx),
-              child: Text("Cancel", style: GoogleFonts.inter(color: const Color(0xFF64748B))),
-            ),
-            ElevatedButton(
-              onPressed: () async {
-                final name = nameCtrl.text.trim();
-                final phone = phoneCtrl.text.trim();
-                if (name.isNotEmpty && phone.isNotEmpty) {
-                  final newCust = CustomerModel(
-                    id: const Uuid().v4(),
-                    businessId: FirestoreSyncService.instance.activeBusinessId,
-                    name: name,
-                    phone: phone,
-                    currentBalancePaise: 0,
-                    creditLimitPaise: 500000,
-                    syncStatus: 'pending',
-                  );
-                  await LocalDatabase.instance.upsertCustomer(newCust);
-                  if (!dialogCtx.mounted) return;
-                  Navigator.pop(dialogCtx);
-                  _loadCustomers();
-                }
-              },
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF10B981),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        ),
+
+        // 1. CRM Directory Button
+        Material(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(10),
+          child: InkWell(
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const CustomersScreen()),
+              ).then((_) => _loadData());
+            },
+            borderRadius: BorderRadius.circular(10),
+            child: Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: const Color(0xFFE2E8F0), width: 1.1),
               ),
-              child: Text("Save", style: GoogleFonts.outfit(fontWeight: FontWeight.w700, color: Colors.white)),
+              child: const Icon(Icons.group_outlined, size: 18, color: Color(0xFF334155)),
             ),
-          ],
-        );
-      },
+          ),
+        ),
+        const SizedBox(width: 8),
+
+        // 2. Golden Add Customer Button
+        ElevatedButton.icon(
+          onPressed: _showAddCustomerModal,
+          icon: const Icon(Icons.person_add_alt_1_rounded, size: 15, color: Color(0xFF0F172A)),
+          label: Text(
+            '+ Add',
+            style: GoogleFonts.outfit(
+              fontSize: 12.5,
+              fontWeight: FontWeight.w800,
+              color: const Color(0xFF0F172A),
+            ),
+          ),
+          style: ElevatedButton.styleFrom(
+            backgroundColor: const Color(0xFFF59E0B),
+            foregroundColor: const Color(0xFF0F172A),
+            elevation: 0,
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            visualDensity: VisualDensity.compact,
+          ),
+        ),
+      ],
     );
   }
 
-  void _openCustomerLedgerSheet(CustomerModel customer) async {
-    HapticFeedback.lightImpact();
-    final ledgerEntries = await LocalDatabase.instance.getLedgerForCustomer(customer.id);
+  Widget _buildMarketUdharHeroCard() {
+    final udharPaise = _totalMarketUdharPaise;
+    final dueCount = _dueCustomersCount;
 
-    if (!mounted) return;
-
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: const Color(0xFF131B2A),
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
-      ),
-      builder: (context) {
-        final balRupees = customer.currentBalancePaise / 100.0;
-        return Padding(
-          padding: EdgeInsets.only(
-            top: 20,
-            left: 20,
-            right: 20,
-            bottom: MediaQuery.of(context).viewInsets.bottom + 20,
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [Color(0xFF0F172A), Color(0xFF1E293B)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFF0F172A).withValues(alpha: 0.14),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
           ),
-          child: Column(
+        ],
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          // Left: Label + Outstanding Amount
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      width: 6,
+                      height: 6,
+                      decoration: const BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: Color(0xFFEF4444),
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    Text(
+                      'TOTAL MARKET UDHAR',
+                      style: GoogleFonts.inter(
+                        fontSize: 9.5,
+                        fontWeight: FontWeight.w800,
+                        color: const Color(0xFF94A3B8),
+                        letterSpacing: 0.8,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 3),
+                FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    MoneyFormatter.formatINR(udharPaise),
+                    style: GoogleFonts.outfit(
+                      fontSize: 24,
+                      fontWeight: FontWeight.w900,
+                      color: Colors.white,
+                      letterSpacing: -0.5,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 10),
+
+          // Right: Compact Badges
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.end,
             mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Center(
-                child: Container(
-                  width: 40,
-                  height: 4,
-                  decoration: BoxDecoration(color: const Color(0xFF334155), borderRadius: BorderRadius.circular(2)),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 3.5),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFEF4444).withValues(alpha: 0.2),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: const Color(0xFFEF4444).withValues(alpha: 0.4)),
+                ),
+                child: Text(
+                  '$dueCount Due',
+                  style: GoogleFonts.outfit(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    color: const Color(0xFFFCA5A5),
+                  ),
                 ),
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: 3),
+              Text(
+                '${_customers.length} Accounts',
+                style: GoogleFonts.inter(
+                  fontSize: 10.5,
+                  fontWeight: FontWeight.w500,
+                  color: const Color(0xFF94A3B8),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
 
-              // Customer Header
+  Widget _buildSearchBar() {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFFE2E8F0), width: 1.1),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.02),
+            blurRadius: 4,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: TextField(
+        onChanged: (val) => setState(() => _searchQuery = val),
+        style: GoogleFonts.inter(fontSize: 13, color: const Color(0xFF0F172A)),
+        decoration: InputDecoration(
+          hintText: 'Search customer name, phone, locality...',
+          hintStyle: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF94A3B8)),
+          prefixIcon: const Icon(Icons.search_rounded, color: Color(0xFF64748B), size: 18),
+          suffixIcon: _searchQuery.isNotEmpty
+              ? IconButton(
+                  icon: const Icon(Icons.clear_rounded, size: 16, color: Color(0xFF94A3B8)),
+                  onPressed: () => setState(() => _searchQuery = ''),
+                )
+              : null,
+          border: InputBorder.none,
+          contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          isDense: true,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildFilterChips() {
+    final filters = [
+      {'key': 'All', 'label': 'All (${_customers.length})'},
+      {'key': 'Due', 'label': 'Udhar Due ($_dueCustomersCount)'},
+      {'key': 'Clear', 'label': 'Settled (${_customers.length - _dueCustomersCount})'},
+      {'key': 'VIP', 'label': 'VIP'},
+    ];
+
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      physics: const BouncingScrollPhysics(),
+      child: Row(
+        children: filters.map((f) {
+          final isSelected = _selectedFilter == f['key'];
+          return Padding(
+            padding: const EdgeInsets.only(right: 6),
+            child: FilterChip(
+              selected: isSelected,
+              showCheckmark: false,
+              label: Text(
+                f['label']!,
+                style: GoogleFonts.outfit(
+                  fontSize: 11.5,
+                  fontWeight: isSelected ? FontWeight.w700 : FontWeight.w600,
+                  color: isSelected ? Colors.white : const Color(0xFF475569),
+                ),
+              ),
+              backgroundColor: Colors.white,
+              selectedColor: const Color(0xFF0F172A),
+              side: BorderSide(
+                color: isSelected ? const Color(0xFF0F172A) : const Color(0xFFE2E8F0),
+                width: 1.1,
+              ),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 0),
+              visualDensity: VisualDensity.compact,
+              onSelected: (_) {
+                HapticFeedback.selectionClick();
+                setState(() => _selectedFilter = f['key']!);
+              },
+            ),
+          );
+        }).toList(),
+      ),
+    );
+  }
+  Widget _buildCustomerCard(CustomerModel cust) {
+    final hasUdhar = cust.currentBalancePaise > 0;
+    final initial = cust.name.isNotEmpty ? cust.name[0].toUpperCase() : 'C';
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 7),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: hasUdhar ? const Color(0xFFFED7AA) : const Color(0xFFE2E8F0),
+          width: 1.1,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.02),
+            blurRadius: 4,
+            offset: const Offset(0, 1.5),
+          ),
+        ],
+      ),
+      child: Material(
+        color: Colors.transparent,
+        borderRadius: BorderRadius.circular(14),
+        child: InkWell(
+          onTap: () {
+            HapticFeedback.selectionClick();
+            setState(() => _selectedCustomer = cust);
+            _loadCustomerDetails(cust);
+          },
+          borderRadius: BorderRadius.circular(14),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            child: Row(
+              children: [
+                // 1. Initial Avatar
+                CircleAvatar(
+                  radius: 19,
+                  backgroundColor: hasUdhar ? const Color(0xFFFFF7ED) : const Color(0xFFECFDF5),
+                  child: Text(
+                    initial,
+                    style: GoogleFonts.outfit(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w800,
+                      color: hasUdhar ? const Color(0xFFEA580C) : const Color(0xFF059669),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 10),
+
+                // 2. Name + Phone + Locality
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        cust.name,
+                        style: GoogleFonts.outfit(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w700,
+                          color: const Color(0xFF0F172A),
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      const SizedBox(height: 2),
+                      Row(
+                        children: [
+                          Text(
+                            cust.phone,
+                            style: GoogleFonts.inter(
+                              fontSize: 11,
+                              color: const Color(0xFF64748B),
+                            ),
+                          ),
+                          if (cust.address != null && cust.address!.isNotEmpty) ...[
+                            Flexible(
+                              child: Text(
+                                ' • ${cust.address}',
+                                style: GoogleFonts.inter(
+                                  fontSize: 11,
+                                  color: const Color(0xFF64748B),
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 8),
+
+                // 3. Balance Amount & Status
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      MoneyFormatter.formatINR(cust.currentBalancePaise),
+                      style: GoogleFonts.outfit(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w800,
+                        color: hasUdhar ? const Color(0xFFDC2626) : const Color(0xFF059669),
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
+                      decoration: BoxDecoration(
+                        color: hasUdhar ? const Color(0xFFFEF2F2) : const Color(0xFFECFDF5),
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: Text(
+                        hasUdhar ? 'UDHAR' : 'CLEAR',
+                        style: GoogleFonts.inter(
+                          fontSize: 9,
+                          fontWeight: FontWeight.w800,
+                          color: hasUdhar ? const Color(0xFFDC2626) : const Color(0xFF059669),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(width: 8),
+
+                // 4. Official WhatsApp Icon Button
+                if (hasUdhar)
+                  GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTap: () => _sendWhatsAppReminder(cust),
+                    child: Padding(
+                      padding: const EdgeInsets.all(4),
+                      child: Image.asset(
+                        'assets/images/whatsapp_logo.png',
+                        width: 24,
+                        height: 24,
+                      ),
+                    ),
+                  )
+                else
+                  const Icon(Icons.chevron_right_rounded, color: Color(0xFFCBD5E1), size: 20),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildEmptyCustomersState() {
+    return Container(
+      padding: const EdgeInsets.all(32),
+      alignment: Alignment.center,
+      child: Column(
+        children: [
+          const Icon(Icons.search_off_rounded, size: 48, color: Color(0xFF94A3B8)),
+          const SizedBox(height: 12),
+          Text(
+            'Koi Grahak Nahi Mila',
+            style: GoogleFonts.outfit(fontSize: 16, fontWeight: FontWeight.w700, color: const Color(0xFF334155)),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Search badal kar dekhein ya "+ Add" par click karke naya khata kholein.',
+            style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF64748B)),
+            textAlign: TextAlign.center,
+          ),
+        ],
+      ),
+    );
+  }
+
+  // =========================================================================
+  // LEVEL 2: CUSTOMER 360° STATEMENT SCREEN (SCREENSHOTS 1, 2, 4, 5)
+  // =========================================================================
+  Widget _buildCustomerDetailView(CustomerModel customer) {
+    final hasUdhar = customer.currentBalancePaise > 0;
+    final initial = customer.name.isNotEmpty ? customer.name[0].toUpperCase() : 'C';
+
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(14, 12, 14, 100),
+      physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
+      children: [
+        // 1. Top Navigation Bar: < Back + Call + WhatsApp Reminder
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            // Back Button
+            Material(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(10),
+              child: InkWell(
+                onTap: () {
+                  HapticFeedback.selectionClick();
+                  setState(() => _selectedCustomer = null);
+                },
+                borderRadius: BorderRadius.circular(10),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: const Color(0xFFE2E8F0), width: 1.1),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.arrow_back_ios_new_rounded, size: 13, color: Color(0xFF0F172A)),
+                      const SizedBox(width: 6),
+                      Text(
+                        'Back',
+                        style: GoogleFonts.outfit(fontSize: 12.5, fontWeight: FontWeight.w700, color: const Color(0xFF0F172A)),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+
+            // Quick Call + WhatsApp Reminder Buttons
+            Row(
+              children: [
+                Material(
+                  color: const Color(0xFFF0F9FF),
+                  borderRadius: BorderRadius.circular(10),
+                  child: InkWell(
+                    onTap: () => _makePhoneCall(customer.phone),
+                    borderRadius: BorderRadius.circular(10),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: const Color(0xFFBAE6FD), width: 1.1),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(Icons.call_rounded, size: 14, color: Color(0xFF0284C7)),
+                          const SizedBox(width: 4),
+                          Text(
+                            'Call',
+                            style: GoogleFonts.outfit(fontSize: 12, fontWeight: FontWeight.w700, color: const Color(0xFF0284C7)),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Material(
+                  color: const Color(0xFFECFDF5),
+                  borderRadius: BorderRadius.circular(10),
+                  child: InkWell(
+                    onTap: () => _sendWhatsAppReminder(customer),
+                    borderRadius: BorderRadius.circular(10),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 7),
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: const Color(0xFFA7F3D0), width: 1.1),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Image.asset(
+                            'assets/images/whatsapp_logo.png',
+                            width: 16,
+                            height: 16,
+                          ),
+                          const SizedBox(width: 6),
+                          Text(
+                            'WhatsApp',
+                            style: GoogleFonts.outfit(fontSize: 12, fontWeight: FontWeight.w700, color: const Color(0xFF065F46)),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+        const SizedBox(height: 10),
+
+        // 2. Compact Space-Saving Customer Identity & Balance Card
+        Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+              color: hasUdhar ? const Color(0xFFFED7AA) : const Color(0xFFE2E8F0),
+              width: 1.1,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.02),
+                blurRadius: 6,
+                offset: const Offset(0, 2),
+              ),
+            ],
+          ),
+          child: Column(
+            children: [
+              // Row 1: Avatar + Name/Phone + Outstanding Balance & Tag
               Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
                   CircleAvatar(
-                    radius: 22,
-                    backgroundColor: const Color(0xFFF59E0B).withValues(alpha: 0.2),
-                    child: Text(customer.name[0], style: const TextStyle(color: Color(0xFFF59E0B), fontSize: 18, fontWeight: FontWeight.bold)),
+                    radius: 20,
+                    backgroundColor: const Color(0xFF0F172A),
+                    child: Text(
+                      initial,
+                      style: GoogleFonts.outfit(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w800,
+                        color: const Color(0xFFF59E0B),
+                      ),
+                    ),
                   ),
-                  const SizedBox(width: 12),
+                  const SizedBox(width: 10),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(customer.name, style: GoogleFonts.outfit(fontSize: 18, fontWeight: FontWeight.w700, color: Colors.white)),
-                        Text(customer.phone, style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF94A3B8))),
+                        Text(
+                          customer.name,
+                          style: GoogleFonts.outfit(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w800,
+                            color: const Color(0xFF0F172A),
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          '${customer.phone}${customer.address != null && customer.address!.isNotEmpty ? " • ${customer.address}" : ""}',
+                          style: GoogleFonts.inter(fontSize: 11, color: const Color(0xFF64748B)),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
                       ],
                     ),
                   ),
+                  const SizedBox(width: 8),
                   Column(
                     crossAxisAlignment: CrossAxisAlignment.end,
                     children: [
-                      Text("Net Balance", style: GoogleFonts.inter(fontSize: 11, color: const Color(0xFF94A3B8))),
                       Text(
-                        currencyFormat.format(balRupees),
+                        MoneyFormatter.formatINR(customer.currentBalancePaise),
                         style: GoogleFonts.outfit(
-                          fontSize: 20,
-                          fontWeight: FontWeight.w800,
-                          color: balRupees > 0 ? const Color(0xFFF59E0B) : const Color(0xFF10B981),
+                          fontSize: 17,
+                          fontWeight: FontWeight.w900,
+                          color: hasUdhar ? const Color(0xFFDC2626) : const Color(0xFF059669),
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
+                        decoration: BoxDecoration(
+                          color: hasUdhar ? const Color(0xFFFEF2F2) : const Color(0xFFECFDF5),
+                          borderRadius: BorderRadius.circular(4),
+                          border: Border.all(
+                            color: hasUdhar ? const Color(0xFFFECACA) : const Color(0xFFA7F3D0),
+                            width: 0.8,
+                          ),
+                        ),
+                        child: Text(
+                          hasUdhar ? 'UDHAR (बाकी)' : 'CLEAR (साफ)',
+                          style: GoogleFonts.inter(
+                            fontSize: 9.5,
+                            fontWeight: FontWeight.w800,
+                            color: hasUdhar ? const Color(0xFFDC2626) : const Color(0xFF059669),
+                          ),
                         ),
                       ),
                     ],
                   ),
                 ],
               ),
-              const SizedBox(height: 20),
+              const SizedBox(height: 10),
+              Container(height: 1, color: const Color(0xFFF1F5F9)),
+              const SizedBox(height: 10),
 
-              // Action Buttons: Settle Jama / Reminder
+              // Row 2: 2 Compact Retail Action Buttons (+ Udhar Diya vs - Jama Mila)
               Row(
                 children: [
                   Expanded(
                     child: ElevatedButton.icon(
-                      onPressed: () => _openSettleBalanceDialog(customer),
-                      icon: const Icon(Icons.download_done, color: Colors.white, size: 18),
-                      label: Text("Jama Settle", style: GoogleFonts.outfit(fontWeight: FontWeight.w700, color: Colors.white)),
+                      onPressed: () => _showGiveUdharModal(customer),
+                      icon: const Icon(Icons.arrow_upward_rounded, size: 15, color: Colors.white),
+                      label: Text(
+                        '+ Udhar Diya',
+                        style: GoogleFonts.outfit(fontSize: 12.5, fontWeight: FontWeight.w800, color: Colors.white),
+                      ),
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF10B981),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        backgroundColor: const Color(0xFFDC2626),
+                        padding: const EdgeInsets.symmetric(vertical: 9),
+                        elevation: 0,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                        visualDensity: VisualDensity.compact,
                       ),
                     ),
                   ),
-                  const SizedBox(width: 10),
+                  const SizedBox(width: 8),
                   Expanded(
-                    child: OutlinedButton.icon(
-                      onPressed: () => _sendWhatsAppReminder(customer),
-                      icon: const Icon(Icons.chat, color: Color(0xFF10B981), size: 18),
-                      label: Text("WhatsApp", style: GoogleFonts.outfit(fontWeight: FontWeight.w700, color: const Color(0xFF10B981))),
-                      style: OutlinedButton.styleFrom(
-                        side: const BorderSide(color: Color(0xFF10B981)),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                        padding: const EdgeInsets.symmetric(vertical: 12),
+                    child: ElevatedButton.icon(
+                      onPressed: () => _showReceiveJamaModal(customer),
+                      icon: const Icon(Icons.arrow_downward_rounded, size: 15, color: Colors.white),
+                      label: Text(
+                        '- Jama Mila',
+                        style: GoogleFonts.outfit(fontSize: 12.5, fontWeight: FontWeight.w800, color: Colors.white),
+                      ),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF059669),
+                        padding: const EdgeInsets.symmetric(vertical: 9),
+                        elevation: 0,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                        visualDensity: VisualDensity.compact,
                       ),
                     ),
                   ),
                 ],
               ),
-              const SizedBox(height: 20),
+            ],
+          ),
+        ),
+        const SizedBox(height: 10),
 
-              // Ledger Transactions List
-              Text("TRANSACTION HISTORY", style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w700, color: const Color(0xFF64748B))),
-              const SizedBox(height: 10),
-              if (ledgerEntries.isEmpty)
+        // 3. Segmented Sub-Tabs: 📜 Ledger Timeline (X) | 🧾 Pending Bills (Y)
+        _buildCustomerSegmentedTabs(),
+        const SizedBox(height: 12),
+
+        // 4. Tab Content
+        if (_activeCustomerSubTab == 0)
+          _buildLedgerTimelineTab(customer)
+        else
+          _buildPendingBillsTab(customer),
+      ],
+    );
+  }
+
+  Widget _buildCustomerSegmentedTabs() {
+    final timelineCount = _customerLedger.length;
+    final pendingBillsCount = _customerBills.where((b) => b.paymentMethod == 'credit').length;
+
+    return Container(
+      padding: const EdgeInsets.all(4),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: const Color(0xFFE2E8F0), width: 1.2),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: _buildSubTabButton(
+              index: 0,
+              icon: '📜',
+              label: 'Ledger Timeline ($timelineCount)',
+            ),
+          ),
+          const SizedBox(width: 4),
+          Expanded(
+            child: _buildSubTabButton(
+              index: 1,
+              icon: '🧾',
+              label: 'Pending Bills ($pendingBillsCount)',
+              badgeCount: pendingBillsCount > 0 ? pendingBillsCount : null,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSubTabButton({
+    required int index,
+    required String icon,
+    required String label,
+    int? badgeCount,
+  }) {
+    final isSelected = _activeCustomerSubTab == index;
+
+    return Material(
+      color: isSelected ? const Color(0xFF0F172A) : Colors.transparent,
+      borderRadius: BorderRadius.circular(10),
+      child: InkWell(
+        onTap: () {
+          HapticFeedback.selectionClick();
+          setState(() => _activeCustomerSubTab = index);
+        },
+        borderRadius: BorderRadius.circular(10),
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 10),
+          alignment: Alignment.center,
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Text(icon, style: const TextStyle(fontSize: 14)),
+              const SizedBox(width: 6),
+              Text(
+                label,
+                style: GoogleFonts.outfit(
+                  fontSize: 12.5,
+                  fontWeight: isSelected ? FontWeight.w800 : FontWeight.w600,
+                  color: isSelected ? Colors.white : const Color(0xFF475569),
+                ),
+              ),
+              if (badgeCount != null && badgeCount > 0 && !isSelected) ...[
+                const SizedBox(width: 6),
                 Container(
-                  padding: const EdgeInsets.all(20),
-                  child: Center(
-                    child: Text("No transaction history recorded yet", style: GoogleFonts.inter(color: const Color(0xFF64748B), fontSize: 13)),
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFDC2626),
+                    borderRadius: BorderRadius.circular(10),
                   ),
-                )
-              else
-                ConstrainedBox(
-                  constraints: const BoxConstraints(maxHeight: 260),
-                  child: ListView.builder(
-                    shrinkWrap: true,
-                    itemCount: ledgerEntries.length,
-                    itemBuilder: (context, idx) {
-                      final item = ledgerEntries[idx];
-                      final isDebit = item.type == 'credit'; // given udhar
-                      final amtRupees = item.amountPaise / 100.0;
-                      return Container(
-                        margin: const EdgeInsets.only(bottom: 8),
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF0B0F19),
-                          borderRadius: BorderRadius.circular(14),
-                          border: Border.all(color: const Color(0xFF1E293B)),
-                        ),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(item.description, style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w600, color: Colors.white)),
-                                Text(DateFormat('dd MMM yyyy, hh:mm a').format(item.createdAt), style: GoogleFonts.inter(fontSize: 11, color: const Color(0xFF64748B))),
-                              ],
-                            ),
-                            Text(
-                              "${isDebit ? '+' : '-'} ${currencyFormat.format(amtRupees)}",
-                              style: GoogleFonts.outfit(
-                                fontSize: 15,
-                                fontWeight: FontWeight.w800,
-                                color: isDebit ? const Color(0xFFF59E0B) : const Color(0xFF10B981),
-                              ),
-                            ),
-                          ],
-                        ),
-                      );
-                    },
+                  child: Text(
+                    '$badgeCount',
+                    style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.w800, color: Colors.white),
                   ),
                 ),
-            ],
-          ),
-        );
-      },
-    );
-  }
-
-  void _openSettleBalanceDialog(CustomerModel customer) {
-    final amountCtrl = TextEditingController(text: (customer.currentBalancePaise / 100.0).toStringAsFixed(0));
-    showDialog(
-      context: context,
-      builder: (dialogCtx) {
-        return AlertDialog(
-          backgroundColor: const Color(0xFF131B2A),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-          title: Text("Receive Payment (Jama)", style: GoogleFonts.outfit(fontWeight: FontWeight.w700, color: Colors.white)),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text("Customer: ${customer.name}", style: GoogleFonts.inter(color: const Color(0xFF94A3B8))),
-              const SizedBox(height: 14),
-              TextField(
-                controller: amountCtrl,
-                keyboardType: TextInputType.number,
-                style: GoogleFonts.outfit(fontSize: 22, fontWeight: FontWeight.w800, color: const Color(0xFF10B981)),
-                decoration: InputDecoration(
-                  prefixText: "₹ ",
-                  prefixStyle: GoogleFonts.outfit(fontSize: 22, fontWeight: FontWeight.w800, color: const Color(0xFF10B981)),
-                  labelText: "Amount Received",
-                  labelStyle: GoogleFonts.inter(color: const Color(0xFF94A3B8)),
-                  enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Color(0xFF1E293B))),
-                  focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Color(0xFF10B981))),
-                ),
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: Text("Cancel", style: GoogleFonts.inter(color: const Color(0xFF64748B))),
-            ),
-            ElevatedButton(
-              onPressed: () async {
-                final rupees = double.tryParse(amountCtrl.text.trim()) ?? 0;
-                final paise = (rupees * 100).toInt();
-                if (paise > 0) {
-                  final newBalance = customer.currentBalancePaise - paise;
-                  final updatedCust = CustomerModel(
-                    id: customer.id,
-                    businessId: customer.businessId,
-                    name: customer.name,
-                    phone: customer.phone,
-                    currentBalancePaise: newBalance < 0 ? 0 : newBalance,
-                    creditLimitPaise: customer.creditLimitPaise,
-                    syncStatus: 'pending',
-                  );
-                  await LocalDatabase.instance.upsertCustomer(updatedCust);
-
-                  // Add ledger payment entry
-                  final ledgerEntry = LedgerTransactionModel(
-                    id: const Uuid().v4(),
-                    businessId: customer.businessId,
-                    customerId: customer.id,
-                    type: 'debit', // payment received
-                    amountPaise: paise,
-                    balanceAfterPaise: newBalance < 0 ? 0 : newBalance,
-                    description: 'Cash Payment Received',
-                    createdAt: DateTime.now(),
-                    syncStatus: 'pending',
-                  );
-                  final db = await LocalDatabase.instance.database;
-                  await db.insert('ledger_transactions', ledgerEntry.toMap());
-
-                  if (!dialogCtx.mounted) return;
-                  Navigator.pop(dialogCtx);
-                  _loadCustomers();
-                }
-              },
-              style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF10B981), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
-              child: Text("Confirm Jama", style: GoogleFonts.outfit(fontWeight: FontWeight.w700, color: Colors.white)),
-            ),
-          ],
-        );
-      },
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    if (_isLoading) {
-      return const Scaffold(
-        backgroundColor: Color(0xFF0B0F19),
-        body: Center(child: CircularProgressIndicator(color: Color(0xFF10B981))),
-      );
-    }
-
-    final filteredCustomers = _customers.where((c) {
-      return c.name.toLowerCase().contains(_searchQuery.toLowerCase()) || c.phone.contains(_searchQuery);
-    }).toList();
-
-    return Scaffold(
-      backgroundColor: const Color(0xFF0B0F19),
-      body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Top Bar with Add Customer Button
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text("Digital Khata", style: GoogleFonts.outfit(fontSize: 24, fontWeight: FontWeight.w800, color: Colors.white)),
-                  ElevatedButton.icon(
-                    onPressed: _openAddCustomerDialog,
-                    icon: const Icon(Icons.person_add, size: 16, color: Colors.white),
-                    label: Text("New Customer", style: GoogleFonts.outfit(fontWeight: FontWeight.w700, color: Colors.white, fontSize: 12)),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF10B981),
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 16),
-
-              // Total Market Udhar Card
-              _buildMarketUdharCard(),
-              const SizedBox(height: 18),
-
-              // Search Bar
-              Container(
-                height: 44,
-                decoration: BoxDecoration(
-                  color: const Color(0xFF131B2A),
-                  borderRadius: BorderRadius.circular(14),
-                  border: Border.all(color: const Color(0xFF1E293B)),
-                ),
-                child: TextField(
-                  onChanged: (val) => setState(() => _searchQuery = val),
-                  style: GoogleFonts.inter(color: Colors.white, fontSize: 14),
-                  decoration: InputDecoration(
-                    hintText: "Search customer name or phone...",
-                    hintStyle: GoogleFonts.inter(color: const Color(0xFF64748B), fontSize: 13),
-                    prefixIcon: const Icon(Icons.search, color: Color(0xFF64748B), size: 20),
-                    border: InputBorder.none,
-                    contentPadding: const EdgeInsets.symmetric(vertical: 10),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 16),
-
-              // Customers List
-              Text("ALL CUSTOMERS (${filteredCustomers.length})", style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w700, color: const Color(0xFF64748B))),
-              const SizedBox(height: 10),
-              ListView.builder(
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                itemCount: filteredCustomers.length,
-                itemBuilder: (context, idx) {
-                  final cust = filteredCustomers[idx];
-                  final balRupees = cust.currentBalancePaise / 100.0;
-                  final hasUdhar = balRupees > 0;
-
-                  return Container(
-                    margin: const EdgeInsets.only(bottom: 10),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF131B2A),
-                      borderRadius: BorderRadius.circular(18),
-                      border: Border.all(color: hasUdhar ? const Color(0xFFF59E0B).withValues(alpha: 0.3) : const Color(0xFF1E293B)),
-                    ),
-                    child: ListTile(
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-                      onTap: () => _openCustomerLedgerSheet(cust),
-                      leading: CircleAvatar(
-                        radius: 22,
-                        backgroundColor: hasUdhar ? const Color(0xFFF59E0B).withValues(alpha: 0.15) : const Color(0xFF10B981).withValues(alpha: 0.15),
-                        child: Text(
-                          cust.name[0],
-                          style: TextStyle(
-                            color: hasUdhar ? const Color(0xFFF59E0B) : const Color(0xFF10B981),
-                            fontWeight: FontWeight.w800,
-                            fontSize: 16,
-                          ),
-                        ),
-                      ),
-                      title: Text(cust.name, style: GoogleFonts.inter(fontSize: 15, fontWeight: FontWeight.w700, color: Colors.white)),
-                      subtitle: Text(cust.phone, style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF64748B))),
-                      trailing: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            crossAxisAlignment: CrossAxisAlignment.end,
-                            children: [
-                              Text(
-                                currencyFormat.format(balRupees),
-                                style: GoogleFonts.outfit(
-                                  fontSize: 17,
-                                  fontWeight: FontWeight.w800,
-                                  color: hasUdhar ? const Color(0xFFF59E0B) : const Color(0xFF10B981),
-                                ),
-                              ),
-                              Text(
-                                hasUdhar ? "Pending" : "Clear",
-                                style: GoogleFonts.inter(
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.w600,
-                                  color: hasUdhar ? const Color(0xFFF59E0B) : const Color(0xFF10B981),
-                                ),
-                              ),
-                            ],
-                          ),
-                          if (hasUdhar) ...[
-                            const SizedBox(width: 8),
-                            IconButton(
-                              icon: Container(
-                                padding: const EdgeInsets.all(6),
-                                decoration: BoxDecoration(
-                                  color: const Color(0xFF10B981).withValues(alpha: 0.15),
-                                  borderRadius: BorderRadius.circular(8),
-                                ),
-                                child: const Icon(Icons.chat, color: Color(0xFF10B981), size: 16),
-                              ),
-                              onPressed: () => _sendWhatsAppReminder(cust),
-                              tooltip: "Send WhatsApp Reminder",
-                            ),
-                          ],
-                        ],
-                      ),
-                    ),
-                  );
-                },
-              ),
-              const SizedBox(height: 80),
+              ],
             ],
           ),
         ),
@@ -552,87 +1101,1135 @@ class _KhataScreenState extends State<KhataScreen> {
     );
   }
 
-  Widget _buildMarketUdharCard() {
-    final udharRupees = totalPendingUdharPaise / 100.0;
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [
-            const Color(0xFF162032),
-            const Color(0xFF1E293B).withValues(alpha: 0.8),
-          ],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
+  // -------------------------------------------------------------------------
+  // SUB-TAB 0: LEDGER TIMELINE (Full Chronological Statement)
+  // -------------------------------------------------------------------------
+  Widget _buildLedgerTimelineTab(CustomerModel customer) {
+    if (_customerLedger.isEmpty) {
+      return Container(
+        padding: const EdgeInsets.all(32),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: const Color(0xFFE2E8F0)),
         ),
-        borderRadius: BorderRadius.circular(24),
+        child: Column(
+          children: [
+            const Icon(Icons.receipt_long_outlined, size: 48, color: Color(0xFF94A3B8)),
+            const SizedBox(height: 12),
+            Text(
+              'No Transaction History',
+              style: GoogleFonts.outfit(fontSize: 16, fontWeight: FontWeight.w700, color: const Color(0xFF334155)),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'Aapne abhi tak is grahak ka koi hisaab nahi joda hai. "+ Udhar Diya" ya "- Jama Mila" se start karein.',
+              style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF64748B)),
+              textAlign: TextAlign.center,
+            ),
+          ],
+        ),
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(
+              'TRANSACTION STATEMENT (${_customerLedger.length})',
+              style: GoogleFonts.inter(
+                fontSize: 11,
+                fontWeight: FontWeight.w800,
+                color: const Color(0xFF64748B),
+                letterSpacing: 0.6,
+              ),
+            ),
+            Text(
+              'Latest first',
+              style: GoogleFonts.inter(fontSize: 11, color: const Color(0xFF94A3B8)),
+            ),
+          ],
+        ),
+        const SizedBox(height: 10),
+        ..._customerLedger.map((tx) => _buildLedgerCard(tx)),
+      ],
+    );
+  }
+
+  Widget _buildLedgerCard(LedgerTransactionModel tx) {
+    final isUdhar = tx.type == 'credit'; // Udhar given to customer
+    final dateStr = DateFormat('d MMM yyyy, hh:mm a').format(tx.createdAt);
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
         border: Border.all(
-          color: const Color(0xFFF59E0B).withValues(alpha: 0.35),
+          color: isUdhar ? const Color(0xFFFCA5A5).withValues(alpha: 0.5) : const Color(0xFFA7F3D0).withValues(alpha: 0.5),
           width: 1.2,
         ),
         boxShadow: [
           BoxShadow(
-            color: const Color(0xFFF59E0B).withValues(alpha: 0.08),
-            blurRadius: 24,
-            offset: const Offset(0, 8),
+            color: Colors.black.withValues(alpha: 0.02),
+            blurRadius: 6,
+            offset: const Offset(0, 2),
           ),
         ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // Top Row: Tag badge + Amount
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: isUdhar ? const Color(0xFFFEF2F2) : const Color(0xFFECFDF5),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      isUdhar ? Icons.north_east_rounded : Icons.south_west_rounded,
+                      size: 13,
+                      color: isUdhar ? const Color(0xFFDC2626) : const Color(0xFF059669),
+                    ),
+                    const SizedBox(width: 4),
+                    Text(
+                      isUdhar ? 'YOU GAVE (उधार)' : 'YOU RECEIVED (जमा)',
+                      style: GoogleFonts.inter(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w800,
+                        color: isUdhar ? const Color(0xFFDC2626) : const Color(0xFF059669),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Text(
+                '${isUdhar ? "+" : "-"} ${MoneyFormatter.formatINR(tx.amountPaise)}',
+                style: GoogleFonts.outfit(
+                  fontSize: 17,
+                  fontWeight: FontWeight.w900,
+                  color: isUdhar ? const Color(0xFFDC2626) : const Color(0xFF059669),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+
+          // Description Note
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            decoration: BoxDecoration(
+              color: const Color(0xFFF8FAFC),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Text(
+              tx.description.isNotEmpty ? tx.description : 'Khata Transaction',
+              style: GoogleFonts.inter(
+                fontSize: 12.5,
+                fontWeight: FontWeight.w600,
+                color: const Color(0xFF1E293B),
+              ),
+            ),
+          ),
+          const SizedBox(height: 8),
+
+          // Date & Time
+          Row(
+            children: [
+              const Icon(Icons.calendar_today_outlined, size: 12, color: Color(0xFF94A3B8)),
+              const SizedBox(width: 4),
+              Text(
+                dateStr,
+                style: GoogleFonts.inter(fontSize: 11, color: const Color(0xFF64748B)),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+
+          // Bottom Bar: Balance After
+          Container(height: 1, color: const Color(0xFFF1F5F9)),
+          const SizedBox(height: 8),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'Bal: ${MoneyFormatter.formatINR(tx.balanceAfterPaise)}',
+                style: GoogleFonts.inter(
+                  fontSize: 11.5,
+                  fontWeight: FontWeight.w600,
+                  color: const Color(0xFF475569),
+                ),
+              ),
+              Row(
+                children: [
+                  Material(
+                    color: const Color(0xFFECFDF5),
+                    borderRadius: BorderRadius.circular(6),
+                    child: InkWell(
+                      onTap: () {
+                        if (_selectedCustomer != null) {
+                          _shareLedgerSlip(tx, _selectedCustomer!);
+                        }
+                      },
+                      borderRadius: BorderRadius.circular(6),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(6),
+                          border: Border.all(color: const Color(0xFFA7F3D0)),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Image.asset('assets/images/whatsapp_logo.png', width: 14, height: 14),
+                            const SizedBox(width: 4),
+                            Text(
+                              'Share Slip',
+                              style: GoogleFonts.inter(
+                                fontSize: 10.5,
+                                fontWeight: FontWeight.w700,
+                                color: const Color(0xFF065F46),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  // -------------------------------------------------------------------------
+  // SUB-TAB 1: PENDING BILLS (Credit sales invoices)
+  // -------------------------------------------------------------------------
+  Widget _buildPendingBillsTab(CustomerModel customer) {
+    final creditBills = _customerBills.where((b) {
+      if (_billsFilter == 'Pending') return b.paymentMethod == 'credit' && b.status != 'settled';
+      if (_billsFilter == 'Settled') return b.status == 'settled';
+      return true;
+    }).toList();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Filter Pills: Pending (1) | All Bills (1) | Settled (0)
+        Row(
+          children: [
+            _buildBillFilterChip('Pending', 'Pending (${_customerBills.where((b) => b.paymentMethod == 'credit' && b.status != 'settled').length})'),
+            const SizedBox(width: 8),
+            _buildBillFilterChip('All', 'All Bills (${_customerBills.length})'),
+            const SizedBox(width: 8),
+            _buildBillFilterChip('Settled', 'Settled (${_customerBills.where((b) => b.status == 'settled').length})'),
+          ],
+        ),
+        const SizedBox(height: 12),
+
+        if (creditBills.isEmpty)
+          Container(
+            padding: const EdgeInsets.all(32),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: const Color(0xFFE2E8F0)),
+            ),
+            child: Column(
+              children: [
+                const Icon(Icons.receipt_outlined, size: 48, color: Color(0xFF94A3B8)),
+                const SizedBox(height: 12),
+                Text(
+                  'No Bills in this Filter',
+                  style: GoogleFonts.outfit(fontSize: 16, fontWeight: FontWeight.w700, color: const Color(0xFF334155)),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'Jab aap POS Billing se credit bill banayenge, wo yahan automatic reflect hoga.',
+                  style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF64748B)),
+                  textAlign: TextAlign.center,
+                ),
+              ],
+            ),
+          )
+        else
+          ...creditBills.map((bill) => _buildCreditBillCard(bill, customer)),
+      ],
+    );
+  }
+
+  Widget _buildBillFilterChip(String key, String label) {
+    final isSelected = _billsFilter == key;
+    return FilterChip(
+      selected: isSelected,
+      showCheckmark: false,
+      label: Text(
+        label,
+        style: GoogleFonts.outfit(
+          fontSize: 11.5,
+          fontWeight: isSelected ? FontWeight.w700 : FontWeight.w600,
+          color: isSelected ? Colors.white : const Color(0xFF475569),
+        ),
+      ),
+      backgroundColor: Colors.white,
+      selectedColor: isSelected && key == 'Pending' ? const Color(0xFFDC2626) : const Color(0xFF0F172A),
+      side: BorderSide(
+        color: isSelected ? Colors.transparent : const Color(0xFFE2E8F0),
+        width: 1.2,
+      ),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      onSelected: (_) {
+        HapticFeedback.selectionClick();
+        setState(() => _billsFilter = key);
+      },
+    );
+  }
+
+  Widget _buildCreditBillCard(SaleModel bill, CustomerModel customer) {
+    final isSettled = bill.status == 'settled';
+    final dateStr = DateFormat('d MMM yyyy • hh:mm a').format(bill.createdAt);
+
+    // Items preview string
+    String itemsPreview = '';
+    if (bill.items.isNotEmpty) {
+      final names = bill.items.map((it) => '${it['qty']}x ${it['name']}').take(2).join(', ');
+      itemsPreview = 'Items (${bill.items.length}): $names${bill.items.length > 2 ? "..." : ""}';
+    } else {
+      itemsPreview = 'Items (1): Store credit sale';
+    }
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(
+          color: isSettled ? const Color(0xFFE2E8F0) : const Color(0xFFFECACA),
+          width: 1.2,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.02),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Header: Invoice # + Badges
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Row(
                 children: [
-                  const Icon(Icons.menu_book, color: Color(0xFFF59E0B), size: 18),
-                  const SizedBox(width: 6),
                   Text(
-                    "TOTAL MARKET UDHAR",
-                    style: GoogleFonts.inter(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w700,
-                      color: const Color(0xFFF59E0B),
-                      letterSpacing: 1.1,
+                    '#${bill.invoiceNumber}',
+                    style: GoogleFonts.outfit(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w800,
+                      color: const Color(0xFF0F172A),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: isSettled ? const Color(0xFFECFDF5) : const Color(0xFFFEF2F2),
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: Text(
+                      isSettled ? 'PAID (SETTLED)' : 'UNPAID (UDHAR)',
+                      style: GoogleFonts.inter(
+                        fontSize: 9.5,
+                        fontWeight: FontWeight.w800,
+                        color: isSettled ? const Color(0xFF059669) : const Color(0xFFDC2626),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 4),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF1F5F9),
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: Text(
+                      'CREDIT',
+                      style: GoogleFonts.inter(
+                        fontSize: 9.5,
+                        fontWeight: FontWeight.w700,
+                        color: const Color(0xFF475569),
+                      ),
                     ),
                   ),
                 ],
               ),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFF59E0B).withValues(alpha: 0.15),
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                child: Text(
-                  "$customersWithDuesCount Due",
-                  style: GoogleFonts.inter(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                    color: const Color(0xFFF59E0B),
+            ],
+          ),
+          const SizedBox(height: 6),
+
+          // Date
+          Row(
+            children: [
+              const Icon(Icons.calendar_today_outlined, size: 12, color: Color(0xFF94A3B8)),
+              const SizedBox(width: 4),
+              Text(
+                dateStr,
+                style: GoogleFonts.inter(fontSize: 11, color: const Color(0xFF64748B)),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+
+          // Items Preview Box
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+            decoration: BoxDecoration(
+              color: const Color(0xFFF8FAFC),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: const Color(0xFFEEF2F6)),
+            ),
+            child: Row(
+              children: [
+                const Icon(Icons.shopping_bag_outlined, size: 15, color: Color(0xFFD97706)),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    itemsPreview,
+                    style: GoogleFonts.inter(
+                      fontSize: 11.5,
+                      fontWeight: FontWeight.w500,
+                      color: const Color(0xFF334155),
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 12),
+
+          // Bill Total & Remaining Due
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'BILL TOTAL',
+                    style: GoogleFonts.inter(fontSize: 9.5, fontWeight: FontWeight.w700, color: const Color(0xFF94A3B8)),
+                  ),
+                  Text(
+                    MoneyFormatter.formatINR(bill.totalAmountPaise),
+                    style: GoogleFonts.outfit(fontSize: 15, fontWeight: FontWeight.w800, color: const Color(0xFF0F172A)),
+                  ),
+                ],
+              ),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Text(
+                    'REMAINING DUE',
+                    style: GoogleFonts.inter(fontSize: 9.5, fontWeight: FontWeight.w700, color: const Color(0xFFDC2626)),
+                  ),
+                  Text(
+                    isSettled ? '₹0.00' : MoneyFormatter.formatINR(bill.totalAmountPaise),
+                    style: GoogleFonts.outfit(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w900,
+                      color: isSettled ? const Color(0xFF059669) : const Color(0xFFDC2626),
+                    ),
+                  ),
+                ],
               ),
             ],
           ),
           const SizedBox(height: 12),
-          Text(
-            currencyFormat.format(udharRupees),
-            style: GoogleFonts.outfit(
-              fontSize: 36,
-              fontWeight: FontWeight.w800,
-              color: Colors.white,
-              letterSpacing: -1,
-            ),
-          ),
-          const SizedBox(height: 6),
-          Text(
-            "Market me itna udhar vasooli baki hai",
-            style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF94A3B8)),
+
+          // Actions: View Bill + Clear Bill
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: () => _showBillDetailModal(bill),
+                  icon: const Icon(Icons.receipt_long_rounded, size: 15, color: Color(0xFF0284C7)),
+                  label: Text('View Bill 🧾', style: GoogleFonts.outfit(fontSize: 12.5, fontWeight: FontWeight.w700, color: const Color(0xFF0284C7))),
+                  style: OutlinedButton.styleFrom(
+                    backgroundColor: const Color(0xFFF0F9FF),
+                    side: const BorderSide(color: Color(0xFFBAE6FD)),
+                    padding: const EdgeInsets.symmetric(vertical: 8),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  ),
+                ),
+              ),
+              if (!isSettled) ...[
+                const SizedBox(width: 8),
+                Expanded(
+                  child: ElevatedButton.icon(
+                    onPressed: () => _settleBill(bill, customer),
+                    icon: const Icon(Icons.check_circle_outline_rounded, size: 15, color: Colors.white),
+                    label: Text('Clear Bill', style: GoogleFonts.outfit(fontSize: 12.5, fontWeight: FontWeight.w800, color: Colors.white)),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF059669),
+                      elevation: 0,
+                      padding: const EdgeInsets.symmetric(vertical: 8),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                    ),
+                  ),
+                ),
+              ],
+            ],
           ),
         ],
       ),
+    );
+  }
+
+  // =========================================================================
+  // MODALS & DIALOGS
+  // =========================================================================
+
+  // 1. ADD NEW CUSTOMER TO KHATA MODAL (SCREENSHOT 3)
+  void _showAddCustomerModal() {
+    final nameCtrl = TextEditingController();
+    final phoneCtrl = TextEditingController();
+    final addressCtrl = TextEditingController();
+    final balanceCtrl = TextEditingController(text: '0.00');
+
+    showDialog(
+      context: context,
+      builder: (ctx) {
+        return AlertDialog(
+          backgroundColor: Colors.white,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+          contentPadding: const EdgeInsets.fromLTRB(20, 20, 20, 16),
+          title: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Row(
+                children: [
+                  const Icon(Icons.person_add_alt_1_rounded, color: Color(0xFFD97706), size: 22),
+                  const SizedBox(width: 8),
+                  Text(
+                    'Add New Customer to Khata',
+                    style: GoogleFonts.outfit(fontSize: 17, fontWeight: FontWeight.w800, color: const Color(0xFF0F172A)),
+                  ),
+                ],
+              ),
+              IconButton(
+                icon: const Icon(Icons.close_rounded, size: 20, color: Color(0xFF64748B)),
+                onPressed: () => Navigator.pop(ctx),
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(),
+              ),
+            ],
+          ),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Create a new customer account to track Udhar and payment transactions.',
+                  style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF64748B)),
+                ),
+                const SizedBox(height: 16),
+
+                // Customer Name
+                _buildModalTextField(
+                  label: 'Customer Name *',
+                  hint: 'e.g. Ramesh Kumar',
+                  controller: nameCtrl,
+                ),
+                const SizedBox(height: 12),
+
+                // Phone Number
+                _buildModalTextField(
+                  label: 'Phone Number (For WhatsApp Statement & Reminders) *',
+                  hint: '9876543210',
+                  controller: phoneCtrl,
+                  keyboardType: TextInputType.phone,
+                ),
+                const SizedBox(height: 12),
+
+                // Address / Locality
+                _buildModalTextField(
+                  label: 'Address / Locality (Optional)',
+                  hint: 'e.g. Shop 4, Main Bazaar',
+                  controller: addressCtrl,
+                ),
+                const SizedBox(height: 12),
+
+                // Opening Balance
+                _buildModalTextField(
+                  label: 'Opening Balance (Purana Udhar / Advance) (₹)',
+                  hint: '0.00',
+                  controller: balanceCtrl,
+                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  helper: 'Enter existing due balance if customer already owes money.',
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: Text('Cancel', style: GoogleFonts.outfit(fontWeight: FontWeight.w600, color: const Color(0xFF64748B))),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                final name = nameCtrl.text.trim();
+                final phone = phoneCtrl.text.trim();
+                final address = addressCtrl.text.trim();
+                final double openBalRupees = double.tryParse(balanceCtrl.text.trim()) ?? 0.0;
+                final int openBalPaise = (openBalRupees * 100).round();
+
+                if (name.isEmpty || phone.isEmpty) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Please enter customer name and phone number.')),
+                  );
+                  return;
+                }
+
+                final newCustomer = CustomerModel(
+                  id: 'cust_${const Uuid().v4().substring(0, 8)}',
+                  businessId: FirestoreSyncService.instance.activeBusinessId,
+                  name: name,
+                  phone: phone,
+                  address: address.isNotEmpty ? address : null,
+                  currentBalancePaise: openBalPaise,
+                  creditLimitPaise: 500000,
+                  syncStatus: 'pending',
+                );
+
+                await LocalDatabase.instance.upsertCustomer(newCustomer);
+
+                // If opening balance > 0, insert opening balance ledger record
+                if (openBalPaise > 0) {
+                  final db = await LocalDatabase.instance.database;
+                  await db.insert('ledger_transactions', {
+                    'id': const Uuid().v4(),
+                    'business_id': newCustomer.businessId,
+                    'customer_id': newCustomer.id,
+                    'type': 'credit',
+                    'amount_paise': openBalPaise,
+                    'balance_after_paise': openBalPaise,
+                    'description': 'Initial opening balance',
+                    'reference_id': null,
+                    'created_at': DateTime.now().toIso8601String(),
+                    'sync_status': 'pending',
+                  });
+                }
+
+                if (!ctx.mounted) return;
+                Navigator.pop(ctx);
+                if (!mounted) return;
+                _loadData();
+
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text('✓ Khata account opened for $name!'),
+                    backgroundColor: const Color(0xFF059669),
+                  ),
+                );
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFFF59E0B),
+                foregroundColor: const Color(0xFF0F172A),
+                elevation: 0,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+              child: Text('Save Customer', style: GoogleFonts.outfit(fontWeight: FontWeight.w800)),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildModalTextField({
+    required String label,
+    required String hint,
+    required TextEditingController controller,
+    TextInputType keyboardType = TextInputType.text,
+    String? helper,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: GoogleFonts.inter(fontSize: 11.5, fontWeight: FontWeight.w700, color: const Color(0xFF334155)),
+        ),
+        const SizedBox(height: 5),
+        TextField(
+          controller: controller,
+          keyboardType: keyboardType,
+          style: GoogleFonts.inter(fontSize: 13.5, color: const Color(0xFF0F172A)),
+          decoration: InputDecoration(
+            hintText: hint,
+            hintStyle: GoogleFonts.inter(fontSize: 12.5, color: const Color(0xFF94A3B8)),
+            filled: true,
+            fillColor: const Color(0xFFF8FAFC),
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+            ),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: const BorderSide(color: Color(0xFFF59E0B), width: 1.5),
+            ),
+            contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+          ),
+        ),
+        if (helper != null) ...[
+          const SizedBox(height: 4),
+          Text(helper, style: GoogleFonts.inter(fontSize: 10.5, color: const Color(0xFF64748B))),
+        ],
+      ],
+    );
+  }
+
+  // 2. RECEIVE PAYMENT (JAMA MILA) MODAL
+  void _showReceiveJamaModal(CustomerModel customer) {
+    final int defaultRupees = customer.currentBalancePaise ~/ 100;
+    final amountCtrl = TextEditingController(text: defaultRupees > 0 ? '$defaultRupees' : '');
+    final noteCtrl = TextEditingController(text: 'Cash Payment Received');
+    String selectedMode = 'Cash';
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            return Padding(
+              padding: EdgeInsets.only(
+                left: 20,
+                right: 20,
+                top: 20,
+                bottom: MediaQuery.of(ctx).viewInsets.bottom + 24,
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(6),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFECFDF5),
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: const Icon(Icons.arrow_downward_rounded, color: Color(0xFF059669), size: 18),
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            'Receive Payment (Jama Settle)',
+                            style: GoogleFonts.outfit(fontSize: 17, fontWeight: FontWeight.w800, color: const Color(0xFF0F172A)),
+                          ),
+                        ],
+                      ),
+                      IconButton(icon: const Icon(Icons.close_rounded), onPressed: () => Navigator.pop(ctx)),
+                    ],
+                  ),
+                  Text(
+                    'Customer: ${customer.name} • Current Due: ${MoneyFormatter.formatINR(customer.currentBalancePaise)}',
+                    style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF64748B)),
+                  ),
+                  const SizedBox(height: 16),
+
+                  // Amount Received Input
+                  Text('AMOUNT RECEIVED (₹) *', style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w700, color: const Color(0xFF475569))),
+                  const SizedBox(height: 6),
+                  TextField(
+                    controller: amountCtrl,
+                    keyboardType: TextInputType.number,
+                    style: GoogleFonts.outfit(fontSize: 24, fontWeight: FontWeight.w900, color: const Color(0xFF059669)),
+                    decoration: InputDecoration(
+                      prefixText: '₹ ',
+                      prefixStyle: GoogleFonts.outfit(fontSize: 24, fontWeight: FontWeight.w900, color: const Color(0xFF059669)),
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
+                      focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: const BorderSide(color: Color(0xFF059669), width: 1.8)),
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+
+                  // Quick Tender Chips
+                  SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: Row(
+                      children: [
+                        if (defaultRupees > 0)
+                          _buildQuickChip('Full: ₹$defaultRupees', defaultRupees.toString(), amountCtrl, setModalState),
+                        _buildQuickChip('₹100', '100', amountCtrl, setModalState),
+                        _buildQuickChip('₹500', '500', amountCtrl, setModalState),
+                        _buildQuickChip('₹1,000', '1000', amountCtrl, setModalState),
+                        _buildQuickChip('₹2,000', '2000', amountCtrl, setModalState),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+
+                  // Payment Mode
+                  Text('PAYMENT METHOD', style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w700, color: const Color(0xFF475569))),
+                  const SizedBox(height: 6),
+                  Row(
+                    children: ['Cash', 'UPI', 'Bank'].map((m) {
+                      final isSel = selectedMode == m;
+                      return Padding(
+                        padding: const EdgeInsets.only(right: 8),
+                        child: ChoiceChip(
+                          selected: isSel,
+                          label: Text(m, style: GoogleFonts.outfit(fontWeight: FontWeight.w700, color: isSel ? Colors.white : const Color(0xFF334155))),
+                          selectedColor: const Color(0xFF059669),
+                          onSelected: (_) => setModalState(() => selectedMode = m),
+                        ),
+                      );
+                    }).toList(),
+                  ),
+                  const SizedBox(height: 14),
+
+                  // Note
+                  TextField(
+                    controller: noteCtrl,
+                    decoration: InputDecoration(
+                      labelText: 'Remarks / Description',
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+
+                  // Confirm Button
+                  SizedBox(
+                    width: double.infinity,
+                    height: 48,
+                    child: ElevatedButton(
+                      onPressed: () async {
+                        final double amtRupees = double.tryParse(amountCtrl.text.trim()) ?? 0.0;
+                        final int amtPaise = (amtRupees * 100).round();
+
+                        if (amtPaise <= 0) {
+                          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please enter a valid amount.')));
+                          return;
+                        }
+
+                        await LocalDatabase.instance.recordCustomerLedgerEntry(
+                          customer: customer,
+                          type: 'debit', // payment received
+                          amountPaise: amtPaise,
+                          description: '${noteCtrl.text.trim()} ($selectedMode)',
+                        );
+
+                        if (!ctx.mounted) return;
+                        Navigator.pop(ctx);
+                        if (!mounted) return;
+                        _loadData();
+
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text('✓ Received ${MoneyFormatter.formatINR(amtPaise)} from ${customer.name}!'),
+                            backgroundColor: const Color(0xFF059669),
+                          ),
+                        );
+                      },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF059669),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                      ),
+                      child: Text('Confirm Jama (Receive Payment)', style: GoogleFonts.outfit(fontSize: 15, fontWeight: FontWeight.w800, color: Colors.white)),
+                    ),
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  // 3. GIVE UDHAR (+ UDHAR DIYA) MODAL
+  void _showGiveUdharModal(CustomerModel customer) {
+    final amountCtrl = TextEditingController();
+    final noteCtrl = TextEditingController(text: 'Dukaan ration udhar');
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+      builder: (ctx) {
+        return Padding(
+          padding: EdgeInsets.only(
+            left: 20,
+            right: 20,
+            top: 20,
+            bottom: MediaQuery.of(ctx).viewInsets.bottom + 24,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(6),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFFEF2F2),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: const Icon(Icons.arrow_upward_rounded, color: Color(0xFFDC2626), size: 18),
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        'Give Credit (Udhar Diya)',
+                        style: GoogleFonts.outfit(fontSize: 17, fontWeight: FontWeight.w800, color: const Color(0xFF0F172A)),
+                      ),
+                    ],
+                  ),
+                  IconButton(icon: const Icon(Icons.close_rounded), onPressed: () => Navigator.pop(ctx)),
+                ],
+              ),
+              Text(
+                'Customer: ${customer.name} • Adding to outstanding due',
+                style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF64748B)),
+              ),
+              const SizedBox(height: 16),
+
+              // Amount
+              Text('UDHAR AMOUNT (₹) *', style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w700, color: const Color(0xFF475569))),
+              const SizedBox(height: 6),
+              TextField(
+                controller: amountCtrl,
+                keyboardType: TextInputType.number,
+                style: GoogleFonts.outfit(fontSize: 24, fontWeight: FontWeight.w900, color: const Color(0xFFDC2626)),
+                decoration: InputDecoration(
+                  prefixText: '₹ ',
+                  prefixStyle: GoogleFonts.outfit(fontSize: 24, fontWeight: FontWeight.w900, color: const Color(0xFFDC2626)),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
+                  focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: const BorderSide(color: Color(0xFFDC2626), width: 1.8)),
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                ),
+              ),
+              const SizedBox(height: 14),
+
+              // Item / Reason Note
+              TextField(
+                controller: noteCtrl,
+                decoration: InputDecoration(
+                  labelText: 'Items / Reason (e.g. Atta, Oil, Grocery)',
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                ),
+              ),
+              const SizedBox(height: 20),
+
+              // Confirm Button
+              SizedBox(
+                width: double.infinity,
+                height: 48,
+                child: ElevatedButton(
+                  onPressed: () async {
+                    final double amtRupees = double.tryParse(amountCtrl.text.trim()) ?? 0.0;
+                    final int amtPaise = (amtRupees * 100).round();
+
+                    if (amtPaise <= 0) {
+                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please enter a valid amount.')));
+                      return;
+                    }
+
+                    await LocalDatabase.instance.recordCustomerLedgerEntry(
+                      customer: customer,
+                      type: 'credit', // udhar given
+                      amountPaise: amtPaise,
+                      description: noteCtrl.text.trim().isNotEmpty ? noteCtrl.text.trim() : 'Udhar given',
+                    );
+
+                    if (!ctx.mounted) return;
+                    Navigator.pop(ctx);
+                    if (!mounted) return;
+                    _loadData();
+
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text('✓ Recorded ${MoneyFormatter.formatINR(amtPaise)} Udhar for ${customer.name}!'),
+                        backgroundColor: const Color(0xFFDC2626),
+                      ),
+                    );
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFFDC2626),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                  ),
+                  child: Text('Confirm Udhar Diya', style: GoogleFonts.outfit(fontSize: 15, fontWeight: FontWeight.w800, color: Colors.white)),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildQuickChip(String label, String value, TextEditingController ctrl, StateSetter setModalState) {
+    return Padding(
+      padding: const EdgeInsets.only(right: 6),
+      child: ActionChip(
+        label: Text(label, style: GoogleFonts.outfit(fontSize: 11.5, fontWeight: FontWeight.w700, color: const Color(0xFF334155))),
+        backgroundColor: const Color(0xFFF1F5F9),
+        side: const BorderSide(color: Color(0xFFCBD5E1)),
+        onPressed: () {
+          HapticFeedback.selectionClick();
+          setModalState(() => ctrl.text = value);
+        },
+      ),
+    );
+  }
+
+  // 4. 1-TAP CLEAR SPECIFIC BILL
+  void _settleBill(SaleModel bill, CustomerModel customer) async {
+    HapticFeedback.lightImpact();
+    await LocalDatabase.instance.settleCustomerSaleBill(
+      saleId: bill.id,
+      customer: customer,
+      amountPaise: bill.totalAmountPaise,
+      paymentMode: 'Cash Settle',
+    );
+    if (!mounted) return;
+    _loadData();
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('✓ Bill #${bill.invoiceNumber} settled successfully!'),
+        backgroundColor: const Color(0xFF059669),
+      ),
+    );
+  }
+
+  // 5. VIEW BILL DETAILS MODAL
+  void _showBillDetailModal(SaleModel bill) {
+    showDialog(
+      context: context,
+      builder: (ctx) {
+        return AlertDialog(
+          backgroundColor: Colors.white,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text('Invoice #${bill.invoiceNumber}', style: GoogleFonts.outfit(fontWeight: FontWeight.w800, fontSize: 18)),
+              IconButton(icon: const Icon(Icons.close_rounded), onPressed: () => Navigator.pop(ctx)),
+            ],
+          ),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Date: ${DateFormat('d MMM yyyy, hh:mm a').format(bill.createdAt)}',
+                  style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF64748B)),
+                ),
+                Text(
+                  'Status: ${bill.status.toUpperCase()} • Mode: ${bill.paymentMethod.toUpperCase()}',
+                  style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w600, color: const Color(0xFF0F172A)),
+                ),
+                const Divider(height: 20),
+
+                // Items
+                ...bill.items.map((it) {
+                  return Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 4),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Expanded(
+                          child: Text('${it['qty']}x ${it['name']}', style: GoogleFonts.inter(fontSize: 13)),
+                        ),
+                        Text(
+                          MoneyFormatter.formatINR((it['price'] as int? ?? 0) * (it['qty'] as num? ?? 1).toInt()),
+                          style: GoogleFonts.outfit(fontWeight: FontWeight.w700),
+                        ),
+                      ],
+                    ),
+                  );
+                }),
+                const Divider(height: 20),
+
+                // Total
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text('Total Bill Amount', style: GoogleFonts.outfit(fontSize: 15, fontWeight: FontWeight.w800)),
+                    Text(
+                      MoneyFormatter.formatINR(bill.totalAmountPaise),
+                      style: GoogleFonts.outfit(fontSize: 18, fontWeight: FontWeight.w900, color: const Color(0xFF059669)),
+                    ),
+                  ],
+                ),
+                if (_selectedCustomer != null) ...[
+                  const SizedBox(height: 16),
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton.icon(
+                      onPressed: () => _shareBillViaWhatsApp(bill, _selectedCustomer!),
+                      icon: Image.asset('assets/images/whatsapp_logo.png', width: 18, height: 18),
+                      label: Text(
+                        'Send Bill on WhatsApp',
+                        style: GoogleFonts.outfit(fontSize: 13.5, fontWeight: FontWeight.w700, color: Colors.white),
+                      ),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF059669),
+                        padding: const EdgeInsets.symmetric(vertical: 10),
+                        elevation: 0,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                      ),
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 }

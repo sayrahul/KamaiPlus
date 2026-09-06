@@ -858,59 +858,39 @@ class _HomePulseTabState extends State<HomePulseTab> {
   }
 
   Widget _buildDailyOpsGrid() {
-    return Column(
+    return Row(
       children: [
-        Row(
-          children: [
-            Expanded(
-              child: _buildPwaActionCard(
-                icon: Icons.receipt_long_rounded,
-                iconColor: const Color(0xFF10B981),
-                iconBg: const Color(0xFFECFDF5),
-                title: 'Billing (POS)',
-                subtitle: 'Instant Checkout',
-                onTap: widget.onNavigateToPos,
-              ),
+        Expanded(
+          child: _buildPwaActionCard(
+            icon: Icons.point_of_sale_rounded,
+            iconColor: const Color(0xFFF59E0B),
+            iconBg: const Color(0xFFFFFBEB),
+            title: 'Cash Register',
+            subtitle: 'Shift & Z-Report',
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const CashRegisterScreen()),
             ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: _buildPwaActionCard(
-                icon: Icons.point_of_sale_rounded,
-                iconColor: const Color(0xFFF59E0B),
-                iconBg: const Color(0xFFFFFBEB),
-                title: 'Cash Register',
-                subtitle: 'Shift & Z-Report',
-                onTap: () => Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (_) => const CashRegisterScreen()),
-                ),
-              ),
-            ),
-          ],
+          ),
         ),
-        const SizedBox(height: 8),
-        Row(
-          children: [
-            Expanded(
-              child: _buildPwaActionCard(
-                icon: Icons.shield_outlined,
-                iconColor: const Color(0xFF0D9488),
-                iconBg: const Color(0xFFF0FDFA),
-                title: 'Transactions',
-                subtitle: 'Audit & Invoices',
-                onTap: () => Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (_) => const TransactionsScreen()),
-                ),
-              ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: _buildPwaActionCard(
+            icon: Icons.shield_outlined,
+            iconColor: const Color(0xFF0D9488),
+            iconBg: const Color(0xFFF0FDFA),
+            title: 'Transactions',
+            subtitle: 'History & Invoices',
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const TransactionsScreen()),
             ),
-            const SizedBox(width: 8),
-            const Expanded(child: SizedBox()),
-          ],
+          ),
         ),
       ],
     );
   }
+
 
   Widget _buildStockSourcingGrid() {
     return Column(
@@ -1539,7 +1519,10 @@ class _HomePulseTabState extends State<HomePulseTab> {
                   borderRadius: BorderRadius.circular(6),
                   border: Border.all(color: const Color(0xFFA7F3D0)),
                 ),
-                child: const Icon(Icons.chat_bubble_outline_rounded, color: Color(0xFF10B981), size: 14),
+                child: Padding(
+                  padding: const EdgeInsets.all(5),
+                  child: Image.asset('assets/images/whatsapp_logo.png', width: 14, height: 14),
+                ),
               ),
             ),
           ),

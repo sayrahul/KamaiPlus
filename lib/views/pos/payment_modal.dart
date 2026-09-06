@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -224,7 +224,7 @@ class _PaymentModalState extends State<PaymentModal> {
                 Expanded(
                   child: OutlinedButton.icon(
                     onPressed: _sendWhatsAppReceipt,
-                    icon: const Icon(Icons.share, color: Color(0xFF25D366)),
+                    icon: Image.asset('assets/images/whatsapp_logo.png', width: 18, height: 18),
                     label: const Text('WhatsApp Bill', style: TextStyle(color: Color(0xFF0F172A), fontWeight: FontWeight.bold)),
                     style: OutlinedButton.styleFrom(
                       padding: const EdgeInsets.symmetric(vertical: 14),

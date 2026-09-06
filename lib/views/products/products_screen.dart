@@ -9,6 +9,7 @@ import '../common/owner_privacy_modal.dart';
 import 'ai_inward_modal.dart';
 import 'add_product_modal.dart';
 import 'barcode_scanner_modal.dart';
+import '../common/kamai_bottom_nav.dart';
 
 class ProductsScreen extends StatefulWidget {
   const ProductsScreen({super.key});
@@ -204,8 +205,10 @@ class _ProductsScreenState extends State<ProductsScreen> {
           ],
         ),
       ),
+      bottomNavigationBar: const KamaiBottomNav(currentIndex: 1),
     );
   }
+
 
   Widget _buildHeaderCard() {
     return Container(
@@ -732,13 +735,25 @@ class _ProductsScreenState extends State<ProductsScreen> {
                 ),
               ),
               const SizedBox(width: 8),
-              // Edit Pencil Button
-              GestureDetector(
-                onTap: () => _openAddProductSheet(existingProduct: product),
-                child: const Icon(
-                  Icons.edit_outlined,
-                  size: 17,
-                  color: Color(0xFF94A3B8),
+              // Edit Pencil Button (Clean touch target)
+              InkWell(
+                onTap: () {
+                  HapticFeedback.selectionClick();
+                  _openAddProductSheet(existingProduct: product);
+                },
+                borderRadius: BorderRadius.circular(8),
+                child: Container(
+                  padding: const EdgeInsets.all(5),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF1F5F9),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: const Color(0xFFE2E8F0)),
+                  ),
+                  child: const Icon(
+                    Icons.edit_outlined,
+                    size: 16,
+                    color: Color(0xFF0F172A),
+                  ),
                 ),
               ),
             ],

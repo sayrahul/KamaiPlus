@@ -103,18 +103,33 @@ class _PwaTopBarState extends State<PwaTopBar> {
               ),
               const SizedBox(width: 6),
 
-              // 3. WhatsApp Button
-              _buildSquareButton(
-                icon: Icons.chat_bubble_outline_rounded,
-                iconColor: const Color(0xFF10B981),
-                bgColor: const Color(0xFFECFDF5),
-                borderColor: const Color(0xFFA7F3D0),
-                onTap: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(builder: (_) => const GrowthCampaignsScreen()),
-                  );
-                },
+              // 3. Official WhatsApp Button
+              Material(
+                color: Colors.transparent,
+                child: InkWell(
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (_) => const GrowthCampaignsScreen()),
+                    );
+                  },
+                  borderRadius: BorderRadius.circular(8),
+                  child: Container(
+                    width: 32,
+                    height: 32,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFECFDF5),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: const Color(0xFFA7F3D0)),
+                    ),
+                    padding: const EdgeInsets.all(7),
+                    child: Image.asset(
+                      'assets/images/whatsapp_logo.png',
+                      width: 18,
+                      height: 18,
+                    ),
+                  ),
+                ),
               ),
               const SizedBox(width: 6),
 

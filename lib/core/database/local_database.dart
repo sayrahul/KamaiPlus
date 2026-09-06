@@ -1,4 +1,5 @@
-﻿import 'package:sqflite/sqflite.dart';
+import 'dart:convert';
+import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart' as p;
 import 'package:uuid/uuid.dart';
 import '../../models/models.dart';
@@ -24,7 +25,45 @@ class LocalDatabase {
       path,
       version: 1,
       onCreate: _createDB,
+      onOpen: (db) async {
+        await _ensureExtraTables(db);
+      },
     );
+  }
+
+  Future<void> _ensureExtraTables(Database db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS store_profile (
+        id TEXT PRIMARY KEY,
+        store_name TEXT,
+        tagline TEXT,
+        owner_name TEXT,
+        phone TEXT,
+        email TEXT,
+        upi_vpa TEXT,
+        category TEXT,
+        address TEXT,
+        pincode TEXT,
+        gstin TEXT,
+        fssai TEXT,
+        logo_url TEXT,
+        upi_accounts_json TEXT
+      )
+    ''');
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS expenses (
+        id TEXT PRIMARY KEY,
+        business_id TEXT NOT NULL,
+        title TEXT NOT NULL,
+        amount_paise INTEGER NOT NULL,
+        category TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        note TEXT
+      )
+    ''');
+    try {
+      await db.execute('ALTER TABLE customers ADD COLUMN address TEXT');
+    } catch (_) {}
   }
 
   Future _createDB(Database db, int version) async {
@@ -60,6 +99,7 @@ class LocalDatabase {
         business_id TEXT NOT NULL,
         name TEXT NOT NULL,
         phone TEXT NOT NULL,
+        address TEXT,
         current_balance_paise INTEGER NOT NULL,
         credit_limit_paise INTEGER NOT NULL,
         sync_status TEXT NOT NULL
@@ -404,9 +444,85 @@ class LocalDatabase {
     );
   }
 
+  Future<void> seedStarterSalesIfNeeded() async {
+    final db = await instance.database;
+    final count = Sqflite.firstIntValue(await db.rawQuery('SELECT COUNT(*) FROM sales')) ?? 0;
+    if (count > 0) return;
+
+    final now = DateTime.now();
+    final starterSales = [
+      {
+        'id': 'sale_init_1',
+        'business_id': 'biz_starter_pos',
+        'invoice_number': 'INV-1001',
+        'customer_id': 'cust_1',
+        'customer_name': 'Ramesh Kumar',
+        'customer_phone': '9820012345',
+        'subtotal_paise': 45000,
+        'tax_amount_paise': 0,
+        'discount_paise': 0,
+        'total_amount_paise': 45000,
+        'payment_method': 'credit',
+        'status': 'completed',
+        'items_json': jsonEncode([
+          {'product_name': 'Aashirvaad Shudh Chakki Atta (5kg)', 'quantity': 1, 'price': 24500, 'gross_total_paise': 24500},
+          {'product_name': 'Amul Butter Pasteurised (500g)', 'quantity': 1, 'price': 20500, 'gross_total_paise': 20500},
+        ]),
+        'created_at': now.subtract(const Duration(minutes: 35)).toIso8601String(),
+        'sync_status': 'synced',
+      },
+      {
+        'id': 'sale_init_2',
+        'business_id': 'biz_starter_pos',
+        'invoice_number': 'INV-1002',
+        'customer_id': 'cust_2',
+        'customer_name': 'Anita Sharma',
+        'customer_phone': '9819098765',
+        'subtotal_paise': 27500,
+        'tax_amount_paise': 0,
+        'discount_paise': 0,
+        'total_amount_paise': 27500,
+        'payment_method': 'upi',
+        'status': 'completed',
+        'items_json': jsonEncode([
+          {'product_name': 'Amul Butter Pasteurised (500g)', 'quantity': 1, 'price': 27500, 'gross_total_paise': 27500},
+        ]),
+        'created_at': now.subtract(const Duration(hours: 2, minutes: 15)).toIso8601String(),
+        'sync_status': 'synced',
+      },
+      {
+        'id': 'sale_init_3',
+        'business_id': 'biz_starter_pos',
+        'invoice_number': 'INV-1003',
+        'customer_id': null,
+        'customer_name': 'Walk-in Customer',
+        'customer_phone': null,
+        'subtotal_paise': 15500,
+        'tax_amount_paise': 0,
+        'discount_paise': 0,
+        'total_amount_paise': 15500,
+        'payment_method': 'cash',
+        'status': 'completed',
+        'items_json': jsonEncode([
+          {'product_name': 'Fortune Sunlite Sunflower Oil (1L)', 'quantity': 1, 'price': 15500, 'gross_total_paise': 15500},
+        ]),
+        'created_at': now.subtract(const Duration(hours: 4, minutes: 5)).toIso8601String(),
+        'sync_status': 'synced',
+      },
+    ];
+
+    for (final s in starterSales) {
+      await db.insert('sales', s);
+    }
+  }
+
   Future<List<SaleModel>> getAllSales({int limit = 100}) async {
     final db = await instance.database;
-    final result = await db.query('sales', orderBy: 'created_at DESC', limit: limit);
+    var result = await db.query('sales', orderBy: 'created_at DESC', limit: limit);
+    if (result.isEmpty) {
+      await seedStarterSalesIfNeeded();
+      result = await db.query('sales', orderBy: 'created_at DESC', limit: limit);
+    }
     return result.map((json) => SaleModel.fromMap(json)).toList();
   }
 
@@ -419,6 +535,106 @@ class LocalDatabase {
       orderBy: 'created_at DESC',
     );
     return result.map((json) => LedgerTransactionModel.fromMap(json)).toList();
+  }
+
+  Future<List<SaleModel>> getSalesForCustomer(String customerId, {String? phone}) async {
+    final db = await instance.database;
+    final whereClauses = <String>[];
+    final whereArgs = <dynamic>[];
+
+    if (customerId.isNotEmpty) {
+      whereClauses.add('customer_id = ?');
+      whereArgs.add(customerId);
+    }
+    if (phone != null && phone.isNotEmpty) {
+      whereClauses.add('customer_phone = ?');
+      whereArgs.add(phone);
+    }
+
+    if (whereClauses.isEmpty) return [];
+
+    final result = await db.query(
+      'sales',
+      where: whereClauses.join(' OR '),
+      whereArgs: whereArgs,
+      orderBy: 'created_at DESC',
+    );
+    return result.map((json) => SaleModel.fromMap(json)).toList();
+  }
+
+  Future<void> recordCustomerLedgerEntry({
+    required CustomerModel customer,
+    required String type, // 'credit' (Udhar Diya) | 'debit' (Jama Mila)
+    required int amountPaise,
+    required String description,
+    String? referenceId,
+  }) async {
+    final db = await instance.database;
+    final isUdhar = type == 'credit';
+    final int newBalancePaise = isUdhar
+        ? customer.currentBalancePaise + amountPaise
+        : (customer.currentBalancePaise - amountPaise).clamp(0, 999999999999);
+
+    await db.transaction((txn) async {
+      await txn.rawUpdate('''
+        UPDATE customers
+        SET current_balance_paise = ?
+        WHERE id = ?
+      ''', [newBalancePaise, customer.id]);
+
+      final ledgerEntry = LedgerTransactionModel(
+        id: _uuid.v4(),
+        businessId: customer.businessId,
+        customerId: customer.id,
+        type: type,
+        amountPaise: amountPaise,
+        balanceAfterPaise: newBalancePaise,
+        description: description,
+        referenceId: referenceId,
+        createdAt: DateTime.now(),
+        syncStatus: 'pending',
+      );
+      await txn.insert('ledger_transactions', ledgerEntry.toMap());
+    });
+  }
+
+  Future<void> settleCustomerSaleBill({
+    required String saleId,
+    required CustomerModel customer,
+    required int amountPaise,
+    required String paymentMode,
+  }) async {
+    final db = await instance.database;
+    final int newBalancePaise = (customer.currentBalancePaise - amountPaise).clamp(0, 999999999999);
+
+    await db.transaction((txn) async {
+      await txn.update(
+        'sales',
+        {'status': 'settled', 'sync_status': 'pending'},
+        where: 'id = ?',
+        whereArgs: [saleId],
+      );
+
+      await txn.rawUpdate('''
+        UPDATE customers
+        SET current_balance_paise = ?
+        WHERE id = ?
+      ''', [newBalancePaise, customer.id]);
+
+      final ledgerEntry = LedgerTransactionModel(
+        id: _uuid.v4(),
+        businessId: customer.businessId,
+        customerId: customer.id,
+        type: 'debit',
+        amountPaise: amountPaise,
+        balanceAfterPaise: newBalancePaise,
+        description: 'Bill Settlement ($paymentMode)',
+        referenceId: saleId,
+        createdAt: DateTime.now(),
+        syncStatus: 'pending',
+      );
+      await txn.insert('ledger_transactions', ledgerEntry.toMap());
+    });
   }
 
   Future<void> markSaleSynced(String saleId) async {
@@ -434,25 +650,75 @@ class LocalDatabase {
   Future<List<ExpenseModel>> getAllExpenses() async {
     final db = await instance.database;
     final result = await db.query('expenses', orderBy: 'created_at DESC');
+    if (result.isEmpty) {
+      final now = DateTime.now();
+      final demo1 = ExpenseModel(
+        id: 'exp_demo_1',
+        businessId: 'biz_default_retail',
+        title: 'Morning Chai & Snacks for Staff',
+        amountPaise: 6000,
+        category: 'Tea / Snacks',
+        createdAt: now.subtract(const Duration(hours: 3)),
+        note: 'Staff tea & biscuits',
+      );
+      final demo2 = ExpenseModel(
+        id: 'exp_demo_2',
+        businessId: 'biz_default_retail',
+        title: 'Carry Bags & Packaging Tape',
+        amountPaise: 12000,
+        category: 'Packaging',
+        createdAt: now.subtract(const Duration(hours: 1)),
+        note: 'Plastic carry bags bundle',
+      );
+      await addExpense(demo1);
+      await addExpense(demo2);
+      return [demo2, demo1];
+    }
     return result.map((m) => ExpenseModel.fromMap(m)).toList();
   }
+
 
   Future<void> deleteExpense(String id) async {
     final db = await instance.database;
     await db.delete('expenses', where: 'id = ?', whereArgs: [id]);
   }
 
+  Future<void> _ensureStoreProfileTable(Database db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS store_profile (
+        id TEXT PRIMARY KEY,
+        store_name TEXT,
+        tagline TEXT,
+        owner_name TEXT,
+        phone TEXT,
+        email TEXT,
+        upi_vpa TEXT,
+        category TEXT,
+        address TEXT,
+        pincode TEXT,
+        gstin TEXT,
+        fssai TEXT,
+        logo_url TEXT,
+        upi_accounts_json TEXT
+      )
+    ''');
+  }
+
   Future<StoreProfileModel> getStoreProfile() async {
     final db = await instance.database;
-    final result = await db.query('store_profile', where: 'id = ?', whereArgs: ['default_store']);
-    if (result.isNotEmpty) {
-      return StoreProfileModel.fromMap(result.first);
-    }
+    await _ensureStoreProfileTable(db);
+    try {
+      final result = await db.query('store_profile', where: 'id = ?', whereArgs: ['default_store']);
+      if (result.isNotEmpty) {
+        return StoreProfileModel.fromMap(result.first);
+      }
+    } catch (_) {}
     return StoreProfileModel();
   }
 
   Future<void> saveStoreProfile(StoreProfileModel profile) async {
     final db = await instance.database;
+    await _ensureStoreProfileTable(db);
     final map = profile.toMap();
     map['id'] = 'default_store';
     await db.insert('store_profile', map, conflictAlgorithm: ConflictAlgorithm.replace);

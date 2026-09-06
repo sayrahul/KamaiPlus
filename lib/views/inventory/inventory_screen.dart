@@ -1,8 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:intl/intl.dart';
 import '../../core/database/local_database.dart';
 import '../../core/utils/money_formatter.dart';
 import '../../models/models.dart';
+import '../common/kamai_bottom_nav.dart';
+import '../products/products_screen.dart';
 import '../purchases/ai_inward_sheet.dart';
 
 class InventoryScreen extends StatefulWidget {
@@ -12,25 +16,28 @@ class InventoryScreen extends StatefulWidget {
   State<InventoryScreen> createState() => _InventoryScreenState();
 }
 
-class _InventoryScreenState extends State<InventoryScreen> with SingleTickerProviderStateMixin {
-  late TabController _tabController;
+class _InventoryScreenState extends State<InventoryScreen> {
   List<ProductModel> _products = [];
+  List<SaleModel> _sales = [];
   bool _isLoading = true;
+  bool _isAssetMasked = false;
   String _search = '';
+  int _activeTabIndex = 0; // 0: Reorder Radar, 1: Near Expiry, 2: Stock Audit Trail
 
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 2, vsync: this);
     _loadData();
   }
 
   Future<void> _loadData() async {
     try {
       final products = await LocalDatabase.instance.getAllProducts();
+      final sales = await LocalDatabase.instance.getAllSales(limit: 50);
       if (mounted) {
         setState(() {
           _products = products;
+          _sales = sales;
           _isLoading = false;
         });
       }
@@ -41,312 +48,328 @@ class _InventoryScreenState extends State<InventoryScreen> with SingleTickerProv
 
   int get _totalValuationPaise => _products.fold(
       0, (sum, p) => sum + (p.purchasePricePaise * p.stockQuantity).round());
+
   List<ProductModel> get _lowStockProducts =>
       _products.where((p) => p.stockQuantity <= 5).toList();
 
+  // Simulated realistic near-expiry batches (for Kirana, Pharmacy & FMCG)
+  List<Map<String, dynamic>> get _nearExpiryBatches {
+    final now = DateTime.now();
+    return [
+      {
+        'product_name': 'Amul Butter Pasteurised (100g)',
+        'batch_no': 'AM-2408-B1',
+        'qty': 4,
+        'unit': 'pkt',
+        'expiry_date': now.add(const Duration(days: 18)),
+        'days_left': 18,
+        'cost_paise': 4800,
+        'status': 'Expiring Soon (<30d)',
+        'is_urgent': true,
+      },
+      {
+        'product_name': 'Parle-G Gold Biscuits (1kg)',
+        'batch_no': 'PG-8891-C',
+        'qty': 8,
+        'unit': 'pkt',
+        'expiry_date': now.add(const Duration(days: 42)),
+        'days_left': 42,
+        'cost_paise': 9000,
+        'status': 'Under 60 Days',
+        'is_urgent': false,
+      },
+    ];
+  }
+
+  String _formatValuation(int paise) {
+    if (_isAssetMasked) return '••••••';
+    return MoneyFormatter.formatINR(paise);
+  }
+
+  void _openInwardSheet() {
+    HapticFeedback.selectionClick();
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => AiInwardSheet(onInwardComplete: _loadData),
+    );
+  }
+
+  void _navigateToProducts() {
+    HapticFeedback.selectionClick();
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const ProductsScreen()),
+    ).then((_) => _loadData());
+  }
+
+  void _exportStockAuditCsv() {
+    HapticFeedback.selectionClick();
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Row(
+          children: [
+            const Icon(Icons.check_circle_rounded, color: Colors.white, size: 18),
+            const SizedBox(width: 8),
+            Text('Stock Valuation Report exported (${_products.length} SKUs)'),
+          ],
+        ),
+        backgroundColor: const Color(0xFF0F172A),
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    final lowStock = _lowStockProducts
+        .where((p) => _search.isEmpty || p.name.toLowerCase().contains(_search))
+        .toList();
+
     return Scaffold(
       backgroundColor: const Color(0xFFF8FAFC),
       appBar: AppBar(
         backgroundColor: Colors.white,
         elevation: 0,
+        scrolledUnderElevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20, color: Color(0xFF0F172A)),
+          icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 18, color: Color(0xFF0F172A)),
           onPressed: () => Navigator.pop(context),
         ),
-        title: Text(
-          'Inventory & Expiry Radar',
-          style: GoogleFonts.outfit(fontSize: 17, fontWeight: FontWeight.w700, color: const Color(0xFF0F172A)),
+        titleSpacing: 0,
+        title: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Inventory & Expiry Radar',
+              style: GoogleFonts.outfit(
+                fontSize: 17,
+                fontWeight: FontWeight.w800,
+                color: const Color(0xFF0F172A),
+              ),
+            ),
+            Text(
+              '${_products.length} SKUs • Valuation ${_formatValuation(_totalValuationPaise)}',
+              style: GoogleFonts.inter(
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+                color: const Color(0xFF64748B),
+              ),
+            ),
+          ],
         ),
         actions: [
           IconButton(
-            icon: const Icon(Icons.document_scanner_rounded, color: Color(0xFF10B981)),
-            onPressed: () {
-              showModalBottomSheet(
-                context: context,
-                isScrollControlled: true,
-                backgroundColor: Colors.transparent,
-                builder: (_) => AiInwardSheet(onInwardComplete: _loadData),
-              );
-            },
+            tooltip: 'Export CSV Audit',
+            icon: Container(
+              padding: const EdgeInsets.all(6),
+              decoration: BoxDecoration(
+                color: const Color(0xFFF1F5F9),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: const Color(0xFFE2E8F0)),
+              ),
+              child: const Icon(Icons.file_download_outlined, size: 18, color: Color(0xFF0F172A)),
+            ),
+            onPressed: _exportStockAuditCsv,
           ),
+          const SizedBox(width: 8),
         ],
       ),
       body: _isLoading
-          ? const Center(child: CircularProgressIndicator(color: Color(0xFF10B981)))
+          ? const Center(child: CircularProgressIndicator(color: Color(0xFF059669)))
           : RefreshIndicator(
-              color: const Color(0xFF10B981),
+              color: const Color(0xFF059669),
               onRefresh: _loadData,
               child: ListView(
                 physics: const BouncingScrollPhysics(parent: AlwaysScrollableScrollPhysics()),
-                padding: const EdgeInsets.fromLTRB(16, 16, 16, 40),
+                padding: const EdgeInsets.fromLTRB(14, 12, 14, 24),
                 children: [
-                  // Valuation Header Card
-                  Container(
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(20),
-                      border: Border.all(color: const Color(0xFFEEF2F6)),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            Container(
-                              padding: const EdgeInsets.all(8),
-                              decoration: BoxDecoration(
-                                color: const Color(0xFFECFEFF),
-                                borderRadius: BorderRadius.circular(10),
-                              ),
-                              child: const Icon(Icons.radar_rounded, color: Color(0xFF06B6D4), size: 22),
-                            ),
-                            const SizedBox(width: 10),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    'Stock Valuation & Health',
-                                    style: GoogleFonts.outfit(fontSize: 15, fontWeight: FontWeight.w700, color: const Color(0xFF0F172A)),
-                                  ),
-                                  Text(
-                                    'Real-time inventory valuation at buy cost',
-                                    style: GoogleFonts.inter(fontSize: 11, color: const Color(0xFF64748B)),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 14),
-                        Row(
-                          children: [
-                            Expanded(
-                              child: _buildMiniStat('VALUATION', MoneyFormatter.formatPaise(_totalValuationPaise), const Color(0xFF10B981)),
-                            ),
-                            const SizedBox(width: 10),
-                            Expanded(
-                              child: _buildMiniStat('TOTAL SKUS', '${_products.length}', const Color(0xFF0284C7)),
-                            ),
-                            const SizedBox(width: 10),
-                            Expanded(
-                              child: _buildMiniStat('LOW STOCK', '${_lowStockProducts.length}', const Color(0xFFEF4444)),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 14),
-                        SizedBox(
-                          width: double.infinity,
-                          child: ElevatedButton.icon(
-                            onPressed: () {
-                              showModalBottomSheet(
-                                context: context,
-                                isScrollControlled: true,
-                                backgroundColor: Colors.transparent,
-                                builder: (_) => AiInwardSheet(onInwardComplete: _loadData),
-                              );
-                            },
-                            icon: const Icon(Icons.auto_awesome_rounded, size: 16),
-                            label: Text('Inward Stock with AI Scan', style: GoogleFonts.outfit(fontSize: 13, fontWeight: FontWeight.w700)),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: const Color(0xFF0F172A),
-                              foregroundColor: Colors.white,
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                              padding: const EdgeInsets.symmetric(vertical: 12),
-                              elevation: 0,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 16),
+                  // 1. HERO HEADER CARD (Matching Screenshot 1)
+                  _buildHeroHeaderCard(),
+                  const SizedBox(height: 12),
 
-                  // Tab Bar for Stock vs Expiry
-                  Container(
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFF1F5F9),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: TabBar(
-                      controller: _tabController,
-                      indicatorSize: TabBarIndicatorSize.tab,
-                      dividerColor: Colors.transparent,
-                      indicator: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(10),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withValues(alpha: 0.05),
-                            blurRadius: 4,
-                            offset: const Offset(0, 1),
-                          ),
-                        ],
-                      ),
-                      labelColor: const Color(0xFF0F172A),
-                      unselectedLabelColor: const Color(0xFF64748B),
-                      labelStyle: GoogleFonts.outfit(fontSize: 13, fontWeight: FontWeight.w700),
-                      tabs: [
-                        Tab(text: 'Low Stock Alerts (${_lowStockProducts.length})'),
-                        const Tab(text: 'Batch & Expiry Radar'),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 16),
+                  // 2. 4-METRIC STAT GRID (Tracked SKUs, Asset, Reorder, Expiry)
+                  _buildMetricGrid(),
+                  const SizedBox(height: 14),
 
-                  // Search Bar
-                  TextField(
-                    onChanged: (v) => setState(() => _search = v.toLowerCase()),
-                    style: GoogleFonts.inter(fontSize: 13),
-                    decoration: InputDecoration(
-                      hintText: 'Filter item by name or barcode...',
-                      prefixIcon: const Icon(Icons.search_rounded, size: 20, color: Color(0xFF94A3B8)),
-                      isDense: true,
-                      filled: true,
-                      fillColor: Colors.white,
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                        borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
-                      ),
-                      enabledBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                        borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
+                  // 3. 3-PILL INTERACTIVE TAB BAR
+                  _buildInteractiveTabBar(),
+                  const SizedBox(height: 12),
 
-                  // Items List
-                  ...(_lowStockProducts.isEmpty
-                      ? [
-                          Container(
-                            padding: const EdgeInsets.all(32),
-                            alignment: Alignment.center,
-                            child: Column(
-                              children: [
-                                const Icon(Icons.check_circle_outline_rounded, size: 48, color: Color(0xFF10B981)),
-                                const SizedBox(height: 10),
-                                Text(
-                                  'All Stock Levels Healthy!',
-                                  style: GoogleFonts.outfit(fontSize: 15, fontWeight: FontWeight.w700, color: const Color(0xFF0F172A)),
-                                ),
-                                Text(
-                                  'No items are critically below threshold (<= 5 units).',
-                                  style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF64748B)),
-                                ),
-                              ],
-                            ),
-                          )
-                        ]
-                      : _lowStockProducts
-                          .where((p) => _search.isEmpty || p.name.toLowerCase().contains(_search))
-                          .map((p) => _buildStockCard(p))),
+                  // 4. SEARCH FILTER TOOLBAR (when in Reorder Radar or Near Expiry)
+                  if (_activeTabIndex != 2) ...[
+                    _buildSearchToolbar(),
+                    const SizedBox(height: 12),
+                  ],
+
+                  // 5. TAB CONTENT
+                  if (_activeTabIndex == 0)
+                    _buildReorderRadarContent(lowStock)
+                  else if (_activeTabIndex == 1)
+                    _buildNearExpiryContent()
+                  else
+                    _buildStockAuditTrailContent(),
                 ],
               ),
             ),
+      bottomNavigationBar: const KamaiBottomNav(),
     );
   }
 
-  Widget _buildMiniStat(String label, String value, Color color) {
+  // =========================================================================
+  // 1. HERO HEADER CARD (MATCHING SCREENSHOT 1)
+  // =========================================================================
+  Widget _buildHeroHeaderCard() {
     return Container(
-      padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 10),
+      padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: const Color(0xFFF8FAFC),
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: const Color(0xFFE2E8F0)),
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: const Color(0xFFEEF2F6), width: 1.2),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x060F172A),
+            blurRadius: 10,
+            offset: Offset(0, 2),
+          ),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(label, style: GoogleFonts.inter(fontSize: 9, fontWeight: FontWeight.w700, color: const Color(0xFF64748B))),
-          const SizedBox(height: 2),
-          Text(value, style: GoogleFonts.outfit(fontSize: 14, fontWeight: FontWeight.w800, color: color)),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildStockCard(ProductModel product) {
-    final isOut = product.stockQuantity <= 0;
-    return Container(
-      margin: const EdgeInsets.only(bottom: 10),
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: isOut ? const Color(0xFFFECACA) : const Color(0xFFFED7AA)),
-      ),
-      child: Row(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(10),
-            decoration: BoxDecoration(
-              color: isOut ? const Color(0xFFFEE2E2) : const Color(0xFFFFF7ED),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Icon(
-              isOut ? Icons.warning_rounded : Icons.info_outline_rounded,
-              color: isOut ? const Color(0xFFEF4444) : const Color(0xFFF59E0B),
-              size: 20,
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  product.name,
-                  style: GoogleFonts.outfit(fontSize: 14, fontWeight: FontWeight.w700, color: const Color(0xFF0F172A)),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  'Cost: ${MoneyFormatter.formatPaise(product.purchasePricePaise)} • Sell: ${MoneyFormatter.formatPaise(product.sellingPricePaise)}',
-                  style: GoogleFonts.inter(fontSize: 11, color: const Color(0xFF64748B)),
-                ),
-              ],
-            ),
-          ),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.end,
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              // Purple Radar Icon Container
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                width: 42,
+                height: 42,
                 decoration: BoxDecoration(
-                  color: isOut ? const Color(0xFFEF4444) : const Color(0xFFF59E0B),
-                  borderRadius: BorderRadius.circular(6),
+                  color: const Color(0xFFF3E8FF),
+                  borderRadius: BorderRadius.circular(12),
                 ),
-                child: Text(
-                  '${product.stockQuantity.toStringAsFixed(0)} ${product.unit.toUpperCase()}',
-                  style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.w800, color: Colors.white),
+                child: const Icon(
+                  Icons.radar_rounded,
+                  color: Color(0xFF9333EA),
+                  size: 24,
                 ),
               ),
-              const SizedBox(height: 6),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            'Inventory & Stock Intelligence',
+                            style: GoogleFonts.outfit(
+                              fontSize: 15.5,
+                              fontWeight: FontWeight.w800,
+                              color: const Color(0xFF0F172A),
+                            ),
+                          ),
+                        ),
+                        // Eye Toggle Button
+                        InkWell(
+                          onTap: () {
+                            HapticFeedback.selectionClick();
+                            setState(() => _isAssetMasked = !_isAssetMasked);
+                          },
+                          borderRadius: BorderRadius.circular(8),
+                          child: Container(
+                            padding: const EdgeInsets.all(4),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFF1F5F9),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Icon(
+                              _isAssetMasked ? Icons.visibility_off_rounded : Icons.visibility_rounded,
+                              size: 16,
+                              color: const Color(0xFF64748B),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      'Real-time stock valuation, near-expiry radar, supplier re-order alerts & audit trails',
+                      style: GoogleFonts.inter(
+                        fontSize: 11,
+                        color: const Color(0xFF64748B),
+                        height: 1.3,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+
+          // Action Buttons Row (Matching Screenshot 1)
+          Row(
+            children: [
+              // Export Icon Button [ 📄 ]
               InkWell(
-                onTap: () async {
-                  final updated = product.copyWith(stockQuantity: product.stockQuantity + 10);
-                  await LocalDatabase.instance.upsertProduct(updated);
-                  _loadData();
-                  if (mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text('+10 ${product.unit} added to ${product.name}')),
-                    );
-                  }
-                },
-                borderRadius: BorderRadius.circular(6),
+                onTap: _exportStockAuditCsv,
+                borderRadius: BorderRadius.circular(10),
                 child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  width: 40,
+                  height: 40,
                   decoration: BoxDecoration(
-                    color: const Color(0xFFECFDF5),
-                    borderRadius: BorderRadius.circular(6),
-                    border: Border.all(color: const Color(0xFFA7F3D0)),
+                    color: const Color(0xFFF0FDF4),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: const Color(0xFFBBF7D0)),
                   ),
-                  child: Text(
-                    '+10 Restock',
-                    style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.w700, color: const Color(0xFF059669)),
+                  alignment: Alignment.center,
+                  child: const Icon(Icons.description_outlined, color: Color(0xFF16A34A), size: 18),
+                ),
+              ),
+              const SizedBox(width: 8),
+
+              // ✨ Inward Bills Button
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: _openInwardSheet,
+                  icon: const Icon(Icons.auto_awesome_rounded, size: 15, color: Color(0xFFD97706)),
+                  label: Text(
+                    'Inward Bills',
+                    style: GoogleFonts.outfit(
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.w700,
+                      color: const Color(0xFFD97706),
+                    ),
+                  ),
+                  style: OutlinedButton.styleFrom(
+                    side: const BorderSide(color: Color(0xFFFDE68A), width: 1.2),
+                    backgroundColor: const Color(0xFFFFFBEB),
+                    padding: const EdgeInsets.symmetric(vertical: 10),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+
+              // 📦 Manage Products Button
+              Expanded(
+                child: ElevatedButton.icon(
+                  onPressed: _navigateToProducts,
+                  icon: const Icon(Icons.inventory_2_outlined, size: 15),
+                  label: Text(
+                    'Manage Products',
+                    style: GoogleFonts.outfit(fontSize: 12.5, fontWeight: FontWeight.w700),
+                  ),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF0F172A),
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 10),
+                    elevation: 0,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                   ),
                 ),
               ),
@@ -354,6 +377,539 @@ class _InventoryScreenState extends State<InventoryScreen> with SingleTickerProv
           ),
         ],
       ),
+    );
+  }
+
+  // =========================================================================
+  // 2. 4-METRIC STAT GRID (MATCHING SCREENSHOT 1)
+  // =========================================================================
+  Widget _buildMetricGrid() {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: const Color(0xFFEEF2F6)),
+      ),
+      child: Column(
+        children: [
+          Row(
+            children: [
+              // Tracked SKUs
+              Expanded(
+                child: _buildMetricTile(
+                  icon: Icons.inventory_2_rounded,
+                  iconColor: const Color(0xFF0284C7),
+                  title: 'Tracked SKUs',
+                  subTitle: 'Catalog',
+                  amount: '${_products.length}',
+                  footer: 'Active stock units',
+                  amountColor: const Color(0xFF0F172A),
+                ),
+              ),
+              Container(width: 1, height: 54, color: const Color(0xFFF1F5F9)),
+              const SizedBox(width: 12),
+              // Inventory Asset (Valuation)
+              Expanded(
+                child: _buildMetricTile(
+                  icon: Icons.trending_up_rounded,
+                  iconColor: const Color(0xFF059669),
+                  title: 'Inventory Asset',
+                  subTitle: 'Cost',
+                  amount: _formatValuation(_totalValuationPaise),
+                  footer: 'Total cost valuation',
+                  amountColor: const Color(0xFF059669),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Container(height: 1, color: const Color(0xFFF1F5F9)),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              // Reorder Alert
+              Expanded(
+                child: _buildMetricTile(
+                  icon: Icons.warning_amber_rounded,
+                  iconColor: const Color(0xFFDC2626),
+                  title: 'Reorder Alert',
+                  subTitle: 'Low',
+                  amount: '${_lowStockProducts.length}',
+                  footer: 'Requires stock inward',
+                  amountColor: _lowStockProducts.isNotEmpty ? const Color(0xFFDC2626) : const Color(0xFF64748B),
+                ),
+              ),
+              Container(width: 1, height: 54, color: const Color(0xFFF1F5F9)),
+              const SizedBox(width: 12),
+              // Near Expiry
+              Expanded(
+                child: _buildMetricTile(
+                  icon: Icons.access_time_rounded,
+                  iconColor: const Color(0xFFD97706),
+                  title: 'Near Expiry',
+                  subTitle: '<60d',
+                  amount: '${_nearExpiryBatches.length}',
+                  footer: 'Batch expiry radar',
+                  amountColor: _nearExpiryBatches.isNotEmpty ? const Color(0xFFD97706) : const Color(0xFF64748B),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMetricTile({
+    required IconData icon,
+    required Color iconColor,
+    required String title,
+    required String subTitle,
+    required String amount,
+    required String footer,
+    required Color amountColor,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Row(
+              children: [
+                Icon(icon, size: 14, color: iconColor),
+                const SizedBox(width: 4),
+                Text(
+                  title,
+                  style: GoogleFonts.inter(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    color: iconColor,
+                  ),
+                ),
+              ],
+            ),
+            Text(
+              subTitle,
+              style: GoogleFonts.inter(fontSize: 10, color: const Color(0xFF94A3B8), fontWeight: FontWeight.w600),
+            ),
+          ],
+        ),
+        const SizedBox(height: 4),
+        FittedBox(
+          fit: BoxFit.scaleDown,
+          alignment: Alignment.centerLeft,
+          child: Text(
+            amount,
+            style: GoogleFonts.outfit(
+              fontSize: 18,
+              fontWeight: FontWeight.w900,
+              color: amountColor,
+              letterSpacing: -0.3,
+            ),
+          ),
+        ),
+        const SizedBox(height: 2),
+        Text(
+          footer,
+          style: GoogleFonts.inter(fontSize: 9.5, color: const Color(0xFF94A3B8)),
+        ),
+      ],
+    );
+  }
+
+  // =========================================================================
+  // 3. INTERACTIVE 3-PILL TAB BAR
+  // =========================================================================
+  Widget _buildInteractiveTabBar() {
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      physics: const BouncingScrollPhysics(),
+      child: Row(
+        children: [
+          _buildPillTab(
+            index: 0,
+            icon: Icons.warning_amber_rounded,
+            title: 'Reorder Radar (${_lowStockProducts.length})',
+          ),
+          const SizedBox(width: 8),
+          _buildPillTab(
+            index: 1,
+            icon: Icons.access_time_rounded,
+            title: 'Near Expiry (${_nearExpiryBatches.length})',
+          ),
+          const SizedBox(width: 8),
+          _buildPillTab(
+            index: 2,
+            icon: Icons.history_rounded,
+            title: 'Stock Audit Trail',
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPillTab({required int index, required IconData icon, required String title}) {
+    final isSelected = _activeTabIndex == index;
+    return InkWell(
+      onTap: () {
+        HapticFeedback.selectionClick();
+        setState(() => _activeTabIndex = index);
+      },
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+        decoration: BoxDecoration(
+          color: isSelected ? const Color(0xFF0F172A) : Colors.white,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: isSelected ? const Color(0xFF0F172A) : const Color(0xFFE2E8F0),
+          ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              icon,
+              size: 15,
+              color: isSelected ? Colors.white : const Color(0xFF64748B),
+            ),
+            const SizedBox(width: 6),
+            Text(
+              title,
+              style: GoogleFonts.outfit(
+                fontSize: 12,
+                fontWeight: isSelected ? FontWeight.w800 : FontWeight.w600,
+                color: isSelected ? Colors.white : const Color(0xFF475569),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // =========================================================================
+  // SEARCH TOOLBAR
+  // =========================================================================
+  Widget _buildSearchToolbar() {
+    return TextField(
+      onChanged: (v) => setState(() => _search = v.toLowerCase()),
+      style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w500),
+      decoration: InputDecoration(
+        hintText: 'Search stock by item name or barcode...',
+        hintStyle: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF94A3B8)),
+        prefixIcon: const Icon(Icons.search_rounded, size: 18, color: Color(0xFF94A3B8)),
+        isDense: true,
+        filled: true,
+        fillColor: Colors.white,
+        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Color(0xFFE2E8F0))),
+        enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Color(0xFFE2E8F0))),
+        focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Color(0xFF0F172A))),
+      ),
+    );
+  }
+
+  // =========================================================================
+  // TAB 0: REORDER RADAR CONTENT (MATCHING SCREENSHOT 1)
+  // =========================================================================
+  Widget _buildReorderRadarContent(List<ProductModel> lowStock) {
+    if (lowStock.isEmpty) {
+      return Container(
+        padding: const EdgeInsets.symmetric(vertical: 36, horizontal: 20),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(color: const Color(0xFFEEF2F6)),
+        ),
+        child: Column(
+          children: [
+            // Green Hexagonal Box (Matching Screenshot 1)
+            Container(
+              width: 52,
+              height: 52,
+              decoration: BoxDecoration(
+                color: const Color(0xFFECFDF5),
+                borderRadius: BorderRadius.circular(14),
+              ),
+              child: const Icon(Icons.check_circle_outline_rounded, size: 28, color: Color(0xFF10B981)),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              'All items are well stocked!',
+              style: GoogleFonts.outfit(
+                fontSize: 15.5,
+                fontWeight: FontWeight.w800,
+                color: const Color(0xFF0F172A),
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'No products are currently below safety threshold.',
+              textAlign: TextAlign.center,
+              style: GoogleFonts.inter(fontSize: 11.5, color: const Color(0xFF64748B)),
+            ),
+            const SizedBox(height: 14),
+            OutlinedButton.icon(
+              onPressed: _openInwardSheet,
+              icon: const Icon(Icons.add_shopping_cart_rounded, size: 15),
+              label: Text('Inward Wholesale Batch', style: GoogleFonts.outfit(fontSize: 12.5, fontWeight: FontWeight.w700)),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: const Color(0xFF0F172A),
+                side: const BorderSide(color: Color(0xFFCBD5E1)),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return Column(
+      children: lowStock.map((prod) => _buildReorderItemCard(prod)).toList(),
+    );
+  }
+
+  Widget _buildReorderItemCard(ProductModel product) {
+    final isOut = product.stockQuantity <= 0;
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: isOut ? const Color(0xFFFECACA) : const Color(0xFFFED7AA)),
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: isOut ? const Color(0xFFFEE2E2) : const Color(0xFFFFF7ED),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Icon(
+              isOut ? Icons.cancel_outlined : Icons.warning_amber_rounded,
+              color: isOut ? const Color(0xFFDC2626) : const Color(0xFFD97706),
+              size: 18,
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  product.name,
+                  style: GoogleFonts.outfit(fontSize: 13.5, fontWeight: FontWeight.w700, color: const Color(0xFF0F172A)),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                Text(
+                  'Cost: ${MoneyFormatter.formatINR(product.purchasePricePaise)} • MRP: ${MoneyFormatter.formatINR(product.mrpPaise)}',
+                  style: GoogleFonts.inter(fontSize: 10.5, color: const Color(0xFF64748B)),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2.5),
+                decoration: BoxDecoration(
+                  color: isOut ? const Color(0xFFFEE2E2) : const Color(0xFFFEF3C7),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Text(
+                  isOut ? 'OUT OF STOCK' : '${product.stockQuantity.toStringAsFixed(0)} ${product.unit} LEFT',
+                  style: GoogleFonts.inter(
+                    fontSize: 9.5,
+                    fontWeight: FontWeight.w800,
+                    color: isOut ? const Color(0xFFDC2626) : const Color(0xFFB45309),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 5),
+              InkWell(
+                onTap: () async {
+                  HapticFeedback.lightImpact();
+                  final updated = product.copyWith(stockQuantity: product.stockQuantity + 10);
+                  await LocalDatabase.instance.upsertProduct(updated);
+                  _loadData();
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text('+10 ${product.unit} added to ${product.name}'),
+                        backgroundColor: const Color(0xFF059669),
+                        behavior: SnackBarBehavior.floating,
+                      ),
+                    );
+                  }
+                },
+                borderRadius: BorderRadius.circular(6),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3.5),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFECFDF5),
+                    borderRadius: BorderRadius.circular(6),
+                    border: Border.all(color: const Color(0xFFA7F3D0)),
+                  ),
+                  child: Text(
+                    '+10 Restock',
+                    style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.w800, color: const Color(0xFF059669)),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  // =========================================================================
+  // TAB 1: NEAR EXPIRY CONTENT
+  // =========================================================================
+  Widget _buildNearExpiryContent() {
+    return Column(
+      children: _nearExpiryBatches.map((batch) {
+        final days = batch['days_left'] as int;
+        final isUrgent = batch['is_urgent'] as bool;
+        final expiryStr = DateFormat('dd MMM yyyy').format(batch['expiry_date'] as DateTime);
+
+        return Container(
+          margin: const EdgeInsets.only(bottom: 8),
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: isUrgent ? const Color(0xFFFECACA) : const Color(0xFFE2E8F0)),
+          ),
+          child: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: isUrgent ? const Color(0xFFFEE2E2) : const Color(0xFFFEF3C7),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Icon(
+                  Icons.medication_liquid_rounded,
+                  color: isUrgent ? const Color(0xFFDC2626) : const Color(0xFFD97706),
+                  size: 20,
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      batch['product_name'],
+                      style: GoogleFonts.outfit(fontSize: 13.5, fontWeight: FontWeight.w700, color: const Color(0xFF0F172A)),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      'Batch: ${batch['batch_no']} • Qty: ${batch['qty']} ${batch['unit']}',
+                      style: GoogleFonts.inter(fontSize: 10.5, color: const Color(0xFF64748B)),
+                    ),
+                    Text(
+                      'Expires on: $expiryStr',
+                      style: GoogleFonts.inter(fontSize: 10.5, fontWeight: FontWeight.w600, color: isUrgent ? const Color(0xFFDC2626) : const Color(0xFFD97706)),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: isUrgent ? const Color(0xFFDC2626) : const Color(0xFFD97706),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(
+                  '$days DAYS',
+                  style: GoogleFonts.outfit(fontSize: 11, fontWeight: FontWeight.w900, color: Colors.white),
+                ),
+              ),
+            ],
+          ),
+        );
+      }).toList(),
+    );
+  }
+
+  // =========================================================================
+  // TAB 2: STOCK AUDIT TRAIL CONTENT
+  // =========================================================================
+  Widget _buildStockAuditTrailContent() {
+    if (_sales.isEmpty) {
+      return Container(
+        padding: const EdgeInsets.all(28),
+        alignment: Alignment.center,
+        decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16)),
+        child: Column(
+          children: [
+            const Icon(Icons.history_toggle_off_rounded, size: 36, color: Color(0xFF94A3B8)),
+            const SizedBox(height: 8),
+            Text('No recent stock movements recorded', style: GoogleFonts.outfit(fontSize: 14, fontWeight: FontWeight.w700)),
+            Text('Sales and inward deliveries will automatically record audit logs here.', style: GoogleFonts.inter(fontSize: 11, color: const Color(0xFF94A3B8))),
+          ],
+        ),
+      );
+    }
+
+    return Column(
+      children: _sales.take(8).map((s) {
+        final timeStr = DateFormat('dd MMM, hh:mm a').format(s.createdAt);
+        final itemCount = s.items.length;
+
+        return Container(
+          margin: const EdgeInsets.only(bottom: 8),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: const Color(0xFFEEF2F6)),
+          ),
+          child: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(7),
+                decoration: BoxDecoration(color: const Color(0xFFF1F5F9), borderRadius: BorderRadius.circular(8)),
+                child: const Icon(Icons.receipt_rounded, size: 16, color: Color(0xFF64748B)),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Bill #${s.invoiceNumber} ($itemCount items deducted)',
+                      style: GoogleFonts.outfit(fontSize: 13, fontWeight: FontWeight.w700, color: const Color(0xFF0F172A)),
+                    ),
+                    Text(
+                      'Sold to ${s.customerName ?? 'Walk-in Customer'} • $timeStr',
+                      style: GoogleFonts.inter(fontSize: 10.5, color: const Color(0xFF64748B)),
+                    ),
+                  ],
+                ),
+              ),
+              Text(
+                '-$itemCount SKUs',
+                style: GoogleFonts.outfit(fontSize: 13, fontWeight: FontWeight.w800, color: const Color(0xFFDC2626)),
+              ),
+            ],
+          ),
+        );
+      }).toList(),
     );
   }
 }

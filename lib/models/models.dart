@@ -1,4 +1,4 @@
-﻿import 'dart:convert';
+import 'dart:convert';
 
 class CategoryModel {
   final String id;
@@ -113,6 +113,7 @@ class CustomerModel {
   final String businessId;
   final String name;
   final String phone;
+  final String? address;
   final int currentBalancePaise; // Positive = customer owes money (Udhar)
   final int creditLimitPaise;
   final String syncStatus;
@@ -122,6 +123,7 @@ class CustomerModel {
     required this.businessId,
     required this.name,
     required this.phone,
+    this.address,
     this.currentBalancePaise = 0,
     this.creditLimitPaise = 500000, // Default ₹5,000 limit
     this.syncStatus = 'synced',
@@ -132,6 +134,7 @@ class CustomerModel {
     'business_id': businessId,
     'name': name,
     'phone': phone,
+    'address': address,
     'current_balance_paise': currentBalancePaise,
     'credit_limit_paise': creditLimitPaise,
     'sync_status': syncStatus,
@@ -142,9 +145,28 @@ class CustomerModel {
     businessId: map['business_id'] ?? '',
     name: map['name'] ?? '',
     phone: map['phone'] ?? '',
+    address: map['address'],
     currentBalancePaise: map['current_balance_paise'] ?? 0,
     creditLimitPaise: map['credit_limit_paise'] ?? 500000,
     syncStatus: map['sync_status'] ?? 'pending',
+  );
+
+  CustomerModel copyWith({
+    String? name,
+    String? phone,
+    String? address,
+    int? currentBalancePaise,
+    int? creditLimitPaise,
+    String? syncStatus,
+  }) => CustomerModel(
+    id: id,
+    businessId: businessId,
+    name: name ?? this.name,
+    phone: phone ?? this.phone,
+    address: address ?? this.address,
+    currentBalancePaise: currentBalancePaise ?? this.currentBalancePaise,
+    creditLimitPaise: creditLimitPaise ?? this.creditLimitPaise,
+    syncStatus: syncStatus ?? this.syncStatus,
   );
 }
 
@@ -374,42 +396,94 @@ class ExpenseModel {
   );
 }
 
+class UpiAccountModel {
+  final String id;
+  final String label;
+  final String upiVpa;
+  final bool isDefault;
+
+  UpiAccountModel({
+    required this.id,
+    required this.label,
+    required this.upiVpa,
+    this.isDefault = false,
+  });
+
+  Map<String, dynamic> toMap() => {
+    'id': id,
+    'label': label,
+    'upi_vpa': upiVpa,
+    'is_default': isDefault ? 1 : 0,
+  };
+
+  factory UpiAccountModel.fromMap(Map<String, dynamic> map) => UpiAccountModel(
+    id: map['id'] ?? '',
+    label: map['label'] ?? '',
+    upiVpa: map['upi_vpa'] ?? '',
+    isDefault: map['is_default'] == 1 || map['is_default'] == true,
+  );
+}
+
 class StoreProfileModel {
   final String storeName;
+  final String tagline;
   final String ownerName;
   final String phone;
+  final String email;
   final String upiVpa;
   final String category;
   final String address;
+  final String pincode;
   final String gstin;
+  final String fssai;
+  final String logoUrl;
+  final String upiAccountsJson;
 
   StoreProfileModel({
-    this.storeName = 'Sharma Kirana & General Store',
-    this.ownerName = 'Rahul Jadhav',
-    this.phone = '9876543210',
-    this.upiVpa = 'sharmakirana@paytm',
+    this.storeName = 'Rahul Shramas',
+    this.tagline = 'Always Fresh, Best Wholesale Rates',
+    this.ownerName = 'Divyaang Pratishthan',
+    this.phone = '9595997711',
+    this.email = 'iamdivyaang@gmail.com',
+    this.upiVpa = 'rahuljadhav44@ybl',
     this.category = 'Grocery / Kirana',
-    this.address = 'Shop #4, Main Market, Mumbai',
-    this.gstin = '27AAAAA0000A1Z5',
+    this.address = 'Shop No. 12, Gandhi Market, Station Road',
+    this.pincode = '400001',
+    this.gstin = '',
+    this.fssai = '',
+    this.logoUrl = '',
+    this.upiAccountsJson = '[{"id":"upi_1","label":"Shop Primary QR","upi_vpa":"rahuljadhav44@ybl","is_default":1}]',
   });
 
   Map<String, dynamic> toMap() => {
     'store_name': storeName,
+    'tagline': tagline,
     'owner_name': ownerName,
     'phone': phone,
+    'email': email,
     'upi_vpa': upiVpa,
     'category': category,
     'address': address,
+    'pincode': pincode,
     'gstin': gstin,
+    'fssai': fssai,
+    'logo_url': logoUrl,
+    'upi_accounts_json': upiAccountsJson,
   };
 
   factory StoreProfileModel.fromMap(Map<String, dynamic> map) => StoreProfileModel(
-    storeName: map['store_name'] ?? 'Sharma Kirana & General Store',
-    ownerName: map['owner_name'] ?? 'Rahul Jadhav',
-    phone: map['phone'] ?? '9876543210',
-    upiVpa: map['upi_vpa'] ?? 'sharmakirana@paytm',
+    storeName: map['store_name'] ?? 'Rahul Shramas',
+    tagline: map['tagline'] ?? 'Always Fresh, Best Wholesale Rates',
+    ownerName: map['owner_name'] ?? 'Divyaang Pratishthan',
+    phone: map['phone'] ?? '9595997711',
+    email: map['email'] ?? 'iamdivyaang@gmail.com',
+    upiVpa: map['upi_vpa'] ?? 'rahuljadhav44@ybl',
     category: map['category'] ?? 'Grocery / Kirana',
-    address: map['address'] ?? 'Shop #4, Main Market, Mumbai',
-    gstin: map['gstin'] ?? '27AAAAA0000A1Z5',
+    address: map['address'] ?? 'Shop No. 12, Gandhi Market, Station Road',
+    pincode: map['pincode'] ?? '400001',
+    gstin: map['gstin'] ?? '',
+    fssai: map['fssai'] ?? '',
+    logoUrl: map['logo_url'] ?? '',
+    upiAccountsJson: map['upi_accounts_json'] ?? '[{"id":"upi_1","label":"Shop Primary QR","upi_vpa":"rahuljadhav44@ybl","is_default":1}]',
   );
 }

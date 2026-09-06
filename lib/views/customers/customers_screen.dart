@@ -410,7 +410,7 @@ class _CustomersScreenState extends State<CustomersScreen> {
           ),
           const SizedBox(width: 8),
           IconButton(
-            icon: const Icon(Icons.chat_rounded, color: Color(0xFF10B981), size: 20),
+            icon: Image.asset('assets/images/whatsapp_logo.png', width: 22, height: 22),
             onPressed: () async {
               final uri = Uri.parse('https://wa.me/91${customer.phone}?text=Namaste%20${customer.name},%20Greetings%20from%20KamaiPlus%20Store!');
               if (await canLaunchUrl(uri)) launchUrl(uri, mode: LaunchMode.externalApplication);

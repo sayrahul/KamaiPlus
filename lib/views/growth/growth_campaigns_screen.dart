@@ -67,7 +67,7 @@ class _GrowthCampaignsScreenState extends State<GrowthCampaignsScreen> {
             ),
             child: Row(
               children: [
-                const Icon(Icons.mark_chat_unread_rounded, color: Colors.white, size: 36),
+                Image.asset('assets/images/whatsapp_logo.png', width: 36, height: 36),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Column(
@@ -141,7 +141,7 @@ class _GrowthCampaignsScreenState extends State<GrowthCampaignsScreen> {
                 }
               }
             },
-            icon: const Icon(Icons.share_rounded, size: 16),
+            icon: Image.asset('assets/images/whatsapp_logo.png', width: 16, height: 16),
             label: Text('Send via WhatsApp', style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w700)),
             style: ElevatedButton.styleFrom(
               backgroundColor: const Color(0xFF10B981),
