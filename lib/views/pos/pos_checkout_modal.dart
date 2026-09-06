@@ -152,18 +152,10 @@ class _PosCheckoutModalState extends State<PosCheckoutModal> {
     final totalRupees = (grandTotalPaise / 100.0).ceil();
     final List<int> chips = [totalRupees];
 
-    if (totalRupees % 50 != 0) {
-      final next50 = (totalRupees / 50).ceil() * 50;
-      if (next50 > totalRupees && !chips.contains(next50)) chips.add(next50);
-    } else if (totalRupees % 100 != 0) {
-      final next100 = (totalRupees / 100).ceil() * 100;
-      if (next100 > totalRupees && !chips.contains(next100)) chips.add(next100);
-    }
-
-    final commonNotes = [100, 200, 300, 500, 1000, 2000];
-    for (var n in commonNotes) {
-      if (n > totalRupees && !chips.contains(n) && chips.length < 5) {
-        chips.add(n);
+    final standardNotes = [50, 100, 200, 500, 1000, 2000];
+    for (final note in standardNotes) {
+      if (!chips.contains(note)) {
+        chips.add(note);
       }
     }
     return chips;
@@ -703,10 +695,48 @@ class _PosCheckoutModalState extends State<PosCheckoutModal> {
                               itemCount: _filteredCustomers.length,
                               itemBuilder: (ctx, i) {
                                 final c = _filteredCustomers[i];
+                                final isUdhar = c.currentBalancePaise > 0;
+                                final isAdvance = c.currentBalancePaise < 0;
+                                final balanceAbsPaise = c.currentBalancePaise.abs();
+                                final balanceText = isUdhar
+                                    ? '₹${(balanceAbsPaise / 100.0).toStringAsFixed(0)} Baki'
+                                    : isAdvance
+                                        ? '₹${(balanceAbsPaise / 100.0).toStringAsFixed(0)} Advance'
+                                        : '₹0 Clear';
+                                final badgeBg = isUdhar
+                                    ? const Color(0xFFFEE2E2)
+                                    : isAdvance
+                                        ? const Color(0xFFECFDF5)
+                                        : const Color(0xFFF1F5F9);
+                                final badgeColor = isUdhar
+                                    ? const Color(0xFFDC2626)
+                                    : isAdvance
+                                        ? const Color(0xFF059669)
+                                        : const Color(0xFF64748B);
+
                                 return ListTile(
                                   dense: true,
-                                  title: Text(c.name, style: GoogleFonts.plusJakartaSans(fontSize: 12, fontWeight: FontWeight.w700)),
-                                  subtitle: Text(c.phone, style: GoogleFonts.jetBrainsMono(fontSize: 10)),
+                                  leading: CircleAvatar(
+                                    radius: 14,
+                                    backgroundColor: const Color(0xFFEFF6FF),
+                                    child: Text(
+                                      c.name.isNotEmpty ? c.name[0].toUpperCase() : 'C',
+                                      style: GoogleFonts.outfit(fontSize: 12, fontWeight: FontWeight.bold, color: const Color(0xFF2563EB)),
+                                    ),
+                                  ),
+                                  title: Text(c.name, style: GoogleFonts.plusJakartaSans(fontSize: 12.5, fontWeight: FontWeight.w700)),
+                                  subtitle: Text(c.phone, style: GoogleFonts.jetBrainsMono(fontSize: 10.5, color: const Color(0xFF64748B))),
+                                  trailing: Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                    decoration: BoxDecoration(
+                                      color: badgeBg,
+                                      borderRadius: BorderRadius.circular(6),
+                                    ),
+                                    child: Text(
+                                      balanceText,
+                                      style: GoogleFonts.jetBrainsMono(fontSize: 10, fontWeight: FontWeight.w700, color: badgeColor),
+                                    ),
+                                  ),
                                   onTap: () => _selectCustomer(c),
                                 );
                               },
@@ -1107,41 +1137,141 @@ class _PosCheckoutModalState extends State<PosCheckoutModal> {
                     ),
                     const SizedBox(height: 14),
                   ] else if (_paymentMode == 'upi') ...[
-                    // UPI Dynamic QR
+                    // UPI Dynamic QR - High-End Merchant Counter Display
                     Container(
-                      padding: const EdgeInsets.all(12),
+                      padding: const EdgeInsets.all(16),
                       decoration: BoxDecoration(
-                        color: const Color(0xFFF8FAFC),
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: const Color(0xFFE2E8F0)),
-                      ),
-                      child: Row(
-                        children: [
-                          Container(
-                            color: Colors.white,
-                            padding: const EdgeInsets.all(4),
-                            child: QrImageView(
-                              data: 'upi://pay?pa=proventure@icici&pn=KamaiPlus+Store&am=${(grandTotalPaise / 100.0)}&cu=INR&tn=POS+Bill',
-                              version: QrVersions.auto,
-                              size: 70,
-                            ),
+                        gradient: const LinearGradient(
+                          colors: [Color(0xFF0F172A), Color(0xFF1E293B)],
+                          begin: Alignment.topCenter,
+                          end: Alignment.bottomCenter,
+                        ),
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(color: const Color(0xFF334155)),
+                        boxShadow: [
+                          BoxShadow(
+                            color: const Color(0xFF0F172A).withValues(alpha: 0.15),
+                            blurRadius: 10,
+                            offset: const Offset(0, 4),
                           ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  'Dynamic UPI QR',
-                                  style: GoogleFonts.plusJakartaSans(fontSize: 13, fontWeight: FontWeight.w700),
+                        ],
+                      ),
+                      child: Column(
+                        children: [
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Row(
+                                children: [
+                                  Container(
+                                    width: 8,
+                                    height: 8,
+                                    decoration: const BoxDecoration(
+                                      color: Color(0xFF10B981),
+                                      shape: BoxShape.circle,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 6),
+                                  Text(
+                                    'DYNAMIC BILL UPI QR',
+                                    style: GoogleFonts.outfit(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w800,
+                                      color: const Color(0xFF34D399),
+                                      letterSpacing: 0.8,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFF10B981).withValues(alpha: 0.2),
+                                  borderRadius: BorderRadius.circular(12),
+                                  border: Border.all(color: const Color(0xFF059669)),
                                 ),
-                                const SizedBox(height: 4),
-                                Text(
-                                  'Scan using PhonePe, GPay, Paytm with instant voice announcement',
-                                  style: GoogleFonts.plusJakartaSans(fontSize: 10.5, color: const Color(0xFF64748B)),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    const Icon(Icons.volume_up_rounded, size: 12, color: Color(0xFF34D399)),
+                                    const SizedBox(width: 4),
+                                    Text(
+                                      'Soundbox Ready',
+                                      style: GoogleFonts.inter(
+                                        fontSize: 9.5,
+                                        fontWeight: FontWeight.w700,
+                                        color: const Color(0xFF34D399),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 14),
+
+                          // QR White Canvas Container
+                          Container(
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(14),
+                              boxShadow: const [
+                                BoxShadow(
+                                  color: Color(0x1A000000),
+                                  blurRadius: 10,
+                                  offset: Offset(0, 4),
                                 ),
                               ],
                             ),
+                            child: Column(
+                              children: [
+                                QrImageView(
+                                  data: 'upi://pay?pa=proventure@icici&pn=KamaiPlus+Store&am=${(grandTotalPaise / 100.0)}&cu=INR&tn=POS+Bill',
+                                  version: QrVersions.auto,
+                                  size: 150,
+                                ),
+                                const SizedBox(height: 6),
+                                Text(
+                                  'Scan to Pay Exact ₹${(grandTotalPaise / 100.0).toStringAsFixed(2)}',
+                                  style: GoogleFonts.outfit(
+                                    fontSize: 13.5,
+                                    fontWeight: FontWeight.w800,
+                                    color: const Color(0xFF0F172A),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+
+                          // Accepted UPI Apps Strip & Timer
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Text(
+                                'PhonePe • GPay • Paytm • BHIM',
+                                style: GoogleFonts.inter(
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w600,
+                                  color: const Color(0xFF94A3B8),
+                                ),
+                              ),
+                              Row(
+                                children: [
+                                  const Icon(Icons.timer_outlined, size: 12, color: Color(0xFFFBBF24)),
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    'Valid: 05:00',
+                                    style: GoogleFonts.robotoMono(
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.w700,
+                                      color: const Color(0xFFFBBF24),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
                           ),
                         ],
                       ),

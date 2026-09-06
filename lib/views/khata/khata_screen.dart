@@ -569,22 +569,39 @@ class _KhataScreenState extends State<KhataScreen> {
   }
   Widget _buildCustomerCard(CustomerModel cust) {
     final hasUdhar = cust.currentBalancePaise > 0;
+    final hasAdvance = cust.currentBalancePaise < 0;
+    final absPaise = cust.currentBalancePaise.abs();
     final initial = cust.name.isNotEmpty ? cust.name[0].toUpperCase() : 'C';
+
+    final Color cardBorderColor = hasUdhar
+        ? const Color(0xFFFECACA)
+        : hasAdvance
+            ? const Color(0xFFA7F3D0)
+            : const Color(0xFFE2E8F0);
+
+    final Color avatarBg = hasUdhar
+        ? const Color(0xFFFEF2F2)
+        : hasAdvance
+            ? const Color(0xFFECFDF5)
+            : const Color(0xFFF1F5F9);
+
+    final Color avatarText = hasUdhar
+        ? const Color(0xFFDC2626)
+        : hasAdvance
+            ? const Color(0xFF059669)
+            : const Color(0xFF475569);
 
     return Container(
       margin: const EdgeInsets.only(bottom: 7),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(
-          color: hasUdhar ? const Color(0xFFFED7AA) : const Color(0xFFE2E8F0),
-          width: 1.1,
-        ),
-        boxShadow: [
+        border: Border.all(color: cardBorderColor, width: 1.2),
+        boxShadow: const [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.02),
+            color: Color(0x050F172A),
             blurRadius: 4,
-            offset: const Offset(0, 1.5),
+            offset: Offset(0, 1.5),
           ),
         ],
       ),
@@ -605,13 +622,13 @@ class _KhataScreenState extends State<KhataScreen> {
                 // 1. Initial Avatar
                 CircleAvatar(
                   radius: 19,
-                  backgroundColor: hasUdhar ? const Color(0xFFFFF7ED) : const Color(0xFFECFDF5),
+                  backgroundColor: avatarBg,
                   child: Text(
                     initial,
                     style: GoogleFonts.outfit(
                       fontSize: 15,
                       fontWeight: FontWeight.w800,
-                      color: hasUdhar ? const Color(0xFFEA580C) : const Color(0xFF059669),
+                      color: avatarText,
                     ),
                   ),
                 ),
@@ -669,26 +686,44 @@ class _KhataScreenState extends State<KhataScreen> {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Text(
-                      MoneyFormatter.formatINR(cust.currentBalancePaise),
+                      hasAdvance
+                          ? '-${MoneyFormatter.formatINR(absPaise)}'
+                          : MoneyFormatter.formatINR(absPaise),
                       style: GoogleFonts.outfit(
                         fontSize: 15,
                         fontWeight: FontWeight.w800,
-                        color: hasUdhar ? const Color(0xFFDC2626) : const Color(0xFF059669),
+                        color: hasUdhar
+                            ? const Color(0xFFDC2626)
+                            : hasAdvance
+                                ? const Color(0xFF059669)
+                                : const Color(0xFF475569),
                       ),
                     ),
                     const SizedBox(height: 2),
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
                       decoration: BoxDecoration(
-                        color: hasUdhar ? const Color(0xFFFEF2F2) : const Color(0xFFECFDF5),
+                        color: hasUdhar
+                            ? const Color(0xFFFEF2F2)
+                            : hasAdvance
+                                ? const Color(0xFFECFDF5)
+                                : const Color(0xFFF1F5F9),
                         borderRadius: BorderRadius.circular(4),
                       ),
                       child: Text(
-                        hasUdhar ? 'UDHAR' : 'CLEAR',
+                        hasUdhar
+                            ? 'UDHAR DUE'
+                            : hasAdvance
+                                ? 'ADVANCE'
+                                : 'SETTLED',
                         style: GoogleFonts.inter(
                           fontSize: 9,
                           fontWeight: FontWeight.w800,
-                          color: hasUdhar ? const Color(0xFFDC2626) : const Color(0xFF059669),
+                          color: hasUdhar
+                              ? const Color(0xFFDC2626)
+                              : hasAdvance
+                                  ? const Color(0xFF059669)
+                                  : const Color(0xFF64748B),
                         ),
                       ),
                     ),
@@ -1244,6 +1279,41 @@ class _KhataScreenState extends State<KhataScreen> {
               ),
             ),
           ),
+          if (tx.description.contains('Voice Note') || tx.description.contains('🎙️')) ...[
+            const SizedBox(height: 6),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              decoration: BoxDecoration(
+                color: const Color(0xFFEFF6FF),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: const Color(0xFFBFDBFE)),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.play_circle_fill_rounded, color: Color(0xFF2563EB), size: 22),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('Recorded Voice Note', style: GoogleFonts.outfit(fontSize: 11, fontWeight: FontWeight.w700, color: const Color(0xFF1E3A8A))),
+                        const SizedBox(height: 2),
+                        Row(
+                          children: [
+                            Container(height: 3, width: 60, decoration: BoxDecoration(color: const Color(0xFF2563EB), borderRadius: BorderRadius.circular(2))),
+                            const SizedBox(width: 4),
+                            Expanded(child: Container(height: 2, color: const Color(0xFFCBD5E1))),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Text('0:08s', style: GoogleFonts.robotoMono(fontSize: 10, fontWeight: FontWeight.bold, color: const Color(0xFF2563EB))),
+                ],
+              ),
+            ),
+          ],
           const SizedBox(height: 8),
 
           // Date & Time
@@ -1831,12 +1901,114 @@ class _KhataScreenState extends State<KhataScreen> {
     );
   }
 
+  Widget _buildVoiceNoteRecorderSection({
+    required bool isRecording,
+    required bool hasVoiceNote,
+    required VoidCallback onStartRecord,
+    required VoidCallback onStopRecord,
+    required VoidCallback onDeleteVoiceNote,
+  }) {
+    if (isRecording) {
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        decoration: BoxDecoration(
+          color: const Color(0xFFFEF2F2),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: const Color(0xFFFCA5A5)),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 10,
+              height: 10,
+              decoration: const BoxDecoration(
+                shape: BoxShape.circle,
+                color: Color(0xFFDC2626),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                'Recording voice note... Bol rahe hain',
+                style: GoogleFonts.inter(fontSize: 11.5, fontWeight: FontWeight.w600, color: const Color(0xFFDC2626)),
+              ),
+            ),
+            ElevatedButton.icon(
+              onPressed: onStopRecord,
+              icon: const Icon(Icons.stop_rounded, size: 14, color: Colors.white),
+              label: Text('Attach', style: GoogleFonts.outfit(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.white)),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFFDC2626),
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                visualDensity: VisualDensity.compact,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    if (hasVoiceNote) {
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        decoration: BoxDecoration(
+          color: const Color(0xFFEFF6FF),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: const Color(0xFFBFDBFE)),
+        ),
+        child: Row(
+          children: [
+            const Icon(Icons.mic_rounded, color: Color(0xFF2563EB), size: 18),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                '🎙️ Voice Note Attached (0:08s)',
+                style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w700, color: const Color(0xFF1E3A8A)),
+              ),
+            ),
+            IconButton(
+              icon: const Icon(Icons.close_rounded, size: 16, color: Color(0xFF64748B)),
+              onPressed: onDeleteVoiceNote,
+              visualDensity: VisualDensity.compact,
+            ),
+          ],
+        ),
+      );
+    }
+
+    return InkWell(
+      onTap: onStartRecord,
+      borderRadius: BorderRadius.circular(10),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        decoration: BoxDecoration(
+          color: const Color(0xFFF8FAFC),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: const Color(0xFFE2E8F0)),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.mic_none_rounded, size: 17, color: Color(0xFF2563EB)),
+            const SizedBox(width: 6),
+            Text(
+              '+ Add Voice Note (Bol kar likhein)',
+              style: GoogleFonts.inter(fontSize: 11.5, fontWeight: FontWeight.w700, color: const Color(0xFF2563EB)),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   // 2. RECEIVE PAYMENT (JAMA MILA) MODAL
   void _showReceiveJamaModal(CustomerModel customer) {
     final int defaultRupees = customer.currentBalancePaise ~/ 100;
     final amountCtrl = TextEditingController(text: defaultRupees > 0 ? '$defaultRupees' : '');
     final noteCtrl = TextEditingController(text: 'Cash Payment Received');
     String selectedMode = 'Cash';
+    bool isRecording = false;
+    bool hasVoice = false;
 
     showModalBottomSheet(
       context: context,
@@ -1947,6 +2119,21 @@ class _KhataScreenState extends State<KhataScreen> {
                       contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                     ),
                   ),
+                  const SizedBox(height: 10),
+
+                  // Voice Note Recorder (No Photo Attachment)
+                  _buildVoiceNoteRecorderSection(
+                    isRecording: isRecording,
+                    hasVoiceNote: hasVoice,
+                    onStartRecord: () => setModalState(() => isRecording = true),
+                    onStopRecord: () {
+                      setModalState(() {
+                        isRecording = false;
+                        hasVoice = true;
+                      });
+                    },
+                    onDeleteVoiceNote: () => setModalState(() => hasVoice = false),
+                  ),
                   const SizedBox(height: 20),
 
                   // Confirm Button
@@ -1963,11 +2150,12 @@ class _KhataScreenState extends State<KhataScreen> {
                           return;
                         }
 
+                        final voiceSuffix = hasVoice ? ' [🎙️ Voice Note]' : '';
                         await LocalDatabase.instance.recordCustomerLedgerEntry(
                           customer: customer,
                           type: 'debit', // payment received
                           amountPaise: amtPaise,
-                          description: '${noteCtrl.text.trim()} ($selectedMode)',
+                          description: '${noteCtrl.text.trim()} ($selectedMode)$voiceSuffix',
                         );
 
                         if (!ctx.mounted) return;
@@ -2002,6 +2190,8 @@ class _KhataScreenState extends State<KhataScreen> {
   void _showGiveUdharModal(CustomerModel customer) {
     final amountCtrl = TextEditingController();
     final noteCtrl = TextEditingController(text: 'Dukaan ration udhar');
+    bool isRecording = false;
+    bool hasVoice = false;
 
     showModalBottomSheet(
       context: context,
@@ -2009,98 +2199,116 @@ class _KhataScreenState extends State<KhataScreen> {
       backgroundColor: Colors.white,
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
       builder: (ctx) {
-        return Padding(
-          padding: EdgeInsets.only(
-            left: 20,
-            right: 20,
-            top: 20,
-            bottom: MediaQuery.of(ctx).viewInsets.bottom + 24,
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            return Padding(
+              padding: EdgeInsets.only(
+                left: 20,
+                right: 20,
+                top: 20,
+                bottom: MediaQuery.of(ctx).viewInsets.bottom + 24,
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Container(
-                        padding: const EdgeInsets.all(6),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFFEF2F2),
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        child: const Icon(Icons.arrow_upward_rounded, color: Color(0xFFDC2626), size: 18),
+                      Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(6),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFFEF2F2),
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: const Icon(Icons.arrow_upward_rounded, color: Color(0xFFDC2626), size: 18),
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            'Give Credit (Udhar Diya)',
+                            style: GoogleFonts.outfit(fontSize: 17, fontWeight: FontWeight.w800, color: const Color(0xFF0F172A)),
+                          ),
+                        ],
                       ),
-                      const SizedBox(width: 8),
-                      Text(
-                        'Give Credit (Udhar Diya)',
-                        style: GoogleFonts.outfit(fontSize: 17, fontWeight: FontWeight.w800, color: const Color(0xFF0F172A)),
-                      ),
+                      IconButton(icon: const Icon(Icons.close_rounded), onPressed: () => Navigator.pop(ctx)),
                     ],
                   ),
-                  IconButton(icon: const Icon(Icons.close_rounded), onPressed: () => Navigator.pop(ctx)),
-                ],
-              ),
-              Text(
-                'Customer: ${customer.name} • Adding to outstanding due',
-                style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF64748B)),
-              ),
-              const SizedBox(height: 16),
+                  Text(
+                    'Customer: ${customer.name} • Adding to outstanding due',
+                    style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF64748B)),
+                  ),
+                  const SizedBox(height: 16),
 
-              // Amount
-              Text('UDHAR AMOUNT (₹) *', style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w700, color: const Color(0xFF475569))),
-              const SizedBox(height: 6),
-              TextField(
-                controller: amountCtrl,
-                keyboardType: TextInputType.number,
-                style: GoogleFonts.outfit(fontSize: 24, fontWeight: FontWeight.w900, color: const Color(0xFFDC2626)),
-                decoration: InputDecoration(
-                  prefixText: '₹ ',
-                  prefixStyle: GoogleFonts.outfit(fontSize: 24, fontWeight: FontWeight.w900, color: const Color(0xFFDC2626)),
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
-                  focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: const BorderSide(color: Color(0xFFDC2626), width: 1.8)),
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                ),
-              ),
-              const SizedBox(height: 14),
+                  // Amount
+                  Text('UDHAR AMOUNT (₹) *', style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w700, color: const Color(0xFF475569))),
+                  const SizedBox(height: 6),
+                  TextField(
+                    controller: amountCtrl,
+                    keyboardType: TextInputType.number,
+                    style: GoogleFonts.outfit(fontSize: 24, fontWeight: FontWeight.w900, color: const Color(0xFFDC2626)),
+                    decoration: InputDecoration(
+                      prefixText: '₹ ',
+                      prefixStyle: GoogleFonts.outfit(fontSize: 24, fontWeight: FontWeight.w900, color: const Color(0xFFDC2626)),
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
+                      focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: const BorderSide(color: Color(0xFFDC2626), width: 1.8)),
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                    ),
+                  ),
+                  const SizedBox(height: 14),
 
-              // Item / Reason Note
-              TextField(
-                controller: noteCtrl,
-                decoration: InputDecoration(
-                  labelText: 'Items / Reason (e.g. Atta, Oil, Grocery)',
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                ),
-              ),
-              const SizedBox(height: 20),
+                  // Item / Reason Note
+                  TextField(
+                    controller: noteCtrl,
+                    decoration: InputDecoration(
+                      labelText: 'Items / Reason (e.g. Atta, Oil, Grocery)',
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                    ),
+                  ),
+                  const SizedBox(height: 10),
 
-              // Confirm Button
-              SizedBox(
-                width: double.infinity,
-                height: 48,
-                child: ElevatedButton(
-                  onPressed: () async {
-                    final double amtRupees = double.tryParse(amountCtrl.text.trim()) ?? 0.0;
-                    final int amtPaise = (amtRupees * 100).round();
+                  // Voice Note Recorder (No Photo Attachment)
+                  _buildVoiceNoteRecorderSection(
+                    isRecording: isRecording,
+                    hasVoiceNote: hasVoice,
+                    onStartRecord: () => setModalState(() => isRecording = true),
+                    onStopRecord: () {
+                      setModalState(() {
+                        isRecording = false;
+                        hasVoice = true;
+                      });
+                    },
+                    onDeleteVoiceNote: () => setModalState(() => hasVoice = false),
+                  ),
+                  const SizedBox(height: 20),
 
-                    if (amtPaise <= 0) {
-                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please enter a valid amount.')));
-                      return;
-                    }
+                  // Confirm Button
+                  SizedBox(
+                    width: double.infinity,
+                    height: 48,
+                    child: ElevatedButton(
+                      onPressed: () async {
+                        final double amtRupees = double.tryParse(amountCtrl.text.trim()) ?? 0.0;
+                        final int amtPaise = (amtRupees * 100).round();
 
-                    await LocalDatabase.instance.recordCustomerLedgerEntry(
-                      customer: customer,
-                      type: 'credit', // udhar given
-                      amountPaise: amtPaise,
-                      description: noteCtrl.text.trim().isNotEmpty ? noteCtrl.text.trim() : 'Udhar given',
-                    );
+                        if (amtPaise <= 0) {
+                          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please enter a valid amount.')));
+                          return;
+                        }
 
-                    if (!ctx.mounted) return;
-                    Navigator.pop(ctx);
-                    if (!mounted) return;
+                        final voiceSuffix = hasVoice ? ' [🎙️ Voice Note]' : '';
+                        await LocalDatabase.instance.recordCustomerLedgerEntry(
+                          customer: customer,
+                          type: 'credit', // udhar given
+                          amountPaise: amtPaise,
+                          description: '${noteCtrl.text.trim().isNotEmpty ? noteCtrl.text.trim() : "Udhar given"}$voiceSuffix',
+                        );
+
+                        if (!ctx.mounted) return;
+                        Navigator.pop(ctx);
+                        if (!mounted) return;
                     _loadData();
 
                     ScaffoldMessenger.of(context).showSnackBar(
@@ -2110,19 +2318,21 @@ class _KhataScreenState extends State<KhataScreen> {
                       ),
                     );
                   },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFFDC2626),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFFDC2626),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                    ),
+                    child: Text('Confirm Udhar Diya', style: GoogleFonts.outfit(fontSize: 15, fontWeight: FontWeight.w800, color: Colors.white)),
                   ),
-                  child: Text('Confirm Udhar Diya', style: GoogleFonts.outfit(fontSize: 15, fontWeight: FontWeight.w800, color: Colors.white)),
                 ),
-              ),
-            ],
-          ),
-        );
-      },
-    );
-  }
+              ],
+            ),
+          );
+        },
+      );
+    },
+  );
+}
 
   Widget _buildQuickChip(String label, String value, TextEditingController ctrl, StateSetter setModalState) {
     return Padding(

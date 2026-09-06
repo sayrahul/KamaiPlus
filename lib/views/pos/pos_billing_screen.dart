@@ -538,7 +538,6 @@ class _PosBillingScreenState extends State<PosBillingScreen> {
         final product = prods[index];
         final cartItem = _cart[product.id];
         final inCartQty = cartItem?.quantity.toInt() ?? 0;
-        final isInCart = inCartQty > 0;
 
         // Find category name
         final cat = _categories.firstWhere(
@@ -547,135 +546,11 @@ class _PosBillingScreenState extends State<PosBillingScreen> {
         );
         final categoryDisplay = cat.name.toUpperCase();
 
-        // Calculate available stock on screen
-        final effectiveStock = (product.stockQuantity - inCartQty).clamp(0.0, 99999.0);
-        final stockLeftStr = effectiveStock % 1 == 0
-            ? effectiveStock.toInt().toString()
-            : effectiveStock.toStringAsFixed(1);
-
-        final priceRupees = (product.sellingPricePaise / 100.0).toStringAsFixed(2);
-        final unitDisplay = product.unit.isNotEmpty ? product.unit : 'packet';
-
-        return InkWell(
+        return _PosProductGridItem(
+          product: product,
+          inCartQty: inCartQty,
+          categoryDisplay: categoryDisplay,
           onTap: () => _addToCart(product),
-          borderRadius: BorderRadius.circular(16),
-          child: Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(
-                color: isInCart ? const Color(0xFFFBBF24) : const Color(0xFFEEF2F6),
-                width: isInCart ? 1.5 : 1.0,
-              ),
-              boxShadow: [
-                BoxShadow(
-                  color: isInCart ? const Color(0xFFFBBF24).withValues(alpha: 0.12) : Colors.black.withValues(alpha: 0.02),
-                  blurRadius: 6,
-                  offset: const Offset(0, 2),
-                ),
-              ],
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                // Top Row: Category Subtitle + 'X in cart' Gold Badge
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Expanded(
-                      child: Text(
-                        categoryDisplay,
-                        style: GoogleFonts.plusJakartaSans(
-                          fontSize: 9.5,
-                          fontWeight: FontWeight.w700,
-                          letterSpacing: 0.4,
-                          color: const Color(0xFF94A3B8),
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                    if (isInCart)
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFFEF3C7),
-                          borderRadius: BorderRadius.circular(6),
-                          border: Border.all(color: const Color(0xFFFDE68A)),
-                        ),
-                        child: Text(
-                          '$inCartQty in cart',
-                          style: GoogleFonts.plusJakartaSans(
-                            fontSize: 9.5,
-                            fontWeight: FontWeight.w800,
-                            color: const Color(0xFF92400E),
-                          ),
-                        ),
-                      ),
-                  ],
-                ),
-
-                // Middle: Product Name
-                Text(
-                  product.name,
-                  style: GoogleFonts.plusJakartaSans(
-                    fontSize: 13.5,
-                    fontWeight: FontWeight.w700,
-                    color: const Color(0xFF0F172A),
-                    height: 1.25,
-                  ),
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                ),
-
-                // Bottom Row: Price / unit and Stock left
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  crossAxisAlignment: CrossAxisAlignment.baseline,
-                  textBaseline: TextBaseline.alphabetic,
-                  children: [
-                    Flexible(
-                      child: RichText(
-                        text: TextSpan(
-                          children: [
-                            TextSpan(
-                              text: '₹$priceRupees ',
-                              style: GoogleFonts.jetBrainsMono(
-                                fontSize: 12.5,
-                                fontWeight: FontWeight.w800,
-                                color: const Color(0xFF0F172A),
-                              ),
-                            ),
-                            TextSpan(
-                              text: '/$unitDisplay',
-                              style: GoogleFonts.plusJakartaSans(
-                                fontSize: 10.5,
-                                fontWeight: FontWeight.w500,
-                                color: const Color(0xFF64748B),
-                              ),
-                            ),
-                          ],
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                    const SizedBox(width: 4),
-                    Text(
-                      '$stockLeftStr left',
-                      style: GoogleFonts.plusJakartaSans(
-                        fontSize: 10.5,
-                        fontWeight: FontWeight.w600,
-                        color: const Color(0xFF64748B),
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
         );
       },
     );
@@ -798,6 +673,167 @@ class _PosBillingScreenState extends State<PosBillingScreen> {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _PosProductGridItem extends StatefulWidget {
+  final ProductModel product;
+  final int inCartQty;
+  final String categoryDisplay;
+  final VoidCallback onTap;
+
+  const _PosProductGridItem({
+    required this.product,
+    required this.inCartQty,
+    required this.categoryDisplay,
+    required this.onTap,
+  });
+
+  @override
+  State<_PosProductGridItem> createState() => _PosProductGridItemState();
+}
+
+class _PosProductGridItemState extends State<_PosProductGridItem> {
+  bool _isPressed = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final isInCart = widget.inCartQty > 0;
+    final effectiveStock = (widget.product.stockQuantity - widget.inCartQty).clamp(0.0, 99999.0);
+    final stockLeftStr = effectiveStock % 1 == 0
+        ? effectiveStock.toInt().toString()
+        : effectiveStock.toStringAsFixed(1);
+    final priceRupees = (widget.product.sellingPricePaise / 100.0).toStringAsFixed(2);
+    final unitDisplay = widget.product.unit.isNotEmpty ? widget.product.unit : 'packet';
+
+    return GestureDetector(
+      onTapDown: (_) => setState(() => _isPressed = true),
+      onTapUp: (_) {
+        setState(() => _isPressed = false);
+        widget.onTap();
+      },
+      onTapCancel: () => setState(() => _isPressed = false),
+      child: AnimatedScale(
+        scale: _isPressed ? 0.94 : 1.0,
+        duration: const Duration(milliseconds: 100),
+        curve: Curves.easeOutCubic,
+        child: Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+              color: isInCart ? const Color(0xFFFBBF24) : const Color(0xFFEEF2F6),
+              width: isInCart ? 1.6 : 1.0,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: isInCart ? const Color(0xFFFBBF24).withValues(alpha: 0.18) : Colors.black.withValues(alpha: 0.03),
+                blurRadius: 6,
+                offset: const Offset(0, 2),
+              ),
+            ],
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              // Top Row: Category Subtitle + 'X in cart' Gold Badge
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Expanded(
+                    child: Text(
+                      widget.categoryDisplay,
+                      style: GoogleFonts.plusJakartaSans(
+                        fontSize: 9.5,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: 0.4,
+                        color: const Color(0xFF94A3B8),
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  if (isInCart)
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFFEF3C7),
+                        borderRadius: BorderRadius.circular(6),
+                        border: Border.all(color: const Color(0xFFFDE68A)),
+                      ),
+                      child: Text(
+                        '${widget.inCartQty} in cart',
+                        style: GoogleFonts.plusJakartaSans(
+                          fontSize: 9.5,
+                          fontWeight: FontWeight.w800,
+                          color: const Color(0xFF92400E),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+              // Middle: Product Name
+              Text(
+                widget.product.name,
+                style: GoogleFonts.plusJakartaSans(
+                  fontSize: 13.5,
+                  fontWeight: FontWeight.w700,
+                  color: const Color(0xFF0F172A),
+                  height: 1.25,
+                ),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+              ),
+              // Bottom Row: Price / unit and Stock left
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                crossAxisAlignment: CrossAxisAlignment.baseline,
+                textBaseline: TextBaseline.alphabetic,
+                children: [
+                  Flexible(
+                    child: RichText(
+                      text: TextSpan(
+                        children: [
+                          TextSpan(
+                            text: '₹$priceRupees ',
+                            style: GoogleFonts.jetBrainsMono(
+                              fontSize: 12.5,
+                              fontWeight: FontWeight.w800,
+                              color: const Color(0xFF0F172A),
+                            ),
+                          ),
+                          TextSpan(
+                            text: '/$unitDisplay',
+                            style: GoogleFonts.plusJakartaSans(
+                              fontSize: 10.5,
+                              fontWeight: FontWeight.w500,
+                              color: const Color(0xFF64748B),
+                            ),
+                          ),
+                        ],
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  const SizedBox(width: 4),
+                  Text(
+                    '$stockLeftStr left',
+                    style: GoogleFonts.plusJakartaSans(
+                      fontSize: 10.5,
+                      fontWeight: FontWeight.w600,
+                      color: const Color(0xFF64748B),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

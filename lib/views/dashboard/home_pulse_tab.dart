@@ -1,9 +1,11 @@
 import '../common/owner_privacy_modal.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../core/database/local_database.dart';
 import '../../core/utils/money_formatter.dart';
 import '../../models/models.dart';
+import '../../services/soundbox_service.dart';
 import '../common/pwa_top_bar.dart';
 import '../cash_register/cash_register_screen.dart';
 import '../transactions/transactions_screen.dart';
@@ -36,6 +38,7 @@ class _HomePulseTabState extends State<HomePulseTab> {
   bool _isProfitHidden = true;
   bool _isLoading = true;
   bool _isLedgerExpanded = true;
+  bool _showSoundboxFeed = true;
 
   // Filter states for Recent Transactions
   String _selectedDateFilter = 'All'; // 'All', 'Today', 'Yesterday', '7 Days'
@@ -238,6 +241,9 @@ class _HomePulseTabState extends State<HomePulseTab> {
                 physics: const ClampingScrollPhysics(parent: AlwaysScrollableScrollPhysics()),
                 padding: const EdgeInsets.fromLTRB(12, 14, 12, 100),
                 children: [
+                  // 0. LIVE SOUNDBOX AUDIO PAYMENT FEED (PhonePe / Paytm Standard)
+                  _buildSoundboxAudioFeedBanner(),
+
                   // SECTION 1: TODAY'S BUSINESS PULSE
                   _buildPulseHeader(),
                   const SizedBox(height: 10),
@@ -281,6 +287,163 @@ class _HomePulseTabState extends State<HomePulseTab> {
                 ],
               ),
             ),
+    );
+  }
+
+  // -------------------------------------------------------------
+  // 0. LIVE SOUNDBOX AUDIO PAYMENT FEED (PhonePe / Paytm Standard)
+  // -------------------------------------------------------------
+  Widget _buildSoundboxAudioFeedBanner() {
+    if (!_showSoundboxFeed) return const SizedBox.shrink();
+
+    final latestSale = _recentSales.isNotEmpty ? _recentSales.first : null;
+    final custName = latestSale?.customerName ?? 'Suresh Kumar';
+    final amountPaise = latestSale != null ? latestSale.totalAmountPaise : 18000;
+    final formattedAmt = MoneyFormatter.formatINR(amountPaise);
+    final mode = (latestSale?.paymentMethod ?? 'UPI').toUpperCase();
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [Color(0xFF0F172A), Color(0xFF1E293B)],
+          begin: Alignment.centerLeft,
+          end: Alignment.centerRight,
+        ),
+        borderRadius: BorderRadius.circular(14),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFF0F172A).withValues(alpha: 0.12),
+            blurRadius: 8,
+            offset: const Offset(0, 3),
+          ),
+        ],
+        border: Border.all(color: const Color(0xFF334155), width: 1.1),
+      ),
+      child: Row(
+        children: [
+          // Animated Speaker / Soundbox Icon
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                colors: [Color(0xFF10B981), Color(0xFF059669)],
+              ),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: const Icon(Icons.volume_up_rounded, color: Colors.white, size: 20),
+          ),
+          const SizedBox(width: 10),
+
+          // Message & Details
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Row(
+                  children: [
+                    Text(
+                      'SOUNDBOX VOICE FEED',
+                      style: GoogleFonts.inter(
+                        fontSize: 9.5,
+                        fontWeight: FontWeight.w800,
+                        color: const Color(0xFF34D399),
+                        letterSpacing: 0.6,
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    Container(
+                      width: 5,
+                      height: 5,
+                      decoration: const BoxDecoration(
+                        color: Color(0xFF10B981),
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                    const SizedBox(width: 4),
+                    Text(
+                      'Live $mode',
+                      style: GoogleFonts.inter(
+                        fontSize: 9,
+                        color: const Color(0xFF94A3B8),
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  '$formattedAmt mila $custName se',
+                  style: GoogleFonts.outfit(
+                    fontSize: 13.5,
+                    fontWeight: FontWeight.w700,
+                    color: Colors.white,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+            ),
+          ),
+
+          // Replay Voice Button
+          Material(
+            color: Colors.transparent,
+            child: InkWell(
+              onTap: () {
+                HapticFeedback.selectionClick();
+                SoundboxService.instance.announceHindiPayment(amountPaise, paymentMethod: mode);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text('🔊 Replaying Hindi Soundbox: "$formattedAmt prapt hue"'),
+                    backgroundColor: const Color(0xFF0F172A),
+                    duration: const Duration(seconds: 2),
+                    behavior: SnackBarBehavior.floating,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  ),
+                );
+              },
+              borderRadius: BorderRadius.circular(8),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF334155),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: const Color(0xFF475569)),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.replay_rounded, size: 13, color: Color(0xFF38BDF8)),
+                    const SizedBox(width: 4),
+                    Text(
+                      'Bolo',
+                      style: GoogleFonts.outfit(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(width: 4),
+
+          // Dismiss Button
+          InkWell(
+            onTap: () => setState(() => _showSoundboxFeed = false),
+            borderRadius: BorderRadius.circular(12),
+            child: const Padding(
+              padding: EdgeInsets.all(4),
+              child: Icon(Icons.close_rounded, size: 16, color: Color(0xFF64748B)),
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -465,14 +628,21 @@ class _HomePulseTabState extends State<HomePulseTab> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
       decoration: BoxDecoration(
-        color: Colors.white,
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            Colors.white,
+            (badgeBg ?? const Color(0xFFF8FAFC)).withValues(alpha: 0.35),
+          ],
+        ),
         borderRadius: BorderRadius.circular(14),
         border: Border.all(color: borderColor, width: 1.1),
-        boxShadow: const [
+        boxShadow: [
           BoxShadow(
-            color: Color(0x060F172A),
+            color: borderColor.withValues(alpha: 0.2),
             blurRadius: 6,
-            offset: Offset(0, 1.5),
+            offset: const Offset(0, 2),
           ),
         ],
       ),

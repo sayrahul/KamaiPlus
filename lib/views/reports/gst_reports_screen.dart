@@ -591,9 +591,107 @@ class _GstReportsScreenState extends State<GstReportsScreen> {
   }
 
   // =========================================================================
-  // TAB 0: TABLE 12 HSN SUMMARY CARD (MATCHING SCREENSHOT 2)
+  // TAB 0: TABLE 12 HSN SUMMARY CARD (HIGH-END FINTECH SPEC)
   // =========================================================================
   Widget _buildHsnSummaryCard() {
+    final List<Map<String, dynamic>> hsnList = [
+      {
+        'hsn': '1902',
+        'desc': 'Maggi & Instant Noodles',
+        'rate': '5%',
+        'uqc': 'PCS',
+        'qty': 48,
+        'taxable_paise': 57600, // ₹576.00
+        'cgst_paise': 1440,     // ₹14.40
+        'sgst_paise': 1440,     // ₹14.40
+        'total_tax_paise': 2880,// ₹28.80
+        'total_paise': 60480,   // ₹604.80
+      },
+      {
+        'hsn': '1512',
+        'desc': 'Sunflower Edible Oil (1L)',
+        'rate': '5%',
+        'uqc': 'LTR',
+        'qty': 24,
+        'taxable_paise': 285714,// ₹2,857.14
+        'cgst_paise': 7143,     // ₹71.43
+        'sgst_paise': 7143,     // ₹71.43
+        'total_tax_paise': 14286,// ₹142.86
+        'total_paise': 300000,  // ₹3,000.00
+      },
+      {
+        'hsn': '3401',
+        'desc': 'Bathing Soaps & Detergents',
+        'rate': '18%',
+        'uqc': 'PCS',
+        'qty': 36,
+        'taxable_paise': 122034,// ₹1,220.34
+        'cgst_paise': 10983,    // ₹109.83
+        'sgst_paise': 10983,    // ₹109.83
+        'total_tax_paise': 21966,// ₹219.66
+        'total_paise': 144000,  // ₹1,440.00
+      },
+      {
+        'hsn': '0402',
+        'desc': 'Dairy Whitener & Condensed Milk',
+        'rate': '12%',
+        'uqc': 'PKT',
+        'qty': 15,
+        'taxable_paise': 60268, // ₹602.68
+        'cgst_paise': 3616,     // ₹36.16
+        'sgst_paise': 3616,     // ₹36.16
+        'total_tax_paise': 7232,// ₹72.32
+        'total_paise': 67500,   // ₹675.00
+      },
+      {
+        'hsn': '2106',
+        'desc': 'Packaged Namkeen & Snacks',
+        'rate': '12%',
+        'uqc': 'PKT',
+        'qty': 30,
+        'taxable_paise': 45536, // ₹455.36
+        'cgst_paise': 2732,     // ₹27.32
+        'sgst_paise': 2732,     // ₹27.32
+        'total_tax_paise': 5464,// ₹54.64
+        'total_paise': 51000,   // ₹510.00
+      },
+      {
+        'hsn': '3306',
+        'desc': 'Dental Paste & Oral Hygiene',
+        'rate': '18%',
+        'uqc': 'PCS',
+        'qty': 20,
+        'taxable_paise': 142373,// ₹1,423.73
+        'cgst_paise': 12814,    // ₹128.14
+        'sgst_paise': 12814,    // ₹128.14
+        'total_tax_paise': 25628,// ₹256.28
+        'total_paise': 168000,  // ₹1,680.00
+      },
+      {
+        'hsn': '1006',
+        'desc': 'India Gate Basmati Rice (5kg)',
+        'rate': '5%',
+        'uqc': 'BAG',
+        'qty': 10,
+        'taxable_paise': 514286,// ₹5,142.86
+        'cgst_paise': 12857,    // ₹128.57
+        'sgst_paise': 12857,    // ₹128.57
+        'total_tax_paise': 25714,// ₹257.14
+        'total_paise': 540000,  // ₹5,400.00
+      },
+    ];
+
+    final filteredHsn = hsnList.where((item) {
+      if (_hsnSearch.isEmpty) return true;
+      final q = _hsnSearch.toLowerCase();
+      final h = (item['hsn'] as String).toLowerCase();
+      final d = (item['desc'] as String).toLowerCase();
+      return h.contains(q) || d.contains(q);
+    }).toList();
+
+    int totalTaxable = filteredHsn.fold(0, (sum, i) => sum + (i['taxable_paise'] as int));
+    int totalTax = filteredHsn.fold(0, (sum, i) => sum + (i['total_tax_paise'] as int));
+
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
@@ -616,10 +714,22 @@ class _GstReportsScreenState extends State<GstReportsScreen> {
                   ),
                   const SizedBox(width: 8),
                   Text(
-                    'Table 12: HSN-wise Sales Summary',
-                    style: GoogleFonts.outfit(fontSize: 14, fontWeight: FontWeight.w800, color: const Color(0xFF0F172A)),
+                    'Table 12: HSN-wise Sales Table',
+                    style: GoogleFonts.outfit(fontSize: 14.5, fontWeight: FontWeight.w800, color: const Color(0xFF0F172A)),
                   ),
                 ],
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFECFDF5),
+                  borderRadius: BorderRadius.circular(6),
+                  border: Border.all(color: const Color(0xFFA7F3D0)),
+                ),
+                child: Text(
+                  '${filteredHsn.length} HSN CODES',
+                  style: GoogleFonts.inter(fontSize: 9.5, fontWeight: FontWeight.w800, color: const Color(0xFF059669)),
+                ),
               ),
             ],
           ),
@@ -630,7 +740,7 @@ class _GstReportsScreenState extends State<GstReportsScreen> {
             onChanged: (v) => setState(() => _hsnSearch = v.toLowerCase()),
             style: GoogleFonts.inter(fontSize: 12),
             decoration: InputDecoration(
-              hintText: 'Search HSN code...',
+              hintText: 'Search by HSN code (e.g. 1902) or description...',
               hintStyle: GoogleFonts.inter(fontSize: 11.5, color: const Color(0xFF94A3B8)),
               prefixIcon: const Icon(Icons.search_rounded, size: 16, color: Color(0xFF94A3B8)),
               isDense: true,
@@ -643,38 +753,74 @@ class _GstReportsScreenState extends State<GstReportsScreen> {
           ),
           const SizedBox(height: 12),
 
-          // HSN Table Headers
+          // HSN Table Headers (Matching official GST Portal Table 12)
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 7),
             decoration: BoxDecoration(
-              color: const Color(0xFFF1F5F9),
+              color: const Color(0xFF0F172A),
               borderRadius: BorderRadius.circular(8),
             ),
             child: Row(
               children: [
-                Expanded(flex: 2, child: Text('HSN', style: GoogleFonts.inter(fontSize: 9.5, fontWeight: FontWeight.w800, color: const Color(0xFF64748B)))),
-                Expanded(flex: 4, child: Text('DESCRIPTION', style: GoogleFonts.inter(fontSize: 9.5, fontWeight: FontWeight.w800, color: const Color(0xFF64748B)))),
-                Expanded(flex: 2, child: Text('QTY', textAlign: TextAlign.center, style: GoogleFonts.inter(fontSize: 9.5, fontWeight: FontWeight.w800, color: const Color(0xFF64748B)))),
-                Expanded(flex: 3, child: Text('TAXABLE', textAlign: TextAlign.right, style: GoogleFonts.inter(fontSize: 9.5, fontWeight: FontWeight.w800, color: const Color(0xFF64748B)))),
-                Expanded(flex: 3, child: Text('TAX', textAlign: TextAlign.right, style: GoogleFonts.inter(fontSize: 9.5, fontWeight: FontWeight.w800, color: const Color(0xFF64748B)))),
+                Expanded(flex: 2, child: Text('HSN', style: GoogleFonts.inter(fontSize: 9.5, fontWeight: FontWeight.w800, color: Colors.white))),
+                Expanded(flex: 4, child: Text('DESCRIPTION & GST%', style: GoogleFonts.inter(fontSize: 9.5, fontWeight: FontWeight.w800, color: Colors.white))),
+                Expanded(flex: 2, child: Text('QTY/UQC', textAlign: TextAlign.center, style: GoogleFonts.inter(fontSize: 9.5, fontWeight: FontWeight.w800, color: Colors.white))),
+                Expanded(flex: 3, child: Text('TAXABLE', textAlign: TextAlign.right, style: GoogleFonts.inter(fontSize: 9.5, fontWeight: FontWeight.w800, color: Colors.white))),
+                Expanded(flex: 3, child: Text('TOTAL TAX', textAlign: TextAlign.right, style: GoogleFonts.inter(fontSize: 9.5, fontWeight: FontWeight.w800, color: const Color(0xFF34D399)))),
               ],
             ),
           ),
-          const SizedBox(height: 6),
+          const SizedBox(height: 4),
 
           // HSN Data Rows
-          _buildHsnTableRow('1902', 'Maggi 2-Min Noodles', '12 Pcs', '₹150.00', '₹18.00'),
-          _buildHsnTableRow('1512', 'Sunflower Cooking Oil', '4 Ltr', '₹580.00', '₹29.00'),
-          _buildHsnTableRow('3401', 'Dettol Bathing Soap', '6 Pcs', '₹330.00', '₹59.40'),
+          ...filteredHsn.map((item) => _buildHsnTableRowCard(item)),
+
+          const SizedBox(height: 8),
+          // HSN Summary Totals Row
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
+            decoration: BoxDecoration(
+              color: const Color(0xFFF8FAFC),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: const Color(0xFFCBD5E1)),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  'TABLE 12 AGGREGATE TOTALS:',
+                  style: GoogleFonts.outfit(fontSize: 11, fontWeight: FontWeight.w800, color: const Color(0xFF475569)),
+                ),
+                Row(
+                  children: [
+                    Text(
+                      'Taxable: ${MoneyFormatter.formatINR(totalTaxable)}  •  ',
+                      style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w700, color: const Color(0xFF0F172A)),
+                    ),
+                    Text(
+                      'Tax: ${MoneyFormatter.formatINR(totalTax)}',
+                      style: GoogleFonts.outfit(fontSize: 12, fontWeight: FontWeight.w900, color: const Color(0xFF059669)),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
         ],
       ),
     );
   }
 
-  Widget _buildHsnTableRow(String hsn, String desc, String qty, String taxable, String tax) {
-    if (_hsnSearch.isNotEmpty && !hsn.contains(_hsnSearch) && !desc.toLowerCase().contains(_hsnSearch)) {
-      return const SizedBox();
-    }
+  Widget _buildHsnTableRowCard(Map<String, dynamic> item) {
+    final hsn = item['hsn'] as String;
+    final desc = item['desc'] as String;
+    final rate = item['rate'] as String;
+    final uqc = item['uqc'] as String;
+    final qty = item['qty'] as int;
+    final taxable = item['taxable_paise'] as int;
+    final tax = item['total_tax_paise'] as int;
+    final cgst = item['cgst_paise'] as int;
+    final sgst = item['sgst_paise'] as int;
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
@@ -683,6 +829,7 @@ class _GstReportsScreenState extends State<GstReportsScreen> {
       ),
       child: Row(
         children: [
+          // HSN Code
           Expanded(
             flex: 2,
             child: Text(
@@ -690,37 +837,66 @@ class _GstReportsScreenState extends State<GstReportsScreen> {
               style: GoogleFonts.outfit(fontSize: 12, fontWeight: FontWeight.w800, color: const Color(0xFF0284C7)),
             ),
           ),
+          // Description + Rate Pill
           Expanded(
             flex: 4,
-            child: Text(
-              desc,
-              style: GoogleFonts.inter(fontSize: 11.5, fontWeight: FontWeight.w600, color: const Color(0xFF0F172A)),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  desc,
+                  style: GoogleFonts.inter(fontSize: 11.5, fontWeight: FontWeight.w600, color: const Color(0xFF0F172A)),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFF1F5F9),
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: Text(
+                        'GST $rate',
+                        style: GoogleFonts.inter(fontSize: 8.5, fontWeight: FontWeight.w700, color: const Color(0xFF64748B)),
+                      ),
+                    ),
+                    const SizedBox(width: 4),
+                    Text(
+                      'C:${MoneyFormatter.formatINR(cgst)} S:${MoneyFormatter.formatINR(sgst)}',
+                      style: GoogleFonts.inter(fontSize: 8.5, color: const Color(0xFF94A3B8)),
+                    ),
+                  ],
+                ),
+              ],
             ),
           ),
+          // Qty & Unit
           Expanded(
             flex: 2,
             child: Text(
-              qty,
+              '$qty $uqc',
               textAlign: TextAlign.center,
-              style: GoogleFonts.inter(fontSize: 11, color: const Color(0xFF64748B)),
+              style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w600, color: const Color(0xFF475569)),
             ),
           ),
+          // Taxable
           Expanded(
             flex: 3,
             child: Text(
-              taxable,
+              MoneyFormatter.formatINR(taxable),
               textAlign: TextAlign.right,
-              style: GoogleFonts.outfit(fontSize: 12, fontWeight: FontWeight.w700, color: const Color(0xFF0F172A)),
+              style: GoogleFonts.outfit(fontSize: 11.5, fontWeight: FontWeight.w700, color: const Color(0xFF0F172A)),
             ),
           ),
+          // Tax Amount
           Expanded(
             flex: 3,
             child: Text(
-              tax,
+              MoneyFormatter.formatINR(tax),
               textAlign: TextAlign.right,
-              style: GoogleFonts.outfit(fontSize: 12, fontWeight: FontWeight.w800, color: const Color(0xFF059669)),
+              style: GoogleFonts.outfit(fontSize: 12, fontWeight: FontWeight.w900, color: const Color(0xFF059669)),
             ),
           ),
         ],
@@ -830,11 +1006,11 @@ class _GstReportsScreenState extends State<GstReportsScreen> {
   }
 
   // =========================================================================
-  // TAB 3: CA DOCS & CA PACK
+  // TAB 3: 1-CLICK CA EXPORT PACKAGE (FINTECH AUDIT SUITE)
   // =========================================================================
   Widget _buildCaDocsCard() {
     return Container(
-      padding: const EdgeInsets.all(14),
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(18),
@@ -843,29 +1019,114 @@ class _GstReportsScreenState extends State<GstReportsScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            '1-Click CA Audit Package',
-            style: GoogleFonts.outfit(fontSize: 14, fontWeight: FontWeight.w800, color: const Color(0xFF0F172A)),
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFECFDF5),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: const Icon(Icons.folder_zip_rounded, color: Color(0xFF059669), size: 22),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '1-Click CA Export Package',
+                      style: GoogleFonts.outfit(fontSize: 15.5, fontWeight: FontWeight.w800, color: const Color(0xFF0F172A)),
+                    ),
+                    Text(
+                      'Complete Monthly Compliance Bundle for $_selectedPeriod',
+                      style: GoogleFonts.inter(fontSize: 11, color: const Color(0xFF64748B)),
+                    ),
+                  ],
+                ),
+              ),
+            ],
           ),
-          const SizedBox(height: 4),
-          Text(
-            'Contains all monthly sales, credit notes, purchase inward vouchers & tax computation sheets in zip format.',
-            style: GoogleFonts.inter(fontSize: 11, color: const Color(0xFF64748B)),
+          const SizedBox(height: 14),
+
+          // Bundle items checklist
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: const Color(0xFFF8FAFC),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: const Color(0xFFE2E8F0)),
+            ),
+            child: Column(
+              children: [
+                _buildCaDocItem(Icons.code_rounded, 'GSTR-1 Monthly JSON', 'Official offline tool compatible upload', const Color(0xFF2563EB)),
+                const Divider(height: 12, color: Color(0xFFEEF2F6)),
+                _buildCaDocItem(Icons.table_chart_rounded, 'GSTR-3B Tax Computation', 'Detailed turnover vs input tax credit (ITC)', const Color(0xFF059669)),
+                const Divider(height: 12, color: Color(0xFFEEF2F6)),
+                _buildCaDocItem(Icons.receipt_long_rounded, 'Table 12 HSN Summary CSV', 'Product codes, rates & taxable values', const Color(0xFFD97706)),
+                const Divider(height: 12, color: Color(0xFFEEF2F6)),
+                _buildCaDocItem(Icons.business_rounded, 'B2B Wholesale Register', 'Party-wise GSTIN sales & tax invoices', const Color(0xFF7C3AED)),
+                const Divider(height: 12, color: Color(0xFFEEF2F6)),
+                _buildCaDocItem(Icons.shopping_bag_rounded, 'Purchase Inward Vouchers', 'Mandi bills, restock expenses & supplier ITC', const Color(0xFF0891B2)),
+              ],
+            ),
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 16),
+
+          // Main 1-Click Export CTA Button
           ElevatedButton.icon(
-            onPressed: () => _showExportModal('Complete CA Filing ZIP'),
-            icon: const Icon(Icons.folder_zip_rounded, size: 16),
-            label: Text('Download Complete CA Pack', style: GoogleFonts.outfit(fontWeight: FontWeight.w700)),
+            onPressed: () => _showExportModal('Complete CA Compliance Pack (ZIP)'),
+            icon: const Icon(Icons.download_for_offline_rounded, size: 18),
+            label: Text(
+              '1-Click Export All CA Files (ZIP)',
+              style: GoogleFonts.outfit(fontSize: 14, fontWeight: FontWeight.w800),
+            ),
             style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF059669),
+              backgroundColor: const Color(0xFF0F172A),
               foregroundColor: Colors.white,
+              minimumSize: const Size.fromHeight(48),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              elevation: 0,
+            ),
+          ),
+          const SizedBox(height: 8),
+
+          // Direct WhatsApp to CA button
+          OutlinedButton.icon(
+            onPressed: () => _showExportModal('WhatsApp CA Package'),
+            icon: Image.asset('assets/images/whatsapp_logo.png', width: 16, height: 16),
+            label: Text(
+              'Direct Share with CA on WhatsApp',
+              style: GoogleFonts.outfit(fontSize: 13, fontWeight: FontWeight.w700, color: const Color(0xFF059669)),
+            ),
+            style: OutlinedButton.styleFrom(
+              side: const BorderSide(color: Color(0xFFA7F3D0)),
+              backgroundColor: const Color(0xFFECFDF5),
               minimumSize: const Size.fromHeight(44),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
             ),
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildCaDocItem(IconData icon, String title, String desc, Color iconColor) {
+    return Row(
+      children: [
+        Icon(icon, size: 16, color: iconColor),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(title, style: GoogleFonts.outfit(fontSize: 12, fontWeight: FontWeight.w700, color: const Color(0xFF0F172A))),
+              Text(desc, style: GoogleFonts.inter(fontSize: 10, color: const Color(0xFF64748B))),
+            ],
+          ),
+        ),
+        const Icon(Icons.check_circle_rounded, size: 14, color: Color(0xFF059669)),
+      ],
     );
   }
 }

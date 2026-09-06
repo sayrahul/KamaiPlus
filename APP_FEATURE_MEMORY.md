@@ -162,3 +162,50 @@ Standardized Indian retail input validation across the app:
 * **FSSAI License:** 14-digit food business standard (`^\d{14}$`).
 * **Pincode:** Indian Postal 6-digit standard (`^[1-9][0-9]{5}$`).
 * **Active Bindings:** Wired into `LoginScreen`, `SignupStoreScreen`, `StoreProfileScreen`, `PosCheckoutModal` (quick customer add), and `CustomersScreen` / `KhataScreen`.
+
+---
+
+## ⚡ 6. HIGH-END 24-POINT RETAIL FINTECH UPGRADE SUITE (LOCKED)
+Comprehensive enterprise-grade retail UX upgrade suite aligned with PhonePe Business, Paytm for Business, and Khatabook:
+
+### 1. 🏠 Home Pulse Dashboard (`lib/views/dashboard/home_pulse_tab.dart`)
+* **KPI Stat Cards (Sales, Bills, Est. Profit, Udhar):** Redesigned with subtle gradients, micro-glow shadows, 1-tap navigation to relevant screens, and an eye toggle to mask/unmask sensitive shop turnover amounts.
+* **Audio Payment Flash (Soundbox Feed):** Live Soundbox audio announcement ticker banner showing real-time UPI & cash receipts with a "Bolo" re-announce button calling `SoundboxService.instance.announceHindiPayment`.
+
+### 2. 📦 Products Master (`lib/views/products/products_screen.dart`)
+* **List / Grid View Instant Toggle:** Dynamic toolbar button toggling between structured 1-column list and compact 2-column image grid.
+* **Smart Stock Badge (Traffic Light Colors):** Red for Out of Stock, Amber for Low Stock (with count left), and Green for Healthy In-Stock.
+* **Pencil Edit Icon:** Prominent, high-contrast dedicated edit button on every product item opening the full `AddProductModal`.
+* **Quick Price / Stock In-Line Update:** Lightning bolt dialog allowing instantaneous price and stock quantity edits without opening the full product form.
+* **Barcode Visual Strip:** Realistic rendered Code128 visual barcode pattern strip displayed beneath SKU barcode numbers.
+* **Clean Retail Listing:** Long descriptions hidden from default list view; strictly displays SKU Name, Unit, Selling Price, and Stock Quantity.
+
+### 3. 🧾 POS Billing & Checkout (`lib/views/pos/pos_billing_screen.dart` & `pos_checkout_modal.dart`)
+* **Top Search + Barcode Bar:** Fast SKU search with instant barcode scanner trigger and live camera feed.
+* **Item Tiles Animation:** Tactile bounce scale micro-interaction (`0.94` scale down on press, bouncy spring return) on tapping product tiles into cart.
+* **Floating Bottom Cart Drawer:** Floating elevated pill drawer with item count, total price, and direct checkout CTA.
+* **Quick Tender Cash Chips:** Standard Indian currency note tender shortcuts: Exact, ₹50, ₹100, ₹200, ₹500, ₹1000, ₹2000.
+* **Customer Auto-Suggest:** Real-time customer search dropdown displaying customer name, phone, and current Khata ledger status badge (`₹X Baki` / `₹X Advance` / `₹0 Clear`).
+* **Dynamic UPI QR Code Tab:** High-end merchant counter QR display with 150px crisp QR code, accepted payment apps row, Soundbox ready tag, and 5-minute validity countdown timer.
+
+### 4. 📖 Digital Khata (`lib/views/khata/khata_screen.dart`)
+* **Market Udhar Hero Card:** Complete credit summary showing Net Balance, Total Customer Udhar, and Total Advance.
+* **Customer Row Hierarchy:** 3-state visual hierarchy with custom borders and badges: Red (`#FECACA`) for Udhar Due + WhatsApp reminder, Green (`#A7F3D0`) for Advance payment, and Slate (`#E2E8F0`) for Settled accounts.
+* **Date-Wise Voice Note (Audio Only - No Photos):** Integrated audio note recorder inside Jama & Udhar modals with waveform indicator, recording timer, and playback strip in customer statement ledger. Strictly NO photo attachment capability.
+
+### 5. 💵 Cash Register (`lib/views/cash_register/cash_register_screen.dart`)
+* **Galla Till Balance Card:** Live cash drawer balance card with shift status, opening float, cash sales, cash expenses, and expected closing till.
+* **Physical Currency Denomination Counter:** Note counter (`₹2000, ₹500, ₹200, ₹100, ₹50, ₹20, ₹10`) and coin counter (`₹5, ₹2, ₹1`) with live count and shortage/excess calculation.
+
+### 6. 📂 Menu Hub Modal (`lib/views/menu/menu_screen.dart`)
+* **Grouped Bento Grid Tiles:** Asymmetric Bento Grid layout with hero feature tiles for POS Billing and Kamai+ Pro, categorized into Counter & Billing, Stock & Sourcing, Khata & Growth, and Tax & Settings.
+* **Icons & Colors:** Vibrant pastel icon containers, high-contrast borders, and status badge pills (`FAST BILLING`, `AI OCR`, `Z-REPORT`, `UDHAR`, `CA READY`).
+
+### 7. 🚚 Purchases & Mandi Inward (`lib/views/purchases/purchases_screen.dart` & `ai_inward_sheet.dart`)
+* **AI Vision Parcha OCR Scanner:** High-tech camera viewfinder modal with scanning laser line animation, handwritten mandi parcha slip preview, OCR extraction confidence, margin calculation, and 1-tap stock inventory save.
+* **Supplier Udhar Status Pill:** Prominent vendor dues status pill on each order card and an interactive Supplier Udhar Summary Banner with direct 1-tap settlement and WhatsApp payment vouchers.
+
+### 8. 📑 GST Reports (`lib/views/reports/gst_reports_screen.dart`)
+* **HSN-Wise Sales Table:** Official Table 12 HSN summary table with HSN codes (`1902, 1512, 3401, 0402, 2106, 3306, 1006`), descriptions, GST rates (5%, 12%, 18%), UQC units, quantities, taxable values, CGST, SGST, and total invoice values, complete with search and aggregate totals.
+* **1-Click CA Export Package:** Complete compliance audit package bundle featuring GSTR-1 JSON, GSTR-3B Excel worksheet, Table 12 HSN CSV, B2B wholesale register, and purchase inward vouchers, with 1-click ZIP export and direct WhatsApp sharing with Chartered Accountants.
+

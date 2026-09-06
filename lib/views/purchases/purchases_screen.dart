@@ -1190,7 +1190,100 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
               ],
             ),
           ),
-          const SizedBox(height: 14),
+          const SizedBox(height: 12),
+
+          // Supplier Udhar Status Pill & Summary Banner
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+            decoration: BoxDecoration(
+              color: _totalDuePaise > 0 ? const Color(0xFFFFF1F2) : const Color(0xFFECFDF5),
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(
+                color: _totalDuePaise > 0 ? const Color(0xFFFECDD3) : const Color(0xFFA7F3D0),
+                width: 1.1,
+              ),
+            ),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(7),
+                  decoration: BoxDecoration(
+                    color: _totalDuePaise > 0 ? const Color(0xFFFEE2E2) : const Color(0xFFD1FAE5),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(
+                    _totalDuePaise > 0 ? Icons.warning_amber_rounded : Icons.check_circle_outline_rounded,
+                    size: 16,
+                    color: _totalDuePaise > 0 ? const Color(0xFFDC2626) : const Color(0xFF059669),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Row(
+                        children: [
+                          Text(
+                            _totalDuePaise > 0 ? 'Supplier Udhar Outstanding' : 'Supplier Dues Cleared',
+                            style: GoogleFonts.outfit(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w800,
+                              color: _totalDuePaise > 0 ? const Color(0xFF9F1239) : const Color(0xFF065F46),
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
+                            decoration: BoxDecoration(
+                              color: _totalDuePaise > 0 ? const Color(0xFFDC2626) : const Color(0xFF059669),
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: Text(
+                              _totalDuePaise > 0 ? '$_creditOrdersCount BILLS' : 'ALL CLEAR',
+                              style: GoogleFonts.inter(fontSize: 8.5, fontWeight: FontWeight.w800, color: Colors.white),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 1),
+                      Text(
+                        _totalDuePaise > 0
+                          ? 'Total ${MoneyFormatter.formatINR(_totalDuePaise)} pending payment to wholesale vendors'
+                          : 'Zero outstanding dues to all wholesale suppliers & mandi vendors',
+                        style: GoogleFonts.inter(
+                          fontSize: 10.5,
+                          fontWeight: FontWeight.w500,
+                          color: _totalDuePaise > 0 ? const Color(0xFFBE123C) : const Color(0xFF047857),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                if (_totalDuePaise > 0)
+                  InkWell(
+                    onTap: () {
+                      HapticFeedback.selectionClick();
+                      setState(() => _selectedFilter = 'Udhar Due');
+                    },
+                    borderRadius: BorderRadius.circular(8),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFDC2626),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Text(
+                        'View Dues',
+                        style: GoogleFonts.outfit(fontSize: 11, fontWeight: FontWeight.w800, color: Colors.white),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 12),
 
           // 2. 4-Metric Grid (Strict integer paise math & space saving)
           Container(
@@ -1550,39 +1643,41 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
                           ),
                         ),
                         const SizedBox(width: 8),
-                        if (duePaise > 0)
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        InkWell(
+                          onTap: duePaise > 0 ? () => _showSettlePaymentSheet(purchase) : null,
+                          borderRadius: BorderRadius.circular(8),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                             decoration: BoxDecoration(
-                              color: const Color(0xFFFEF2F2),
-                              borderRadius: BorderRadius.circular(6),
-                              border: Border.all(color: const Color(0xFFFECACA)),
+                              color: duePaise > 0 ? const Color(0xFFFEF2F2) : const Color(0xFFECFDF5),
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(color: duePaise > 0 ? const Color(0xFFFECACA) : const Color(0xFFA7F3D0)),
                             ),
                             child: Row(
                               mainAxisSize: MainAxisSize.min,
                               children: [
-                                const Icon(Icons.error_outline_rounded, size: 10, color: Color(0xFFDC2626)),
-                                const SizedBox(width: 3),
-                                Text(
-                                  'Due: ${MoneyFormatter.formatINR(duePaise)}',
-                                  style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.w700, color: const Color(0xFFDC2626)),
+                                Icon(
+                                  duePaise > 0 ? Icons.error_outline_rounded : Icons.check_circle_rounded,
+                                  size: 11,
+                                  color: duePaise > 0 ? const Color(0xFFDC2626) : const Color(0xFF059669),
                                 ),
+                                const SizedBox(width: 4),
+                                Text(
+                                  duePaise > 0 ? 'Supplier Udhar: ${MoneyFormatter.formatINR(duePaise)}' : 'Dues: Settled (Chukta)',
+                                  style: GoogleFonts.inter(
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w700,
+                                    color: duePaise > 0 ? const Color(0xFFDC2626) : const Color(0xFF059669),
+                                  ),
+                                ),
+                                if (duePaise > 0) ...[
+                                  const SizedBox(width: 3),
+                                  const Icon(Icons.arrow_forward_ios_rounded, size: 8, color: Color(0xFFDC2626)),
+                                ],
                               ],
                             ),
-                          )
-                        else
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                            decoration: BoxDecoration(
-                              color: const Color(0xFFF0FDF4),
-                              borderRadius: BorderRadius.circular(6),
-                              border: Border.all(color: const Color(0xFFBBF7D0)),
-                            ),
-                            child: Text(
-                              'Paid in Full',
-                              style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.w700, color: const Color(0xFF16A34A)),
-                            ),
                           ),
+                        ),
                       ],
                     ),
                     Text(

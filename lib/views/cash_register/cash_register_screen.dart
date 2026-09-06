@@ -28,13 +28,16 @@ class _CashRegisterScreenState extends State<CashRegisterScreen> {
 
   // Denomination notes state for quick tally
   final Map<int, int> _denominations = {
+    2000: 0,
     500: 0,
     200: 0,
     100: 0,
     50: 0,
     20: 0,
     10: 0,
-    5: 0, // coins & 5 notes
+    5: 0,
+    2: 0,
+    1: 0,
   };
 
   @override
@@ -605,7 +608,7 @@ class _CashRegisterScreenState extends State<CashRegisterScreen> {
                     children: _denominations.keys.map((denom) {
                       final count = _denominations[denom]!;
                       final totalVal = denom * count;
-                      final label = denom == 5 ? 'Coins/₹5' : '₹$denom';
+                      final label = denom <= 5 ? '₹$denom Coin' : '₹$denom Note';
 
                       return Container(
                         margin: const EdgeInsets.only(bottom: 6),

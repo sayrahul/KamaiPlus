@@ -188,18 +188,39 @@ class _MenuScreenState extends State<MenuScreen> {
             Expanded(
               child: ListView(
                 physics: const BouncingScrollPhysics(parent: AlwaysScrollableScrollPhysics()),
-                padding: const EdgeInsets.fromLTRB(14, 16, 14, 16),
+                padding: const EdgeInsets.fromLTRB(14, 16, 14, 20),
                 children: [
-                  // 1. DAILY BILLING & COUNTER
-                  _buildSectionTitle('DAILY BILLING & COUNTER'),
+                  // 1. DAILY BILLING & COUNTER (Bento Hero + Grid)
+                  _buildSectionTitle('DAILY BILLING & COUNTER', subtitle: 'Fast register checkout, day history & cash till'),
+                  const SizedBox(height: 10),
+                  // Bento Hero Card: POS Billing
+                  _buildBentoHeroCard(
+                    title: 'Billing (POS) Register',
+                    subtitle: 'Express Barcode Scanner, Instant Cart & UPI QR',
+                    badgeText: 'FAST BILLING',
+                    badgeBg: const Color(0xFFECFDF5),
+                    badgeColor: const Color(0xFF059669),
+                    icon: Icons.point_of_sale_rounded,
+                    isDark: widget.currentTabIndex == 2,
+                    gradient: const LinearGradient(
+                      colors: [Color(0xFF0F172A), Color(0xFF1E293B)],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
+                    onTap: () => _handleTabTap(2),
+                  ),
                   const SizedBox(height: 10),
                   Row(
                     children: [
                       Expanded(
                         child: _buildNavCard(
-                          title: 'Home',
-                          subtitle: 'Overview & KPIs',
+                          title: 'Home Pulse',
+                          subtitle: 'Live KPIs & Soundbox',
                           icon: Icons.home_rounded,
+                          iconColor: const Color(0xFF2563EB),
+                          iconBg: const Color(0xFFEFF6FF),
+                          borderColor: const Color(0xFFDBEAFE),
+                          badgeText: 'PULSE',
                           isDark: (widget.currentTabIndex ?? 0) == 0,
                           onTap: () => _handleTabTap(0),
                         ),
@@ -207,57 +228,47 @@ class _MenuScreenState extends State<MenuScreen> {
                       const SizedBox(width: 10),
                       Expanded(
                         child: _buildNavCard(
-                          title: 'Billing (POS)',
-                          subtitle: 'Fast Checkout',
-                          icon: Icons.point_of_sale_rounded,
-                          iconColor: const Color(0xFF10B981),
-                          iconBg: const Color(0xFFECFDF5),
-                          isDark: widget.currentTabIndex == 2,
-                          onTap: () => _handleTabTap(2),
+                          title: 'Transactions',
+                          subtitle: 'Bills & Return Slips',
+                          icon: Icons.receipt_long_rounded,
+                          iconColor: const Color(0xFF0D9488),
+                          iconBg: const Color(0xFFCCFBF1),
+                          borderColor: const Color(0xFF99F6E4),
+                          badgeText: 'HISTORY',
+                          onTap: () => _handleScreenPush(const TransactionsScreen()),
                         ),
                       ),
                     ],
                   ),
                   const SizedBox(height: 10),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: _buildNavCard(
-                          title: 'Transactions',
-                          subtitle: 'History & Returns',
-                          icon: Icons.verified_user_rounded,
-                          iconColor: const Color(0xFF0D9488),
-                          iconBg: const Color(0xFFCCFBF1),
-                          onTap: () => _handleScreenPush(const TransactionsScreen()),
-                        ),
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: _buildNavCard(
-                          title: 'Cash Register',
-                          subtitle: 'Shift Closing & Z-Report',
-                          icon: Icons.calculate_rounded,
-                          iconColor: const Color(0xFFD97706),
-                          iconBg: const Color(0xFFFEF3C7),
-                          onTap: () => _handleScreenPush(const CashRegisterScreen()),
-                        ),
-                      ),
-                    ],
+                  _buildNavCard(
+                    title: 'Cash Register & Galla Till',
+                    subtitle: 'Cash In/Out, Physical Denomination Counter & Z-Report',
+                    icon: Icons.calculate_rounded,
+                    iconColor: const Color(0xFFD97706),
+                    iconBg: const Color(0xFFFEF3C7),
+                    borderColor: const Color(0xFFFDE68A),
+                    badgeText: 'Z-REPORT',
+                    badgeBg: const Color(0xFFFFFBEB),
+                    badgeColor: const Color(0xFFB45309),
+                    onTap: () => _handleScreenPush(const CashRegisterScreen()),
                   ),
-                  const SizedBox(height: 20),
+                  const SizedBox(height: 22),
 
-                  // 2. STOCK & INVENTORY
-                  _buildSectionTitle('STOCK & INVENTORY'),
+                  // 2. STOCK & INVENTORY (Bento Grid)
+                  _buildSectionTitle('STOCK & INVENTORY', subtitle: 'SKU catalog, wholesale restock & barcode printing'),
                   const SizedBox(height: 10),
                   Row(
                     children: [
                       Expanded(
                         child: _buildNavCard(
                           title: 'Products & FMCG',
-                          subtitle: 'Daily Essentials & Barcodes',
+                          subtitle: 'Catalog & Barcodes',
                           icon: Icons.inventory_2_rounded,
                           iconColor: const Color(0xFF3B82F6),
                           iconBg: const Color(0xFFEFF6FF),
+                          borderColor: const Color(0xFFDBEAFE),
+                          badgeText: 'CATALOG',
                           isDark: widget.currentTabIndex == 1,
                           onTap: () => _handleTabTap(1),
                         ),
@@ -265,12 +276,16 @@ class _MenuScreenState extends State<MenuScreen> {
                       const SizedBox(width: 10),
                       Expanded(
                         child: _buildNavCard(
-                          title: 'Inventory & Alerts',
-                          subtitle: 'Stock Alerts & Low Stock',
-                          icon: Icons.radar_rounded,
-                          iconColor: const Color(0xFF06B6D4),
-                          iconBg: const Color(0xFFECFEFF),
-                          onTap: () => _handleScreenPush(const InventoryScreen()),
+                          title: 'Wholesale Inward',
+                          subtitle: 'Mandi & Vendor Bills',
+                          icon: Icons.shopping_bag_rounded,
+                          iconColor: const Color(0xFF059669),
+                          iconBg: const Color(0xFFECFDF5),
+                          borderColor: const Color(0xFFA7F3D0),
+                          badgeText: 'AI OCR',
+                          badgeBg: const Color(0xFFECFDF5),
+                          badgeColor: const Color(0xFF059669),
+                          onTap: () => _handleScreenPush(const PurchasesScreen()),
                         ),
                       ),
                     ],
@@ -280,41 +295,49 @@ class _MenuScreenState extends State<MenuScreen> {
                     children: [
                       Expanded(
                         child: _buildNavCard(
-                          title: 'Wholesale Inward',
-                          subtitle: 'Mandi & Supplier Bills',
-                          icon: Icons.shopping_bag_rounded,
-                          iconColor: const Color(0xFFD97706),
-                          iconBg: const Color(0xFFFFFBEB),
-                          onTap: () => _handleScreenPush(const PurchasesScreen()),
+                          title: 'Inventory & Alerts',
+                          subtitle: 'Low Stock Radar',
+                          icon: Icons.radar_rounded,
+                          iconColor: const Color(0xFF0891B2),
+                          iconBg: const Color(0xFFECFEFF),
+                          borderColor: const Color(0xFFA5F3FC),
+                          badgeText: 'ALERTS',
+                          onTap: () => _handleScreenPush(const InventoryScreen()),
                         ),
                       ),
                       const SizedBox(width: 10),
                       Expanded(
                         child: _buildNavCard(
                           title: 'Barcode Studio',
-                          subtitle: 'Price Stickers & Tags',
+                          subtitle: 'Sticker & Label Print',
                           icon: Icons.document_scanner_rounded,
-                          iconColor: const Color(0xFF8B5CF6),
+                          iconColor: const Color(0xFF7C3AED),
                           iconBg: const Color(0xFFF5F3FF),
+                          borderColor: const Color(0xFFDDD6FE),
+                          badgeText: 'PRINT',
                           onTap: () => _handleScreenPush(const BarcodeStudioScreen()),
                         ),
                       ),
                     ],
                   ),
-                  const SizedBox(height: 20),
+                  const SizedBox(height: 22),
 
-                  // 3. CUSTOMER & CREDIT LEDGER
-                  _buildSectionTitle('CUSTOMER & CREDIT LEDGER'),
+                  // 3. CUSTOMER & CREDIT LEDGER (Bento Grid)
+                  _buildSectionTitle('CUSTOMER & CREDIT LEDGER', subtitle: 'Udhar reminders, voice notes & marketing campaigns'),
                   const SizedBox(height: 10),
                   Row(
                     children: [
                       Expanded(
                         child: _buildNavCard(
-                          title: 'Khata Ledger',
-                          subtitle: 'Customer Credit & Udhar',
+                          title: 'Digital Khata',
+                          subtitle: 'Credit & Udhar Dues',
                           icon: Icons.menu_book_rounded,
-                          iconColor: const Color(0xFFD97706),
-                          iconBg: const Color(0xFFFEF3C7),
+                          iconColor: const Color(0xFFEA580C),
+                          iconBg: const Color(0xFFFFF7ED),
+                          borderColor: const Color(0xFFFFEDD5),
+                          badgeText: 'UDHAR',
+                          badgeBg: const Color(0xFFFEF2F2),
+                          badgeColor: const Color(0xFFDC2626),
                           isDark: widget.currentTabIndex == 3,
                           onTap: () => _handleTabTap(3),
                         ),
@@ -326,7 +349,9 @@ class _MenuScreenState extends State<MenuScreen> {
                           subtitle: 'Profiles & Loyalty',
                           icon: Icons.people_alt_rounded,
                           iconColor: const Color(0xFF0284C7),
-                          iconBg: const Color(0xFFE0F2FE),
+                          iconBg: const Color(0xFFF0F9FF),
+                          borderColor: const Color(0xFFBAE6FD),
+                          badgeText: 'CRM',
                           onTap: () => _handleScreenPush(const CustomersScreen()),
                         ),
                       ),
@@ -338,40 +363,50 @@ class _MenuScreenState extends State<MenuScreen> {
                       Expanded(
                         child: _buildNavCard(
                           title: 'WhatsApp Growth',
-                          subtitle: 'Festival Greetings',
+                          subtitle: 'Offers & Festive SMS',
                           icon: Icons.trending_up_rounded,
-                          iconColor: const Color(0xFF10B981),
-                          iconBg: const Color(0xFFECFDF5),
+                          iconColor: const Color(0xFF16A34A),
+                          iconBg: const Color(0xFFF0FDF4),
+                          borderColor: const Color(0xFFBBF7D0),
+                          badgeText: 'AUTO',
                           onTap: () => _handleScreenPush(const GrowthCampaignsScreen()),
                         ),
                       ),
                       const SizedBox(width: 10),
                       Expanded(
                         child: _buildNavCard(
-                          title: 'Upgrade & Plans',
-                          subtitle: 'Kamai+ Pro',
+                          title: 'Kamai+ Pro',
+                          subtitle: 'Cloud & Multi-Staff',
                           icon: Icons.auto_awesome_rounded,
-                          iconColor: const Color(0xFFA855F7),
+                          iconColor: const Color(0xFF9333EA),
                           iconBg: const Color(0xFFFAF5FF),
+                          borderColor: const Color(0xFFE9D5FF),
+                          badgeText: 'PRO',
+                          badgeBg: const Color(0xFFFAF5FF),
+                          badgeColor: const Color(0xFF7E22CE),
                           onTap: _handleProUpgrade,
                         ),
                       ),
                     ],
                   ),
-                  const SizedBox(height: 20),
+                  const SizedBox(height: 22),
 
-                  // 4. TAX, BACKUP & SETTINGS
-                  _buildSectionTitle('TAX, BACKUP & SETTINGS'),
+                  // 4. TAX, BACKUP & SETTINGS (Bento Grid)
+                  _buildSectionTitle('TAX, BACKUP & SETTINGS', subtitle: 'GSTR-1, bill themes, Google Drive sync & shop profile'),
                   const SizedBox(height: 10),
                   Row(
                     children: [
                       Expanded(
                         child: _buildNavCard(
-                          title: 'GSTR-1 Reports',
-                          subtitle: 'HSN Tax Filing',
+                          title: 'GSTR-1 & CA Pack',
+                          subtitle: 'HSN Sales Summary',
                           icon: Icons.receipt_long_rounded,
-                          iconColor: const Color(0xFF6366F1),
+                          iconColor: const Color(0xFF4F46E5),
                           iconBg: const Color(0xFFEEF2FF),
+                          borderColor: const Color(0xFFC7D2FE),
+                          badgeText: 'CA READY',
+                          badgeBg: const Color(0xFFEEF2FF),
+                          badgeColor: const Color(0xFF4338CA),
                           onTap: () => _handleScreenPush(const GstReportsScreen()),
                         ),
                       ),
@@ -379,10 +414,12 @@ class _MenuScreenState extends State<MenuScreen> {
                       Expanded(
                         child: _buildNavCard(
                           title: 'Invoice Themes',
-                          subtitle: 'Bill Templates',
+                          subtitle: 'Bill Prints & Logo',
                           icon: Icons.palette_rounded,
                           iconColor: const Color(0xFFD97706),
                           iconBg: const Color(0xFFFFFBEB),
+                          borderColor: const Color(0xFFFDE68A),
+                          badgeText: 'DESIGN',
                           onTap: () => _handleScreenPush(const InvoiceThemesScreen()),
                         ),
                       ),
@@ -397,18 +434,22 @@ class _MenuScreenState extends State<MenuScreen> {
                           subtitle: 'Google Drive Sync',
                           icon: Icons.cloud_done_rounded,
                           iconColor: const Color(0xFF0284C7),
-                          iconBg: const Color(0xFFE0F2FE),
+                          iconBg: const Color(0xFFF0F9FF),
+                          borderColor: const Color(0xFFBAE6FD),
+                          badgeText: 'SYNC',
                           onTap: () => _handleScreenPush(const BackupRestoreScreen()),
                         ),
                       ),
                       const SizedBox(width: 10),
                       Expanded(
                         child: _buildNavCard(
-                          title: 'Settings',
-                          subtitle: 'Shop Profile & UPI',
+                          title: 'Store Settings',
+                          subtitle: 'Shop Profile & UPI QR',
                           icon: Icons.settings_suggest_rounded,
                           iconColor: const Color(0xFF475569),
                           iconBg: const Color(0xFFF1F5F9),
+                          borderColor: const Color(0xFFE2E8F0),
+                          badgeText: 'CONFIG',
                           onTap: () => _handleScreenPush(const StoreProfileScreen()),
                         ),
                       ),
@@ -544,16 +585,148 @@ class _MenuScreenState extends State<MenuScreen> {
     );
   }
 
-  Widget _buildSectionTitle(String title) {
+  Widget _buildSectionTitle(String title, {String? subtitle}) {
     return Padding(
       padding: const EdgeInsets.only(left: 2, top: 4),
-      child: Text(
-        title,
-        style: GoogleFonts.inter(
-          fontSize: 11,
-          fontWeight: FontWeight.w800,
-          letterSpacing: 0.9,
-          color: const Color(0xFF64748B),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            title,
+            style: GoogleFonts.inter(
+              fontSize: 11,
+              fontWeight: FontWeight.w800,
+              letterSpacing: 0.9,
+              color: const Color(0xFF64748B),
+            ),
+          ),
+          if (subtitle != null) ...[
+            const SizedBox(height: 2),
+            Text(
+              subtitle,
+              style: GoogleFonts.inter(
+                fontSize: 10.5,
+                color: const Color(0xFF94A3B8),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildBentoHeroCard({
+    required String title,
+    required String subtitle,
+    required String badgeText,
+    required Color badgeBg,
+    required Color badgeColor,
+    required IconData icon,
+    bool isDark = true,
+    LinearGradient? gradient,
+    required VoidCallback onTap,
+  }) {
+    return Material(
+      color: Colors.transparent,
+      borderRadius: BorderRadius.circular(18),
+      child: InkWell(
+        onTap: () {
+          HapticFeedback.selectionClick();
+          onTap();
+        },
+        borderRadius: BorderRadius.circular(18),
+        child: Container(
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            gradient: gradient ??
+                const LinearGradient(
+                  colors: [Color(0xFF0F172A), Color(0xFF1E293B)],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+            borderRadius: BorderRadius.circular(18),
+            boxShadow: [
+              BoxShadow(
+                color: const Color(0xFF0F172A).withValues(alpha: 0.25),
+                blurRadius: 10,
+                offset: const Offset(0, 4),
+              ),
+            ],
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(13),
+                  border: Border.all(color: Colors.white.withValues(alpha: 0.18)),
+                ),
+                child: const Icon(
+                  Icons.point_of_sale_rounded,
+                  size: 24,
+                  color: Color(0xFF34D399),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Row(
+                      children: [
+                        Flexible(
+                          child: Text(
+                            title,
+                            style: GoogleFonts.outfit(
+                              fontSize: 14.5,
+                              fontWeight: FontWeight.w800,
+                              color: Colors.white,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: badgeBg,
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: Text(
+                            badgeText,
+                            style: GoogleFonts.inter(
+                              fontSize: 9,
+                              fontWeight: FontWeight.w800,
+                              color: badgeColor,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      subtitle,
+                      style: GoogleFonts.inter(
+                        fontSize: 11,
+                        color: const Color(0xFF94A3B8),
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
+                ),
+              ),
+              const Icon(
+                Icons.arrow_forward_ios_rounded,
+                size: 14,
+                color: Colors.white70,
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -565,9 +738,14 @@ class _MenuScreenState extends State<MenuScreen> {
     required IconData icon,
     Color? iconColor,
     Color? iconBg,
+    Color? borderColor,
+    String? badgeText,
+    Color? badgeBg,
+    Color? badgeColor,
     bool isDark = false,
     required VoidCallback onTap,
   }) {
+    final effectiveBorder = isDark ? const Color(0xFF1E293B) : (borderColor ?? const Color(0xFFE2E8F0));
     return Material(
       color: isDark ? const Color(0xFF0F172A) : Colors.white,
       borderRadius: BorderRadius.circular(16),
@@ -583,7 +761,7 @@ class _MenuScreenState extends State<MenuScreen> {
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(16),
             border: Border.all(
-              color: isDark ? const Color(0xFF1E293B) : const Color(0xFFE2E8F0),
+              color: effectiveBorder,
               width: 1.1,
             ),
             boxShadow: isDark
@@ -605,15 +783,15 @@ class _MenuScreenState extends State<MenuScreen> {
           child: Row(
             children: [
               Container(
-                width: 40,
-                height: 40,
+                width: 38,
+                height: 38,
                 decoration: BoxDecoration(
                   color: isDark ? Colors.white.withValues(alpha: 0.12) : (iconBg ?? const Color(0xFFF1F5F9)),
-                  borderRadius: BorderRadius.circular(12),
+                  borderRadius: BorderRadius.circular(11),
                 ),
                 child: Icon(
                   icon,
-                  size: 22,
+                  size: 21,
                   color: isDark ? Colors.white : (iconColor ?? const Color(0xFF0F172A)),
                 ),
               ),
@@ -623,15 +801,43 @@ class _MenuScreenState extends State<MenuScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Text(
-                      title,
-                      style: GoogleFonts.outfit(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w700,
-                        color: isDark ? Colors.white : const Color(0xFF0F172A),
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
+                    Row(
+                      children: [
+                        Flexible(
+                          child: Text(
+                            title,
+                            style: GoogleFonts.outfit(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w700,
+                              color: isDark ? Colors.white : const Color(0xFF0F172A),
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        if (badgeText != null) ...[
+                          const SizedBox(width: 5),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
+                            decoration: BoxDecoration(
+                              color: isDark
+                                  ? Colors.white.withValues(alpha: 0.15)
+                                  : (badgeBg ?? (iconBg ?? const Color(0xFFF1F5F9))),
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: Text(
+                              badgeText,
+                              style: GoogleFonts.inter(
+                                fontSize: 8,
+                                fontWeight: FontWeight.w800,
+                                color: isDark
+                                    ? Colors.white
+                                    : (badgeColor ?? (iconColor ?? const Color(0xFF475569))),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ],
                     ),
                     const SizedBox(height: 2),
                     Text(

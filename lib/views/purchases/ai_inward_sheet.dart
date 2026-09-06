@@ -10,11 +10,177 @@ class AiInwardSheet extends StatelessWidget {
   const AiInwardSheet({super.key, this.onInwardComplete});
 
   void _simulateAiScan(BuildContext context, String mode) {
+    int scanStep = 0; // 0: Scanning viewfinder, 1: Review extracted parcha
     showDialog(
       context: context,
       barrierDismissible: false,
       builder: (ctx) => StatefulBuilder(
         builder: (context, setDialogState) {
+          if (scanStep == 0) {
+            // Auto transition from scanning to extracted items after 1.5 seconds
+            Future.delayed(const Duration(milliseconds: 1600), () {
+              if (ctx.mounted && scanStep == 0) {
+                setDialogState(() => scanStep = 1);
+              }
+            });
+
+            return AlertDialog(
+              backgroundColor: const Color(0xFF0F172A),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+              contentPadding: const EdgeInsets.all(20),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // Viewfinder Header
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(6),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF10B981).withValues(alpha: 0.2),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: const Icon(Icons.document_scanner_rounded, color: Color(0xFF34D399), size: 18),
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            'AI Vision Parcha OCR',
+                            style: GoogleFonts.outfit(fontSize: 15, fontWeight: FontWeight.w700, color: Colors.white),
+                          ),
+                        ],
+                      ),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF10B981).withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(6),
+                          border: Border.all(color: const Color(0xFF10B981).withValues(alpha: 0.4)),
+                        ),
+                        child: Text(
+                          'PROCESSING',
+                          style: GoogleFonts.inter(fontSize: 9, fontWeight: FontWeight.w800, color: const Color(0xFF34D399)),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 18),
+
+                  // Simulated Camera Viewfinder with Parcha Paper
+                  Container(
+                    height: 180,
+                    width: double.infinity,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF1E293B),
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: const Color(0xFF334155), width: 1.5),
+                    ),
+                    child: Stack(
+                      alignment: Alignment.center,
+                      children: [
+                        // Parcha Paper Graphic
+                        Container(
+                          width: 170,
+                          height: 130,
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFFFFBEB),
+                            borderRadius: BorderRadius.circular(8),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withValues(alpha: 0.4),
+                                blurRadius: 12,
+                                offset: const Offset(0, 4),
+                              ),
+                            ],
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                children: [
+                                  Text('MANDI INWARD SLIP', style: GoogleFonts.inter(fontSize: 8, fontWeight: FontWeight.w900, color: const Color(0xFF78350F))),
+                                  Text('#9821', style: GoogleFonts.inter(fontSize: 8, color: const Color(0xFF92400E))),
+                                ],
+                              ),
+                              const Divider(height: 8, color: Color(0xFFFDE68A)),
+                              Text('1. Fortune Oil 1L x 24', style: GoogleFonts.inter(fontSize: 8, fontWeight: FontWeight.w600, color: const Color(0xFF451A03))),
+                              Text('2. Toor Dal 1kg x 30', style: GoogleFonts.inter(fontSize: 8, fontWeight: FontWeight.w600, color: const Color(0xFF451A03))),
+                              Text('3. Chakki Atta 10kg x 15', style: GoogleFonts.inter(fontSize: 8, fontWeight: FontWeight.w600, color: const Color(0xFF451A03))),
+                              const Spacer(),
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                children: [
+                                  Text('TOTAL DUE:', style: GoogleFonts.inter(fontSize: 7.5, fontWeight: FontWeight.w800, color: const Color(0xFF78350F))),
+                                  Text('₹12,900', style: GoogleFonts.inter(fontSize: 8.5, fontWeight: FontWeight.w900, color: const Color(0xFFB45309))),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ),
+
+                        // Corner Reticles
+                        Positioned(
+                          top: 8,
+                          left: 8,
+                          child: Container(width: 14, height: 14, decoration: const BoxDecoration(border: Border(top: BorderSide(color: Color(0xFF34D399), width: 2), left: BorderSide(color: Color(0xFF34D399), width: 2)))),
+                        ),
+                        Positioned(
+                          top: 8,
+                          right: 8,
+                          child: Container(width: 14, height: 14, decoration: const BoxDecoration(border: Border(top: BorderSide(color: Color(0xFF34D399), width: 2), right: BorderSide(color: Color(0xFF34D399), width: 2)))),
+                        ),
+                        Positioned(
+                          bottom: 8,
+                          left: 8,
+                          child: Container(width: 14, height: 14, decoration: const BoxDecoration(border: Border(bottom: BorderSide(color: Color(0xFF34D399), width: 2), left: BorderSide(color: Color(0xFF34D399), width: 2)))),
+                        ),
+                        Positioned(
+                          bottom: 8,
+                          right: 8,
+                          child: Container(width: 14, height: 14, decoration: const BoxDecoration(border: Border(bottom: BorderSide(color: Color(0xFF34D399), width: 2), right: BorderSide(color: Color(0xFF34D399), width: 2)))),
+                        ),
+
+                        // Scanning Laser Line
+                        Positioned(
+                          left: 0,
+                          right: 0,
+                          child: Container(
+                            height: 2,
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF34D399),
+                              boxShadow: [
+                                BoxShadow(color: const Color(0xFF34D399).withValues(alpha: 0.8), blurRadius: 8, spreadRadius: 2),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+
+                  // Progress & Status
+                  const LinearProgressIndicator(
+                    valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF10B981)),
+                    backgroundColor: Color(0xFF334155),
+                    minHeight: 4,
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    'Reading handwritten mandi parcha & bill rates...',
+                    style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF94A3B8)),
+                    textAlign: TextAlign.center,
+                  ),
+                ],
+              ),
+            );
+          }
+
+          // Stage 1: Extracted items with verification
           return AlertDialog(
             backgroundColor: Colors.white,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
@@ -30,9 +196,18 @@ class AiInwardSheet extends StatelessWidget {
                 ),
                 const SizedBox(width: 10),
                 Expanded(
-                  child: Text(
-                    'AI Vision OCR Extraction',
-                    style: GoogleFonts.outfit(fontSize: 17, fontWeight: FontWeight.w700),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'AI Vision OCR Extraction',
+                        style: GoogleFonts.outfit(fontSize: 16.5, fontWeight: FontWeight.w800, color: const Color(0xFF0F172A)),
+                      ),
+                      Text(
+                        'Matched: 3 Products • 99.1% Confidence',
+                        style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w600, color: const Color(0xFF059669)),
+                      ),
+                    ],
                   ),
                 ),
               ],
@@ -41,26 +216,46 @@ class AiInwardSheet extends StatelessWidget {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  'Extracted from: Wholesaler Purchase Invoice #INV-9821',
-                  style: GoogleFonts.inter(fontSize: 11, color: const Color(0xFF64748B)),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF8FAFC),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: const Color(0xFFE2E8F0)),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.store_rounded, size: 14, color: Color(0xFF64748B)),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Text(
+                          'Wholesale Invoice: Metro Cash & Carry #INV-9821',
+                          style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w600, color: const Color(0xFF334155)),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
                 const SizedBox(height: 12),
-                _buildExtractedRow('Fortune Sunlite Oil (1L)', '24 Pcs', '₹125.00', '₹145.00'),
-                _buildExtractedRow('Tata Sampann Toor Dal (1kg)', '30 Pcs', '₹140.00', '₹165.00'),
-                _buildExtractedRow('Aashirvaad Shudh Chakki Atta (10kg)', '15 Pcs', '₹380.00', '₹425.00'),
+                _buildExtractedRow('Fortune Sunlite Oil (1L)', '24 Pcs', '₹125.00', '₹145.00', '+16% Margin'),
+                _buildExtractedRow('Tata Sampann Toor Dal (1kg)', '30 Pcs', '₹140.00', '₹165.00', '+18% Margin'),
+                _buildExtractedRow('Aashirvaad Chakki Atta (10kg)', '15 Bags', '₹380.00', '₹425.00', '+12% Margin'),
                 const Divider(height: 20),
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Text('Total Inward Value:', style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w600)),
-                    Text('₹12,900.00', style: GoogleFonts.outfit(fontSize: 15, fontWeight: FontWeight.w800, color: const Color(0xFF10B981))),
+                    Text('Total Inward Value:', style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w600, color: const Color(0xFF64748B))),
+                    Text('₹12,900.00', style: GoogleFonts.outfit(fontSize: 16, fontWeight: FontWeight.w900, color: const Color(0xFF059669))),
                   ],
                 ),
               ],
             ),
             actions: [
-              TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: Text('Cancel', style: GoogleFonts.inter(fontWeight: FontWeight.w600, color: const Color(0xFF64748B))),
+              ),
               ElevatedButton(
                 onPressed: () async {
                   final messenger = ScaffoldMessenger.of(context);
@@ -86,20 +281,40 @@ class AiInwardSheet extends StatelessWidget {
                     stockQuantity: 30,
                     unit: 'packet',
                   );
+                  final p3 = ProductModel(
+                    id: const Uuid().v4(),
+                    businessId: 'default_business',
+                    name: 'Aashirvaad Shudh Chakki Atta (10kg)',
+                    purchasePricePaise: 38000,
+                    sellingPricePaise: 42500,
+                    mrpPaise: 44000,
+                    stockQuantity: 15,
+                    unit: 'bag',
+                  );
                   await LocalDatabase.instance.upsertProduct(p1);
                   await LocalDatabase.instance.upsertProduct(p2);
+                  await LocalDatabase.instance.upsertProduct(p3);
 
                   onInwardComplete?.call();
                   messenger.showSnackBar(
-                    const SnackBar(content: Text('✓ 3 items successfully added to inventory via AI Inward!')),
+                    const SnackBar(
+                      content: Row(
+                        children: [
+                          Icon(Icons.check_circle_rounded, color: Colors.white, size: 18),
+                          SizedBox(width: 8),
+                          Text('✓ 3 items successfully added to inventory via AI Inward!'),
+                        ],
+                      ),
+                      backgroundColor: Color(0xFF059669),
+                    ),
                   );
                 },
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF10B981),
+                  backgroundColor: const Color(0xFF0F172A),
                   foregroundColor: Colors.white,
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                 ),
-                child: const Text('Confirm & Save Stock'),
+                child: Text('Confirm & Save Stock', style: GoogleFonts.outfit(fontWeight: FontWeight.w700)),
               ),
             ],
           );
@@ -108,26 +323,48 @@ class AiInwardSheet extends StatelessWidget {
     );
   }
 
-  Widget _buildExtractedRow(String name, String qty, String buy, String sell) {
+  Widget _buildExtractedRow(String name, String qty, String buy, String sell, String margin) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Row(
-        children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(name, style: GoogleFonts.outfit(fontSize: 13, fontWeight: FontWeight.w700, color: const Color(0xFF0F172A))),
-                Text('Buy: $buy • Sell: $sell', style: GoogleFonts.inter(fontSize: 11, color: const Color(0xFF64748B))),
-              ],
+      child: Container(
+        padding: const EdgeInsets.all(8),
+        decoration: BoxDecoration(
+          color: const Color(0xFFF8FAFC),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: const Color(0xFFEEF2F6)),
+        ),
+        child: Row(
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(name, style: GoogleFonts.outfit(fontSize: 13, fontWeight: FontWeight.w700, color: const Color(0xFF0F172A))),
+                  const SizedBox(height: 2),
+                  Row(
+                    children: [
+                      Text('Buy: $buy • Sell: $sell', style: GoogleFonts.inter(fontSize: 11, color: const Color(0xFF64748B))),
+                      const SizedBox(width: 6),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFECFDF5),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: Text(margin, style: GoogleFonts.inter(fontSize: 9, fontWeight: FontWeight.w700, color: const Color(0xFF059669))),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
             ),
-          ),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-            decoration: BoxDecoration(color: const Color(0xFFF1F5F9), borderRadius: BorderRadius.circular(6)),
-            child: Text(qty, style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w700, color: const Color(0xFF334155))),
-          ),
-        ],
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+              decoration: BoxDecoration(color: const Color(0xFFE2E8F0), borderRadius: BorderRadius.circular(6)),
+              child: Text(qty, style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w800, color: const Color(0xFF1E293B))),
+            ),
+          ],
+        ),
       ),
     );
   }

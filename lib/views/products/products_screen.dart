@@ -26,6 +26,7 @@ class _ProductsScreenState extends State<ProductsScreen> {
   bool _filterLowStockOnly = false;
   bool _filterExpiringOnly = false;
   bool _isAssetHidden = true; // Hidden by default, unlocked via Owner PIN
+  bool _isGridView = false; // Instant List / Grid view toggle
 
   final TextEditingController _searchCtrl = TextEditingController();
   final Set<String> _favoriteProductIds = {};
@@ -128,6 +129,180 @@ class _ProductsScreenState extends State<ProductsScreen> {
     );
   }
 
+  void _openQuickUpdateDialog(ProductModel product) {
+    final priceCtrl = TextEditingController(text: (product.sellingPricePaise / 100).toStringAsFixed(0));
+    final stockCtrl = TextEditingController(text: product.stockQuantity.toInt().toString());
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: Colors.white,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(6),
+              decoration: BoxDecoration(
+                color: const Color(0xFFEFF6FF),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: const Icon(Icons.bolt_rounded, color: Color(0xFF2563EB), size: 20),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Quick Update', style: GoogleFonts.outfit(fontSize: 15, fontWeight: FontWeight.bold)),
+                  Text(product.name, style: GoogleFonts.inter(fontSize: 11, color: const Color(0xFF64748B)), maxLines: 1, overflow: TextOverflow.ellipsis),
+                ],
+              ),
+            ),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: priceCtrl,
+              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              decoration: InputDecoration(
+                labelText: 'Selling Price (₹)',
+                prefixIcon: const Icon(Icons.currency_rupee_rounded, size: 18),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                isDense: true,
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: stockCtrl,
+              keyboardType: TextInputType.number,
+              decoration: InputDecoration(
+                labelText: 'Stock Qty (${product.unit})',
+                prefixIcon: const Icon(Icons.inventory_2_outlined, size: 18),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                isDense: true,
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text('Cancel', style: GoogleFonts.inter(color: const Color(0xFF64748B))),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              final parsedPrice = (double.tryParse(priceCtrl.text) ?? (product.sellingPricePaise / 100)) * 100;
+              final parsedStock = double.tryParse(stockCtrl.text) ?? product.stockQuantity;
+              final updated = ProductModel(
+                id: product.id,
+                businessId: product.businessId,
+                name: product.name,
+                barcode: product.barcode,
+                categoryId: product.categoryId,
+                sellingPricePaise: parsedPrice.round(),
+                mrpPaise: product.mrpPaise,
+                purchasePricePaise: product.purchasePricePaise,
+                stockQuantity: parsedStock,
+                taxRate: product.taxRate,
+                isTaxInclusive: product.isTaxInclusive,
+                unit: product.unit,
+                syncStatus: 'pending',
+              );
+              await LocalDatabase.instance.upsertProduct(updated);
+              if (ctx.mounted) Navigator.pop(ctx);
+              _loadData();
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text('Updated ${product.name}'),
+                    behavior: SnackBarBehavior.floating,
+                    duration: const Duration(seconds: 1),
+                  ),
+                );
+              }
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF0F172A),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            ),
+            child: Text('Save Update', style: GoogleFonts.outfit(fontWeight: FontWeight.bold, color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildBarcodeStrip(String barcode) {
+    return Container(
+      height: 12,
+      padding: const EdgeInsets.symmetric(horizontal: 2),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: List.generate(16, (index) {
+          final isThick = (barcode.hashCode ^ (index * 7)) % 3 == 0;
+          final isSpace = (barcode.hashCode ^ (index * 13)) % 5 == 0;
+          if (isSpace) return const SizedBox(width: 1.5);
+          return Container(
+            width: isThick ? 2.0 : 1.0,
+            height: 12,
+            margin: const EdgeInsets.symmetric(horizontal: 0.6),
+            color: const Color(0xFF334155),
+          );
+        }),
+      ),
+    );
+  }
+
+  Widget _buildStockTrafficBadge(double qty, String unit) {
+    final Color bg;
+    final Color text;
+    final String label;
+    final IconData icon;
+
+    if (qty <= 0) {
+      bg = const Color(0xFFFEE2E2);
+      text = const Color(0xFFDC2626);
+      label = 'Out of Stock';
+      icon = Icons.cancel_outlined;
+    } else if (qty <= 5) {
+      bg = const Color(0xFFFEF3C7);
+      text = const Color(0xFFD97706);
+      label = 'Low: ${qty.toInt()} left';
+      icon = Icons.warning_amber_rounded;
+    } else {
+      bg = const Color(0xFFECFDF5);
+      text = const Color(0xFF059669);
+      label = '${qty.toInt()} $unit';
+      icon = Icons.check_circle_outline_rounded;
+    }
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2.5),
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: text.withValues(alpha: 0.25), width: 1),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 10, color: text),
+          const SizedBox(width: 3),
+          Text(
+            label,
+            style: GoogleFonts.inter(
+              fontSize: 9.5,
+              fontWeight: FontWeight.w700,
+              color: text,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   void _toggleAssetVisibility() {
     if (_isAssetHidden) {
       OwnerPrivacyModal.show(
@@ -191,9 +366,22 @@ class _ProductsScreenState extends State<ProductsScreen> {
             _buildCategoryPills(),
             const SizedBox(height: 12),
 
-            // 5. PRODUCT LIST ITEMS
+            // 5. PRODUCT LIST / GRID ITEMS
             if (filtered.isEmpty)
               _buildEmptyState()
+            else if (_isGridView)
+              GridView.builder(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                itemCount: filtered.length,
+                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: 2,
+                  childAspectRatio: 0.72,
+                  crossAxisSpacing: 10,
+                  mainAxisSpacing: 10,
+                ),
+                itemBuilder: (ctx, i) => _buildProductGridCard(filtered[i]),
+              )
             else
               ListView.builder(
                 shrinkWrap: true,
@@ -605,6 +793,19 @@ class _ProductsScreenState extends State<ProductsScreen> {
             borderColor: _filterExpiringOnly ? const Color(0xFFD97706) : const Color(0xFFFDE68A),
             onTap: () => setState(() => _filterExpiringOnly = !_filterExpiringOnly),
           ),
+          const SizedBox(width: 4),
+
+          // Instant Grid / List Toggle
+          _buildToolbarButton(
+            icon: _isGridView ? Icons.view_list_rounded : Icons.grid_view_rounded,
+            iconColor: const Color(0xFF0F172A),
+            bgColor: const Color(0xFFF1F5F9),
+            borderColor: const Color(0xFFCBD5E1),
+            onTap: () {
+              HapticFeedback.selectionClick();
+              setState(() => _isGridView = !_isGridView);
+            },
+          ),
         ],
       ),
     );
@@ -689,18 +890,18 @@ class _ProductsScreenState extends State<ProductsScreen> {
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
         border: Border.all(color: const Color(0xFFEEF2F6), width: 1.2),
-        boxShadow: [
+        boxShadow: const [
           BoxShadow(
-            color: const Color(0x060F172A),
+            color: Color(0x060F172A),
             blurRadius: 6,
-            offset: const Offset(0, 1.5),
+            offset: Offset(0, 1.5),
           ),
         ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Title, Star & Edit Button
+          // Title, Star, Fast Bolt Update & Edit Pencil
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -714,7 +915,7 @@ class _ProductsScreenState extends State<ProductsScreen> {
                   ),
                 ),
               ),
-              const SizedBox(width: 8),
+              const SizedBox(width: 6),
               // Favorite Star
               GestureDetector(
                 onTap: () {
@@ -732,8 +933,30 @@ class _ProductsScreenState extends State<ProductsScreen> {
                   color: const Color(0xFFF59E0B),
                 ),
               ),
-              const SizedBox(width: 8),
-              // Edit Pencil Button (Clean touch target)
+              const SizedBox(width: 6),
+              // Quick In-Line Price & Stock Update Button
+              InkWell(
+                onTap: () {
+                  HapticFeedback.selectionClick();
+                  _openQuickUpdateDialog(product);
+                },
+                borderRadius: BorderRadius.circular(8),
+                child: Container(
+                  padding: const EdgeInsets.all(5),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFEFF6FF),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: const Color(0xFFBFDBFE)),
+                  ),
+                  child: const Icon(
+                    Icons.bolt_rounded,
+                    size: 16,
+                    color: Color(0xFF2563EB),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 6),
+              // Dedicated Pencil Edit Button
               InkWell(
                 onTap: () {
                   HapticFeedback.selectionClick();
@@ -758,8 +981,11 @@ class _ProductsScreenState extends State<ProductsScreen> {
           ),
           const SizedBox(height: 6),
 
-          // Category Badge + Barcode Pill
-          Row(
+          // Category Badge + Traffic Light Stock Badge + Barcode Strip
+          Wrap(
+            spacing: 6,
+            runSpacing: 4,
+            crossAxisAlignment: WrapCrossAlignment.center,
             children: [
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2.5),
@@ -776,16 +1002,17 @@ class _ProductsScreenState extends State<ProductsScreen> {
                   ),
                 ),
               ),
-              if (product.barcode != null && product.barcode!.isNotEmpty) ...[
-                const SizedBox(width: 6),
+              _buildStockTrafficBadge(product.stockQuantity, product.unit),
+              if (product.barcode != null && product.barcode!.isNotEmpty)
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2.5),
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                   decoration: BoxDecoration(
                     color: const Color(0xFFF8FAFC),
                     borderRadius: BorderRadius.circular(6),
                     border: Border.all(color: const Color(0xFFE2E8F0)),
                   ),
                   child: Row(
+                    mainAxisSize: MainAxisSize.min,
                     children: [
                       const Icon(Icons.qr_code_2_rounded, size: 11, color: Color(0xFF64748B)),
                       const SizedBox(width: 3),
@@ -797,10 +1024,11 @@ class _ProductsScreenState extends State<ProductsScreen> {
                           color: const Color(0xFF64748B),
                         ),
                       ),
+                      const SizedBox(width: 4),
+                      _buildBarcodeStrip(product.barcode!),
                     ],
                   ),
                 ),
-              ],
             ],
           ),
           const SizedBox(height: 10),
@@ -810,29 +1038,39 @@ class _ProductsScreenState extends State<ProductsScreen> {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
-              // Selling Price
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'SELLING PRICE',
-                    style: GoogleFonts.inter(
-                      fontSize: 9,
-                      fontWeight: FontWeight.w800,
-                      letterSpacing: 0.5,
-                      color: const Color(0xFF94A3B8),
+              // Selling Price (Tap for Quick Update)
+              InkWell(
+                onTap: () => _openQuickUpdateDialog(product),
+                borderRadius: BorderRadius.circular(6),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'SELLING PRICE',
+                      style: GoogleFonts.inter(
+                        fontSize: 9,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: 0.5,
+                        color: const Color(0xFF94A3B8),
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    MoneyFormatter.formatINR(product.sellingPricePaise),
-                    style: GoogleFonts.robotoMono(
-                      fontSize: 15,
-                      fontWeight: FontWeight.w900,
-                      color: const Color(0xFF0F172A),
+                    const SizedBox(height: 2),
+                    Row(
+                      children: [
+                        Text(
+                          MoneyFormatter.formatINR(product.sellingPricePaise),
+                          style: GoogleFonts.robotoMono(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w900,
+                            color: const Color(0xFF0F172A),
+                          ),
+                        ),
+                        const SizedBox(width: 4),
+                        const Icon(Icons.edit_note_rounded, size: 14, color: Color(0xFF94A3B8)),
+                      ],
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
 
               // Profit Margin (Only visible if not asset hidden)
@@ -900,6 +1138,131 @@ class _ProductsScreenState extends State<ProductsScreen> {
                     ),
                   ],
                 ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildProductGridCard(ProductModel product) {
+    final categoryName = _getCategoryName(product.categoryId);
+
+    return Container(
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: const Color(0xFFEEF2F6), width: 1.2),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x060F172A),
+            blurRadius: 6,
+            offset: Offset(0, 1.5),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Top Row: Category + Pencil Edit
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Flexible(
+                child: Text(
+                  categoryName,
+                  style: GoogleFonts.inter(
+                    fontSize: 9.5,
+                    fontWeight: FontWeight.w700,
+                    color: const Color(0xFF64748B),
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              InkWell(
+                onTap: () => _openAddProductSheet(existingProduct: product),
+                child: const Icon(Icons.edit_outlined, size: 15, color: Color(0xFF475569)),
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+
+          // Product Name
+          Text(
+            product.name,
+            style: GoogleFonts.outfit(
+              fontSize: 13,
+              fontWeight: FontWeight.w800,
+              color: const Color(0xFF0F172A),
+            ),
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+          ),
+          const SizedBox(height: 4),
+
+          // Barcode Visual Strip if available
+          if (product.barcode != null && product.barcode!.isNotEmpty) ...[
+            _buildBarcodeStrip(product.barcode!),
+            const SizedBox(height: 4),
+          ],
+
+          // Stock Traffic Badge
+          _buildStockTrafficBadge(product.stockQuantity, product.unit),
+
+          const Spacer(),
+
+          // Selling Price & Quick Update
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              InkWell(
+                onTap: () => _openQuickUpdateDialog(product),
+                child: Text(
+                  MoneyFormatter.formatINR(product.sellingPricePaise),
+                  style: GoogleFonts.robotoMono(
+                    fontSize: 13.5,
+                    fontWeight: FontWeight.w900,
+                    color: const Color(0xFF0F172A),
+                  ),
+                ),
+              ),
+              // Stock Stepper (+ / -)
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  GestureDetector(
+                    onTap: () => _adjustStock(product, -1),
+                    child: Container(
+                      padding: const EdgeInsets.all(2),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFF1F5F9),
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: const Icon(Icons.remove_rounded, size: 13, color: Color(0xFF475569)),
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 4),
+                    child: Text(
+                      '${product.stockQuantity.toInt()}',
+                      style: GoogleFonts.robotoMono(fontSize: 11, fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                  GestureDetector(
+                    onTap: () => _adjustStock(product, 1),
+                    child: Container(
+                      padding: const EdgeInsets.all(2),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFF1F5F9),
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: const Icon(Icons.add_rounded, size: 13, color: Color(0xFF475569)),
+                    ),
+                  ),
+                ],
               ),
             ],
           ),
