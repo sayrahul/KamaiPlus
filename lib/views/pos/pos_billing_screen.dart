@@ -25,7 +25,9 @@ class CartTab {
 }
 
 class PosBillingScreen extends StatefulWidget {
-  const PosBillingScreen({super.key});
+  final bool autoOpenCheckout;
+
+  const PosBillingScreen({super.key, this.autoOpenCheckout = false});
 
   @override
   State<PosBillingScreen> createState() => _PosBillingScreenState();
@@ -80,6 +82,18 @@ class _PosBillingScreenState extends State<PosBillingScreen> {
         _customers = custs;
         _isLoading = false;
       });
+
+      if (widget.autoOpenCheckout && prods.isNotEmpty) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted && _cart.isEmpty) {
+            _addToCart(prods.first);
+            if (prods.length > 1) {
+              _addToCart(prods[1]);
+            }
+            _openCheckoutModal();
+          }
+        });
+      }
     }
   }
 
@@ -709,11 +723,9 @@ class _PosProductGridItemState extends State<_PosProductGridItem> {
     final unitDisplay = widget.product.unit.isNotEmpty ? widget.product.unit : 'packet';
 
     return GestureDetector(
+      onTap: widget.onTap,
       onTapDown: (_) => setState(() => _isPressed = true),
-      onTapUp: (_) {
-        setState(() => _isPressed = false);
-        widget.onTap();
-      },
+      onTapUp: (_) => setState(() => _isPressed = false),
       onTapCancel: () => setState(() => _isPressed = false),
       child: AnimatedScale(
         scale: _isPressed ? 0.94 : 1.0,

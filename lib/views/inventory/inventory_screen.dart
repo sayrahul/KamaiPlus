@@ -19,6 +19,7 @@ class InventoryScreen extends StatefulWidget {
 class _InventoryScreenState extends State<InventoryScreen> {
   List<ProductModel> _products = [];
   List<SaleModel> _sales = [];
+  List<InventoryMovementModel> _movements = [];
   bool _isLoading = true;
   bool _isAssetMasked = false;
   String _search = '';
@@ -34,10 +35,12 @@ class _InventoryScreenState extends State<InventoryScreen> {
     try {
       final products = await LocalDatabase.instance.getAllProducts();
       final sales = await LocalDatabase.instance.getAllSales(limit: 50);
+      final movements = await LocalDatabase.instance.getAllInventoryMovements(limit: 50);
       if (mounted) {
         setState(() {
           _products = products;
           _sales = sales;
+          _movements = movements;
           _isLoading = false;
         });
       }
@@ -847,6 +850,67 @@ class _InventoryScreenState extends State<InventoryScreen> {
   // TAB 2: STOCK AUDIT TRAIL CONTENT
   // =========================================================================
   Widget _buildStockAuditTrailContent() {
+    if (_movements.isNotEmpty) {
+      return Column(
+        children: _movements.take(12).map((m) {
+          final timeStr = DateFormat('dd MMM, hh:mm a').format(m.createdAt);
+          final isSale = m.movementType == 'SALE';
+          final isPurchase = m.movementType == 'PURCHASE';
+
+          final icon = isSale
+              ? Icons.arrow_downward_rounded
+              : (isPurchase ? Icons.arrow_upward_rounded : Icons.sync_rounded);
+          final color = isSale
+              ? const Color(0xFFDC2626)
+              : (isPurchase ? const Color(0xFF059669) : const Color(0xFFD97706));
+          final bgColor = isSale
+              ? const Color(0xFFFEE2E2)
+              : (isPurchase ? const Color(0xFFECFDF5) : const Color(0xFFFEF3C7));
+
+          return Container(
+            margin: const EdgeInsets.only(bottom: 8),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: const Color(0xFFEEF2F6)),
+            ),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(7),
+                  decoration: BoxDecoration(color: bgColor, borderRadius: BorderRadius.circular(8)),
+                  child: Icon(icon, size: 16, color: color),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        m.productName,
+                        style: GoogleFonts.outfit(fontSize: 13, fontWeight: FontWeight.w700, color: const Color(0xFF0F172A)),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      Text(
+                        '${m.movementType} • ${m.previousStock.toInt()} → ${m.newStock.toInt()} stock • $timeStr',
+                        style: GoogleFonts.inter(fontSize: 10.5, color: const Color(0xFF64748B)),
+                      ),
+                    ],
+                  ),
+                ),
+                Text(
+                  '${isSale ? "-" : "+"}${m.quantity.toStringAsFixed(0)}',
+                  style: GoogleFonts.jetBrainsMono(fontSize: 13, fontWeight: FontWeight.w800, color: color),
+                ),
+              ],
+            ),
+          );
+        }).toList(),
+      );
+    }
+
     if (_sales.isEmpty) {
       return Container(
         padding: const EdgeInsets.all(28),

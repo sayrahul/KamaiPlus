@@ -487,3 +487,156 @@ class StoreProfileModel {
     upiAccountsJson: map['upi_accounts_json'] ?? '[{"id":"upi_1","label":"Shop Primary QR","upi_vpa":"rahuljadhav44@ybl","is_default":1}]',
   );
 }
+
+class InventoryMovementModel {
+  final String id;
+  final String businessId;
+  final String productId;
+  final String productName;
+  final String movementType; // 'SALE' | 'PURCHASE' | 'RETURN' | 'ADJUSTMENT' | 'DAMAGE'
+  final double quantity;
+  final double previousStock;
+  final double newStock;
+  final String? referenceId;
+  final DateTime createdAt;
+
+  InventoryMovementModel({
+    required this.id,
+    required this.businessId,
+    required this.productId,
+    required this.productName,
+    required this.movementType,
+    required this.quantity,
+    required this.previousStock,
+    required this.newStock,
+    this.referenceId,
+    required this.createdAt,
+  });
+
+  Map<String, dynamic> toMap() => {
+    'id': id,
+    'business_id': businessId,
+    'product_id': productId,
+    'product_name': productName,
+    'movement_type': movementType,
+    'quantity': quantity,
+    'previous_stock': previousStock,
+    'new_stock': newStock,
+    'reference_id': referenceId,
+    'created_at': createdAt.toIso8601String(),
+  };
+
+  factory InventoryMovementModel.fromMap(Map<String, dynamic> map) => InventoryMovementModel(
+    id: map['id'] ?? '',
+    businessId: map['business_id'] ?? '',
+    productId: map['product_id'] ?? '',
+    productName: map['product_name'] ?? '',
+    movementType: map['movement_type'] ?? 'SALE',
+    quantity: (map['quantity'] as num?)?.toDouble() ?? 0.0,
+    previousStock: (map['previous_stock'] as num?)?.toDouble() ?? 0.0,
+    newStock: (map['new_stock'] as num?)?.toDouble() ?? 0.0,
+    referenceId: map['reference_id'],
+    createdAt: DateTime.tryParse(map['created_at'] ?? '') ?? DateTime.now(),
+  );
+}
+
+class SupplierModel {
+  final String id;
+  final String businessId;
+  final String name;
+  final String phone;
+  final String category;
+  final int currentBalancePaise; // Udhar due to supplier
+  final String? gstin;
+  final String syncStatus;
+
+  SupplierModel({
+    required this.id,
+    required this.businessId,
+    required this.name,
+    required this.phone,
+    required this.category,
+    this.currentBalancePaise = 0,
+    this.gstin,
+    this.syncStatus = 'synced',
+  });
+
+  Map<String, dynamic> toMap() => {
+    'id': id,
+    'business_id': businessId,
+    'name': name,
+    'phone': phone,
+    'category': category,
+    'current_balance_paise': currentBalancePaise,
+    'gstin': gstin,
+    'sync_status': syncStatus,
+  };
+
+  factory SupplierModel.fromMap(Map<String, dynamic> map) => SupplierModel(
+    id: map['id'] ?? '',
+    businessId: map['business_id'] ?? '',
+    name: map['name'] ?? '',
+    phone: map['phone'] ?? '',
+    category: map['category'] ?? 'General',
+    currentBalancePaise: map['current_balance_paise'] ?? 0,
+    gstin: map['gstin'],
+    syncStatus: map['sync_status'] ?? 'pending',
+  );
+}
+
+class CashRegisterShiftModel {
+  final String id;
+  final String businessId;
+  final int openingCashPaise;
+  final int cashSalesPaise;
+  final int cashExpensesPaise;
+  final int expectedClosingPaise;
+  final int actualClosingPaise;
+  final int differencePaise;
+  final String status; // 'open' | 'closed'
+  final DateTime openedAt;
+  final DateTime? closedAt;
+
+  CashRegisterShiftModel({
+    required this.id,
+    required this.businessId,
+    required this.openingCashPaise,
+    this.cashSalesPaise = 0,
+    this.cashExpensesPaise = 0,
+    required this.expectedClosingPaise,
+    this.actualClosingPaise = 0,
+    this.differencePaise = 0,
+    this.status = 'open',
+    required this.openedAt,
+    this.closedAt,
+  });
+
+  Map<String, dynamic> toMap() => {
+    'id': id,
+    'business_id': businessId,
+    'opening_cash_paise': openingCashPaise,
+    'cash_sales_paise': cashSalesPaise,
+    'cash_expenses_paise': cashExpensesPaise,
+    'expected_closing_paise': expectedClosingPaise,
+    'actual_closing_paise': actualClosingPaise,
+    'difference_paise': differencePaise,
+    'status': status,
+    'opened_at': openedAt.toIso8601String(),
+    'closed_at': closedAt?.toIso8601String(),
+  };
+
+  factory CashRegisterShiftModel.fromMap(Map<String, dynamic> map) => CashRegisterShiftModel(
+    id: map['id'] ?? '',
+    businessId: map['business_id'] ?? '',
+    openingCashPaise: map['opening_cash_paise'] ?? 0,
+    cashSalesPaise: map['cash_sales_paise'] ?? 0,
+    cashExpensesPaise: map['cash_expenses_paise'] ?? 0,
+    expectedClosingPaise: map['expected_closing_paise'] ?? 0,
+    actualClosingPaise: map['actual_closing_paise'] ?? 0,
+    differencePaise: map['difference_paise'] ?? 0,
+    status: map['status'] ?? 'open',
+    openedAt: DateTime.tryParse(map['opened_at'] ?? '') ?? DateTime.now(),
+    closedAt: map['closed_at'] != null ? DateTime.tryParse(map['closed_at']) : null,
+  );
+}
+

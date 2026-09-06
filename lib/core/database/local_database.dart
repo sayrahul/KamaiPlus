@@ -61,6 +61,47 @@ class LocalDatabase {
         note TEXT
       )
     ''');
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS inventory_movements (
+        id TEXT PRIMARY KEY,
+        business_id TEXT NOT NULL,
+        product_id TEXT NOT NULL,
+        product_name TEXT NOT NULL,
+        movement_type TEXT NOT NULL,
+        quantity REAL NOT NULL,
+        previous_stock REAL NOT NULL,
+        new_stock REAL NOT NULL,
+        reference_id TEXT,
+        created_at TEXT NOT NULL
+      )
+    ''');
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS suppliers (
+        id TEXT PRIMARY KEY,
+        business_id TEXT NOT NULL,
+        name TEXT NOT NULL,
+        phone TEXT NOT NULL,
+        category TEXT NOT NULL,
+        current_balance_paise INTEGER NOT NULL,
+        gstin TEXT,
+        sync_status TEXT NOT NULL
+      )
+    ''');
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS cash_register_shifts (
+        id TEXT PRIMARY KEY,
+        business_id TEXT NOT NULL,
+        opening_cash_paise INTEGER NOT NULL,
+        cash_sales_paise INTEGER NOT NULL,
+        cash_expenses_paise INTEGER NOT NULL,
+        expected_closing_paise INTEGER NOT NULL,
+        actual_closing_paise INTEGER NOT NULL,
+        difference_paise INTEGER NOT NULL,
+        status TEXT NOT NULL,
+        opened_at TEXT NOT NULL,
+        closed_at TEXT
+      )
+    ''');
     try {
       await db.execute('ALTER TABLE customers ADD COLUMN address TEXT');
     } catch (_) {}
@@ -378,13 +419,27 @@ class LocalDatabase {
       // 1. Insert Sale record
       await txn.insert('sales', sale.toMap());
 
-      // 2. Decrement inventory stock for each sold product
+      // 2. Decrement inventory stock for each sold product & record audit movement
       for (var item in cartItems) {
         await txn.rawUpdate('''
           UPDATE products
           SET stock_quantity = stock_quantity - ?
           WHERE id = ?
         ''', [item.quantity, item.product.id]);
+
+        final movement = InventoryMovementModel(
+          id: _uuid.v4(),
+          businessId: businessId,
+          productId: item.product.id,
+          productName: item.product.name,
+          movementType: 'SALE',
+          quantity: item.quantity,
+          previousStock: item.product.stockQuantity,
+          newStock: item.product.stockQuantity - item.quantity,
+          referenceId: saleId,
+          createdAt: DateTime.now(),
+        );
+        await txn.insert('inventory_movements', movement.toMap());
       }
 
       // 3. If Udhar (credit), update customer balance and record ledger entry
@@ -722,5 +777,87 @@ class LocalDatabase {
     final map = profile.toMap();
     map['id'] = 'default_store';
     await db.insert('store_profile', map, conflictAlgorithm: ConflictAlgorithm.replace);
+  }
+
+  // ==========================================
+  // INVENTORY MOVEMENTS AUDIT TRAIL
+  // ==========================================
+  Future<void> recordInventoryMovement(InventoryMovementModel movement) async {
+    final db = await instance.database;
+    await db.insert('inventory_movements', movement.toMap());
+  }
+
+  Future<List<InventoryMovementModel>> getAllInventoryMovements({int limit = 100}) async {
+    final db = await instance.database;
+    final result = await db.query(
+      'inventory_movements',
+      orderBy: 'created_at DESC',
+      limit: limit,
+    );
+    return result.map((m) => InventoryMovementModel.fromMap(m)).toList();
+  }
+
+  // ==========================================
+  // SUPPLIERS MASTER
+  // ==========================================
+  Future<List<SupplierModel>> getAllSuppliers() async {
+    final db = await instance.database;
+    final result = await db.query('suppliers', orderBy: 'name ASC');
+    if (result.isEmpty) {
+      // Seed default suppliers if empty
+      final defaultSuppliers = [
+        SupplierModel(
+          id: 'sup_1',
+          businessId: 'biz_starter_pos',
+          name: 'Metro Cash & Carry India',
+          phone: '+919820011223',
+          category: 'FMCG & Staples Wholesale',
+          currentBalancePaise: 0,
+        ),
+        SupplierModel(
+          id: 'sup_2',
+          businessId: 'biz_starter_pos',
+          name: 'Hindustan Unilever Distributor',
+          phone: '+919819922334',
+          category: 'Personal & Home Care',
+          currentBalancePaise: 1860000,
+        ),
+        SupplierModel(
+          id: 'sup_3',
+          businessId: 'biz_starter_pos',
+          name: 'Parle & Britannia Agencies',
+          phone: '+919867733445',
+          category: 'Biscuits & Confectionery',
+          currentBalancePaise: 340000,
+        ),
+      ];
+      for (final s in defaultSuppliers) {
+        await db.insert('suppliers', s.toMap(), conflictAlgorithm: ConflictAlgorithm.replace);
+      }
+      return defaultSuppliers;
+    }
+    return result.map((m) => SupplierModel.fromMap(m)).toList();
+  }
+
+  Future<void> upsertSupplier(SupplierModel supplier) async {
+    final db = await instance.database;
+    await db.insert('suppliers', supplier.toMap(), conflictAlgorithm: ConflictAlgorithm.replace);
+  }
+
+  // ==========================================
+  // CASH REGISTER SHIFTS
+  // ==========================================
+  Future<void> saveCashRegisterShift(CashRegisterShiftModel shift) async {
+    final db = await instance.database;
+    await db.insert('cash_register_shifts', shift.toMap(), conflictAlgorithm: ConflictAlgorithm.replace);
+  }
+
+  Future<CashRegisterShiftModel?> getLatestCashRegisterShift() async {
+    final db = await instance.database;
+    final result = await db.query('cash_register_shifts', orderBy: 'opened_at DESC', limit: 1);
+    if (result.isNotEmpty) {
+      return CashRegisterShiftModel.fromMap(result.first);
+    }
+    return null;
   }
 }

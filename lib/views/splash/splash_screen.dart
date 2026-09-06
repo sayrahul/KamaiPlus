@@ -4,6 +4,9 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../dashboard/home_dashboard_screen.dart';
 import '../auth/login_screen.dart';
+import '../cash_register/cash_register_screen.dart';
+import '../purchases/purchases_screen.dart';
+import '../reports/gst_reports_screen.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -43,9 +46,31 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
         final isLoggedIn = prefs.getBool('is_logged_in') ?? false;
         final isOnboarded = prefs.getBool('is_onboarded') ?? false;
 
-        final Widget target = (isLoggedIn && isOnboarded)
-            ? HomeDashboardScreen(key: HomeDashboardScreen.dashboardKey)
-            : const LoginScreen();
+        final testScreen = prefs.getString('test_screen');
+        Widget target;
+        if (testScreen == 'home') {
+          target = HomeDashboardScreen(key: HomeDashboardScreen.dashboardKey, initialIndex: 0);
+        } else if (testScreen == 'product') {
+          target = HomeDashboardScreen(key: HomeDashboardScreen.dashboardKey, initialIndex: 1);
+        } else if (testScreen == 'pos') {
+          target = HomeDashboardScreen(key: HomeDashboardScreen.dashboardKey, initialIndex: 2);
+        } else if (testScreen == 'checkout') {
+          target = HomeDashboardScreen(key: HomeDashboardScreen.dashboardKey, initialIndex: 2, autoOpenCheckout: true);
+        } else if (testScreen == 'khata') {
+          target = HomeDashboardScreen(key: HomeDashboardScreen.dashboardKey, initialIndex: 3);
+        } else if (testScreen == 'menu') {
+          target = HomeDashboardScreen(key: HomeDashboardScreen.dashboardKey, initialIndex: 4);
+        } else if (testScreen == 'cash_register') {
+          target = const CashRegisterScreen();
+        } else if (testScreen == 'purchases') {
+          target = const PurchasesScreen();
+        } else if (testScreen == 'gst_reports') {
+          target = const GstReportsScreen();
+        } else {
+          target = (isLoggedIn && isOnboarded)
+              ? HomeDashboardScreen(key: HomeDashboardScreen.dashboardKey)
+              : const LoginScreen();
+        }
 
 
         if (!mounted) return;

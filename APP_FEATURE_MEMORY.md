@@ -209,3 +209,16 @@ Comprehensive enterprise-grade retail UX upgrade suite aligned with PhonePe Busi
 * **HSN-Wise Sales Table:** Official Table 12 HSN summary table with HSN codes (`1902, 1512, 3401, 0402, 2106, 3306, 1006`), descriptions, GST rates (5%, 12%, 18%), UQC units, quantities, taxable values, CGST, SGST, and total invoice values, complete with search and aggregate totals.
 * **1-Click CA Export Package:** Complete compliance audit package bundle featuring GSTR-1 JSON, GSTR-3B Excel worksheet, Table 12 HSN CSV, B2B wholesale register, and purchase inward vouchers, with 1-click ZIP export and direct WhatsApp sharing with Chartered Accountants.
 
+---
+
+## 🏛️ 7. PWA DOCUMENTATION PARITY & MASTER HANDOVER (SEPTEMBER 06, 2026)
+* **Document Audited:** `KamaiPlus_PWA_Documentation.docx` (51,597 chars, 707 paragraphs, direct audit from `sayrahul/kamai`).
+* **14 Database Tables Parity:**
+  - `businesses` mapped to `store_profile` SQLite table + `SharedPreferences`.
+  - `categories`, `products`, `customers`, `sales`, `ledger_transactions`, `expenses` all verified.
+  - Added dedicated SQLite tables: `inventory_movements` (stock audit ledger for SALE, PURCHASE, ADJUSTMENT), `suppliers` (vendor master with `current_balance_paise`), and `cash_register_shifts` (shift history).
+  - Every POS sale automatically logs an atomic `inventory_movements` record (`movement_type: 'SALE'`).
+  - Stock Audit Trail in `InventoryScreen` reads and renders live movements from `inventory_movements`.
+* **Master Handover Document:** Created `HANDOVER.md` in project root covering all completed features, PWA parity analysis, remaining backend/services integrations (Meta Cloud API, Gemini live OCR, Razorpay Android SDK, Bluetooth hardware auto-connect), and UI enhancements.
+
+
