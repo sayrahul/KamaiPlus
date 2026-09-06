@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../core/database/local_database.dart';
 import '../../services/firestore_sync_service.dart';
+import '../common/kamai_bottom_nav.dart';
 
 class BackupRestoreScreen extends StatefulWidget {
   const BackupRestoreScreen({super.key});
@@ -258,6 +259,7 @@ class _BackupRestoreScreenState extends State<BackupRestoreScreen> {
                 ),
               ],
             ),
+      bottomNavigationBar: const KamaiBottomNav(),
     );
   }
 

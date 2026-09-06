@@ -1357,7 +1357,7 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
             ...filtered.map((p) => _buildPurchaseCard(p)),
         ],
       ),
-      bottomNavigationBar: const KamaiBottomNav(currentIndex: 4),
+      bottomNavigationBar: const KamaiBottomNav(),
     );
   }
 

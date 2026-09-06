@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../dashboard/home_dashboard_screen.dart';
+import '../menu/menu_screen.dart';
 
 class KamaiBottomNav extends StatelessWidget {
   final int currentIndex;
@@ -17,6 +18,17 @@ class KamaiBottomNav extends StatelessWidget {
     HapticFeedback.selectionClick();
     if (onTabTap != null) {
       onTabTap!(index);
+      return;
+    }
+
+    if (index == 4) {
+      MenuScreen.show(
+        context,
+        currentTabIndex: currentIndex,
+        onNavigateTab: (targetIndex) {
+          HomeDashboardScreen.switchTab(context, targetIndex);
+        },
+      );
       return;
     }
 

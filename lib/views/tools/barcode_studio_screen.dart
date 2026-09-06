@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../core/database/local_database.dart';
 import '../../models/models.dart';
+import '../common/kamai_bottom_nav.dart';
 
 class BarcodeStudioScreen extends StatefulWidget {
   const BarcodeStudioScreen({super.key});
@@ -15,26 +17,52 @@ class _BarcodeStudioScreenState extends State<BarcodeStudioScreen> {
   ProductModel? _selectedProduct;
   int _copies = 10;
   bool _isLoading = true;
+  String _storeName = 'KAMAI STORE';
 
   @override
   void initState() {
     super.initState();
-    _loadProducts();
+    _loadProductsAndStore();
   }
 
-  Future<void> _loadProducts() async {
+  Future<void> _loadProductsAndStore() async {
     try {
       final products = await LocalDatabase.instance.getAllProducts();
+      final profile = await LocalDatabase.instance.getStoreProfile();
       if (mounted) {
         setState(() {
           _products = products;
           if (products.isNotEmpty) _selectedProduct = products.first;
+          if (profile.storeName.isNotEmpty) _storeName = profile.storeName.toUpperCase();
           _isLoading = false;
         });
       }
     } catch (_) {
       if (mounted) setState(() => _isLoading = false);
     }
+  }
+
+  void _dispatchPrint() {
+    HapticFeedback.mediumImpact();
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Row(
+          children: [
+            const Icon(Icons.print_rounded, color: Colors.white),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                '✓ Sent $_copies barcode label(s) for "${_selectedProduct?.name ?? 'Item'}" to 58mm printer',
+                style: GoogleFonts.inter(fontSize: 13),
+              ),
+            ),
+          ],
+        ),
+        backgroundColor: const Color(0xFF0F172A),
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      ),
+    );
   }
 
   @override
@@ -83,7 +111,7 @@ class _BarcodeStudioScreenState extends State<BarcodeStudioScreen> {
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Text('Barcode Studio & Label Maker', style: GoogleFonts.outfit(fontSize: 15, fontWeight: FontWeight.w700)),
-                                Text('Print Code128 thermal price stickers for products', style: GoogleFonts.inter(fontSize: 11, color: const Color(0xFF64748B))),
+                                Text('Generate Code128 thermal price stickers for products', style: GoogleFonts.inter(fontSize: 11, color: const Color(0xFF64748B))),
                               ],
                             ),
                           ),
@@ -130,34 +158,43 @@ class _BarcodeStudioScreenState extends State<BarcodeStudioScreen> {
                 const SizedBox(height: 20),
 
                 // Label Mockup
-                Text('STICKER PREVIEW (50mm × 25mm Thermal)', style: GoogleFonts.outfit(fontSize: 12, fontWeight: FontWeight.w800, color: const Color(0xFF64748B), letterSpacing: 0.5)),
+                Text('STICKER PREVIEW (50mm × 25mm Thermal Roll)', style: GoogleFonts.outfit(fontSize: 12, fontWeight: FontWeight.w800, color: const Color(0xFF64748B), letterSpacing: 0.5)),
                 const SizedBox(height: 8),
                 Container(
-                  padding: const EdgeInsets.all(16),
+                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
                   decoration: BoxDecoration(
                     color: Colors.white,
                     borderRadius: BorderRadius.circular(16),
                     border: Border.all(color: const Color(0xFF0F172A), width: 1.5),
+                    boxShadow: const [
+                      BoxShadow(color: Color(0x0A0F172A), blurRadius: 10, offset: Offset(0, 4)),
+                    ],
                   ),
                   child: Column(
                     children: [
-                      Text('KAMAI STORE', style: GoogleFonts.outfit(fontSize: 11, fontWeight: FontWeight.w800)),
+                      Text(
+                        _storeName,
+                        style: GoogleFonts.outfit(fontSize: 12, fontWeight: FontWeight.w800, letterSpacing: 0.5),
+                      ),
+                      const SizedBox(height: 2),
                       Text(
                         _selectedProduct?.name ?? 'Product SKU',
                         style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w700),
                         textAlign: TextAlign.center,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
                       ),
                       const SizedBox(height: 8),
-                      // Barcode simulation lines
+                      // Barcode simulation graphic
                       Container(
-                        height: 48,
-                        padding: const EdgeInsets.symmetric(horizontal: 20),
+                        height: 52,
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
                         child: Row(
                           mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                           children: List.generate(
-                            28,
+                            38,
                             (i) => Container(
-                              width: (i % 3 == 0) ? 3 : ((i % 2 == 0) ? 2 : 1),
+                              width: (i % 4 == 0) ? 3.5 : ((i % 3 == 0) ? 2.5 : ((i % 2 == 0) ? 1.5 : 1)),
                               color: Colors.black,
                             ),
                           ),
@@ -165,24 +202,24 @@ class _BarcodeStudioScreenState extends State<BarcodeStudioScreen> {
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        _selectedProduct?.barcode ?? '890123456789',
-                        style: GoogleFonts.inter(fontSize: 11, letterSpacing: 2, fontWeight: FontWeight.w600),
+                        _selectedProduct?.barcode ?? '8901234567890',
+                        style: GoogleFonts.inter(fontSize: 12, letterSpacing: 2.5, fontWeight: FontWeight.w700),
                       ),
                       const SizedBox(height: 6),
                       Text(
                         'MRP: ₹${((_selectedProduct?.sellingPricePaise ?? 0) / 100).toStringAsFixed(2)}',
-                        style: GoogleFonts.outfit(fontSize: 16, fontWeight: FontWeight.w800, color: const Color(0xFF0F172A)),
+                        style: GoogleFonts.outfit(fontSize: 18, fontWeight: FontWeight.w800, color: const Color(0xFF0F172A)),
+                      ),
+                      Text(
+                        '(Incl. of all taxes)',
+                        style: GoogleFonts.inter(fontSize: 9, color: const Color(0xFF64748B)),
                       ),
                     ],
                   ),
                 ),
                 const SizedBox(height: 24),
                 ElevatedButton.icon(
-                  onPressed: () {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text('Dispatched $_copies barcode labels to Bluetooth thermal printer')),
-                    );
-                  },
+                  onPressed: _dispatchPrint,
                   icon: const Icon(Icons.print_rounded, size: 18),
                   label: Text('Print $_copies Labels via Bluetooth', style: GoogleFonts.outfit(fontSize: 14, fontWeight: FontWeight.w700)),
                   style: ElevatedButton.styleFrom(
@@ -194,6 +231,7 @@ class _BarcodeStudioScreenState extends State<BarcodeStudioScreen> {
                 ),
               ],
             ),
+      bottomNavigationBar: const KamaiBottomNav(),
     );
   }
 }

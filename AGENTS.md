@@ -1,6 +1,13 @@
-﻿# 🛡️ KAMAI+ (KAMAIPLUS) NATIVE ANDROID — AI AGENT CONSTITUTION & PROTOCOLS
+# 🛡️ KAMAI+ (KAMAIPLUS) NATIVE ANDROID — AI AGENT CONSTITUTION & PROTOCOLS
 
 You are working on **KamaiPlus Native Android App** (`com.kamaiplus.pos`), built with **Flutter & SQLite** for Indian Small & Medium Retail Businesses (Kirana, Apparel, Electronics, General Stores).
+
+---
+
+## 🧠 0. MEMORY & REGRESSION PREVENTION PROTOCOL (MANDATORY)
+1. **Check `APP_FEATURE_MEMORY.md` First:** Before touching any screen, file, or flow, you MUST check `APP_FEATURE_MEMORY.md` to understand what features and UX decisions are already solved and locked.
+2. **Never Break or Revert Solved Decisions:** Features and user preferences logged in `APP_FEATURE_MEMORY.md` (e.g. Menu as a bottom sheet modal, pencil edit button, cash register chips) MUST NEVER be modified, deleted, or reverted without explicit user instruction.
+3. **Update Memory After Every Task:** Whenever a new feature, screen layout, or UX decision is finalized, record it into `APP_FEATURE_MEMORY.md`.
 
 ---
 
@@ -18,12 +25,14 @@ You are working on **KamaiPlus Native Android App** (`com.kamaiplus.pos`), built
 ---
 
 ## 📱 2. APP NAVIGATION STRUCTURE (LOCKED)
-The Bottom Navigation Bar has exactly 5 tabs in this order:
-1. **Home** (`HomeDashboardScreen` / `HomePulseTab`)
-2. **Product** (`ProductsScreen`)
-3. **Billing** (`PosBillingScreen`)
-4. **Khata** (`KhataScreen`)
-5. **Menu** (`MenuScreen` — hub for Inventory, Cash Register, Purchases, Reports, Settings)
+The Bottom Navigation Bar has exactly 5 items:
+1. **Home** (`HomePulseTab`) — Page tab index 0
+2. **Product** (`ProductsScreen`) — Page tab index 1 (NO inner bottom navbar)
+3. **Billing** (`PosBillingScreen`) — Page tab index 2 (Elevated Center Button)
+4. **Khata** (`KhataScreen`) — Page tab index 3
+5. **Menu** (`MenuScreen.show(context)`) — **STRICTLY A BOTTOM SHEET MODAL!**
+   - When tapped on bottom navbar, Menu slides up from the bottom as a modal bottom sheet with an 'X' close button.
+   - It is NEVER a 5th full page in PageView. Dismissing it keeps the user on their current tab.
 
 ---
 

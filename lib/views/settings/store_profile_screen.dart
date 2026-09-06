@@ -8,6 +8,7 @@ import '../../core/database/local_database.dart';
 import '../../models/models.dart';
 import '../common/pro_upgrade_modal.dart';
 import '../common/upi_standee_modal.dart';
+import '../common/kamai_bottom_nav.dart';
 import '../growth/growth_campaigns_screen.dart';
 import '../auth/login_screen.dart';
 
@@ -338,6 +339,7 @@ class _StoreProfileScreenState extends State<StoreProfileScreen> {
                 ],
               ),
             ),
+      bottomNavigationBar: const KamaiBottomNav(),
     );
   }
 

@@ -15,6 +15,34 @@ class HomeDashboardScreen extends StatefulWidget {
   static final GlobalKey<HomeDashboardScreenState> dashboardKey = GlobalKey<HomeDashboardScreenState>();
 
   static void switchTab(BuildContext context, int index) {
+    if (index == 4) {
+      if (dashboardKey.currentState != null) {
+        Navigator.popUntil(context, (route) => route.isFirst);
+        final state = dashboardKey.currentState!;
+        MenuScreen.show(
+          state.context,
+          currentTabIndex: state._currentIndex,
+          onNavigateTab: (idx) => state.setTab(idx),
+        );
+      } else {
+        Navigator.pushAndRemoveUntil(
+          context,
+          MaterialPageRoute(builder: (_) => HomeDashboardScreen(key: dashboardKey, initialIndex: 2)),
+          (route) => false,
+        );
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (dashboardKey.currentContext != null) {
+            MenuScreen.show(
+              dashboardKey.currentContext!,
+              currentTabIndex: 2,
+              onNavigateTab: (idx) => dashboardKey.currentState?.setTab(idx),
+            );
+          }
+        });
+      }
+      return;
+    }
+
     if (dashboardKey.currentState != null) {
       dashboardKey.currentState!.setTab(index);
       Navigator.popUntil(context, (route) => route.isFirst);
@@ -39,7 +67,7 @@ class HomeDashboardScreenState extends State<HomeDashboardScreen> {
   @override
   void initState() {
     super.initState();
-    _currentIndex = widget.initialIndex;
+    _currentIndex = (widget.initialIndex >= 0 && widget.initialIndex < 4) ? widget.initialIndex : 2;
     _pageController = PageController(initialPage: _currentIndex);
     _screens = [
       HomePulseTab(
@@ -50,12 +78,19 @@ class HomeDashboardScreenState extends State<HomeDashboardScreen> {
       const ProductsScreen(),
       const PosBillingScreen(),
       const KhataScreen(),
-      MenuScreen(
-        isModal: false,
-        currentTabIndex: 4,
-        onNavigateTab: (index) => setTab(index),
-      ),
     ];
+
+    if (widget.initialIndex == 4) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          MenuScreen.show(
+            context,
+            currentTabIndex: _currentIndex,
+            onNavigateTab: (idx) => setTab(idx),
+          );
+        }
+      });
+    }
   }
 
   @override
@@ -73,6 +108,18 @@ class HomeDashboardScreenState extends State<HomeDashboardScreen> {
     _pageController.jumpToPage(index);
   }
 
+  void _onBottomNavTap(int index) {
+    if (index == 4) {
+      HapticFeedback.selectionClick();
+      MenuScreen.show(
+        context,
+        currentTabIndex: _currentIndex,
+        onNavigateTab: (targetIndex) => setTab(targetIndex),
+      );
+      return;
+    }
+    setTab(index);
+  }
 
   void _onPageChanged(int index) {
     if (_currentIndex != index) {
@@ -93,7 +140,7 @@ class HomeDashboardScreenState extends State<HomeDashboardScreen> {
       ),
       bottomNavigationBar: KamaiBottomNav(
         currentIndex: _currentIndex,
-        onTabTap: setTab,
+        onTabTap: _onBottomNavTap,
       ),
     );
   }
