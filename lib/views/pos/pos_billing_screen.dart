@@ -2,12 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
+import '../../core/constants/business_vertical_config.dart';
 import '../../models/models.dart';
 import '../../core/database/local_database.dart';
 import '../../services/firestore_sync_service.dart';
 import 'pos_checkout_modal.dart';
 import 'barcode_scanner_view.dart';
-
 
 class PosBillingScreen extends StatefulWidget {
   final bool autoOpenCheckout;
@@ -48,11 +48,27 @@ class _PosBillingScreenState extends State<PosBillingScreen> {
       CartTab(id: 'tab_1', name: 'Bill #1', number: 1, items: {}),
     ];
     _loadData();
+    _loadBusinessType();
+    BusinessVerticals.activeBusinessTypeNotifier.addListener(_onBusinessTypeChanged);
     FirestoreSyncService.instance.liveSyncCounter.addListener(_handleCloudSyncUpdate);
+  }
+
+  Future<void> _loadBusinessType() async {
+    try {
+      final profile = await LocalDatabase.instance.getStoreProfile();
+      if (profile.businessType.isNotEmpty) {
+        BusinessVerticals.updateActiveBusinessType(profile.businessType);
+      }
+    } catch (_) {}
+  }
+
+  void _onBusinessTypeChanged() {
+    if (mounted) setState(() {});
   }
 
   @override
   void dispose() {
+    BusinessVerticals.activeBusinessTypeNotifier.removeListener(_onBusinessTypeChanged);
     FirestoreSyncService.instance.liveSyncCounter.removeListener(_handleCloudSyncUpdate);
     _searchController.dispose();
     super.dispose();
@@ -384,7 +400,7 @@ class _PosBillingScreenState extends State<PosBillingScreen> {
                         color: const Color(0xFF0F172A),
                       ),
                       decoration: InputDecoration(
-                        hintText: 'Scan barcode or type Atta, Rice, Oil, Maggi...',
+                        hintText: BusinessVerticals.resolve(BusinessVerticals.activeBusinessTypeNotifier.value).placeholders.searchProduct,
                         hintStyle: GoogleFonts.plusJakartaSans(
                           fontSize: 12.5,
                           color: const Color(0xFF94A3B8),

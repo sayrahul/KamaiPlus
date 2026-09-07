@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:uuid/uuid.dart';
+import '../../core/constants/business_vertical_config.dart';
 import '../../core/database/local_database.dart';
 import '../../models/models.dart';
 import '../../services/firestore_sync_service.dart';
@@ -492,7 +493,9 @@ class _AddProductModalState extends State<AddProductModal> {
                       TextFormField(
                         controller: _nameCtrl,
                         style: GoogleFonts.inter(fontSize: 13.5, fontWeight: FontWeight.w600),
-                        decoration: _buildInputDecoration('e.g. Fortune Sunflower Oil 1L'),
+                        decoration: _buildInputDecoration(
+                          BusinessVerticals.resolve(BusinessVerticals.activeBusinessTypeNotifier.value).placeholders.newProductName,
+                        ),
                         validator: (v) => (v == null || v.trim().isEmpty) ? 'Product name is required' : null,
                       ),
                       const SizedBox(height: 12),
