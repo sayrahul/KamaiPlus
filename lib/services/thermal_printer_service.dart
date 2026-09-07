@@ -54,6 +54,9 @@ class ThermalPrinterService {
       bytes.addAll('Customer: ${sale.customerName}\n'.codeUnits);
     }
     bytes.addAll('Payment: ${sale.paymentMethod.toUpperCase()}\n'.codeUnits);
+    if (sale.tableNumber != null && sale.tableNumber!.isNotEmpty) {
+      bytes.addAll('Table: ${sale.tableNumber}\n'.codeUnits);
+    }
 
     bytes.addAll('${"-" * width}\n'.codeUnits);
 
@@ -84,6 +87,7 @@ class ThermalPrinterService {
         final a = amtStr.padLeft(12);
         bytes.addAll('$shortName $q $a\n'.codeUnits);
       }
+
     }
 
     bytes.addAll('${"-" * width}\n'.codeUnits);
@@ -107,6 +111,30 @@ class ThermalPrinterService {
     // Auto-cut paper (GS V 66 0)
     bytes.addAll([0x1D, 0x56, 0x42, 0x00]);
 
+    return Uint8List.fromList(bytes);
+  }
+
+  static Uint8List generateLabelBytes({
+    required ProductModel product,
+    required String storeName,
+    int copies = 1,
+  }) {
+    final bytes = <int>[0x1B, 0x40];
+    for (var i = 0; i < copies; i++) {
+      bytes.addAll([0x1B, 0x61, 0x01, 0x1B, 0x45, 0x01]);
+      bytes.addAll('$storeName\n'.codeUnits);
+      bytes.addAll([0x1B, 0x45, 0x00]);
+      bytes.addAll('${product.name}\n'.codeUnits);
+      bytes.addAll('${MoneyFormatter.formatINR(product.sellingPricePaise)}  ${product.unit}\n'.codeUnits);
+      if (product.barcode != null && product.barcode!.isNotEmpty) {
+        final barcode = product.barcode!;
+        bytes.addAll([0x1D, 0x68, 70, 0x1D, 0x77, 2, 0x1D, 0x6B, 0x04, barcode.length]);
+        bytes.addAll(barcode.codeUnits);
+        bytes.add(0);
+      }
+      bytes.addAll('\n\n'.codeUnits);
+    }
+    bytes.addAll([0x1D, 0x56, 0x42, 0]);
     return Uint8List.fromList(bytes);
   }
 }

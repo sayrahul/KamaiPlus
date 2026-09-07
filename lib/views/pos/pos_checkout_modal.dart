@@ -24,12 +24,14 @@ class PosCheckoutModal extends StatefulWidget {
   final Function(int index)? onSwitchTab;
   final Function()? onAddNewBill;
   final Function(int index)? onCloseTab;
-  final Function(CartItemModel item, int newQty) onUpdateQuantity;
+  final Function(CartItemModel item, double newQty) onUpdateQuantity;
   final Function(CartItemModel item) onRemoveItem;
   final Function() onClearCart;
   final Function() onHoldBill;
   final Function(CustomerModel? customer) onCustomerChanged;
   final Function() onSaleCompleted;
+  final String? tableNumber;
+  final Function(String?)? onTableChanged;
   final bool autoOpenCustomerDropdown;
   final bool autoOpenSplit;
 
@@ -51,6 +53,8 @@ class PosCheckoutModal extends StatefulWidget {
     required this.onHoldBill,
     required this.onCustomerChanged,
     required this.onSaleCompleted,
+    this.tableNumber,
+    this.onTableChanged,
     this.autoOpenCustomerDropdown = false,
     this.autoOpenSplit = false,
   });
@@ -67,12 +71,14 @@ class PosCheckoutModal extends StatefulWidget {
     Function(int index)? onSwitchTab,
     Function()? onAddNewBill,
     Function(int index)? onCloseTab,
-    required Function(CartItemModel item, int newQty) onUpdateQuantity,
+    required Function(CartItemModel item, double newQty) onUpdateQuantity,
     required Function(CartItemModel item) onRemoveItem,
     required Function() onClearCart,
     required Function() onHoldBill,
     required Function(CustomerModel? customer) onCustomerChanged,
     required Function() onSaleCompleted,
+    String? tableNumber,
+    Function(String?)? onTableChanged,
     bool autoOpenCustomerDropdown = false,
     bool autoOpenSplit = false,
   }) {
@@ -97,6 +103,8 @@ class PosCheckoutModal extends StatefulWidget {
         onHoldBill: onHoldBill,
         onCustomerChanged: onCustomerChanged,
         onSaleCompleted: onSaleCompleted,
+        tableNumber: tableNumber,
+        onTableChanged: onTableChanged,
         autoOpenCustomerDropdown: autoOpenCustomerDropdown,
         autoOpenSplit: autoOpenSplit,
       ),
@@ -112,6 +120,7 @@ class _PosCheckoutModalState extends State<PosCheckoutModal> {
 
   late int _currentTabIndex;
   CustomerModel? _currentCustomer;
+  String? _tableNumber;
   String _paymentMode = 'cash'; // 'cash', 'upi', 'credit', 'split'
 
   // Cash Tendered state
@@ -164,6 +173,7 @@ class _PosCheckoutModalState extends State<PosCheckoutModal> {
   void initState() {
     super.initState();
     _currentTabIndex = widget.activeTabIndex;
+    _tableNumber = widget.tableNumber;
     if (widget.tabs != null && widget.tabs!.isNotEmpty && _currentTabIndex < widget.tabs!.length) {
       _currentCustomer = widget.tabs![_currentTabIndex].customer ?? widget.selectedCustomer;
     } else {
@@ -209,6 +219,30 @@ class _PosCheckoutModalState extends State<PosCheckoutModal> {
     _splitUpiController.text = other.toString();
     _splitCreditController.text = '0';
     _billDiscountController.clear();
+  }
+
+  Future<void> _chooseTable() async {
+    final controller = TextEditingController(text: _tableNumber ?? '');
+    final result = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Cafe Table Number'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          keyboardType: TextInputType.number,
+          decoration: const InputDecoration(hintText: 'e.g. 4 or A-2'),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, ''), child: const Text('Clear')),
+          ElevatedButton(onPressed: () => Navigator.pop(ctx, controller.text.trim()), child: const Text('Save')),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (!mounted || result == null) return;
+    setState(() => _tableNumber = result.isEmpty ? null : result);
+    widget.onTableChanged?.call(_tableNumber);
   }
 
   @override
@@ -466,6 +500,7 @@ class _PosCheckoutModalState extends State<PosCheckoutModal> {
         splitCashPaise: _paymentMode == 'split' ? splitCashPaise : (_paymentMode == 'cash' ? grandTotalPaise : 0),
         splitUpiPaise: _paymentMode == 'split' ? splitUpiPaise : (_paymentMode == 'upi' ? grandTotalPaise : 0),
         splitCreditPaise: _paymentMode == 'split' ? splitCreditPaise : (_paymentMode == 'credit' ? grandTotalPaise : 0),
+        tableNumber: _tableNumber,
       );
 
       // Soundbox Voice announcement
@@ -737,6 +772,12 @@ class _PosCheckoutModalState extends State<PosCheckoutModal> {
                   // 1. Multi-Bill Draft Tabs (Bill 1, Bill 2, +, etc.)
                   _buildCheckoutDraftTabs(),
                   const SizedBox(height: 16),
+                  OutlinedButton.icon(
+                    onPressed: _chooseTable,
+                    icon: const Icon(Icons.table_restaurant_outlined, size: 18),
+                    label: Text(_tableNumber == null ? 'Assign Cafe Table' : 'Table $_tableNumber'),
+                  ),
+                  const SizedBox(height: 12),
 
                   // 2. Customer Section
                   Row(
@@ -1139,7 +1180,7 @@ class _PosCheckoutModalState extends State<PosCheckoutModal> {
                                     InkWell(
                                       onTap: () {
                                         if (item.quantity > 1) {
-                                          widget.onUpdateQuantity(item, (item.quantity - 1).toInt());
+                                          widget.onUpdateQuantity(item, item.quantity - 1);
                                         } else {
                                           widget.onRemoveItem(item);
                                         }
@@ -1168,7 +1209,7 @@ class _PosCheckoutModalState extends State<PosCheckoutModal> {
                                     // Stepper [+]
                                     InkWell(
                                       onTap: () {
-                                        widget.onUpdateQuantity(item, (item.quantity + 1).toInt());
+                                        widget.onUpdateQuantity(item, item.quantity + 1);
                                         setState(() {});
                                       },
                                       borderRadius: BorderRadius.circular(6),

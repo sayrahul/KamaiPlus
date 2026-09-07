@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../core/database/local_database.dart';
 import '../../core/utils/money_formatter.dart';
 import '../../models/models.dart';
+import '../../services/thermal_printer_service.dart';
 
 class BarcodeStudioScreen extends StatefulWidget {
   const BarcodeStudioScreen({super.key});
@@ -18,6 +20,7 @@ class _BarcodeStudioScreenState extends State<BarcodeStudioScreen> {
   int _copies = 10;
   bool _isLoading = true;
   String _storeName = 'KAMAI STORE';
+  static const _printerChannel = MethodChannel('com.kamaiplus.pos/bluetooth_printer');
 
   // Label Layout Option
   // 'standard': 50x25mm, 'compact': 38x25mm, 'detailed': 50x38mm
@@ -58,8 +61,22 @@ class _BarcodeStudioScreenState extends State<BarcodeStudioScreen> {
     }
   }
 
-  void _dispatchPrint() {
+  Future<void> _dispatchPrint() async {
     HapticFeedback.mediumImpact();
+    final product = _selectedProduct;
+    if (product == null) return;
+    final prefs = await SharedPreferences.getInstance();
+    final address = prefs.getString('printer_mac_address');
+    if (address == null || address.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Bluetooth printer connect karein')));
+      return;
+    }
+    final bytes = ThermalPrinterService.generateLabelBytes(
+      product: product,
+      storeName: _storeName,
+      copies: _copies,
+    );
+    await _printerChannel.invokeMethod('printBytes', {'address': address, 'bytes': bytes});
     final name = _selectedProduct?.name ?? 'Item';
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(

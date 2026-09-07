@@ -114,6 +114,12 @@ class LocalDatabase {
     try {
       await db.execute('ALTER TABLE sales ADD COLUMN split_credit_paise INTEGER DEFAULT 0');
     } catch (_) {}
+    try {
+      await db.execute('ALTER TABLE products ADD COLUMN size_variants_json TEXT DEFAULT \'[]\'');
+    } catch (_) {}
+    try {
+      await db.execute('ALTER TABLE sales ADD COLUMN table_number TEXT');
+    } catch (_) {}
   }
 
   Future _createDB(Database db, int version) async {
@@ -139,6 +145,7 @@ class LocalDatabase {
         tax_rate REAL NOT NULL,
         is_tax_inclusive INTEGER NOT NULL,
         unit TEXT NOT NULL,
+        size_variants_json TEXT DEFAULT '[]',
         sync_status TEXT NOT NULL
       )
     ''');
@@ -172,6 +179,7 @@ class LocalDatabase {
         split_cash_paise INTEGER DEFAULT 0,
         split_upi_paise INTEGER DEFAULT 0,
         split_credit_paise INTEGER DEFAULT 0,
+        table_number TEXT,
         status TEXT NOT NULL,
         items_json TEXT NOT NULL,
         created_at TEXT NOT NULL,
@@ -365,6 +373,9 @@ class LocalDatabase {
       }
 
       for (final product in catalog.products) {
+        final sizeVariants = storeType == 'Apparel / Clothing'
+            ? const ['S', 'M', 'L', 'XL', 'XXL']
+            : const <String>[];
         await txn.insert('products', {
           'id': '${businessId}_${product.id}',
           'business_id': businessId,
@@ -378,6 +389,7 @@ class LocalDatabase {
           'tax_rate': product.taxRate,
           'is_tax_inclusive': 1,
           'unit': product.unit,
+          'size_variants_json': jsonEncode(sizeVariants),
           'sync_status': 'pending',
         });
       }
@@ -544,6 +556,7 @@ class LocalDatabase {
     int splitCashPaise = 0,
     int splitUpiPaise = 0,
     int splitCreditPaise = 0,
+    String? tableNumber,
   }) async {
     final db = await instance.database;
 
@@ -577,6 +590,7 @@ class LocalDatabase {
       splitCashPaise: splitCashPaise,
       splitUpiPaise: splitUpiPaise,
       splitCreditPaise: splitCreditPaise,
+      tableNumber: tableNumber,
       items: itemsList,
       createdAt: DateTime.now(),
       syncStatus: 'pending',
@@ -1090,7 +1104,6 @@ class _StarterProduct {
   final int purchasePricePaise;
   final double stockQuantity;
   final double taxRate;
-
   const _StarterProduct(
     this.id,
     this.name,

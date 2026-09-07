@@ -239,6 +239,7 @@ public class MainActivity extends FlutterActivity implements TextToSpeech.OnInit
                                 String customerName = call.argument("customerName");
                                 String dateStr = call.argument("dateStr");
                                 String paymentMode = call.argument("paymentMode");
+                                String tableNumber = call.argument("tableNumber");
                                 String totalAmount = call.argument("totalAmount");
                                 List<Map<String, Object>> items = call.argument("items");
 
@@ -247,6 +248,7 @@ public class MainActivity extends FlutterActivity implements TextToSpeech.OnInit
                                 if (customerName == null) customerName = "Walk-in Customer";
                                 if (dateStr == null) dateStr = "";
                                 if (paymentMode == null) paymentMode = "CASH";
+                                if (tableNumber == null) tableNumber = "";
                                 if (totalAmount == null) totalAmount = "₹0.00";
                                 if (items == null) items = new ArrayList<>();
 
@@ -286,6 +288,9 @@ public class MainActivity extends FlutterActivity implements TextToSpeech.OnInit
                                 canvas.drawText("Billed To: " + customerName, 40, 100, boldPaint);
                                 canvas.drawText("Date: " + dateStr, 400, 100, subPaint);
                                 canvas.drawText("Payment Mode: " + paymentMode.toUpperCase(), 400, 116, boldPaint);
+                                if (!tableNumber.isEmpty()) {
+                                    canvas.drawText("Table: " + tableNumber, 40, 116, boldPaint);
+                                }
 
                                 canvas.drawLine(40, 128, 555, 128, linePaint);
 

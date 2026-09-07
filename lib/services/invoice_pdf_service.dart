@@ -37,6 +37,7 @@ class InvoicePdfService {
         'customerName': sale.customerName?.isNotEmpty == true ? sale.customerName : 'Walk-in Customer',
         'dateStr': dateStr,
         'paymentMode': sale.paymentMethod,
+        'tableNumber': sale.tableNumber,
         'totalAmount': totalAmount,
         'items': itemsList,
       });

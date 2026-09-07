@@ -1,5 +1,16 @@
 import 'dart:convert';
 
+List<String> _decodeStringList(dynamic value) {
+  if (value == null) return const [];
+  try {
+    final decoded = value is String ? jsonDecode(value) : value;
+    if (decoded is List) {
+      return decoded.map((item) => item.toString()).where((item) => item.isNotEmpty).toList();
+    }
+  } catch (_) {}
+  return const [];
+}
+
 class CategoryModel {
   final String id;
   final String businessId;
@@ -37,6 +48,7 @@ class ProductModel {
   final double taxRate;
   final bool isTaxInclusive;
   final String unit;
+  final List<String> sizeVariants;
   final String syncStatus;
 
   ProductModel({
@@ -52,6 +64,7 @@ class ProductModel {
     this.taxRate = 0.0,
     this.isTaxInclusive = true,
     this.unit = 'pcs',
+    this.sizeVariants = const [],
     this.syncStatus = 'synced',
   });
 
@@ -68,6 +81,7 @@ class ProductModel {
     'tax_rate': taxRate,
     'is_tax_inclusive': isTaxInclusive ? 1 : 0,
     'unit': unit,
+    'size_variants_json': jsonEncode(sizeVariants),
     'sync_status': syncStatus,
   };
 
@@ -84,6 +98,7 @@ class ProductModel {
     taxRate: (map['tax_rate'] as num?)?.toDouble() ?? 0.0,
     isTaxInclusive: (map['is_tax_inclusive'] == 1 || map['is_tax_inclusive'] == true),
     unit: map['unit'] ?? 'pcs',
+    sizeVariants: _decodeStringList(map['size_variants_json']),
     syncStatus: map['sync_status'] ?? 'pending',
   );
 
@@ -91,6 +106,7 @@ class ProductModel {
     double? stockQuantity,
     int? sellingPricePaise,
     String? name,
+    List<String>? sizeVariants,
   }) => ProductModel(
     id: id,
     businessId: businessId,
@@ -104,6 +120,7 @@ class ProductModel {
     taxRate: taxRate,
     isTaxInclusive: isTaxInclusive,
     unit: unit,
+    sizeVariants: sizeVariants ?? this.sizeVariants,
     syncStatus: syncStatus,
   );
 }
@@ -237,6 +254,7 @@ class SaleModel {
   final int splitCashPaise;
   final int splitUpiPaise;
   final int splitCreditPaise;
+  final String? tableNumber;
   final String status;
   final List<Map<String, dynamic>> items;
   final DateTime createdAt;
@@ -257,6 +275,7 @@ class SaleModel {
     this.splitCashPaise = 0,
     this.splitUpiPaise = 0,
     this.splitCreditPaise = 0,
+    this.tableNumber,
     this.status = 'completed',
     required this.items,
     required this.createdAt,
@@ -278,6 +297,7 @@ class SaleModel {
     'split_cash_paise': splitCashPaise,
     'split_upi_paise': splitUpiPaise,
     'split_credit_paise': splitCreditPaise,
+    'table_number': tableNumber,
     'status': status,
     'items_json': jsonEncode(items),
     'created_at': createdAt.toIso8601String(),
@@ -307,6 +327,7 @@ class SaleModel {
       splitCashPaise: map['split_cash_paise'] ?? 0,
       splitUpiPaise: map['split_upi_paise'] ?? 0,
       splitCreditPaise: map['split_credit_paise'] ?? 0,
+      tableNumber: map['table_number'],
       status: map['status'] ?? 'completed',
       items: parsedItems,
       createdAt: DateTime.tryParse(map['created_at'] ?? '') ?? DateTime.now(),
@@ -658,6 +679,7 @@ class CartTabModel {
   int number;
   Map<String, CartItemModel> items;
   CustomerModel? customer;
+  String? tableNumber;
 
   CartTabModel({
     required this.id,
@@ -665,6 +687,7 @@ class CartTabModel {
     required this.number,
     required this.items,
     this.customer,
+    this.tableNumber,
   });
 
   int get totalItemCount => items.values.fold<int>(0, (sum, it) => sum + it.quantity.toInt());
@@ -672,4 +695,3 @@ class CartTabModel {
 }
 
 typedef CartTab = CartTabModel;
-

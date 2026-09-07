@@ -307,5 +307,12 @@ Comprehensive enterprise-grade retail UX upgrade suite aligned with PhonePe Busi
     - During store onboarding, the selected business type replaces the existing starter catalog when preload is enabled.
     - Grocery / Kirana, Apparel / Clothing, Electronics & Mobile, and Cafe / Restaurant each receive four relevant categories and 15 essential products with integer-paise prices and starter stock.
 
+18. **Business-Type POS Adaptations:**
+    - Grocery/Kirana quantity editing supports fractional kg, gram, litre, ml, and piece values from the cart pencil editor with stock validation.
+    - Product records retain integer-paise MRP, selling price, purchase cost, and margin information.
+    - Apparel products support normalized size variants (S, M, L, XL, XXL), shown on product cards and persisted in SQLite.
+    - Barcode Studio generates ESC/POS price-label bytes and dispatches them to the configured Bluetooth thermal printer.
+    - Cafe/Restaurant checkout supports table assignment, draft bill tabs as table-wise open bills, and table numbers on thermal and A4 invoices.
+    - Home dashboard KPI labels and profit calculations adapt to the store type.
 
 

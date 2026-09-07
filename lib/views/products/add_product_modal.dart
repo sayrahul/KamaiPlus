@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:uuid/uuid.dart';
+
 import '../../core/database/local_database.dart';
 import '../../models/models.dart';
 import '../../services/firestore_sync_service.dart';
@@ -54,6 +55,7 @@ class _AddProductModalState extends State<AddProductModal> {
   late final TextEditingController _costPriceCtrl;
   late final TextEditingController _stockCtrl;
   late final TextEditingController _thresholdCtrl;
+  late final TextEditingController _sizeVariantsCtrl;
 
   late String _selectedCategoryId;
   late String _selectedUnit;
@@ -105,9 +107,14 @@ class _AddProductModalState extends State<AddProductModal> {
       text: p != null ? (p.purchasePricePaise / 100).toStringAsFixed(2) : '',
     );
     _stockCtrl = TextEditingController(
-      text: p != null ? (_isUnlimitedStock ? '' : p.stockQuantity.toInt().toString()) : '0',
+      text: p != null
+          ? (_isUnlimitedStock ? '' : p.stockQuantity.toInt().toString())
+          : '0',
     );
     _thresholdCtrl = TextEditingController(text: '5');
+    _sizeVariantsCtrl = TextEditingController(
+      text: p?.sizeVariants.join(', ') ?? '',
+    );
 
     // Deduplicate categories by ID
     final uniqueCats = <String, CategoryModel>{};
@@ -116,17 +123,25 @@ class _AddProductModalState extends State<AddProductModal> {
     }
     _localCategories = uniqueCats.values.toList();
     if (_localCategories.isEmpty) {
-      _localCategories.add(CategoryModel(id: 'cat_gen', businessId: 'biz_default', name: 'General Products'));
+      _localCategories.add(
+        CategoryModel(
+          id: 'cat_gen',
+          businessId: 'biz_default',
+          name: 'General Products',
+        ),
+      );
     }
 
     // Safe Category Selection
     if (p?.categoryId != null && p!.categoryId!.isNotEmpty) {
       if (!_localCategories.any((c) => c.id == p.categoryId)) {
-        _localCategories.add(CategoryModel(
-          id: p.categoryId!,
-          businessId: p.businessId,
-          name: 'Category (${p.categoryId})',
-        ));
+        _localCategories.add(
+          CategoryModel(
+            id: p.categoryId!,
+            businessId: p.businessId,
+            name: 'Category (${p.categoryId})',
+          ),
+        );
       }
       _selectedCategoryId = p.categoryId!;
     } else {
@@ -177,6 +192,7 @@ class _AddProductModalState extends State<AddProductModal> {
     _costPriceCtrl.dispose();
     _stockCtrl.dispose();
     _thresholdCtrl.dispose();
+    _sizeVariantsCtrl.dispose();
     super.dispose();
   }
 
@@ -205,18 +221,27 @@ class _AddProductModalState extends State<AddProductModal> {
       builder: (ctx) => AlertDialog(
         backgroundColor: Colors.white,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
-        title: Text('Add New Category', style: GoogleFonts.outfit(fontSize: 16, fontWeight: FontWeight.bold)),
+        title: Text(
+          'Add New Category',
+          style: GoogleFonts.outfit(fontSize: 16, fontWeight: FontWeight.bold),
+        ),
         content: TextField(
           controller: catCtrl,
           autofocus: true,
           decoration: InputDecoration(
             hintText: 'e.g. Beverages, Dairy',
-            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 12,
+              vertical: 10,
+            ),
             border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
           ),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
           ElevatedButton(
             onPressed: () async {
               final name = catCtrl.text.trim();
@@ -241,7 +266,9 @@ class _AddProductModalState extends State<AddProductModal> {
             style: ElevatedButton.styleFrom(
               backgroundColor: const Color(0xFF0F172A),
               foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
             ),
             child: const Text('Add'),
           ),
@@ -255,16 +282,26 @@ class _AddProductModalState extends State<AddProductModal> {
 
     setState(() => _isSaving = true);
     try {
-      final sellPaise = ((double.tryParse(_sellPriceCtrl.text.trim()) ?? 0.0) * 100).round();
-      final mrpPaise = ((double.tryParse(_mrpCtrl.text.trim()) ?? (sellPaise / 100.0)) * 100).round();
-      final costPaise = ((double.tryParse(_costPriceCtrl.text.trim()) ?? 0.0) * 100).round();
-      final stockQty = _isUnlimitedStock ? 999999.0 : (double.tryParse(_stockCtrl.text.trim()) ?? 0.0);
+      final sellPaise =
+          ((double.tryParse(_sellPriceCtrl.text.trim()) ?? 0.0) * 100).round();
+      final mrpPaise =
+          ((double.tryParse(_mrpCtrl.text.trim()) ?? (sellPaise / 100.0)) * 100)
+              .round();
+      final costPaise =
+          ((double.tryParse(_costPriceCtrl.text.trim()) ?? 0.0) * 100).round();
+      final stockQty = _isUnlimitedStock
+          ? 999999.0
+          : (double.tryParse(_stockCtrl.text.trim()) ?? 0.0);
 
       final p = ProductModel(
         id: widget.existingProduct?.id ?? const Uuid().v4(),
-        businessId: widget.existingProduct?.businessId ?? FirestoreSyncService.instance.activeBusinessId,
+        businessId:
+            widget.existingProduct?.businessId ??
+            FirestoreSyncService.instance.activeBusinessId,
         name: _nameCtrl.text.trim(),
-        barcode: _barcodeCtrl.text.trim().isNotEmpty ? _barcodeCtrl.text.trim() : null,
+        barcode: _barcodeCtrl.text.trim().isNotEmpty
+            ? _barcodeCtrl.text.trim()
+            : null,
         categoryId: _selectedCategoryId,
         sellingPricePaise: sellPaise,
         mrpPaise: mrpPaise > 0 ? mrpPaise : sellPaise,
@@ -273,6 +310,12 @@ class _AddProductModalState extends State<AddProductModal> {
         taxRate: _selectedTaxRate,
         isTaxInclusive: true,
         unit: _selectedUnit,
+        sizeVariants: _sizeVariantsCtrl.text
+            .split(',')
+            .map((value) => value.trim().toUpperCase())
+            .where((value) => value.isNotEmpty)
+            .toSet()
+            .toList(),
         syncStatus: 'synced',
       );
 
@@ -292,13 +335,14 @@ class _AddProductModalState extends State<AddProductModal> {
           ),
           backgroundColor: const Color(0xFF0F172A),
           behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(10),
+          ),
         ),
       );
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to save product: $e')),
-      );
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text('Failed to save product: $e')));
     } finally {
       if (mounted) setState(() => _isSaving = false);
     }
@@ -358,7 +402,9 @@ class _AddProductModalState extends State<AddProductModal> {
                       ),
                       const SizedBox(width: 6),
                       Text(
-                        isEditing ? 'Edit Catalog Item' : 'Add New Item to Catalog',
+                        isEditing
+                            ? 'Edit Catalog Item'
+                            : 'Add New Item to Catalog',
                         style: GoogleFonts.outfit(
                           fontSize: 17,
                           fontWeight: FontWeight.w900,
@@ -378,7 +424,11 @@ class _AddProductModalState extends State<AddProductModal> {
                           color: Color(0xFFF1F5F9),
                           shape: BoxShape.circle,
                         ),
-                        child: const Icon(Icons.close_rounded, size: 16, color: Color(0xFF64748B)),
+                        child: const Icon(
+                          Icons.close_rounded,
+                          size: 16,
+                          color: Color(0xFF64748B),
+                        ),
                       ),
                     ),
                   ),
@@ -417,7 +467,10 @@ class _AddProductModalState extends State<AddProductModal> {
                           decoration: BoxDecoration(
                             color: const Color(0xFFFFFDF5),
                             borderRadius: BorderRadius.circular(16),
-                            border: Border.all(color: const Color(0xFFFDE68A), width: 1.2),
+                            border: Border.all(
+                              color: const Color(0xFFFDE68A),
+                              width: 1.2,
+                            ),
                           ),
                           child: Row(
                             children: [
@@ -428,7 +481,11 @@ class _AddProductModalState extends State<AddProductModal> {
                                   color: const Color(0xFFFBBF24),
                                   borderRadius: BorderRadius.circular(10),
                                 ),
-                                child: const Icon(Icons.auto_awesome_rounded, color: Color(0xFF0F172A), size: 18),
+                                child: const Icon(
+                                  Icons.auto_awesome_rounded,
+                                  color: Color(0xFF0F172A),
+                                  size: 18,
+                                ),
                               ),
                               const SizedBox(width: 10),
                               Expanded(
@@ -445,7 +502,10 @@ class _AddProductModalState extends State<AddProductModal> {
                                     ),
                                     Text(
                                       "Don't type items one by one. Scan distributor invoice...",
-                                      style: GoogleFonts.inter(fontSize: 10, color: const Color(0xFF64748B)),
+                                      style: GoogleFonts.inter(
+                                        fontSize: 10,
+                                        color: const Color(0xFF64748B),
+                                      ),
                                       overflow: TextOverflow.ellipsis,
                                     ),
                                   ],
@@ -458,7 +518,10 @@ class _AddProductModalState extends State<AddProductModal> {
                                   widget.onSwitchToAiInward();
                                 },
                                 child: Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 10,
+                                    vertical: 6,
+                                  ),
                                   decoration: BoxDecoration(
                                     color: const Color(0xFF0F172A),
                                     borderRadius: BorderRadius.circular(10),
@@ -466,7 +529,11 @@ class _AddProductModalState extends State<AddProductModal> {
                                   child: Row(
                                     mainAxisSize: MainAxisSize.min,
                                     children: [
-                                      const Icon(Icons.camera_alt_outlined, size: 12, color: Colors.white),
+                                      const Icon(
+                                        Icons.camera_alt_outlined,
+                                        size: 12,
+                                        color: Colors.white,
+                                      ),
                                       const SizedBox(width: 4),
                                       Text(
                                         'Inward with AI',
@@ -491,9 +558,16 @@ class _AddProductModalState extends State<AddProductModal> {
                       const SizedBox(height: 5),
                       TextFormField(
                         controller: _nameCtrl,
-                        style: GoogleFonts.inter(fontSize: 13.5, fontWeight: FontWeight.w600),
-                        decoration: _buildInputDecoration('e.g. Fortune Sunflower Oil 1L'),
-                        validator: (v) => (v == null || v.trim().isEmpty) ? 'Product name is required' : null,
+                        style: GoogleFonts.inter(
+                          fontSize: 13.5,
+                          fontWeight: FontWeight.w600,
+                        ),
+                        decoration: _buildInputDecoration(
+                          'e.g. Fortune Sunflower Oil 1L',
+                        ),
+                        validator: (v) => (v == null || v.trim().isEmpty)
+                            ? 'Product name is required'
+                            : null,
                       ),
                       const SizedBox(height: 12),
 
@@ -506,7 +580,8 @@ class _AddProductModalState extends State<AddProductModal> {
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Row(
-                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                  mainAxisAlignment:
+                                      MainAxisAlignment.spaceBetween,
                                   children: [
                                     _buildLabel('Category'),
                                     GestureDetector(
@@ -524,27 +599,47 @@ class _AddProductModalState extends State<AddProductModal> {
                                 ),
                                 const SizedBox(height: 5),
                                 Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 10),
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 10,
+                                  ),
                                   decoration: BoxDecoration(
                                     color: const Color(0xFFF8FAFC),
                                     borderRadius: BorderRadius.circular(12),
-                                    border: Border.all(color: const Color(0xFFCBD5E1)),
+                                    border: Border.all(
+                                      color: const Color(0xFFCBD5E1),
+                                    ),
                                   ),
                                   child: DropdownButtonHideUnderline(
                                     child: DropdownButton<String>(
-                                      value: _localCategories.any((c) => c.id == _selectedCategoryId)
+                                      value:
+                                          _localCategories.any(
+                                            (c) => c.id == _selectedCategoryId,
+                                          )
                                           ? _selectedCategoryId
                                           : _localCategories.first.id,
                                       isExpanded: true,
-                                      icon: const Icon(Icons.keyboard_arrow_down_rounded, color: Color(0xFF475569)),
+                                      icon: const Icon(
+                                        Icons.keyboard_arrow_down_rounded,
+                                        color: Color(0xFF475569),
+                                      ),
                                       items: _localCategories.map((c) {
                                         return DropdownMenuItem<String>(
                                           value: c.id,
-                                          child: Text(c.name, style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w600), overflow: TextOverflow.ellipsis),
+                                          child: Text(
+                                            c.name,
+                                            style: GoogleFonts.inter(
+                                              fontSize: 12,
+                                              fontWeight: FontWeight.w600,
+                                            ),
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
                                         );
                                       }).toList(),
                                       onChanged: (val) {
-                                        if (val != null) setState(() => _selectedCategoryId = val);
+                                        if (val != null)
+                                          setState(
+                                            () => _selectedCategoryId = val,
+                                          );
                                       },
                                     ),
                                   ),
@@ -560,27 +655,45 @@ class _AddProductModalState extends State<AddProductModal> {
                                 _buildLabel('Unit'),
                                 const SizedBox(height: 5),
                                 Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 10),
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 10,
+                                  ),
                                   decoration: BoxDecoration(
                                     color: const Color(0xFFF8FAFC),
                                     borderRadius: BorderRadius.circular(12),
-                                    border: Border.all(color: const Color(0xFFCBD5E1)),
+                                    border: Border.all(
+                                      color: const Color(0xFFCBD5E1),
+                                    ),
                                   ),
                                   child: DropdownButtonHideUnderline(
                                     child: DropdownButton<String>(
-                                      value: _units.any((u) => u['val'] == _selectedUnit)
+                                      value:
+                                          _units.any(
+                                            (u) => u['val'] == _selectedUnit,
+                                          )
                                           ? _selectedUnit
                                           : _units.first['val'],
                                       isExpanded: true,
-                                      icon: const Icon(Icons.keyboard_arrow_down_rounded, color: Color(0xFF475569)),
+                                      icon: const Icon(
+                                        Icons.keyboard_arrow_down_rounded,
+                                        color: Color(0xFF475569),
+                                      ),
                                       items: _units.map((u) {
                                         return DropdownMenuItem<String>(
                                           value: u['val'],
-                                          child: Text(u['label']!, style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w600), overflow: TextOverflow.ellipsis),
+                                          child: Text(
+                                            u['label']!,
+                                            style: GoogleFonts.inter(
+                                              fontSize: 12,
+                                              fontWeight: FontWeight.w600,
+                                            ),
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
                                         );
                                       }).toList(),
                                       onChanged: (val) {
-                                        if (val != null) setState(() => _selectedUnit = val);
+                                        if (val != null)
+                                          setState(() => _selectedUnit = val);
                                       },
                                     ),
                                   ),
@@ -616,11 +729,16 @@ class _AddProductModalState extends State<AddProductModal> {
                                 ),
                                 if (_profitMargin > 0)
                                   Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 7,
+                                      vertical: 2,
+                                    ),
                                     decoration: BoxDecoration(
                                       color: const Color(0xFFECFDF5),
                                       borderRadius: BorderRadius.circular(6),
-                                      border: Border.all(color: const Color(0xFFA7F3D0)),
+                                      border: Border.all(
+                                        color: const Color(0xFFA7F3D0),
+                                      ),
                                     ),
                                     child: Text(
                                       'Margin: +₹${_profitMargin.toStringAsFixed(2)}',
@@ -640,19 +758,30 @@ class _AddProductModalState extends State<AddProductModal> {
                               children: [
                                 Expanded(
                                   child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
                                     children: [
                                       _buildLabel('Selling Price (₹) *'),
                                       const SizedBox(height: 4),
                                       TextFormField(
                                         controller: _sellPriceCtrl,
-                                        keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                                        style: GoogleFonts.robotoMono(fontSize: 13, fontWeight: FontWeight.w700),
-                                        decoration: _buildInputDecoration('e.g. 150.00'),
+                                        keyboardType:
+                                            const TextInputType.numberWithOptions(
+                                              decimal: true,
+                                            ),
+                                        style: GoogleFonts.robotoMono(
+                                          fontSize: 13,
+                                          fontWeight: FontWeight.w700,
+                                        ),
+                                        decoration: _buildInputDecoration(
+                                          'e.g. 150.00',
+                                        ),
                                         onChanged: (_) => setState(() {}),
                                         validator: (v) {
-                                          if (v == null || v.trim().isEmpty) return 'Selling price required';
-                                          if ((double.tryParse(v) ?? 0.0) <= 0) return 'Must be > 0';
+                                          if (v == null || v.trim().isEmpty)
+                                            return 'Selling price required';
+                                          if ((double.tryParse(v) ?? 0.0) <= 0)
+                                            return 'Must be > 0';
                                           return null;
                                         },
                                       ),
@@ -662,15 +791,24 @@ class _AddProductModalState extends State<AddProductModal> {
                                 const SizedBox(width: 10),
                                 Expanded(
                                   child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
                                     children: [
                                       _buildLabel('MRP (₹)'),
                                       const SizedBox(height: 4),
                                       TextFormField(
                                         controller: _mrpCtrl,
-                                        keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                                        style: GoogleFonts.robotoMono(fontSize: 13, fontWeight: FontWeight.w700),
-                                        decoration: _buildInputDecoration('e.g. 165.00'),
+                                        keyboardType:
+                                            const TextInputType.numberWithOptions(
+                                              decimal: true,
+                                            ),
+                                        style: GoogleFonts.robotoMono(
+                                          fontSize: 13,
+                                          fontWeight: FontWeight.w700,
+                                        ),
+                                        decoration: _buildInputDecoration(
+                                          'e.g. 165.00',
+                                        ),
                                       ),
                                     ],
                                   ),
@@ -684,15 +822,24 @@ class _AddProductModalState extends State<AddProductModal> {
                               children: [
                                 Expanded(
                                   child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
                                     children: [
                                       _buildLabel('Purchase Cost (₹)'),
                                       const SizedBox(height: 4),
                                       TextFormField(
                                         controller: _costPriceCtrl,
-                                        keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                                        style: GoogleFonts.robotoMono(fontSize: 13, fontWeight: FontWeight.w700),
-                                        decoration: _buildInputDecoration('e.g. 120.00'),
+                                        keyboardType:
+                                            const TextInputType.numberWithOptions(
+                                              decimal: true,
+                                            ),
+                                        style: GoogleFonts.robotoMono(
+                                          fontSize: 13,
+                                          fontWeight: FontWeight.w700,
+                                        ),
+                                        decoration: _buildInputDecoration(
+                                          'e.g. 120.00',
+                                        ),
                                         onChanged: (_) => setState(() {}),
                                       ),
                                     ],
@@ -701,32 +848,61 @@ class _AddProductModalState extends State<AddProductModal> {
                                 const SizedBox(width: 10),
                                 Expanded(
                                   child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
                                     children: [
                                       _buildLabel('GST Tax Rate (%)'),
                                       const SizedBox(height: 4),
                                       Container(
-                                        padding: const EdgeInsets.symmetric(horizontal: 10),
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 10,
+                                        ),
                                         decoration: BoxDecoration(
                                           color: Colors.white,
-                                          borderRadius: BorderRadius.circular(12),
-                                          border: Border.all(color: const Color(0xFFCBD5E1)),
+                                          borderRadius: BorderRadius.circular(
+                                            12,
+                                          ),
+                                          border: Border.all(
+                                            color: const Color(0xFFCBD5E1),
+                                          ),
                                         ),
                                         child: DropdownButtonHideUnderline(
                                           child: DropdownButton<double>(
-                                            value: _taxRates.any((t) => ((t['val'] as num).toDouble() - _selectedTaxRate).abs() < 0.001)
+                                            value:
+                                                _taxRates.any(
+                                                  (t) =>
+                                                      ((t['val'] as num)
+                                                                  .toDouble() -
+                                                              _selectedTaxRate)
+                                                          .abs() <
+                                                      0.001,
+                                                )
                                                 ? _selectedTaxRate
                                                 : 0.0,
                                             isExpanded: true,
-                                            icon: const Icon(Icons.keyboard_arrow_down_rounded, color: Color(0xFF475569)),
+                                            icon: const Icon(
+                                              Icons.keyboard_arrow_down_rounded,
+                                              color: Color(0xFF475569),
+                                            ),
                                             items: _taxRates.map((t) {
                                               return DropdownMenuItem<double>(
                                                 value: t['val'] as double,
-                                                child: Text(t['label'] as String, style: GoogleFonts.inter(fontSize: 11.5, fontWeight: FontWeight.w600), overflow: TextOverflow.ellipsis),
+                                                child: Text(
+                                                  t['label'] as String,
+                                                  style: GoogleFonts.inter(
+                                                    fontSize: 11.5,
+                                                    fontWeight: FontWeight.w600,
+                                                  ),
+                                                  overflow:
+                                                      TextOverflow.ellipsis,
+                                                ),
                                               );
                                             }).toList(),
                                             onChanged: (val) {
-                                              if (val != null) setState(() => _selectedTaxRate = val);
+                                              if (val != null)
+                                                setState(
+                                                  () => _selectedTaxRate = val,
+                                                );
                                             },
                                           ),
                                         ),
@@ -750,7 +926,11 @@ class _AddProductModalState extends State<AddProductModal> {
                             onTap: _openBarcodeScanner,
                             child: Row(
                               children: [
-                                const Icon(Icons.qr_code_scanner_rounded, size: 14, color: Color(0xFF0284C7)),
+                                const Icon(
+                                  Icons.qr_code_scanner_rounded,
+                                  size: 14,
+                                  color: Color(0xFF0284C7),
+                                ),
                                 const SizedBox(width: 4),
                                 Text(
                                   'Scan Camera',
@@ -769,8 +949,18 @@ class _AddProductModalState extends State<AddProductModal> {
                       TextFormField(
                         controller: _barcodeCtrl,
                         keyboardType: TextInputType.number,
-                        style: GoogleFonts.robotoMono(fontSize: 13.5, fontWeight: FontWeight.w700),
+                        style: GoogleFonts.robotoMono(
+                          fontSize: 13.5,
+                          fontWeight: FontWeight.w700,
+                        ),
                         decoration: _buildInputDecoration('e.g. 8901030383748'),
+                      ),
+                      const SizedBox(height: 12),
+
+                      TextFormField(
+                        controller: _sizeVariantsCtrl,
+                        textCapitalization: TextCapitalization.characters,
+                        decoration: _buildInputDecoration('S, M, L, XL, XXL'),
                       ),
                       const SizedBox(height: 12),
 
@@ -778,10 +968,14 @@ class _AddProductModalState extends State<AddProductModal> {
                       Container(
                         padding: const EdgeInsets.all(12),
                         decoration: BoxDecoration(
-                          color: _isUnlimitedStock ? const Color(0xFFF0FDF4) : const Color(0xFFF8FAFC),
+                          color: _isUnlimitedStock
+                              ? const Color(0xFFF0FDF4)
+                              : const Color(0xFFF8FAFC),
                           borderRadius: BorderRadius.circular(16),
                           border: Border.all(
-                            color: _isUnlimitedStock ? const Color(0xFFBBF7D0) : const Color(0xFFE2E8F0),
+                            color: _isUnlimitedStock
+                                ? const Color(0xFFBBF7D0)
+                                : const Color(0xFFE2E8F0),
                             width: 1.2,
                           ),
                         ),
@@ -794,9 +988,13 @@ class _AddProductModalState extends State<AddProductModal> {
                                 Row(
                                   children: [
                                     Icon(
-                                      _isUnlimitedStock ? Icons.all_inclusive_rounded : Icons.inventory_2_outlined,
+                                      _isUnlimitedStock
+                                          ? Icons.all_inclusive_rounded
+                                          : Icons.inventory_2_outlined,
                                       size: 16,
-                                      color: _isUnlimitedStock ? const Color(0xFF16A34A) : const Color(0xFF475569),
+                                      color: _isUnlimitedStock
+                                          ? const Color(0xFF16A34A)
+                                          : const Color(0xFF475569),
                                     ),
                                     const SizedBox(width: 6),
                                     Text(
@@ -818,7 +1016,9 @@ class _AddProductModalState extends State<AddProductModal> {
                                       style: GoogleFonts.inter(
                                         fontSize: 10.5,
                                         fontWeight: FontWeight.w700,
-                                        color: _isUnlimitedStock ? const Color(0xFF16A34A) : const Color(0xFF64748B),
+                                        color: _isUnlimitedStock
+                                            ? const Color(0xFF16A34A)
+                                            : const Color(0xFF64748B),
                                       ),
                                     ),
                                     const SizedBox(width: 4),
@@ -826,7 +1026,9 @@ class _AddProductModalState extends State<AddProductModal> {
                                       scale: 0.75,
                                       child: Switch(
                                         value: _isUnlimitedStock,
-                                        activeThumbColor: const Color(0xFF16A34A),
+                                        activeThumbColor: const Color(
+                                          0xFF16A34A,
+                                        ),
                                         onChanged: (val) {
                                           setState(() {
                                             _isUnlimitedStock = val;
@@ -848,20 +1050,33 @@ class _AddProductModalState extends State<AddProductModal> {
                             if (_isUnlimitedStock)
                               Container(
                                 width: double.infinity,
-                                padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 10),
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: 8,
+                                  horizontal: 10,
+                                ),
                                 decoration: BoxDecoration(
                                   color: Colors.white,
                                   borderRadius: BorderRadius.circular(10),
-                                  border: Border.all(color: const Color(0xFFDCFCE7)),
+                                  border: Border.all(
+                                    color: const Color(0xFFDCFCE7),
+                                  ),
                                 ),
                                 child: Row(
                                   children: [
-                                    const Icon(Icons.check_circle_rounded, size: 14, color: Color(0xFF16A34A)),
+                                    const Icon(
+                                      Icons.check_circle_rounded,
+                                      size: 14,
+                                      color: Color(0xFF16A34A),
+                                    ),
                                     const SizedBox(width: 6),
                                     Expanded(
                                       child: Text(
                                         'Unlimited stock enabled — No inventory warnings or count tracking needed.',
-                                        style: GoogleFonts.inter(fontSize: 10.5, color: const Color(0xFF15803D), fontWeight: FontWeight.w600),
+                                        style: GoogleFonts.inter(
+                                          fontSize: 10.5,
+                                          color: const Color(0xFF15803D),
+                                          fontWeight: FontWeight.w600,
+                                        ),
                                       ),
                                     ),
                                   ],
@@ -872,18 +1087,27 @@ class _AddProductModalState extends State<AddProductModal> {
                                 children: [
                                   Expanded(
                                     child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
                                       children: [
-                                        _buildLabel('Current Available Stock *'),
+                                        _buildLabel(
+                                          'Current Available Stock *',
+                                        ),
                                         const SizedBox(height: 4),
                                         TextFormField(
                                           controller: _stockCtrl,
                                           keyboardType: TextInputType.number,
-                                          style: GoogleFonts.robotoMono(fontSize: 13, fontWeight: FontWeight.w700),
-                                          decoration: _buildInputDecoration('e.g. 25'),
+                                          style: GoogleFonts.robotoMono(
+                                            fontSize: 13,
+                                            fontWeight: FontWeight.w700,
+                                          ),
+                                          decoration: _buildInputDecoration(
+                                            'e.g. 25',
+                                          ),
                                           validator: (v) {
                                             if (_isUnlimitedStock) return null;
-                                            if (v == null || v.trim().isEmpty) return 'Stock required';
+                                            if (v == null || v.trim().isEmpty)
+                                              return 'Stock required';
                                             return null;
                                           },
                                         ),
@@ -893,15 +1117,21 @@ class _AddProductModalState extends State<AddProductModal> {
                                   const SizedBox(width: 10),
                                   Expanded(
                                     child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
                                       children: [
                                         _buildLabel('Low Alert Threshold'),
                                         const SizedBox(height: 4),
                                         TextFormField(
                                           controller: _thresholdCtrl,
                                           keyboardType: TextInputType.number,
-                                          style: GoogleFonts.robotoMono(fontSize: 13, fontWeight: FontWeight.w700),
-                                          decoration: _buildInputDecoration('e.g. 5'),
+                                          style: GoogleFonts.robotoMono(
+                                            fontSize: 13,
+                                            fontWeight: FontWeight.w700,
+                                          ),
+                                          decoration: _buildInputDecoration(
+                                            'e.g. 5',
+                                          ),
                                         ),
                                       ],
                                     ),
@@ -921,9 +1151,15 @@ class _AddProductModalState extends State<AddProductModal> {
                             child: OutlinedButton(
                               onPressed: () => Navigator.of(context).pop(),
                               style: OutlinedButton.styleFrom(
-                                padding: const EdgeInsets.symmetric(vertical: 13),
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                                side: const BorderSide(color: Color(0xFFCBD5E1)),
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: 13,
+                                ),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(14),
+                                ),
+                                side: const BorderSide(
+                                  color: Color(0xFFCBD5E1),
+                                ),
                               ),
                               child: Text(
                                 'Cancel',
@@ -942,18 +1178,27 @@ class _AddProductModalState extends State<AddProductModal> {
                               onPressed: _isSaving ? null : _saveProduct,
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: const Color(0xFF0F172A),
-                                padding: const EdgeInsets.symmetric(vertical: 13),
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: 13,
+                                ),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(14),
+                                ),
                                 elevation: 2,
                               ),
                               child: _isSaving
                                   ? const SizedBox(
                                       width: 20,
                                       height: 20,
-                                      child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                        color: Colors.white,
+                                      ),
                                     )
                                   : Text(
-                                      isEditing ? 'Update Product' : 'Save Product',
+                                      isEditing
+                                          ? 'Update Product'
+                                          : 'Save Product',
                                       style: GoogleFonts.outfit(
                                         fontSize: 13.5,
                                         fontWeight: FontWeight.w900,
@@ -990,7 +1235,10 @@ class _AddProductModalState extends State<AddProductModal> {
   InputDecoration _buildInputDecoration(String hint) {
     return InputDecoration(
       hintText: hint,
-      hintStyle: GoogleFonts.inter(fontSize: 13, color: const Color(0xFF94A3B8)),
+      hintStyle: GoogleFonts.inter(
+        fontSize: 13,
+        color: const Color(0xFF94A3B8),
+      ),
       contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
       filled: true,
       fillColor: const Color(0xFFF8FAFC),

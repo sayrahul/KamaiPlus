@@ -167,6 +167,12 @@ class _PosItemEditModalState extends State<PosItemEditModal> {
     };
   }
 
+  double get _quantityStep {
+    if (_currentUnit == 'kg' || _currentUnit == 'litre' || _currentUnit == 'l') return 0.1;
+    if (_currentUnit == 'g' || _currentUnit == 'gram' || _currentUnit == 'ml') return 10;
+    return 1;
+  }
+
   void _handleSave() {
     final qty = double.tryParse(_qtyController.text) ?? 1.0;
     final price = double.tryParse(_priceController.text) ?? (widget.cartItem.product.sellingPricePaise / 100.0);
@@ -312,9 +318,9 @@ class _PosItemEditModalState extends State<PosItemEditModal> {
                     icon: const Icon(Icons.remove, size: 18, color: Color(0xFF334155)),
                     onPressed: () {
                       final cur = double.tryParse(_qtyController.text) ?? 1.0;
-                      if (cur > 1) {
+                      if (cur > _quantityStep) {
                         setState(() {
-                          final next = cur - 1;
+                          final next = cur - _quantityStep;
                           _qtyController.text = next % 1 == 0 ? next.toInt().toString() : next.toString();
                         });
                       }
@@ -343,7 +349,7 @@ class _PosItemEditModalState extends State<PosItemEditModal> {
                     onPressed: () {
                       final cur = double.tryParse(_qtyController.text) ?? 0.0;
                       setState(() {
-                        final next = cur + 1;
+                        final next = cur + _quantityStep;
                         _qtyController.text = next % 1 == 0 ? next.toInt().toString() : next.toString();
                       });
                     },

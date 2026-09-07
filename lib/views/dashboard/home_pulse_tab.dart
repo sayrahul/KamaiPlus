@@ -1,6 +1,8 @@
 import '../common/owner_privacy_modal.dart';
+
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+
 import '../../core/database/local_database.dart';
 import '../../core/utils/money_formatter.dart';
 import '../../models/models.dart';
@@ -41,18 +43,20 @@ class _HomePulseTabState extends State<HomePulseTab> {
 
   // Filter states for Recent Transactions
   String _selectedDateFilter = 'All'; // 'All', 'Today', 'Yesterday', '7 Days'
-  String _selectedModeFilter = 'All Modes'; // 'All Modes', 'Cash', 'UPI', 'Udhar'
+  String _selectedModeFilter =
+      'All Modes'; // 'All Modes', 'Cash', 'UPI', 'Udhar'
   String _searchQuery = '';
 
   // Pulse Metrics
   int _todaySalesPaise = 190200; // Rs 1,902.00
   int _todayBillsCount = 4;
   int _todayProfitPaise = 26750; // Rs 267.50 (~14% Margin)
-  int _cashInHandPaise = 29700;  // Rs 297.00
+  int _cashInHandPaise = 29700; // Rs 297.00
   int _marketUdharPaise = 98000; // Rs 980.00
   int _debtorsCount = 1;
 
   int _totalProductsCount = 8;
+  String _storeCategory = 'Grocery / Kirana';
   List<SaleModel> _recentSales = [];
 
   @override
@@ -66,32 +70,62 @@ class _HomePulseTabState extends State<HomePulseTab> {
       final now = DateTime.now();
       final sales = await LocalDatabase.instance.getAllSales(limit: 50);
       final products = await LocalDatabase.instance.getAllProducts();
+      final profile = await LocalDatabase.instance.getStoreProfile();
 
-      final todaySales = sales.where((s) =>
-          s.createdAt.year == now.year &&
-          s.createdAt.month == now.month &&
-          s.createdAt.day == now.day).toList();
+      final todaySales = sales
+          .where(
+            (s) =>
+                s.createdAt.year == now.year &&
+                s.createdAt.month == now.month &&
+                s.createdAt.day == now.day,
+          )
+          .toList();
 
       final customers = await LocalDatabase.instance.getAllCustomers();
-      final debtors = customers.where((c) => c.currentBalancePaise > 0).toList();
-      final totalUdhar = debtors.fold(0, (sum, c) => sum + c.currentBalancePaise);
+      final debtors = customers
+          .where((c) => c.currentBalancePaise > 0)
+          .toList();
+      final totalUdhar = debtors.fold(
+        0,
+        (sum, c) => sum + c.currentBalancePaise,
+      );
 
       final expenses = await LocalDatabase.instance.getAllExpenses();
-      final todayExp = expenses.where((e) =>
-          e.createdAt.year == now.year &&
-          e.createdAt.month == now.month &&
-          e.createdAt.day == now.day).fold(0, (sum, e) => sum + e.amountPaise);
+      final todayExp = expenses
+          .where(
+            (e) =>
+                e.createdAt.year == now.year &&
+                e.createdAt.month == now.month &&
+                e.createdAt.day == now.day,
+          )
+          .fold(0, (sum, e) => sum + e.amountPaise);
 
       if (sales.isNotEmpty) {
-        final totalSales = todaySales.fold(0, (sum, s) => sum + s.totalAmountPaise);
-        final cashSales = todaySales.where((s) => s.paymentMethod == 'cash').fold(0, (sum, s) => sum + s.totalAmountPaise);
+        final totalSales = todaySales.fold(
+          0,
+          (sum, s) => sum + s.totalAmountPaise,
+        );
+        final cashSales = todaySales
+            .where((s) => s.paymentMethod == 'cash')
+            .fold(0, (sum, s) => sum + s.totalAmountPaise);
 
         if (mounted) {
           setState(() {
             if (todaySales.isNotEmpty) {
               _todaySalesPaise = totalSales;
               _todayBillsCount = todaySales.length;
-              _todayProfitPaise = (totalSales * 0.14).round();
+              final productCosts = {
+                for (final product in products)
+                  product.id: product.purchasePricePaise,
+              };
+              _todayProfitPaise = todaySales.fold<int>(0, (profit, sale) {
+                final cost = sale.items.fold<int>(0, (sum, item) {
+                  final productId = item['product_id']?.toString();
+                  final qty = (item['quantity'] as num?)?.toDouble() ?? 0;
+                  return sum + ((productCosts[productId] ?? 0) * qty).round();
+                });
+                return profit + sale.totalAmountPaise - cost;
+              });
               _cashInHandPaise = (cashSales > 0 ? cashSales : 29700) - todayExp;
             }
             if (debtors.isNotEmpty) {
@@ -99,6 +133,9 @@ class _HomePulseTabState extends State<HomePulseTab> {
               _debtorsCount = debtors.length;
             }
             _totalProductsCount = products.isNotEmpty ? products.length : 8;
+            _storeCategory = profile.category.isNotEmpty
+                ? profile.category
+                : _storeCategory;
             _recentSales = sales;
             _isLoading = false;
           });
@@ -107,6 +144,9 @@ class _HomePulseTabState extends State<HomePulseTab> {
         if (mounted) {
           setState(() {
             _totalProductsCount = products.isNotEmpty ? products.length : 8;
+            _storeCategory = profile.category.isNotEmpty
+                ? profile.category
+                : _storeCategory;
             _recentSales = _getSampleScreenshotSales();
             _isLoading = false;
           });
@@ -218,13 +258,33 @@ class _HomePulseTabState extends State<HomePulseTab> {
         if (!matchInv && !matchCust) return false;
       }
 
-      if (_selectedModeFilter == 'Cash' && sale.paymentMethod != 'cash') return false;
-      if (_selectedModeFilter == 'UPI' && sale.paymentMethod != 'upi') return false;
-      if (_selectedModeFilter == 'Udhar' && sale.paymentMethod != 'credit') return false;
+      if (_selectedModeFilter == 'Cash' && sale.paymentMethod != 'cash')
+        return false;
+      if (_selectedModeFilter == 'UPI' && sale.paymentMethod != 'upi')
+        return false;
+      if (_selectedModeFilter == 'Udhar' && sale.paymentMethod != 'credit')
+        return false;
 
       return true;
     }).toList();
   }
+
+  String get _primaryKpiLabel {
+    switch (_storeCategory) {
+      case 'Apparel / Clothing':
+        return 'TODAY\'S RETAIL SALES';
+      case 'Electronics & Mobile':
+        return 'TODAY\'S HIGH-VALUE SALES';
+      case 'Cafe / Restaurant':
+        return 'TODAY\'S FOOD SALES';
+      default:
+        return "TODAY'S SALES";
+    }
+  }
+
+  String get _ordersKpiLabel => _storeCategory == 'Cafe / Restaurant'
+      ? 'OPEN/COMPLETED ORDERS'
+      : 'TOTAL BILLS';
 
   @override
   Widget build(BuildContext context) {
@@ -232,12 +292,16 @@ class _HomePulseTabState extends State<HomePulseTab> {
       backgroundColor: const Color(0xFFF8FAFC),
       appBar: const PwaTopBar(),
       body: _isLoading
-          ? const Center(child: CircularProgressIndicator(color: Color(0xFF10B981)))
+          ? const Center(
+              child: CircularProgressIndicator(color: Color(0xFF10B981)),
+            )
           : RefreshIndicator(
               color: const Color(0xFF10B981),
               onRefresh: _loadLiveMetrics,
               child: ListView(
-                physics: const ClampingScrollPhysics(parent: AlwaysScrollableScrollPhysics()),
+                physics: const ClampingScrollPhysics(
+                  parent: AlwaysScrollableScrollPhysics(),
+                ),
                 padding: const EdgeInsets.fromLTRB(12, 14, 12, 100),
                 children: [
                   // SECTION 1: TODAY'S BUSINESS PULSE
@@ -261,19 +325,28 @@ class _HomePulseTabState extends State<HomePulseTab> {
                   const SizedBox(height: 18),
 
                   // SECTION 4: DAILY COUNTER & OPS
-                  _buildSectionHeader('DAILY COUNTER & OPS', const Color(0xFF10B981)),
+                  _buildSectionHeader(
+                    'DAILY COUNTER & OPS',
+                    const Color(0xFF10B981),
+                  ),
                   const SizedBox(height: 10),
                   _buildDailyOpsGrid(),
                   const SizedBox(height: 18),
 
                   // SECTION 5: STOCK & SOURCING
-                  _buildSectionHeader('STOCK & SOURCING', const Color(0xFF2563EB)),
+                  _buildSectionHeader(
+                    'STOCK & SOURCING',
+                    const Color(0xFF2563EB),
+                  ),
                   const SizedBox(height: 10),
                   _buildStockSourcingGrid(),
                   const SizedBox(height: 18),
 
                   // SECTION 6: LEDGER, GROWTH & GST
-                  _buildSectionHeader('LEDGER, GROWTH & GST', const Color(0xFF7C3AED)),
+                  _buildSectionHeader(
+                    'LEDGER, GROWTH & GST',
+                    const Color(0xFF7C3AED),
+                  ),
                   const SizedBox(height: 10),
                   _buildLedgerGrowthGrid(),
                   const SizedBox(height: 18),
@@ -285,7 +358,6 @@ class _HomePulseTabState extends State<HomePulseTab> {
             ),
     );
   }
-
 
   // -------------------------------------------------------------
   // SECTION 1: TODAY'S BUSINESS PULSE
@@ -330,7 +402,9 @@ class _HomePulseTabState extends State<HomePulseTab> {
                   content: const Text("🔒 Today's profit is now hidden."),
                   duration: const Duration(seconds: 2),
                   behavior: SnackBarBehavior.floating,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
                 ),
               );
             }
@@ -344,7 +418,9 @@ class _HomePulseTabState extends State<HomePulseTab> {
               border: Border.all(color: const Color(0xFFE2E8F0)),
             ),
             child: Icon(
-              _isProfitHidden ? Icons.visibility_off_outlined : Icons.visibility_outlined,
+              _isProfitHidden
+                  ? Icons.visibility_off_outlined
+                  : Icons.visibility_outlined,
               size: 16,
               color: const Color(0xFF475569),
             ),
@@ -362,7 +438,7 @@ class _HomePulseTabState extends State<HomePulseTab> {
             // Card 1: Today's Sales
             Expanded(
               child: _buildMetricCard(
-                title: "TODAY'S SALES",
+                title: _primaryKpiLabel,
                 titleColor: const Color(0xFF059669),
                 titleIcon: Icons.trending_up_rounded,
                 badgeText: '$_todayBillsCount Bills',
@@ -416,7 +492,7 @@ class _HomePulseTabState extends State<HomePulseTab> {
             // Card 3: Total Orders
             Expanded(
               child: _buildMetricCard(
-                title: 'TOTAL BILLS',
+                title: _ordersKpiLabel,
                 titleColor: const Color(0xFF7C3AED),
                 titleIcon: Icons.receipt_long_rounded,
                 badgeText: 'Counter POS',
@@ -525,7 +601,10 @@ class _HomePulseTabState extends State<HomePulseTab> {
               if (badgeText != null) ...[
                 const SizedBox(width: 4),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 5,
+                    vertical: 1.5,
+                  ),
                   decoration: BoxDecoration(
                     color: badgeBg ?? const Color(0xFFF1F5F9),
                     borderRadius: BorderRadius.circular(5),
@@ -650,7 +729,11 @@ class _HomePulseTabState extends State<HomePulseTab> {
                   color: const Color(0xFF0B1528),
                   borderRadius: BorderRadius.circular(10),
                 ),
-                child: const Icon(Icons.add_rounded, color: Color(0xFFFBBF24), size: 22),
+                child: const Icon(
+                  Icons.add_rounded,
+                  color: Color(0xFFFBBF24),
+                  size: 22,
+                ),
               ),
               const SizedBox(width: 12),
               Expanded(
@@ -676,7 +759,11 @@ class _HomePulseTabState extends State<HomePulseTab> {
                   ],
                 ),
               ),
-              const Icon(Icons.arrow_forward_rounded, color: Color(0xFF0F172A), size: 18),
+              const Icon(
+                Icons.arrow_forward_rounded,
+                color: Color(0xFF0F172A),
+                size: 18,
+              ),
             ],
           ),
         ),
@@ -710,7 +797,8 @@ class _HomePulseTabState extends State<HomePulseTab> {
                 context: context,
                 isScrollControlled: true,
                 backgroundColor: Colors.transparent,
-                builder: (_) => AiInwardSheet(onInwardComplete: _loadLiveMetrics),
+                builder: (_) =>
+                    AiInwardSheet(onInwardComplete: _loadLiveMetrics),
               );
             },
           ),
@@ -809,7 +897,10 @@ class _HomePulseTabState extends State<HomePulseTab> {
                     ),
                     const SizedBox(width: 4),
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 4,
+                        vertical: 1,
+                      ),
                       decoration: BoxDecoration(
                         color: const Color(0xFF10B981).withValues(alpha: 0.3),
                         borderRadius: BorderRadius.circular(4),
@@ -851,7 +942,9 @@ class _HomePulseTabState extends State<HomePulseTab> {
               backgroundColor: const Color(0xFF10B981),
               foregroundColor: Colors.white,
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
               elevation: 0,
             ),
             child: Row(
@@ -859,7 +952,10 @@ class _HomePulseTabState extends State<HomePulseTab> {
               children: [
                 Text(
                   'Counter',
-                  style: GoogleFonts.outfit(fontSize: 10.5, fontWeight: FontWeight.w700),
+                  style: GoogleFonts.outfit(
+                    fontSize: 10.5,
+                    fontWeight: FontWeight.w700,
+                  ),
                 ),
                 const SizedBox(width: 2),
                 const Icon(Icons.arrow_forward_rounded, size: 12),
@@ -880,10 +976,7 @@ class _HomePulseTabState extends State<HomePulseTab> {
         Container(
           width: 7,
           height: 7,
-          decoration: BoxDecoration(
-            color: dotColor,
-            shape: BoxShape.circle,
-          ),
+          decoration: BoxDecoration(color: dotColor, shape: BoxShape.circle),
         ),
         const SizedBox(width: 7),
         Text(
@@ -932,7 +1025,6 @@ class _HomePulseTabState extends State<HomePulseTab> {
       ],
     );
   }
-
 
   Widget _buildStockSourcingGrid() {
     return Column(
@@ -992,7 +1084,9 @@ class _HomePulseTabState extends State<HomePulseTab> {
                 badge: 'PRO',
                 onTap: () => Navigator.push(
                   context,
-                  MaterialPageRoute(builder: (_) => const BarcodeStudioScreen()),
+                  MaterialPageRoute(
+                    builder: (_) => const BarcodeStudioScreen(),
+                  ),
                 ),
               ),
             ),
@@ -1046,7 +1140,9 @@ class _HomePulseTabState extends State<HomePulseTab> {
                 badge: 'PRO',
                 onTap: () => Navigator.push(
                   context,
-                  MaterialPageRoute(builder: (_) => const GrowthCampaignsScreen()),
+                  MaterialPageRoute(
+                    builder: (_) => const GrowthCampaignsScreen(),
+                  ),
                 ),
               ),
             ),
@@ -1132,7 +1228,10 @@ class _HomePulseTabState extends State<HomePulseTab> {
                         if (badge != null) ...[
                           const SizedBox(width: 3),
                           Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 4,
+                              vertical: 1,
+                            ),
                             decoration: BoxDecoration(
                               color: const Color(0xFFFEF3C7),
                               borderRadius: BorderRadius.circular(3),
@@ -1203,7 +1302,11 @@ class _HomePulseTabState extends State<HomePulseTab> {
                     color: const Color(0xFFF1F5F9),
                     borderRadius: BorderRadius.circular(8),
                   ),
-                  child: const Icon(Icons.receipt_long_rounded, color: Color(0xFF334155), size: 18),
+                  child: const Icon(
+                    Icons.receipt_long_rounded,
+                    color: Color(0xFF334155),
+                    size: 18,
+                  ),
                 ),
                 const SizedBox(width: 8),
                 Expanded(
@@ -1222,7 +1325,10 @@ class _HomePulseTabState extends State<HomePulseTab> {
                           ),
                           const SizedBox(width: 6),
                           Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 6,
+                              vertical: 1.5,
+                            ),
                             decoration: BoxDecoration(
                               color: const Color(0xFFF1F5F9),
                               borderRadius: BorderRadius.circular(5),
@@ -1262,7 +1368,9 @@ class _HomePulseTabState extends State<HomePulseTab> {
                 InkWell(
                   onTap: () => Navigator.push(
                     context,
-                    MaterialPageRoute(builder: (_) => const TransactionsScreen()),
+                    MaterialPageRoute(
+                      builder: (_) => const TransactionsScreen(),
+                    ),
                   ),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
@@ -1276,22 +1384,34 @@ class _HomePulseTabState extends State<HomePulseTab> {
                         ),
                       ),
                       const SizedBox(width: 3),
-                      const Icon(Icons.arrow_forward_rounded, size: 13, color: Color(0xFF0F172A)),
+                      const Icon(
+                        Icons.arrow_forward_rounded,
+                        size: 13,
+                        color: Color(0xFF0F172A),
+                      ),
                     ],
                   ),
                 ),
                 IconButton(
-                  onPressed: () => setState(() => _isLedgerExpanded = !_isLedgerExpanded),
+                  onPressed: () =>
+                      setState(() => _isLedgerExpanded = !_isLedgerExpanded),
                   icon: Icon(
-                    _isLedgerExpanded ? Icons.keyboard_arrow_up_rounded : Icons.keyboard_arrow_down_rounded,
+                    _isLedgerExpanded
+                        ? Icons.keyboard_arrow_up_rounded
+                        : Icons.keyboard_arrow_down_rounded,
                     color: const Color(0xFF475569),
                     size: 18,
                   ),
-                  constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+                  constraints: const BoxConstraints(
+                    minWidth: 28,
+                    minHeight: 28,
+                  ),
                   padding: EdgeInsets.zero,
                   style: IconButton.styleFrom(
                     backgroundColor: const Color(0xFFF8FAFC),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(6),
+                    ),
                   ),
                 ),
               ],
@@ -1311,11 +1431,21 @@ class _HomePulseTabState extends State<HomePulseTab> {
                 ),
                 child: TextField(
                   onChanged: (val) => setState(() => _searchQuery = val),
-                  style: GoogleFonts.inter(fontSize: 11.5, color: const Color(0xFF0F172A)),
+                  style: GoogleFonts.inter(
+                    fontSize: 11.5,
+                    color: const Color(0xFF0F172A),
+                  ),
                   decoration: InputDecoration(
                     hintText: 'Search invoice # or customer...',
-                    hintStyle: GoogleFonts.inter(fontSize: 11.5, color: const Color(0xFF94A3B8)),
-                    prefixIcon: const Icon(Icons.search_rounded, size: 16, color: Color(0xFF94A3B8)),
+                    hintStyle: GoogleFonts.inter(
+                      fontSize: 11.5,
+                      color: const Color(0xFF94A3B8),
+                    ),
+                    prefixIcon: const Icon(
+                      Icons.search_rounded,
+                      size: 16,
+                      color: Color(0xFF94A3B8),
+                    ),
                     border: InputBorder.none,
                     isDense: true,
                     contentPadding: const EdgeInsets.symmetric(vertical: 8),
@@ -1332,23 +1462,59 @@ class _HomePulseTabState extends State<HomePulseTab> {
               padding: const EdgeInsets.symmetric(horizontal: 12),
               child: Row(
                 children: [
-                  _buildFilterPill('All', _selectedDateFilter == 'All', () => setState(() => _selectedDateFilter = 'All')),
+                  _buildFilterPill(
+                    'All',
+                    _selectedDateFilter == 'All',
+                    () => setState(() => _selectedDateFilter = 'All'),
+                  ),
                   const SizedBox(width: 5),
-                  _buildFilterPill('Today', _selectedDateFilter == 'Today', () => setState(() => _selectedDateFilter = 'Today')),
+                  _buildFilterPill(
+                    'Today',
+                    _selectedDateFilter == 'Today',
+                    () => setState(() => _selectedDateFilter = 'Today'),
+                  ),
                   const SizedBox(width: 5),
-                  _buildFilterPill('Yesterday', _selectedDateFilter == 'Yesterday', () => setState(() => _selectedDateFilter = 'Yesterday')),
+                  _buildFilterPill(
+                    'Yesterday',
+                    _selectedDateFilter == 'Yesterday',
+                    () => setState(() => _selectedDateFilter = 'Yesterday'),
+                  ),
                   const SizedBox(width: 5),
-                  _buildFilterPill('7 Days', _selectedDateFilter == '7 Days', () => setState(() => _selectedDateFilter = '7 Days')),
+                  _buildFilterPill(
+                    '7 Days',
+                    _selectedDateFilter == '7 Days',
+                    () => setState(() => _selectedDateFilter = '7 Days'),
+                  ),
                   const SizedBox(width: 8),
-                  Container(width: 1, height: 18, color: const Color(0xFFE2E8F0)),
+                  Container(
+                    width: 1,
+                    height: 18,
+                    color: const Color(0xFFE2E8F0),
+                  ),
                   const SizedBox(width: 8),
-                  _buildModePill('All Modes', _selectedModeFilter == 'All Modes', () => setState(() => _selectedModeFilter = 'All Modes')),
+                  _buildModePill(
+                    'All Modes',
+                    _selectedModeFilter == 'All Modes',
+                    () => setState(() => _selectedModeFilter = 'All Modes'),
+                  ),
                   const SizedBox(width: 5),
-                  _buildModePill('Cash', _selectedModeFilter == 'Cash', () => setState(() => _selectedModeFilter = 'Cash')),
+                  _buildModePill(
+                    'Cash',
+                    _selectedModeFilter == 'Cash',
+                    () => setState(() => _selectedModeFilter = 'Cash'),
+                  ),
                   const SizedBox(width: 5),
-                  _buildModePill('UPI', _selectedModeFilter == 'UPI', () => setState(() => _selectedModeFilter = 'UPI')),
+                  _buildModePill(
+                    'UPI',
+                    _selectedModeFilter == 'UPI',
+                    () => setState(() => _selectedModeFilter = 'UPI'),
+                  ),
                   const SizedBox(width: 5),
-                  _buildModePill('Udhar', _selectedModeFilter == 'Udhar', () => setState(() => _selectedModeFilter = 'Udhar')),
+                  _buildModePill(
+                    'Udhar',
+                    _selectedModeFilter == 'Udhar',
+                    () => setState(() => _selectedModeFilter = 'Udhar'),
+                  ),
                 ],
               ),
             ),
@@ -1363,7 +1529,10 @@ class _HomePulseTabState extends State<HomePulseTab> {
                       child: Center(
                         child: Text(
                           'No transactions found for filter',
-                          style: GoogleFonts.inter(fontSize: 11, color: const Color(0xFF94A3B8)),
+                          style: GoogleFonts.inter(
+                            fontSize: 11,
+                            color: const Color(0xFF94A3B8),
+                          ),
                         ),
                       ),
                     )
@@ -1371,7 +1540,8 @@ class _HomePulseTabState extends State<HomePulseTab> {
                       children: filteredSales.asMap().entries.map((entry) {
                         final index = entry.key;
                         final sale = entry.value;
-                        final tagNumber = '#${(filteredSales.length - index).toString().padLeft(3, '0')}';
+                        final tagNumber =
+                            '#${(filteredSales.length - index).toString().padLeft(3, '0')}';
                         return _buildInvoiceListItem(sale, tagNumber);
                       }).toList(),
                     ),
@@ -1418,7 +1588,9 @@ class _HomePulseTabState extends State<HomePulseTab> {
           style: GoogleFonts.inter(
             fontSize: 10.5,
             fontWeight: isSelected ? FontWeight.w800 : FontWeight.w500,
-            color: isSelected ? const Color(0xFF0F172A) : const Color(0xFF475569),
+            color: isSelected
+                ? const Color(0xFF0F172A)
+                : const Color(0xFF475569),
           ),
         ),
       ),
@@ -1429,8 +1601,12 @@ class _HomePulseTabState extends State<HomePulseTab> {
     final isCredit = sale.paymentMethod == 'credit';
     final isUpi = sale.paymentMethod == 'upi';
     final paymentBadgeText = isCredit ? 'CREDIT' : (isUpi ? 'UPI' : 'CASH');
-    final paymentBadgeBg = isCredit ? const Color(0xFFFEE2E2) : const Color(0xFFECFDF5);
-    final paymentBadgeColor = isCredit ? const Color(0xFFE11D48) : const Color(0xFF059669);
+    final paymentBadgeBg = isCredit
+        ? const Color(0xFFFEE2E2)
+        : const Color(0xFFECFDF5);
+    final paymentBadgeColor = isCredit
+        ? const Color(0xFFE11D48)
+        : const Color(0xFF059669);
 
     final hour = sale.createdAt.hour.toString().padLeft(2, "0");
     final minute = sale.createdAt.minute.toString().padLeft(2, "0");
@@ -1454,157 +1630,183 @@ class _HomePulseTabState extends State<HomePulseTab> {
           child: Padding(
             padding: const EdgeInsets.all(9),
             child: Row(
-        children: [
-          // Tag badge #001
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
-            decoration: BoxDecoration(
-              color: const Color(0xFFF1F5F9),
-              borderRadius: BorderRadius.circular(6),
-            ),
-            child: Text(
-              '#${sale.invoiceNumber.replaceAll(RegExp(r'[^0-9]'), '').padLeft(3, '0').substring(sale.invoiceNumber.replaceAll(RegExp(r'[^0-9]'), '').padLeft(3, '0').length - 3)}',
-              style: GoogleFonts.outfit(
-                fontSize: 10,
-                fontWeight: FontWeight.w700,
-                color: const Color(0xFF475569),
-              ),
-            ),
-          ),
-          const SizedBox(width: 8),
-
-          // Customer / Bill Details
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Row(
+                // Tag badge #001
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 6,
+                    vertical: 3,
+                  ),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF1F5F9),
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: Text(
+                    '#${sale.invoiceNumber.replaceAll(RegExp(r'[^0-9]'), '').padLeft(3, '0').substring(sale.invoiceNumber.replaceAll(RegExp(r'[^0-9]'), '').padLeft(3, '0').length - 3)}',
+                    style: GoogleFonts.outfit(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w700,
+                      color: const Color(0xFF475569),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+
+                // Customer / Bill Details
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Flexible(
+                            child: Text(
+                              sale.customerName ?? 'Walk-in Customer',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: GoogleFonts.outfit(
+                                fontSize: 12.5,
+                                fontWeight: FontWeight.w700,
+                                color: const Color(0xFF0F172A),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 5,
+                              vertical: 1.5,
+                            ),
+                            decoration: BoxDecoration(
+                              color: paymentBadgeBg,
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: Text(
+                              paymentBadgeText,
+                              style: GoogleFonts.inter(
+                                fontSize: 8.5,
+                                fontWeight: FontWeight.w700,
+                                color: paymentBadgeColor,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 1.5),
+                      Row(
+                        children: [
+                          const Icon(
+                            Icons.access_time_rounded,
+                            size: 10,
+                            color: Color(0xFF94A3B8),
+                          ),
+                          const SizedBox(width: 3),
+                          Text(
+                            '$timeStr • $itemsCount items',
+                            style: GoogleFonts.inter(
+                              fontSize: 9.5,
+                              color: const Color(0xFF64748B),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+
+                // Total Amount & Status
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
-                    Flexible(
-                      child: Text(
-                        sale.customerName ?? 'Walk-in Customer',
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: GoogleFonts.outfit(
-                          fontSize: 12.5,
-                          fontWeight: FontWeight.w700,
-                          color: const Color(0xFF0F172A),
-                        ),
+                    Text(
+                      MoneyFormatter.formatPaise(sale.totalAmountPaise),
+                      style: GoogleFonts.outfit(
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.w800,
+                        color: const Color(0xFF0F172A),
                       ),
                     ),
-                    const SizedBox(width: 6),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
-                      decoration: BoxDecoration(
-                        color: paymentBadgeBg,
-                        borderRadius: BorderRadius.circular(4),
-                      ),
-                      child: Text(
-                        paymentBadgeText,
-                        style: GoogleFonts.inter(
-                          fontSize: 8.5,
-                          fontWeight: FontWeight.w700,
-                          color: paymentBadgeColor,
-                        ),
+                    Text(
+                      isCredit
+                          ? 'Due: ${MoneyFormatter.formatPaise(sale.totalAmountPaise)}'
+                          : 'Paid',
+                      style: GoogleFonts.inter(
+                        fontSize: 8.5,
+                        fontWeight: isCredit
+                            ? FontWeight.w700
+                            : FontWeight.w500,
+                        color: isCredit
+                            ? const Color(0xFFE11D48)
+                            : const Color(0xFF64748B),
                       ),
                     ),
                   ],
                 ),
-                const SizedBox(height: 1.5),
-                Row(
-                  children: [
-                    const Icon(Icons.access_time_rounded, size: 10, color: Color(0xFF94A3B8)),
-                    const SizedBox(width: 3),
-                    Text(
-                      '$timeStr • $itemsCount items',
-                      style: GoogleFonts.inter(
-                        fontSize: 9.5,
-                        color: const Color(0xFF64748B),
+                const SizedBox(width: 6),
+
+                // WhatsApp Share Button
+                Material(
+                  color: Colors.transparent,
+                  child: InkWell(
+                    onTap: () => _shareBillOnWhatsapp(sale),
+                    borderRadius: BorderRadius.circular(6),
+                    child: Container(
+                      width: 28,
+                      height: 28,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFECFDF5),
+                        borderRadius: BorderRadius.circular(6),
+                        border: Border.all(color: const Color(0xFFA7F3D0)),
+                      ),
+                      child: Padding(
+                        padding: const EdgeInsets.all(5),
+                        child: Image.asset(
+                          'assets/images/whatsapp_logo.png',
+                          width: 14,
+                          height: 14,
+                        ),
                       ),
                     ),
-                  ],
+                  ),
+                ),
+                const SizedBox(width: 5),
+
+                // Print Button
+                Material(
+                  color: Colors.transparent,
+                  child: InkWell(
+                    onTap: () => _printInvoice(sale),
+                    borderRadius: BorderRadius.circular(6),
+                    child: Container(
+                      width: 28,
+                      height: 28,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFF8FAFC),
+                        borderRadius: BorderRadius.circular(6),
+                        border: Border.all(color: const Color(0xFFE2E8F0)),
+                      ),
+                      child: const Icon(
+                        Icons.print_outlined,
+                        color: Color(0xFF475569),
+                        size: 14,
+                      ),
+                    ),
+                  ),
                 ),
               ],
             ),
           ),
-
-          // Total Amount & Status
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              Text(
-                MoneyFormatter.formatPaise(sale.totalAmountPaise),
-                style: GoogleFonts.outfit(
-                  fontSize: 12.5,
-                  fontWeight: FontWeight.w800,
-                  color: const Color(0xFF0F172A),
-                ),
-              ),
-              Text(
-                isCredit ? 'Due: ${MoneyFormatter.formatPaise(sale.totalAmountPaise)}' : 'Paid',
-                style: GoogleFonts.inter(
-                  fontSize: 8.5,
-                  fontWeight: isCredit ? FontWeight.w700 : FontWeight.w500,
-                  color: isCredit ? const Color(0xFFE11D48) : const Color(0xFF64748B),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(width: 6),
-
-          // WhatsApp Share Button
-          Material(
-            color: Colors.transparent,
-            child: InkWell(
-              onTap: () => _shareBillOnWhatsapp(sale),
-              borderRadius: BorderRadius.circular(6),
-              child: Container(
-                width: 28,
-                height: 28,
-                decoration: BoxDecoration(
-                  color: const Color(0xFFECFDF5),
-                  borderRadius: BorderRadius.circular(6),
-                  border: Border.all(color: const Color(0xFFA7F3D0)),
-                ),
-                child: Padding(
-                  padding: const EdgeInsets.all(5),
-                  child: Image.asset('assets/images/whatsapp_logo.png', width: 14, height: 14),
-                ),
-              ),
-            ),
-          ),
-          const SizedBox(width: 5),
-
-          // Print Button
-          Material(
-            color: Colors.transparent,
-            child: InkWell(
-              onTap: () => _printInvoice(sale),
-              borderRadius: BorderRadius.circular(6),
-              child: Container(
-                width: 28,
-                height: 28,
-                decoration: BoxDecoration(
-                  color: const Color(0xFFF8FAFC),
-                  borderRadius: BorderRadius.circular(6),
-                  border: Border.all(color: const Color(0xFFE2E8F0)),
-                ),
-                child: const Icon(Icons.print_outlined, color: Color(0xFF475569), size: 14),
-              ),
-            ),
-          ),
-        ],
+        ),
       ),
-    ),
-  ),
-),
-);
+    );
   }
 
   void _shareBillOnWhatsapp(SaleModel sale) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text('WhatsApp receipt ready for ${sale.invoiceNumber} (${MoneyFormatter.formatPaise(sale.totalAmountPaise)})'),
+        content: Text(
+          'WhatsApp receipt ready for ${sale.invoiceNumber} (${MoneyFormatter.formatPaise(sale.totalAmountPaise)})',
+        ),
         backgroundColor: const Color(0xFF10B981),
       ),
     );
@@ -1639,7 +1841,10 @@ class _HomePulseTabState extends State<HomePulseTab> {
                   children: [
                     Text(
                       'Daily Closing Z-Report',
-                      style: GoogleFonts.outfit(fontSize: 17, fontWeight: FontWeight.w800),
+                      style: GoogleFonts.outfit(
+                        fontSize: 17,
+                        fontWeight: FontWeight.w800,
+                      ),
                     ),
                     IconButton(
                       icon: const Icon(Icons.close_rounded),
@@ -1650,14 +1855,34 @@ class _HomePulseTabState extends State<HomePulseTab> {
                 const SizedBox(height: 10),
                 Text(
                   'Today: $dateStr',
-                  style: GoogleFonts.inter(fontSize: 11, color: const Color(0xFF64748B)),
+                  style: GoogleFonts.inter(
+                    fontSize: 11,
+                    color: const Color(0xFF64748B),
+                  ),
                 ),
                 const SizedBox(height: 14),
-                _buildSummaryRow('Total Sales Revenue', MoneyFormatter.formatPaise(_todaySalesPaise)),
-                _buildSummaryRow('Total Bills Generated', '$_todayBillsCount Bills'),
-                _buildSummaryRow('Estimated Profit', _isProfitHidden ? '••••••' : MoneyFormatter.formatPaise(_todayProfitPaise)),
-                _buildSummaryRow('Cash in Till/Galla', MoneyFormatter.formatPaise(_cashInHandPaise)),
-                _buildSummaryRow('Outstanding Udhar', MoneyFormatter.formatPaise(_marketUdharPaise)),
+                _buildSummaryRow(
+                  'Total Sales Revenue',
+                  MoneyFormatter.formatPaise(_todaySalesPaise),
+                ),
+                _buildSummaryRow(
+                  'Total Bills Generated',
+                  '$_todayBillsCount Bills',
+                ),
+                _buildSummaryRow(
+                  'Estimated Profit',
+                  _isProfitHidden
+                      ? '••••••'
+                      : MoneyFormatter.formatPaise(_todayProfitPaise),
+                ),
+                _buildSummaryRow(
+                  'Cash in Till/Galla',
+                  MoneyFormatter.formatPaise(_cashInHandPaise),
+                ),
+                _buildSummaryRow(
+                  'Outstanding Udhar',
+                  MoneyFormatter.formatPaise(_marketUdharPaise),
+                ),
                 const SizedBox(height: 18),
                 SizedBox(
                   width: double.infinity,
@@ -1665,19 +1890,28 @@ class _HomePulseTabState extends State<HomePulseTab> {
                     onPressed: () {
                       Navigator.pop(ctx);
                       ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('WhatsApp summary dispatched to store owner')),
+                        const SnackBar(
+                          content: Text(
+                            'WhatsApp summary dispatched to store owner',
+                          ),
+                        ),
                       );
                     },
                     icon: const Icon(Icons.send_rounded, size: 16),
                     label: Text(
                       'Share on WhatsApp',
-                      style: GoogleFonts.outfit(fontSize: 13.5, fontWeight: FontWeight.w700),
+                      style: GoogleFonts.outfit(
+                        fontSize: 13.5,
+                        fontWeight: FontWeight.w700,
+                      ),
                     ),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: const Color(0xFF10B981),
                       foregroundColor: Colors.white,
                       padding: const EdgeInsets.symmetric(vertical: 12),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
                     ),
                   ),
                 ),
@@ -1695,8 +1929,21 @@ class _HomePulseTabState extends State<HomePulseTab> {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(label, style: GoogleFonts.inter(fontSize: 12.5, color: const Color(0xFF475569))),
-          Text(value, style: GoogleFonts.outfit(fontSize: 13.5, fontWeight: FontWeight.w700, color: const Color(0xFF0F172A))),
+          Text(
+            label,
+            style: GoogleFonts.inter(
+              fontSize: 12.5,
+              color: const Color(0xFF475569),
+            ),
+          ),
+          Text(
+            value,
+            style: GoogleFonts.outfit(
+              fontSize: 13.5,
+              fontWeight: FontWeight.w700,
+              color: const Color(0xFF0F172A),
+            ),
+          ),
         ],
       ),
     );

@@ -993,6 +993,19 @@ class _ProductsScreenState extends State<ProductsScreen> {
                 ),
               ),
               _buildStockTrafficBadge(product.stockQuantity, product.unit),
+              if (product.sizeVariants.isNotEmpty)
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFFDF2F8),
+                    borderRadius: BorderRadius.circular(6),
+                    border: Border.all(color: const Color(0xFFF9A8D4)),
+                  ),
+                  child: Text(
+                    'Sizes ${product.sizeVariants.join('/')}',
+                    style: GoogleFonts.inter(fontSize: 9.5, fontWeight: FontWeight.w700, color: const Color(0xFFBE185D)),
+                  ),
+                ),
               if (product.barcode != null && product.barcode!.isNotEmpty)
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),

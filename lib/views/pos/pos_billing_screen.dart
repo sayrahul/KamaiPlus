@@ -160,13 +160,20 @@ class _PosBillingScreenState extends State<PosBillingScreen> {
     });
   }
 
-  void _updateItemQuantity(CartItemModel item, int newQty) {
+  void _updateItemQuantity(CartItemModel item, double newQty) {
     HapticFeedback.lightImpact();
     setState(() {
       if (newQty <= 0) {
         _cart.remove(item.product.id);
       } else {
-        item.quantity = newQty.toDouble();
+        final unlimited = item.product.stockQuantity >= 900000;
+        if (!unlimited && newQty > item.product.stockQuantity) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Available stock: ${item.product.stockQuantity} ${item.product.unit}')),
+          );
+          return;
+        }
+        item.quantity = newQty;
       }
     });
   }
@@ -255,6 +262,10 @@ class _PosBillingScreenState extends State<PosBillingScreen> {
         setState(() {
           currentTab.customer = cust;
         });
+      },
+      tableNumber: currentTab.tableNumber,
+      onTableChanged: (table) {
+        setState(() => currentTab.tableNumber = table);
       },
       onSaleCompleted: () {
         setState(() {

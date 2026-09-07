@@ -330,7 +330,7 @@ Have a wonderful day! Visit us again soon.
                             ),
                             const SizedBox(height: 2),
                             Text(
-                              'Invoice #${sale.invoiceNumber} • $customerDisplay',
+                              'Invoice #${sale.invoiceNumber} • $customerDisplay${sale.tableNumber == null ? '' : ' • Table ${sale.tableNumber}'}',
                               style: GoogleFonts.plusJakartaSans(
                                 fontSize: 11.5,
                                 color: const Color(0xFF64748B),
