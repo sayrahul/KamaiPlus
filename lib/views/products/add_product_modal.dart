@@ -57,6 +57,10 @@ class _AddProductModalState extends State<AddProductModal> {
   late final TextEditingController _thresholdCtrl;
   late final TextEditingController _batchNumberCtrl;
   late final TextEditingController _expiryDateCtrl;
+  late final TextEditingController _sizeCtrl;
+  late final TextEditingController _colorCtrl;
+  late final TextEditingController _imeiCtrl;
+  late final TextEditingController _warrantyCtrl;
 
   late String _selectedCategoryId;
   late String _selectedUnit;
@@ -103,6 +107,10 @@ class _AddProductModalState extends State<AddProductModal> {
     _thresholdCtrl = TextEditingController(text: '5');
     _batchNumberCtrl = TextEditingController(text: p?.batchNumber ?? '');
     _expiryDateCtrl = TextEditingController(text: p?.expiryDate ?? '');
+    _sizeCtrl = TextEditingController(text: p?.size ?? '');
+    _colorCtrl = TextEditingController(text: p?.color ?? '');
+    _imeiCtrl = TextEditingController(text: p?.imeiSerial ?? '');
+    _warrantyCtrl = TextEditingController();
 
     // Deduplicate categories by ID
     final uniqueCats = <String, CategoryModel>{};
@@ -177,6 +185,10 @@ class _AddProductModalState extends State<AddProductModal> {
     _thresholdCtrl.dispose();
     _batchNumberCtrl.dispose();
     _expiryDateCtrl.dispose();
+    _sizeCtrl.dispose();
+    _colorCtrl.dispose();
+    _imeiCtrl.dispose();
+    _warrantyCtrl.dispose();
     super.dispose();
   }
 
@@ -227,52 +239,86 @@ class _AddProductModalState extends State<AddProductModal> {
 
   void _showAddCategoryDialog() {
     final catCtrl = TextEditingController();
+    final vert = BusinessVerticals.resolve(BusinessVerticals.activeBusinessTypeNotifier.value);
     showDialog(
       context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: Colors.white,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
-        title: Text('Add New Category', style: GoogleFonts.outfit(fontSize: 16, fontWeight: FontWeight.bold)),
-        content: TextField(
-          controller: catCtrl,
-          autofocus: true,
-          decoration: InputDecoration(
-            hintText: 'e.g. Beverages, Dairy',
-            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-            border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-          ),
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
-          ElevatedButton(
-            onPressed: () async {
-              final name = catCtrl.text.trim();
-              if (name.isNotEmpty) {
-                final newCat = CategoryModel(
-                  id: 'cat_${DateTime.now().millisecondsSinceEpoch}',
-                  businessId: FirestoreSyncService.instance.activeBusinessId,
-                  name: name,
-                );
-                await LocalDatabase.instance.upsertCategory(newCat);
-                if (ctx.mounted) {
-                  Navigator.pop(ctx);
-                }
-                if (mounted) {
-                  setState(() {
-                    _localCategories.add(newCat);
-                    _selectedCategoryId = newCat.id;
-                  });
-                }
-              }
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF0F172A),
-              foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
+          backgroundColor: Colors.white,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+          title: Text('Add Category', style: GoogleFonts.outfit(fontSize: 16, fontWeight: FontWeight.bold)),
+          content: SizedBox(
+            width: double.maxFinite,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Quick category suggestion chips
+                Text('Quick suggestions:', style: GoogleFonts.inter(fontSize: 11, color: const Color(0xFF64748B), fontWeight: FontWeight.w600)),
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 6,
+                  runSpacing: 6,
+                  children: vert.quickCategories.map((cat) {
+                    return GestureDetector(
+                      onTap: () => setDialogState(() => catCtrl.text = cat),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFF1F5F9),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: const Color(0xFFCBD5E1)),
+                        ),
+                        child: Text(cat, style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w600, color: const Color(0xFF0F172A))),
+                      ),
+                    );
+                  }).toList(),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: catCtrl,
+                  autofocus: false,
+                  decoration: InputDecoration(
+                    hintText: 'Or type custom category name...',
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                  ),
+                ),
+              ],
             ),
-            child: const Text('Add'),
           ),
-        ],
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+            ElevatedButton(
+              onPressed: () async {
+                final name = catCtrl.text.trim();
+                if (name.isNotEmpty) {
+                  final newCat = CategoryModel(
+                    id: 'cat_${DateTime.now().millisecondsSinceEpoch}',
+                    businessId: FirestoreSyncService.instance.activeBusinessId,
+                    name: name,
+                  );
+                  await LocalDatabase.instance.upsertCategory(newCat);
+                  if (ctx.mounted) {
+                    Navigator.pop(ctx);
+                  }
+                  if (mounted) {
+                    setState(() {
+                      _localCategories.add(newCat);
+                      _selectedCategoryId = newCat.id;
+                    });
+                  }
+                }
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF0F172A),
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              ),
+              child: const Text('Add'),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -302,6 +348,9 @@ class _AddProductModalState extends State<AddProductModal> {
         unit: _selectedUnit,
         batchNumber: _batchNumberCtrl.text.trim().isNotEmpty ? _batchNumberCtrl.text.trim() : widget.existingProduct?.batchNumber,
         expiryDate: _expiryDateCtrl.text.trim().isNotEmpty ? _expiryDateCtrl.text.trim() : widget.existingProduct?.expiryDate,
+        size: _sizeCtrl.text.trim().isNotEmpty ? _sizeCtrl.text.trim() : widget.existingProduct?.size,
+        color: _colorCtrl.text.trim().isNotEmpty ? _colorCtrl.text.trim() : widget.existingProduct?.color,
+        imeiSerial: _imeiCtrl.text.trim().isNotEmpty ? _imeiCtrl.text.trim() : widget.existingProduct?.imeiSerial,
         syncStatus: 'synced',
       );
 
@@ -819,38 +868,117 @@ class _AddProductModalState extends State<AddProductModal> {
                         const SizedBox(height: 12),
                       ],
 
-                      // 4. Barcode / EAN-13 + Scan Camera Button
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          _buildLabel('Barcode / EAN-13'),
-                          GestureDetector(
-                            onTap: _openBarcodeScanner,
-                            child: Row(
-                              children: [
-                                const Icon(Icons.qr_code_scanner_rounded, size: 14, color: Color(0xFF0284C7)),
-                                const SizedBox(width: 4),
-                                Text(
-                                  'Scan Camera',
-                                  style: GoogleFonts.inter(
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.w800,
-                                    color: const Color(0xFF0284C7),
+                      // 4. Barcode / EAN-13 (hidden for restaurant)
+                      if (vert.toggles.showBarcode) ...[
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            _buildLabel('Barcode / EAN-13'),
+                            GestureDetector(
+                              onTap: _openBarcodeScanner,
+                              child: Row(
+                                children: [
+                                  const Icon(Icons.qr_code_scanner_rounded, size: 14, color: Color(0xFF0284C7)),
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    'Scan Camera',
+                                    style: GoogleFonts.inter(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w800,
+                                      color: const Color(0xFF0284C7),
+                                    ),
                                   ),
-                                ),
-                              ],
+                                ],
+                              ),
                             ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 5),
-                      TextFormField(
-                        controller: _barcodeCtrl,
-                        keyboardType: TextInputType.number,
-                        style: GoogleFonts.robotoMono(fontSize: 13.5, fontWeight: FontWeight.w700),
-                        decoration: _buildInputDecoration('e.g. 8901030383748'),
-                      ),
-                      const SizedBox(height: 12),
+                          ],
+                        ),
+                        const SizedBox(height: 5),
+                        TextFormField(
+                          controller: _barcodeCtrl,
+                          keyboardType: TextInputType.number,
+                          style: GoogleFonts.robotoMono(fontSize: 13.5, fontWeight: FontWeight.w700),
+                          decoration: _buildInputDecoration('e.g. 8901030383748'),
+                        ),
+                        const SizedBox(height: 12),
+                      ],
+
+                      // Row 5: Size + Color (Clothing/Apparel only)
+                      if (vert.toggles.showSizeVariants) ...[
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  _buildLabel('Size / Variant'),
+                                  const SizedBox(height: 4),
+                                  TextFormField(
+                                    controller: _sizeCtrl,
+                                    style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w600),
+                                    decoration: _buildInputDecoration('e.g. S, M, L, XL, 40, 42'),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  _buildLabel('Color'),
+                                  const SizedBox(height: 4),
+                                  TextFormField(
+                                    controller: _colorCtrl,
+                                    style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w600),
+                                    decoration: _buildInputDecoration('e.g. Red, Navy Blue, Black'),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 12),
+                      ],
+
+                      // Row 6: IMEI / Serial + Warranty (Hardware/Electrical only)
+                      if (vert.toggles.showImeiWarranty) ...[
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  _buildLabel('IMEI / Serial No.'),
+                                  const SizedBox(height: 4),
+                                  TextFormField(
+                                    controller: _imeiCtrl,
+                                    style: GoogleFonts.robotoMono(fontSize: 12.5, fontWeight: FontWeight.w600),
+                                    decoration: _buildInputDecoration('e.g. SN-20240701-X'),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  _buildLabel('Warranty (Months)'),
+                                  const SizedBox(height: 4),
+                                  TextFormField(
+                                    controller: _warrantyCtrl,
+                                    keyboardType: TextInputType.number,
+                                    style: GoogleFonts.robotoMono(fontSize: 13, fontWeight: FontWeight.w700),
+                                    decoration: _buildInputDecoration('e.g. 12, 24'),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 12),
+                      ],
 
                       // 5. Stock & Inventory Card (With Unlimited Stock Toggle!)
                       Container(
