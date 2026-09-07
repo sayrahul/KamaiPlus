@@ -3,6 +3,9 @@
 > Yeh file KamaiPlus app ke sabhi solved features, UI decisions, aur user preferences ka **Single Source of Truth (SSOT)** hai. 
 > Koi bhi naya feature ya screen banane se pehle is file ko check karna **COMPULSORY** hai. 
 > Yaha likhe kisi bhi solved feature ya user preference ko dubara todna ya revert karna **STRICTLY FORBIDDEN** hai.
+>
+> 🔒 **PERMANENT GOLD BASELINE LOCKED:** Version 4.17.0 (Commit `e7d4079` / Tag `v4.17.0-locked-gold`).
+> Is version ke sabhi features device par verified hain. Kisi bhi halat me is version ka koi bhi UI element, navigation structure, ya feature revert nahi kiya jayega.
 
 ---
 
