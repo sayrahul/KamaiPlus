@@ -23,15 +23,48 @@ class LocalDatabase {
 
     return await openDatabase(
       path,
-      version: 1,
+      version: 2,
       onCreate: _createDB,
+      onUpgrade: (db, oldVersion, newVersion) async {
+        if (oldVersion < 2) {
+          await _migrateToV2(db);
+        }
+      },
       onOpen: (db) async {
         await _ensureExtraTables(db);
       },
     );
   }
 
+  Future<void> _migrateToV2(Database db) async {
+    try {
+      await db.execute('ALTER TABLE store_profile ADD COLUMN business_type TEXT');
+    } catch (_) {}
+    try {
+      await db.execute('ALTER TABLE products ADD COLUMN batch_number TEXT');
+    } catch (_) {}
+    try {
+      await db.execute('ALTER TABLE products ADD COLUMN expiry_date TEXT');
+    } catch (_) {}
+    try {
+      await db.execute('ALTER TABLE products ADD COLUMN size TEXT');
+    } catch (_) {}
+    try {
+      await db.execute('ALTER TABLE products ADD COLUMN color TEXT');
+    } catch (_) {}
+    try {
+      await db.execute('ALTER TABLE products ADD COLUMN imei_serial TEXT');
+    } catch (_) {}
+    try {
+      await db.execute('ALTER TABLE products ADD COLUMN hsn_code TEXT');
+    } catch (_) {}
+    try {
+      await db.execute('ALTER TABLE products ADD COLUMN is_loose_item INTEGER DEFAULT 0');
+    } catch (_) {}
+  }
+
   Future<void> _ensureExtraTables(Database db) async {
+    await _migrateToV2(db);
     await db.execute('''
       CREATE TABLE IF NOT EXISTS store_profile (
         id TEXT PRIMARY KEY,
@@ -42,6 +75,7 @@ class LocalDatabase {
         email TEXT,
         upi_vpa TEXT,
         category TEXT,
+        business_type TEXT,
         address TEXT,
         pincode TEXT,
         gstin TEXT,
@@ -139,6 +173,13 @@ class LocalDatabase {
         tax_rate REAL NOT NULL,
         is_tax_inclusive INTEGER NOT NULL,
         unit TEXT NOT NULL,
+        batch_number TEXT,
+        expiry_date TEXT,
+        size TEXT,
+        color TEXT,
+        imei_serial TEXT,
+        hsn_code TEXT,
+        is_loose_item INTEGER DEFAULT 0,
         sync_status TEXT NOT NULL
       )
     ''');
@@ -860,6 +901,9 @@ class LocalDatabase {
   }
 
   Future<void> _ensureStoreProfileTable(Database db) async {
+    try {
+      await db.execute('ALTER TABLE store_profile ADD COLUMN business_type TEXT');
+    } catch (_) {}
     await db.execute('''
       CREATE TABLE IF NOT EXISTS store_profile (
         id TEXT PRIMARY KEY,
@@ -870,6 +914,7 @@ class LocalDatabase {
         email TEXT,
         upi_vpa TEXT,
         category TEXT,
+        business_type TEXT,
         address TEXT,
         pincode TEXT,
         gstin TEXT,
