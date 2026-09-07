@@ -90,6 +90,13 @@ class AuthService {
       }
 
       return userCredential;
+    } on GoogleSignInException catch (e) {
+      if (e.code == GoogleSignInExceptionCode.canceled) {
+        debugPrint('Google Sign-In canceled by user.');
+        return null;
+      }
+      debugPrint('GoogleSignInException: ${e.description}');
+      rethrow;
     } catch (e) {
       debugPrint('Error signing in with Google: $e');
       rethrow;

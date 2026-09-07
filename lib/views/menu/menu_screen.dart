@@ -421,13 +421,13 @@ class _MenuScreenState extends State<MenuScreen> {
                     children: [
                       Expanded(
                         child: _buildNavCard(
-                          title: 'Cloud Backup',
-                          subtitle: 'Google Drive Sync',
+                          title: 'Backup & Reset',
+                          subtitle: 'Vault & Start Fresh',
                           icon: Icons.cloud_done_rounded,
                           iconColor: const Color(0xFF0284C7),
                           iconBg: const Color(0xFFF0F9FF),
                           borderColor: const Color(0xFFBAE6FD),
-                          badgeText: 'SYNC',
+                          badgeText: 'RESET',
                           onTap: () => _handleScreenPush(const BackupRestoreScreen()),
                         ),
                       ),

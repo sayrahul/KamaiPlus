@@ -336,3 +336,14 @@ Comprehensive enterprise-grade retail UX upgrade suite aligned with PhonePe Busi
       - Foreground heads-up notification banner on bill generation (`showSaleNotification`), low stock alerts, and shift closing reports.
       - Android desugaring enabled (`com.android.tools:desugar_jdk_libs:2.1.4`) to support Java 8+ APIs required by `flutter_local_notifications`.
       - Deployed, verified, and FCM token registered on physical Redmi 6 device (`de7ea8af7d29`) on 07 September 2026, 10:32 PM IST.
+
+20. **Data Reset & Start Fresh Vault (`lib/views/settings/backup_restore_screen.dart` & `lib/core/database/local_database.dart`):**
+    - **Atomic SQLite Deletion Protocols:**
+      1. `clearSalesHistory()`: Deletes from `sales`, resets today's turnover counter to 0.
+      2. `clearProductsAndInventory()`: Deletes `products`, `categories`, and `inventory_movements` to allow clean real stock entry.
+      3. `clearKhataAndCustomers()`: Deletes `customers` and `ledger_transactions` to clear Udhar/Jama dues.
+      4. `completeFactoryReset({bool resetStoreProfile = false})`: Atomic SQLite wipe across all operational retail tables (`sales`, `products`, `categories`, `inventory_movements`, `customers`, `ledger_transactions`, `expenses`, `cash_register_shifts`, `suppliers`), with optional store profile preservation.
+    - **UI & Security Invariants:**
+      - High-contrast Danger Zone section with red warning badges and explanatory text.
+      - **Owner Security PIN Guard (`1234`)** enforced before allowing complete factory wipe to prevent accidental employee deletion.
+      - Accessible via Settings and Menu Hub modal ("Backup & Reset" tile).

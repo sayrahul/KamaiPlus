@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../core/database/local_database.dart';
 import '../../services/firestore_sync_service.dart';
@@ -15,6 +16,7 @@ class BackupRestoreScreen extends StatefulWidget {
 class _BackupRestoreScreenState extends State<BackupRestoreScreen> {
   int _itemCount = 0;
   int _saleCount = 0;
+  int _customerCount = 0;
   bool _isLoading = true;
   bool _isSyncing = false;
 
@@ -28,10 +30,12 @@ class _BackupRestoreScreenState extends State<BackupRestoreScreen> {
     try {
       final products = await LocalDatabase.instance.getAllProducts();
       final sales = await LocalDatabase.instance.getAllSales(limit: 500);
+      final customers = await LocalDatabase.instance.getAllCustomers();
       if (mounted) {
         setState(() {
           _itemCount = products.length;
           _saleCount = sales.length;
+          _customerCount = customers.length;
           _isLoading = false;
         });
       }
@@ -71,7 +75,7 @@ class _BackupRestoreScreenState extends State<BackupRestoreScreen> {
             ],
           ),
           content: Text(
-            'Snapshot generated with $_itemCount products, ${customers.length} customers and $_saleCount sales bills (${(jsonStr.length / 1024).toStringAsFixed(1)} KB).\n\nSaved to Internal Storage / Documents / KamaiPlus_Backup.json',
+            'Snapshot generated with $_itemCount products, $_customerCount customers and $_saleCount sales bills (${(jsonStr.length / 1024).toStringAsFixed(1)} KB).\n\nSaved to Internal Storage / Documents / KamaiPlus_Backup.json',
             style: GoogleFonts.inter(fontSize: 13, color: const Color(0xFF475569)),
           ),
           actions: [
@@ -108,6 +112,279 @@ class _BackupRestoreScreenState extends State<BackupRestoreScreen> {
     }
   }
 
+  // ==========================================
+  // DANGER ZONE CONFIRMATION DIALOGS
+  // ==========================================
+
+  void _confirmClearSales() {
+    HapticFeedback.mediumImpact();
+    final messenger = ScaffoldMessenger.of(context);
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: Colors.white,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(color: const Color(0xFFFEE2E2), borderRadius: BorderRadius.circular(10)),
+              child: const Icon(Icons.receipt_long_rounded, color: Color(0xFFDC2626), size: 22),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text('Clear Sales History?', style: GoogleFonts.outfit(fontSize: 17, fontWeight: FontWeight.w700)),
+            ),
+          ],
+        ),
+        content: Text(
+          'Aapke sabhi purane sales bills aur transaction records delete ho jayenge ($_saleCount bills). Daily counter zero reset ho jayega.\n\nProducts aur customers safe rahenge.',
+          style: GoogleFonts.inter(fontSize: 13, color: const Color(0xFF475569)),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text('Cancel', style: GoogleFonts.inter(fontWeight: FontWeight.w600, color: const Color(0xFF64748B))),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              Navigator.pop(ctx);
+              await LocalDatabase.instance.clearSalesHistory();
+              await _loadStats();
+              if (!mounted) return;
+              messenger.showSnackBar(
+                const SnackBar(
+                  content: Text('✓ Sales and transaction history cleared successfully!'),
+                  backgroundColor: Color(0xFF059669),
+                ),
+              );
+            },
+            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFDC2626), foregroundColor: Colors.white),
+            child: const Text('Delete Sales'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _confirmClearProducts() {
+    HapticFeedback.mediumImpact();
+    final messenger = ScaffoldMessenger.of(context);
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: Colors.white,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(color: const Color(0xFFFEE2E2), borderRadius: BorderRadius.circular(10)),
+              child: const Icon(Icons.inventory_2_rounded, color: Color(0xFFDC2626), size: 22),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text('Clear All Products?', style: GoogleFonts.outfit(fontSize: 17, fontWeight: FontWeight.w700)),
+            ),
+          ],
+        ),
+        content: Text(
+          'Aapka poora product catalog ($_itemCount items) aur category list delete ho jayegi taaki aap fresh real stock add kar sakein.\n\nSales bills aur customers safe rahenge.',
+          style: GoogleFonts.inter(fontSize: 13, color: const Color(0xFF475569)),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text('Cancel', style: GoogleFonts.inter(fontWeight: FontWeight.w600, color: const Color(0xFF64748B))),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              Navigator.pop(ctx);
+              await LocalDatabase.instance.clearProductsAndInventory();
+              await _loadStats();
+              if (!mounted) return;
+              messenger.showSnackBar(
+                const SnackBar(
+                  content: Text('✓ Products catalog cleared successfully!'),
+                  backgroundColor: Color(0xFF059669),
+                ),
+              );
+            },
+            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFDC2626), foregroundColor: Colors.white),
+            child: const Text('Delete Products'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _confirmClearKhata() {
+    HapticFeedback.mediumImpact();
+    final messenger = ScaffoldMessenger.of(context);
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: Colors.white,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(color: const Color(0xFFFEE2E2), borderRadius: BorderRadius.circular(10)),
+              child: const Icon(Icons.menu_book_rounded, color: Color(0xFFDC2626), size: 22),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text('Clear Khata & Udhar?', style: GoogleFonts.outfit(fontSize: 17, fontWeight: FontWeight.w700)),
+            ),
+          ],
+        ),
+        content: Text(
+          'Sabhi customers ($_customerCount) aur unka Udhar / Jama ledger hisab delete ho jayega.\n\nProducts aur bills safe rahenge.',
+          style: GoogleFonts.inter(fontSize: 13, color: const Color(0xFF475569)),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text('Cancel', style: GoogleFonts.inter(fontWeight: FontWeight.w600, color: const Color(0xFF64748B))),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              Navigator.pop(ctx);
+              await LocalDatabase.instance.clearKhataAndCustomers();
+              await _loadStats();
+              if (!mounted) return;
+              messenger.showSnackBar(
+                const SnackBar(
+                  content: Text('✓ Khata and customer ledger cleared successfully!'),
+                  backgroundColor: Color(0xFF059669),
+                ),
+              );
+            },
+            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFDC2626), foregroundColor: Colors.white),
+            child: const Text('Delete Khata'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _confirmFactoryReset() {
+    HapticFeedback.heavyImpact();
+    final messenger = ScaffoldMessenger.of(context);
+    final pinController = TextEditingController();
+    bool resetProfile = false;
+    String? errorMessage;
+
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (modalCtx, setModalState) => AlertDialog(
+          backgroundColor: Colors.white,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(color: const Color(0xFFFEE2E2), borderRadius: BorderRadius.circular(10)),
+                child: const Icon(Icons.warning_amber_rounded, color: Color(0xFFDC2626), size: 24),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text('Factory Reset & Start Fresh', style: GoogleFonts.outfit(fontSize: 17, fontWeight: FontWeight.w800, color: const Color(0xFFDC2626))),
+              ),
+            ],
+          ),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Yeh action permanent hai! Aapke sabhi test bills, products catalog, khata hisab, expenses, aur cash shifts completely saaf ho jayenge.',
+                  style: GoogleFonts.inter(fontSize: 13, color: const Color(0xFF475569)),
+                ),
+                const SizedBox(height: 14),
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(color: const Color(0xFFFFF1F2), borderRadius: BorderRadius.circular(10), border: Border.all(color: const Color(0xFFFECDD3))),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.security_rounded, color: Color(0xFFDC2626), size: 18),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'Security Guard: Owner PIN enter karein (Default: 1234)',
+                          style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w600, color: const Color(0xFF991B1B)),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: pinController,
+                  keyboardType: TextInputType.number,
+                  obscureText: true,
+                  maxLength: 4,
+                  decoration: InputDecoration(
+                    labelText: 'Enter 4-Digit Owner PIN',
+                    hintText: '1234',
+                    errorText: errorMessage,
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                    counterText: '',
+                  ),
+                ),
+                const SizedBox(height: 10),
+                CheckboxListTile(
+                  contentPadding: EdgeInsets.zero,
+                  value: resetProfile,
+                  onChanged: (val) => setModalState(() => resetProfile = val ?? false),
+                  title: Text(
+                    'Dukan ki basic profile (Name, Address, UPI) bhi reset karein?',
+                    style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF334155)),
+                  ),
+                  controlAffinity: ListTileControlAffinity.leading,
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: Text('Cancel', style: GoogleFonts.inter(fontWeight: FontWeight.w600, color: const Color(0xFF64748B))),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                final enteredPin = pinController.text.trim();
+                if (enteredPin != '1234') {
+                  setModalState(() => errorMessage = 'Incorrect PIN! Default PIN is 1234');
+                  return;
+                }
+                Navigator.pop(ctx);
+                await LocalDatabase.instance.completeFactoryReset(resetStoreProfile: resetProfile);
+                await _loadStats();
+                if (!mounted) return;
+                messenger.showSnackBar(
+                  const SnackBar(
+                    content: Text('✓ Store database reset complete! You are ready to start fresh.'),
+                    backgroundColor: Color(0xFF059669),
+                  ),
+                );
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFFDC2626),
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              ),
+              child: const Text('CONFIRM RESET'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -120,7 +397,7 @@ class _BackupRestoreScreenState extends State<BackupRestoreScreen> {
           onPressed: () => Navigator.pop(context),
         ),
         title: Text(
-          'Data Backup & Tax Reports',
+          'Data Backup & Reset Vault',
           style: GoogleFonts.outfit(fontSize: 17, fontWeight: FontWeight.w700, color: const Color(0xFF0F172A)),
         ),
       ),
@@ -152,8 +429,8 @@ class _BackupRestoreScreenState extends State<BackupRestoreScreen> {
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Text('Data Backup & Tax Reports', style: GoogleFonts.outfit(fontSize: 15, fontWeight: FontWeight.w700)),
-                                Text('Offline JSON snapshots, Tally Prime XML, and CA exports', style: GoogleFonts.inter(fontSize: 11, color: const Color(0xFF64748B))),
+                                Text('Data Backup & Reset Vault', style: GoogleFonts.outfit(fontSize: 15, fontWeight: FontWeight.w700)),
+                                Text('Snapshots, Tally Prime, Cloud Sync & Data Management', style: GoogleFonts.inter(fontSize: 11, color: const Color(0xFF64748B))),
                               ],
                             ),
                           ),
@@ -173,11 +450,11 @@ class _BackupRestoreScreenState extends State<BackupRestoreScreen> {
                             const SizedBox(width: 8),
                             Expanded(
                               child: Text(
-                                'Offline Active • $_itemCount items, $_saleCount bills saved safely',
+                                'Offline Active • $_itemCount items • $_saleCount bills • $_customerCount customers',
                                 style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w600, color: const Color(0xFF166534)),
                               ),
                             ),
-                            Text('Last: Just now', style: GoogleFonts.inter(fontSize: 10, color: const Color(0xFF15803D))),
+                            Text('Live', style: GoogleFonts.inter(fontSize: 10, color: const Color(0xFF15803D))),
                           ],
                         ),
                       ),
@@ -235,7 +512,7 @@ class _BackupRestoreScreenState extends State<BackupRestoreScreen> {
                   title: 'Tally Prime XML',
                   subtitle: 'Vouchers, Sales & Sundry Debtors import',
                   badge: 'TALLY ERP 9',
-                  buttonLabel: 'Export Tally XML',
+                  buttonLabel: 'Export XML',
                   onTap: () {
                     ScaffoldMessenger.of(context).showSnackBar(
                       const SnackBar(content: Text('Tally Prime XML vouchers compiled in Downloads/tally_vouchers.xml')),
@@ -256,6 +533,125 @@ class _BackupRestoreScreenState extends State<BackupRestoreScreen> {
                       const SnackBar(content: Text('CA Master CSV exported to Downloads/kamai_ca_register.csv')),
                     );
                   },
+                ),
+                const SizedBox(height: 28),
+
+                // Section 3: DANGER ZONE / DATA RESET (START FRESH)
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      decoration: BoxDecoration(color: const Color(0xFFFEE2E2), borderRadius: BorderRadius.circular(4)),
+                      child: Text('DANGER ZONE', style: GoogleFonts.outfit(fontSize: 10, fontWeight: FontWeight.w900, color: const Color(0xFFDC2626))),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'DATA RESET & START FRESH',
+                        style: GoogleFonts.outfit(fontSize: 12, fontWeight: FontWeight.w800, color: const Color(0xFF991B1B), letterSpacing: 0.6),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  'Naye store setup ke liye test data delete karein. Data safe rakhne ke liye pehle backup download kar lein.',
+                  style: GoogleFonts.inter(fontSize: 11, color: const Color(0xFF64748B)),
+                ),
+                const SizedBox(height: 12),
+
+                // Option 1: Clear Sales Bills
+                _buildActionCard(
+                  icon: Icons.receipt_long_rounded,
+                  iconColor: const Color(0xFFDC2626),
+                  iconBg: const Color(0xFFFEE2E2),
+                  title: 'Clear Transaction History',
+                  subtitle: '$_saleCount sales bills • Resets daily sales counter',
+                  buttonLabel: 'Clear Bills',
+                  buttonColor: const Color(0xFFDC2626),
+                  onTap: _confirmClearSales,
+                ),
+                const SizedBox(height: 10),
+
+                // Option 2: Clear Products Catalog
+                _buildActionCard(
+                  icon: Icons.inventory_2_rounded,
+                  iconColor: const Color(0xFFDC2626),
+                  iconBg: const Color(0xFFFEE2E2),
+                  title: 'Clear Products Catalog',
+                  subtitle: '$_itemCount products & inventory stock history',
+                  buttonLabel: 'Clear Items',
+                  buttonColor: const Color(0xFFDC2626),
+                  onTap: _confirmClearProducts,
+                ),
+                const SizedBox(height: 10),
+
+                // Option 3: Clear Khata & Customers
+                _buildActionCard(
+                  icon: Icons.menu_book_rounded,
+                  iconColor: const Color(0xFFDC2626),
+                  iconBg: const Color(0xFFFEE2E2),
+                  title: 'Clear Digital Khata',
+                  subtitle: '$_customerCount customers & Udhar ledger records',
+                  buttonLabel: 'Clear Khata',
+                  buttonColor: const Color(0xFFDC2626),
+                  onTap: _confirmClearKhata,
+                ),
+                const SizedBox(height: 14),
+
+                // Option 4: Full Factory Reset (Start Fresh)
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFFFF1F2),
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: const Color(0xFFFECDD3), width: 1.5),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(color: const Color(0xFFDC2626), borderRadius: BorderRadius.circular(10)),
+                            child: const Icon(Icons.delete_forever_rounded, color: Colors.white, size: 22),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text('Complete Factory Reset', style: GoogleFonts.outfit(fontSize: 15, fontWeight: FontWeight.w800, color: const Color(0xFF991B1B))),
+                                Text('Purana sabhi data saaf karke Start Fresh karein', style: GoogleFonts.inter(fontSize: 11, color: const Color(0xFFB91C1C))),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      Text(
+                        'Bills, Products, Customers, Expenses aur Shifts saaf ho jayenge. Yeh action irreversible hai aur PIN protected hai.',
+                        style: GoogleFonts.inter(fontSize: 11, color: const Color(0xFF7F1D1D)),
+                      ),
+                      const SizedBox(height: 12),
+                      SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton.icon(
+                          onPressed: _confirmFactoryReset,
+                          icon: const Icon(Icons.restore_rounded, size: 18),
+                          label: Text('START FRESH (FACTORY RESET)', style: GoogleFonts.outfit(fontSize: 13, fontWeight: FontWeight.w800, letterSpacing: 0.5)),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFFDC2626),
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                            elevation: 0,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ],
             ),
@@ -283,6 +679,7 @@ class _BackupRestoreScreenState extends State<BackupRestoreScreen> {
     required String subtitle,
     String? badge,
     required String buttonLabel,
+    Color? buttonColor,
     required VoidCallback onTap,
   }) {
     return Container(
@@ -338,7 +735,7 @@ class _BackupRestoreScreenState extends State<BackupRestoreScreen> {
           ElevatedButton(
             onPressed: onTap,
             style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF0F172A),
+              backgroundColor: buttonColor ?? const Color(0xFF0F172A),
               foregroundColor: Colors.white,
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),

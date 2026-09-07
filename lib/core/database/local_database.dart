@@ -1053,4 +1053,54 @@ class LocalDatabase {
     );
     return result.map((m) => CashRegisterShiftModel.fromMap(m)).toList();
   }
+
+  // ==========================================
+  // DATA RESET & FACTORY WIPE (START FRESH)
+  // ==========================================
+
+  /// 1. Clears all sales history, bills, and resets daily counter
+  Future<void> clearSalesHistory() async {
+    final db = await instance.database;
+    await db.transaction((txn) async {
+      await txn.delete('sales');
+    });
+  }
+
+  /// 2. Clears all products, categories, and stock audit ledger
+  Future<void> clearProductsAndInventory() async {
+    final db = await instance.database;
+    await db.transaction((txn) async {
+      await txn.delete('products');
+      await txn.delete('categories');
+      await txn.delete('inventory_movements');
+    });
+  }
+
+  /// 3. Clears all customers and Khata ledger transactions
+  Future<void> clearKhataAndCustomers() async {
+    final db = await instance.database;
+    await db.transaction((txn) async {
+      await txn.delete('customers');
+      await txn.delete('ledger_transactions');
+    });
+  }
+
+  /// 4. Complete Factory Reset: Wipes all operational retail data cleanly
+  Future<void> completeFactoryReset({bool resetStoreProfile = false}) async {
+    final db = await instance.database;
+    await db.transaction((txn) async {
+      await txn.delete('sales');
+      await txn.delete('products');
+      await txn.delete('categories');
+      await txn.delete('inventory_movements');
+      await txn.delete('customers');
+      await txn.delete('ledger_transactions');
+      await txn.delete('expenses');
+      await txn.delete('cash_register_shifts');
+      await txn.delete('suppliers');
+      if (resetStoreProfile) {
+        await txn.delete('store_profile');
+      }
+    });
+  }
 }
