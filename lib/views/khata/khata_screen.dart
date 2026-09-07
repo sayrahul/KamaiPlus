@@ -4,6 +4,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:uuid/uuid.dart';
+import '../../core/constants/business_vertical_config.dart';
 import '../../core/database/local_database.dart';
 import '../../core/utils/app_validators.dart';
 import '../../core/utils/money_formatter.dart';
@@ -505,7 +506,7 @@ class _KhataScreenState extends State<KhataScreen> {
         onChanged: (val) => setState(() => _searchQuery = val),
         style: GoogleFonts.inter(fontSize: 13, color: const Color(0xFF0F172A)),
         decoration: InputDecoration(
-          hintText: 'Search customer name, phone, locality...',
+          hintText: BusinessVerticals.resolve(BusinessVerticals.activeBusinessTypeNotifier.value).placeholders.customerSearch,
           hintStyle: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF94A3B8)),
           prefixIcon: const Icon(Icons.search_rounded, color: Color(0xFF64748B), size: 18),
           suffixIcon: _searchQuery.isNotEmpty

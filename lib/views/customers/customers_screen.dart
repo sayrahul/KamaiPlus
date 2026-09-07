@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:uuid/uuid.dart';
+import '../../core/constants/business_vertical_config.dart';
 import '../../core/database/local_database.dart';
 import '../../core/utils/app_validators.dart';
 import '../../core/utils/money_formatter.dart';
@@ -547,7 +548,7 @@ class _CustomersScreenState extends State<CustomersScreen> {
                     onChanged: (v) => setState(() => _search = v),
                     style: GoogleFonts.inter(fontSize: 13),
                     decoration: InputDecoration(
-                      hintText: 'Search by customer name or mobile...',
+                      hintText: BusinessVerticals.resolve(BusinessVerticals.activeBusinessTypeNotifier.value).placeholders.customerSearch,
                       prefixIcon: const Icon(Icons.search_rounded, size: 20, color: Color(0xFF94A3B8)),
                       isDense: true,
                       filled: true,
