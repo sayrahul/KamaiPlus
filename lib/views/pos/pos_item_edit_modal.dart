@@ -252,6 +252,31 @@ class _PosItemEditModalState extends State<PosItemEditModal> {
                 ),
               ],
             ),
+            // Row 18: Show size/color/batch read-only attribute chips if present
+            Builder(builder: (ctx) {
+              final p = widget.cartItem.product;
+              final attrs = <String>[];
+              if (p.size != null && p.size!.isNotEmpty) attrs.add('📐 ${p.size}');
+              if (p.color != null && p.color!.isNotEmpty) attrs.add('🎨 ${p.color}');
+              if (p.batchNumber != null && p.batchNumber!.isNotEmpty) attrs.add('📦 Batch: ${p.batchNumber}');
+              if (attrs.isEmpty) return const SizedBox.shrink();
+              return Padding(
+                padding: const EdgeInsets.only(top: 6, bottom: 2),
+                child: Wrap(
+                  spacing: 6,
+                  runSpacing: 4,
+                  children: attrs.map((a) => Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF1F5F9),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: const Color(0xFFCBD5E1)),
+                    ),
+                    child: Text(a, style: GoogleFonts.inter(fontSize: 10.5, fontWeight: FontWeight.w600, color: const Color(0xFF475569))),
+                  )).toList(),
+                ),
+              );
+            }),
             const SizedBox(height: 18),
 
             // 2. Quantity Label, Unit Pill, and Notice
