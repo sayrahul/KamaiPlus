@@ -37,6 +37,13 @@ class ProductModel {
   final double taxRate;
   final bool isTaxInclusive;
   final String unit;
+  final String? batchNumber;
+  final String? expiryDate;
+  final String? size;
+  final String? color;
+  final String? imeiSerial;
+  final String? hsnCode;
+  final bool isLooseItem;
   final String syncStatus;
 
   ProductModel({
@@ -52,6 +59,13 @@ class ProductModel {
     this.taxRate = 0.0,
     this.isTaxInclusive = true,
     this.unit = 'pcs',
+    this.batchNumber,
+    this.expiryDate,
+    this.size,
+    this.color,
+    this.imeiSerial,
+    this.hsnCode,
+    this.isLooseItem = false,
     this.syncStatus = 'synced',
   });
 
@@ -68,6 +82,13 @@ class ProductModel {
     'tax_rate': taxRate,
     'is_tax_inclusive': isTaxInclusive ? 1 : 0,
     'unit': unit,
+    'batch_number': batchNumber,
+    'expiry_date': expiryDate,
+    'size': size,
+    'color': color,
+    'imei_serial': imeiSerial,
+    'hsn_code': hsnCode,
+    'is_loose_item': isLooseItem ? 1 : 0,
     'sync_status': syncStatus,
   };
 
@@ -84,27 +105,56 @@ class ProductModel {
     taxRate: (map['tax_rate'] as num?)?.toDouble() ?? 0.0,
     isTaxInclusive: (map['is_tax_inclusive'] == 1 || map['is_tax_inclusive'] == true),
     unit: map['unit'] ?? 'pcs',
+    batchNumber: map['batch_number'] as String?,
+    expiryDate: map['expiry_date'] as String?,
+    size: map['size'] as String?,
+    color: map['color'] as String?,
+    imeiSerial: map['imei_serial'] as String?,
+    hsnCode: map['hsn_code'] as String?,
+    isLooseItem: map['is_loose_item'] == 1 || map['is_loose_item'] == true,
     syncStatus: map['sync_status'] ?? 'pending',
   );
 
   ProductModel copyWith({
     double? stockQuantity,
     int? sellingPricePaise,
+    int? mrpPaise,
+    int? purchasePricePaise,
     String? name,
+    String? barcode,
+    String? categoryId,
+    double? taxRate,
+    bool? isTaxInclusive,
+    String? unit,
+    String? batchNumber,
+    String? expiryDate,
+    String? size,
+    String? color,
+    String? imeiSerial,
+    String? hsnCode,
+    bool? isLooseItem,
+    String? syncStatus,
   }) => ProductModel(
     id: id,
     businessId: businessId,
     name: name ?? this.name,
-    barcode: barcode,
-    categoryId: categoryId,
+    barcode: barcode ?? this.barcode,
+    categoryId: categoryId ?? this.categoryId,
     sellingPricePaise: sellingPricePaise ?? this.sellingPricePaise,
-    mrpPaise: mrpPaise,
-    purchasePricePaise: purchasePricePaise,
+    mrpPaise: mrpPaise ?? this.mrpPaise,
+    purchasePricePaise: purchasePricePaise ?? this.purchasePricePaise,
     stockQuantity: stockQuantity ?? this.stockQuantity,
-    taxRate: taxRate,
-    isTaxInclusive: isTaxInclusive,
-    unit: unit,
-    syncStatus: syncStatus,
+    taxRate: taxRate ?? this.taxRate,
+    isTaxInclusive: isTaxInclusive ?? this.isTaxInclusive,
+    unit: unit ?? this.unit,
+    batchNumber: batchNumber ?? this.batchNumber,
+    expiryDate: expiryDate ?? this.expiryDate,
+    size: size ?? this.size,
+    color: color ?? this.color,
+    imeiSerial: imeiSerial ?? this.imeiSerial,
+    hsnCode: hsnCode ?? this.hsnCode,
+    isLooseItem: isLooseItem ?? this.isLooseItem,
+    syncStatus: syncStatus ?? this.syncStatus,
   );
 }
 
@@ -446,6 +496,7 @@ class StoreProfileModel {
   final String email;
   final String upiVpa;
   final String category;
+  final String businessType;
   final String address;
   final String pincode;
   final String gstin;
@@ -461,6 +512,7 @@ class StoreProfileModel {
     this.email = '',
     this.upiVpa = '',
     this.category = 'Retail Store',
+    this.businessType = 'grocery',
     this.address = 'Main Market, Station Road',
     this.pincode = '',
     this.gstin = '',
@@ -477,6 +529,7 @@ class StoreProfileModel {
     'email': email,
     'upi_vpa': upiVpa,
     'category': category,
+    'business_type': businessType,
     'address': address,
     'pincode': pincode,
     'gstin': gstin,
@@ -493,6 +546,7 @@ class StoreProfileModel {
     email: map['email'] ?? '',
     upiVpa: map['upi_vpa'] ?? '',
     category: (map['category'] as String?)?.isNotEmpty == true ? map['category'] : 'Retail Store',
+    businessType: (map['business_type'] as String?)?.isNotEmpty == true ? map['business_type'] : 'grocery',
     address: map['address'] ?? 'Main Market, Station Road',
     pincode: map['pincode'] ?? '',
     gstin: map['gstin'] ?? '',
