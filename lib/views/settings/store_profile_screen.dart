@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:qr_flutter/qr_flutter.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import '../../core/constants/business_vertical_config.dart';
 import '../../core/database/local_database.dart';
 import '../../core/utils/app_validators.dart';
 import '../../models/models.dart';
@@ -23,7 +25,7 @@ class StoreProfileScreen extends StatefulWidget {
 }
 
 class _StoreProfileScreenState extends State<StoreProfileScreen> {
-  int _currentTab = 0; // 0: Store & GST Profile, 1: UPI QR & Banking, 2: Invoice & Bill Rules
+  late int _currentTab; // 0: Store & GST Profile, 1: UPI QR & Banking, 2: Invoice & Bill Rules
 
   // Store Profile Controllers
   final _formKey = GlobalKey<FormState>();
@@ -38,6 +40,7 @@ class _StoreProfileScreenState extends State<StoreProfileScreen> {
   final _fssaiCtrl = TextEditingController();
 
   String _selectedCategory = 'Grocery / Kirana';
+  String _selectedBusinessType = 'grocery';
 
   // UPI Accounts
   final _addUpiLabelCtrl = TextEditingController();
@@ -101,6 +104,7 @@ class _StoreProfileScreenState extends State<StoreProfileScreen> {
       _pincodeCtrl.text = profile.pincode;
       _gstinCtrl.text = profile.gstin;
       _fssaiCtrl.text = profile.fssai;
+      _selectedBusinessType = profile.businessType.isNotEmpty ? profile.businessType : 'grocery';
       _selectedCategory = profile.category;
 
       try {
@@ -147,6 +151,7 @@ class _StoreProfileScreenState extends State<StoreProfileScreen> {
       email: _emailCtrl.text.trim(),
       upiVpa: primaryVpa,
       category: _selectedCategory,
+      businessType: _selectedBusinessType,
       address: _addressCtrl.text.trim(),
       pincode: _pincodeCtrl.text.trim(),
       gstin: _gstinCtrl.text.trim(),
@@ -155,6 +160,10 @@ class _StoreProfileScreenState extends State<StoreProfileScreen> {
     );
 
     await LocalDatabase.instance.saveStoreProfile(profile);
+    BusinessVerticals.updateActiveBusinessType(_selectedBusinessType);
+
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('business_type', _selectedBusinessType);
     if (!mounted) return;
 
     ScaffoldMessenger.of(context).showSnackBar(
@@ -729,6 +738,62 @@ class _StoreProfileScreenState extends State<StoreProfileScreen> {
                 controller: _taglineCtrl,
                 style: GoogleFonts.inter(fontSize: 14),
                 decoration: _fieldInputDecoration(hint: 'e.g. Always Fresh, Best Wholesale Rates'),
+              ),
+              const SizedBox(height: 16),
+
+              // Store Type / Retail Vertical
+              _buildFieldLabel('Store Type / Business Vertical *'),
+              const SizedBox(height: 6),
+              Container(
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF8FAFC),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: const Color(0xFFCBD5E1), width: 1.2),
+                ),
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+                child: DropdownButtonHideUnderline(
+                  child: DropdownButton<String>(
+                    value: _selectedBusinessType,
+                    isExpanded: true,
+                    icon: const Icon(Icons.keyboard_arrow_down_rounded, color: Color(0xFF0F172A)),
+                    borderRadius: BorderRadius.circular(12),
+                    items: BusinessVerticals.all.values.map((v) {
+                      return DropdownMenuItem<String>(
+                        value: v.id,
+                        child: Row(
+                          children: [
+                            Text(v.emoji, style: const TextStyle(fontSize: 18)),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Text(
+                                v.name,
+                                style: GoogleFonts.outfit(
+                                  fontSize: 13.5,
+                                  fontWeight: FontWeight.w600,
+                                  color: const Color(0xFF0F172A),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+                    }).toList(),
+                    onChanged: (val) {
+                      if (val != null) {
+                        setState(() {
+                          _selectedBusinessType = val;
+                          final vert = BusinessVerticals.resolve(val);
+                          _selectedCategory = vert.name;
+                        });
+                      }
+                    },
+                  ),
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                'Adapts unit dropdowns, search hints, expiry/size fields, and menu tiles automatically.',
+                style: GoogleFonts.inter(fontSize: 11, color: const Color(0xFF64748B)),
               ),
             ],
           ),
