@@ -68,6 +68,7 @@ class _HomePulseTabState extends State<HomePulseTab> {
       final products = await LocalDatabase.instance.getAllProducts();
 
       final todaySales = sales.where((s) =>
+          !s.isRefunded &&
           s.createdAt.year == now.year &&
           s.createdAt.month == now.month &&
           s.createdAt.day == now.day).toList();

@@ -313,6 +313,8 @@ class SaleModel {
       syncStatus: map['sync_status'] ?? 'pending',
     );
   }
+
+  bool get isRefunded => status.toLowerCase() == 'refunded' || status.toLowerCase() == 'returned';
 }
 
 class LedgerTransactionModel {

@@ -496,6 +496,103 @@ class LocalDatabase {
     return sale;
   }
 
+  // --- 1-TAP SALES RETURN / REFUND ENGINE ---
+  Future<void> processSalesReturn({
+    required SaleModel sale,
+    String reason = 'Customer Return',
+  }) async {
+    final db = await instance.database;
+
+    await db.transaction((txn) async {
+      // 1. Mark sale status as 'refunded'
+      await txn.update(
+        'sales',
+        {
+          'status': 'refunded',
+          'sync_status': 'pending',
+        },
+        where: 'id = ?',
+        whereArgs: [sale.id],
+      );
+
+      // 2. Restock all products into inventory & record audit movement
+      for (final it in sale.items) {
+        final prodId = it['product_id'] ?? it['id'];
+        final prodName = (it['product_name'] ?? it['name'] ?? 'Item').toString();
+        final num rawQty = it['quantity'] ?? it['qty'] ?? 1;
+        final double qty = rawQty.toDouble();
+
+        List<Map<String, dynamic>> prodRows = [];
+        if (prodId != null && prodId.toString().isNotEmpty) {
+          prodRows = await txn.query('products', where: 'id = ?', whereArgs: [prodId.toString()]);
+        }
+        if (prodRows.isEmpty && prodName.isNotEmpty) {
+          prodRows = await txn.query('products', where: 'name = ?', whereArgs: [prodName]);
+        }
+
+        if (prodRows.isNotEmpty) {
+          final pMap = prodRows.first;
+          final currentStock = (pMap['stock_quantity'] as num).toDouble();
+          final targetProdId = pMap['id'].toString();
+          final newStock = currentStock + qty;
+
+          await txn.rawUpdate('''
+            UPDATE products
+            SET stock_quantity = stock_quantity + ?
+            WHERE id = ?
+          ''', [qty, targetProdId]);
+
+          final movement = InventoryMovementModel(
+            id: _uuid.v4(),
+            businessId: sale.businessId,
+            productId: targetProdId,
+            productName: prodName,
+            movementType: 'RETURN',
+            quantity: qty,
+            previousStock: currentStock,
+            newStock: newStock,
+            referenceId: sale.id,
+            createdAt: DateTime.now(),
+          );
+          await txn.insert('inventory_movements', movement.toMap());
+        }
+      }
+
+      // 3. If credit or split-credit was used, reverse customer udhar balance & record ledger entry
+      final creditDue = sale.paymentMethod == 'credit'
+          ? sale.totalAmountPaise
+          : (sale.paymentMethod == 'split' ? sale.splitCreditPaise : 0);
+
+      if (creditDue > 0 && sale.customerId != null && sale.customerId!.isNotEmpty) {
+        final custRows = await txn.query('customers', where: 'id = ?', whereArgs: [sale.customerId]);
+        if (custRows.isNotEmpty) {
+          final currentBal = custRows.first['current_balance_paise'] as int;
+          final newBal = (currentBal - creditDue).clamp(0, 999999999999);
+
+          await txn.rawUpdate('''
+            UPDATE customers
+            SET current_balance_paise = ?
+            WHERE id = ?
+          ''', [newBal, sale.customerId]);
+
+          final ledgerEntry = LedgerTransactionModel(
+            id: _uuid.v4(),
+            businessId: sale.businessId,
+            customerId: sale.customerId!,
+            type: 'debit', // Reversing credit debt
+            amountPaise: creditDue,
+            balanceAfterPaise: newBal,
+            description: 'Sales Return / Refund #${sale.invoiceNumber}',
+            referenceId: sale.id,
+            createdAt: DateTime.now(),
+            syncStatus: 'pending',
+          );
+          await txn.insert('ledger_transactions', ledgerEntry.toMap());
+        }
+      }
+    });
+  }
+
   Future<void> upsertProduct(ProductModel product) async {
     final db = await instance.database;
     await db.insert(

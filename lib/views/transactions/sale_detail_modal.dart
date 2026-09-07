@@ -4,8 +4,11 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
+import '../../core/database/local_database.dart';
 import '../../core/utils/money_formatter.dart';
 import '../../models/models.dart';
+import '../../services/invoice_pdf_service.dart';
+import '../../services/native_notification_service.dart';
 import '../../services/thermal_printer_service.dart';
 
 class SaleDetailModal extends StatelessWidget {
@@ -144,15 +147,226 @@ class SaleDetailModal extends StatelessWidget {
     }
   }
 
+  void _downloadPdf(BuildContext context) async {
+    HapticFeedback.selectionClick();
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final storeName = prefs.getString('business_name') ?? 'KamaiPlus Store';
+      final path = await InvoicePdfService.generateAndDownloadPdf(sale: sale, storeName: storeName);
+      if (path != null && context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text('✓ Tax Invoice PDF downloaded to Downloads!'),
+            backgroundColor: const Color(0xFF059669),
+            behavior: SnackBarBehavior.floating,
+            action: SnackBarAction(
+              label: 'OPEN',
+              textColor: Colors.white,
+              onPressed: () => InvoicePdfService.openPdf(path),
+            ),
+          ),
+        );
+      }
+    } catch (_) {}
+  }
+
+  void _confirmSalesReturn(BuildContext context) {
+    HapticFeedback.mediumImpact();
+    final creditDue = sale.paymentMethod == 'credit'
+        ? sale.totalAmountPaise
+        : (sale.paymentMethod == 'split' ? sale.splitCreditPaise : 0);
+    final isUdhar = creditDue > 0;
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: Colors.white,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: const Color(0xFFFEE2E2),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: const Icon(Icons.replay_rounded, color: Color(0xFFDC2626), size: 22),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                'Sales Return (Refund)?',
+                style: GoogleFonts.plusJakartaSans(fontSize: 16, fontWeight: FontWeight.w800),
+              ),
+            ),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Invoice #${sale.invoiceNumber} ke sabhi items inventory me wapas add honge:',
+              style: GoogleFonts.inter(fontSize: 12.5, color: const Color(0xFF475569)),
+            ),
+            const SizedBox(height: 10),
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: const Color(0xFFF8FAFC),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: const Color(0xFFEEF2F6)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  ...sale.items.map((it) {
+                    final name = it['product_name'] ?? it['name'] ?? 'Item';
+                    final qty = it['quantity'] ?? it['qty'] ?? 1;
+                    return Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 2),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.arrow_right_rounded, size: 18, color: Color(0xFF059669)),
+                          Expanded(
+                            child: Text(
+                              '$name (+$qty stock)',
+                              style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w600, color: const Color(0xFF1E293B)),
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  }),
+                ],
+              ),
+            ),
+            const SizedBox(height: 12),
+            if (isUdhar) ...[
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFEF2F2),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: const Color(0xFFFCA5A5)),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.account_balance_wallet_outlined, size: 18, color: Color(0xFFDC2626)),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'Customer ${sale.customerName ?? ""} ka Udhar ${MoneyFormatter.formatINR(creditDue)} turant reverse ho jayega.',
+                        style: GoogleFonts.inter(fontSize: 11.5, fontWeight: FontWeight.w600, color: const Color(0xFF991B1B)),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ] else ...[
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFFFBEB),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: const Color(0xFFFDE68A)),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.payments_outlined, size: 18, color: Color(0xFFD97706)),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'Customer ko ${MoneyFormatter.formatINR(sale.totalAmountPaise)} (${sale.paymentMethod.toUpperCase()}) refund karein.',
+                        style: GoogleFonts.inter(fontSize: 11.5, fontWeight: FontWeight.w600, color: const Color(0xFF92400E)),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text('Cancel', style: GoogleFonts.inter(fontWeight: FontWeight.w600, color: const Color(0xFF64748B))),
+          ),
+          ElevatedButton.icon(
+            onPressed: () async {
+              Navigator.pop(ctx);
+              HapticFeedback.heavyImpact();
+
+              try {
+                await LocalDatabase.instance.processSalesReturn(sale: sale);
+
+                await NativeNotificationService.showNotification(
+                  title: '↩️ Sales Return Done: #${sale.invoiceNumber}',
+                  body: 'Stock restored to inventory & ${isUdhar ? "Udhar reversed" : "Refund recorded"}.',
+                );
+
+                if (context.mounted) {
+                  Navigator.pop(context);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Row(
+                        children: [
+                          const Icon(Icons.check_circle_rounded, color: Colors.white, size: 20),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              '✓ Invoice #${sale.invoiceNumber} returned! Stock restocked & ${isUdhar ? "Udhar reversed" : "Refund completed"}.',
+                              style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700),
+                            ),
+                          ),
+                        ],
+                      ),
+                      backgroundColor: const Color(0xFF059669),
+                      behavior: SnackBarBehavior.floating,
+                      duration: const Duration(seconds: 3),
+                    ),
+                  );
+                }
+                onVoidOrRefund?.call();
+              } catch (e) {
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('Return error: $e'),
+                      backgroundColor: const Color(0xFFDC2626),
+                    ),
+                  );
+                }
+              }
+            },
+            icon: const Icon(Icons.replay_rounded, size: 16, color: Colors.white),
+            label: Text('Confirm 1-Tap Return', style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w800, color: Colors.white)),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFFDC2626),
+              elevation: 0,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final dateStr = DateFormat('d MMM yyyy, hh:mm a').format(sale.createdAt);
+    final isRefunded = sale.isRefunded;
     final isUdhar = sale.paymentMethod == 'credit';
     final isUpi = sale.paymentMethod == 'upi';
-
-    final modeBadgeText = isUdhar ? 'CREDIT / UDHAR' : (isUpi ? 'UPI DIGITAL' : 'CASH COUNTER');
-    final modeBadgeBg = isUdhar ? const Color(0xFFFEF2F2) : (isUpi ? const Color(0xFFF0F9FF) : const Color(0xFFECFDF5));
-    final modeBadgeColor = isUdhar ? const Color(0xFFDC2626) : (isUpi ? const Color(0xFF0284C7) : const Color(0xFF059669));
+    final modeBadgeText = isRefunded
+        ? 'REFUNDED / RETURNED'
+        : (isUdhar ? 'CREDIT / UDHAR' : (isUpi ? 'UPI DIGITAL' : 'CASH COUNTER'));
+    final modeBadgeBg = isRefunded
+        ? const Color(0xFFFEE2E2)
+        : (isUdhar ? const Color(0xFFFEF2F2) : (isUpi ? const Color(0xFFF0F9FF) : const Color(0xFFECFDF5)));
+    final modeBadgeColor = isRefunded
+        ? const Color(0xFFDC2626)
+        : (isUdhar ? const Color(0xFFDC2626) : (isUpi ? const Color(0xFF0284C7) : const Color(0xFF059669)));
 
     return Padding(
       padding: EdgeInsets.only(
@@ -345,51 +559,123 @@ class SaleDetailModal extends StatelessWidget {
           ),
           const SizedBox(height: 16),
 
-          // Actions: Print Thermal + WhatsApp Bill
+          // Actions: Print Thermal + WhatsApp Bill + A4 PDF
           Row(
             children: [
               Expanded(
                 child: OutlinedButton.icon(
                   onPressed: () => _printThermal(context),
-                  icon: const Icon(Icons.print_rounded, size: 16, color: Color(0xFF0F172A)),
+                  icon: const Icon(Icons.print_rounded, size: 15, color: Color(0xFF0F172A)),
                   label: Text(
-                    'Print Thermal',
+                    'Thermal',
                     style: GoogleFonts.plusJakartaSans(
-                      fontSize: 12.5,
+                      fontSize: 12,
                       fontWeight: FontWeight.w700,
                       color: const Color(0xFF0F172A),
                     ),
                   ),
                   style: OutlinedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    padding: const EdgeInsets.symmetric(vertical: 11),
                     side: const BorderSide(color: Color(0xFFCBD5E1)),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                   ),
                 ),
               ),
-              const SizedBox(width: 10),
+              const SizedBox(width: 8),
               Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: () => _downloadPdf(context),
+                  icon: const Icon(Icons.picture_as_pdf_rounded, size: 15, color: Color(0xFF0284C7)),
+                  label: Text(
+                    'A4 PDF',
+                    style: GoogleFonts.plusJakartaSans(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                      color: const Color(0xFF0284C7),
+                    ),
+                  ),
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 11),
+                    side: const BorderSide(color: Color(0xFFBAE6FD)),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                flex: 1,
                 child: ElevatedButton.icon(
                   onPressed: () => _shareWhatsApp(context),
-                  icon: Image.asset('assets/images/whatsapp_logo.png', width: 17, height: 17),
+                  icon: Image.asset('assets/images/whatsapp_logo.png', width: 15, height: 15),
                   label: Text(
-                    'WhatsApp Bill',
+                    'WhatsApp',
                     style: GoogleFonts.plusJakartaSans(
-                      fontSize: 12.5,
+                      fontSize: 12,
                       fontWeight: FontWeight.w700,
                       color: Colors.white,
                     ),
                   ),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: const Color(0xFF059669),
-                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    padding: const EdgeInsets.symmetric(vertical: 11),
                     elevation: 0,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                   ),
                 ),
               ),
             ],
           ),
+          const SizedBox(height: 10),
+
+          // 1-Tap Sales Return (Refund) Action OR Refunded Confirmation Strip
+          if (isRefunded) ...[
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              decoration: BoxDecoration(
+                color: const Color(0xFFFEF2F2),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: const Color(0xFFFCA5A5)),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Icon(Icons.check_circle_rounded, size: 16, color: Color(0xFFDC2626)),
+                  const SizedBox(width: 6),
+                  Text(
+                    'Bill Returned • Stock Restored & Udhar Reversed',
+                    style: GoogleFonts.plusJakartaSans(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                      color: const Color(0xFFB91C1C),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ] else ...[
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                onPressed: () => _confirmSalesReturn(context),
+                icon: const Icon(Icons.replay_rounded, size: 17, color: Color(0xFFDC2626)),
+                label: Text(
+                  'Sales Return (1-Tap Refund & Restock)',
+                  style: GoogleFonts.plusJakartaSans(
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w800,
+                    color: const Color(0xFFDC2626),
+                  ),
+                ),
+                style: OutlinedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(vertical: 11),
+                  side: const BorderSide(color: Color(0xFFFCA5A5), width: 1.2),
+                  backgroundColor: const Color(0xFFFEF2F2),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                ),
+              ),
+            ),
+          ],
         ],
       ),
     );

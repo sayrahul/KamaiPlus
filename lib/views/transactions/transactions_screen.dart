@@ -8,6 +8,7 @@ import '../../core/utils/money_formatter.dart';
 import '../../models/models.dart';
 import '../../services/thermal_printer_service.dart';
 import '../common/kamai_bottom_nav.dart';
+import 'sale_detail_modal.dart';
 
 class TransactionsScreen extends StatefulWidget {
   const TransactionsScreen({super.key});
@@ -107,18 +108,18 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
     return list;
   }
 
-  int get _totalRevenuePaise => _filteredSales.fold(0, (sum, s) => sum + s.totalAmountPaise);
-  int get _cashRevenuePaise => _filteredSales.fold(0, (sum, s) {
+  int get _totalRevenuePaise => _filteredSales.where((s) => !s.isRefunded).fold(0, (sum, s) => sum + s.totalAmountPaise);
+  int get _cashRevenuePaise => _filteredSales.where((s) => !s.isRefunded).fold(0, (sum, s) {
     if (s.paymentMethod == 'cash') return sum + s.totalAmountPaise;
     if (s.paymentMethod == 'split') return sum + s.splitCashPaise;
     return sum;
   });
-  int get _upiRevenuePaise => _filteredSales.fold(0, (sum, s) {
+  int get _upiRevenuePaise => _filteredSales.where((s) => !s.isRefunded).fold(0, (sum, s) {
     if (s.paymentMethod == 'upi') return sum + s.totalAmountPaise;
     if (s.paymentMethod == 'split') return sum + s.splitUpiPaise;
     return sum;
   });
-  int get _creditDuePaise => _filteredSales.fold(0, (sum, s) {
+  int get _creditDuePaise => _filteredSales.where((s) => !s.isRefunded).fold(0, (sum, s) {
     if (s.paymentMethod == 'credit') return sum + s.totalAmountPaise;
     if (s.paymentMethod == 'split') return sum + s.splitCreditPaise;
     return sum;
@@ -856,21 +857,26 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
   // 4. INTERACTIVE SALE INVOICE CARD (BEST IN INDUSTRY & COMPACT)
   // =========================================================================
   Widget _buildSaleInvoiceCard(SaleModel sale) {
+    final isRefunded = sale.isRefunded;
     final isUdhar = sale.paymentMethod == 'credit';
     final isUpi = sale.paymentMethod == 'upi';
     final dateStr = DateFormat('d MMM, hh:mm a').format(sale.createdAt);
 
-    final modeColor = isUdhar
+    final modeColor = isRefunded
         ? const Color(0xFFDC2626)
-        : isUpi
-            ? const Color(0xFF0284C7)
-            : const Color(0xFF059669);
+        : (isUdhar
+            ? const Color(0xFFDC2626)
+            : isUpi
+                ? const Color(0xFF0284C7)
+                : const Color(0xFF059669));
 
-    final modeBg = isUdhar
-        ? const Color(0xFFFEF2F2)
-        : isUpi
-            ? const Color(0xFFF0F9FF)
-            : const Color(0xFFECFDF5);
+    final modeBg = isRefunded
+        ? const Color(0xFFFEE2E2)
+        : (isUdhar
+            ? const Color(0xFFFEF2F2)
+            : isUpi
+                ? const Color(0xFFF0F9FF)
+                : const Color(0xFFECFDF5));
 
     // Items preview
     String itemsSummary = '';
@@ -884,10 +890,12 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: isRefunded ? const Color(0xFFFFF1F2) : Colors.white,
         borderRadius: BorderRadius.circular(14),
         border: Border.all(
-          color: isUdhar ? const Color(0xFFFED7AA) : const Color(0xFFE2E8F0),
+          color: isRefunded
+              ? const Color(0xFFFCA5A5)
+              : (isUdhar ? const Color(0xFFFED7AA) : const Color(0xFFE2E8F0)),
           width: 1.1,
         ),
         boxShadow: [
@@ -922,11 +930,13 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
                         border: Border.all(color: modeColor.withValues(alpha: 0.3)),
                       ),
                       child: Icon(
-                        isUdhar
-                            ? Icons.book_rounded
-                            : isUpi
-                                ? Icons.qr_code_2_rounded
-                                : Icons.payments_rounded,
+                        isRefunded
+                            ? Icons.replay_rounded
+                            : (isUdhar
+                                ? Icons.book_rounded
+                                : isUpi
+                                    ? Icons.qr_code_2_rounded
+                                    : Icons.payments_rounded),
                         color: modeColor,
                         size: 18,
                       ),
@@ -956,7 +966,7 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
                                   borderRadius: BorderRadius.circular(4),
                                 ),
                                 child: Text(
-                                  sale.paymentMethod.toUpperCase(),
+                                  isRefunded ? 'RETURNED' : sale.paymentMethod.toUpperCase(),
                                   style: GoogleFonts.inter(
                                     fontSize: 9,
                                     fontWeight: FontWeight.w800,
@@ -987,22 +997,29 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
                           style: GoogleFonts.outfit(
                             fontSize: 16,
                             fontWeight: FontWeight.w900,
-                            color: isUdhar ? const Color(0xFFDC2626) : const Color(0xFF0F172A),
+                            decoration: isRefunded ? TextDecoration.lineThrough : null,
+                            color: isRefunded
+                                ? const Color(0xFF94A3B8)
+                                : (isUdhar ? const Color(0xFFDC2626) : const Color(0xFF0F172A)),
                           ),
                         ),
                         const SizedBox(height: 2),
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
                           decoration: BoxDecoration(
-                            color: isUdhar ? const Color(0xFFFEF2F2) : const Color(0xFFECFDF5),
+                            color: isRefunded
+                                ? const Color(0xFFFEE2E2)
+                                : (isUdhar ? const Color(0xFFFEF2F2) : const Color(0xFFECFDF5)),
                             borderRadius: BorderRadius.circular(4),
                           ),
                           child: Text(
-                            isUdhar ? 'UDHAR' : 'PAID',
+                            isRefunded ? 'REFUNDED' : (isUdhar ? 'UDHAR' : 'PAID'),
                             style: GoogleFonts.inter(
                               fontSize: 9,
                               fontWeight: FontWeight.w800,
-                              color: isUdhar ? const Color(0xFFDC2626) : const Color(0xFF059669),
+                              color: isRefunded
+                                  ? const Color(0xFFDC2626)
+                                  : (isUdhar ? const Color(0xFFDC2626) : const Color(0xFF059669)),
                             ),
                           ),
                         ),
@@ -1168,147 +1185,10 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
   // 5. BILL DETAIL MODAL
   // =========================================================================
   void _showSaleDetailModal(SaleModel sale) {
-    final dateStr = DateFormat('d MMM yyyy, hh:mm a').format(sale.createdAt);
-
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.white,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
-      builder: (ctx) {
-        return Padding(
-          padding: EdgeInsets.only(
-            left: 20,
-            right: 20,
-            top: 20,
-            bottom: MediaQuery.of(ctx).viewInsets.bottom + 24,
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Header
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Row(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.all(6),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFF1F5F9),
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        child: const Icon(Icons.receipt_long_rounded, color: Color(0xFF0F172A), size: 20),
-                      ),
-                      const SizedBox(width: 8),
-                      Text('Invoice #${sale.invoiceNumber}',
-                          style: GoogleFonts.outfit(fontSize: 17, fontWeight: FontWeight.w800, color: const Color(0xFF0F172A))),
-                    ],
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.close_rounded, size: 20, color: Color(0xFF64748B)),
-                    onPressed: () => Navigator.pop(ctx),
-                  ),
-                ],
-              ),
-              Text(
-                'Customer: ${sale.customerName ?? "Walk-in"} ${sale.customerPhone != null ? "• ${sale.customerPhone}" : ""} • $dateStr',
-                style: GoogleFonts.inter(fontSize: 11.5, color: const Color(0xFF64748B)),
-              ),
-              const SizedBox(height: 14),
-
-              // Items Container
-              Container(
-                decoration: BoxDecoration(
-                  color: const Color(0xFFF8FAFC),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: const Color(0xFFEEF2F6)),
-                ),
-                padding: const EdgeInsets.all(12),
-                child: Column(
-                  children: [
-                    ...sale.items.map((it) {
-                      final name = it['product_name'] ?? it['name'] ?? 'Item';
-                      final qty = it['quantity'] ?? it['qty'] ?? 1;
-                      final pricePaise = it['gross_total_paise'] ?? ((it['price'] as int? ?? 0) * (qty as num).toInt());
-
-                      return Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 4),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Expanded(
-                              child: Text(
-                                '${qty}x $name',
-                                style: GoogleFonts.inter(fontSize: 12.5, fontWeight: FontWeight.w600, color: const Color(0xFF1E293B)),
-                              ),
-                            ),
-                            Text(
-                              MoneyFormatter.formatINR(pricePaise as int),
-                              style: GoogleFonts.outfit(fontSize: 13, fontWeight: FontWeight.w700, color: const Color(0xFF0F172A)),
-                            ),
-                          ],
-                        ),
-                      );
-                    }),
-                    const Divider(height: 16, color: Color(0xFFE2E8F0)),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text('Total Amount', style: GoogleFonts.outfit(fontSize: 14, fontWeight: FontWeight.w800)),
-                        Text(
-                          MoneyFormatter.formatINR(sale.totalAmountPaise),
-                          style: GoogleFonts.outfit(fontSize: 18, fontWeight: FontWeight.w900, color: const Color(0xFF059669)),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 16),
-
-              // Actions: Print ESC/POS + Send WhatsApp
-              Row(
-                children: [
-                  Expanded(
-                    child: OutlinedButton.icon(
-                      onPressed: () {
-                        Navigator.pop(ctx);
-                        _printBill(sale);
-                      },
-                      icon: const Icon(Icons.print_rounded, size: 16, color: Color(0xFF0F172A)),
-                      label: Text('Print Thermal', style: GoogleFonts.outfit(fontSize: 13, fontWeight: FontWeight.w700, color: const Color(0xFF0F172A))),
-                      style: OutlinedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(vertical: 12),
-                        side: const BorderSide(color: Color(0xFFCBD5E1)),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: ElevatedButton.icon(
-                      onPressed: () {
-                        Navigator.pop(ctx);
-                        _sendWhatsAppReceipt(sale);
-                      },
-                      icon: Image.asset('assets/images/whatsapp_logo.png', width: 17, height: 17),
-                      label: Text('WhatsApp Bill', style: GoogleFonts.outfit(fontSize: 13, fontWeight: FontWeight.w700, color: Colors.white)),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF059669),
-                        padding: const EdgeInsets.symmetric(vertical: 12),
-                        elevation: 0,
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        );
-      },
+    SaleDetailModal.show(
+      context,
+      sale: sale,
+      onVoidOrRefund: _loadSales,
     );
   }
 

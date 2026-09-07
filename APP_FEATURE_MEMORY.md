@@ -303,6 +303,17 @@ Comprehensive enterprise-grade retail UX upgrade suite aligned with PhonePe Busi
     - Integrated native Android `NotificationManager` engine (`com.kamaiplus.pos/notifications`) triggering high-priority status bar notifications on bill completion, PDF download, WhatsApp dispatch, and cloud sync.
     - Built-in Android `PdfDocument` engine (`InvoicePdfService`) generates genuine A4 Tax Invoices, saves directly to the device's public `Downloads/` directory, and provides 1-tap open in system PDF viewers via `FileProvider`.
 
+17. **1-Tap Sales Return (Refund) & Inventory / Udhar Balance Reversal Engine:**
+    - Completed sale invoices can be returned directly from `SaleDetailModal` (accessible from Transaction History and Home Recent Transactions).
+    - **Single Atomic Transaction (`LocalDatabase.processSalesReturn`):**
+      1. Sale status updated to `'refunded'` and marked for cloud sync.
+      2. **Inventory Restock:** All items in the bill automatically added back to product stock (`stock_quantity = stock_quantity + qty`) with an audit entry in `inventory_movements` (`movement_type = 'RETURN'`).
+      3. **Udhar (Credit) Balance Reversal:** If the sale was Credit (Udhar) or Split Credit, customer debt is automatically reduced (`current_balance_paise - creditDue`) and a debit ledger entry is recorded in `ledger_transactions` with reference to the refund invoice.
+    - **Financial Integrity & Revenue Guards:**
+      - Refunded sales are excluded from today's sales totals and net revenue calculations across Home Pulse Dashboard, Daily Ops Cash Register, and Transaction History.
+      - Invoices marked refunded display a bold red `REFUNDED` badge, strike-through invoice amount, and disabled return action with an explanatory indicator to prevent duplicate refunds.
+
+
 
 
 

@@ -71,6 +71,7 @@ class _CashRegisterScreenState extends State<CashRegisterScreen> {
       final now = DateTime.now();
       final allSales = await LocalDatabase.instance.getAllSales(limit: 300);
       final todaySales = allSales.where((s) =>
+          !s.isRefunded &&
           (s.paymentMethod == 'cash' || (s.paymentMethod == 'split' && s.splitCashPaise > 0)) &&
           s.createdAt.year == now.year &&
           s.createdAt.month == now.month &&
