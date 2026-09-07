@@ -90,9 +90,9 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
       }
 
       // 3. Payment Mode Filter
-      if (_selectedModeFilter == 'Cash' && sale.paymentMethod != 'cash') return false;
-      if (_selectedModeFilter == 'UPI' && sale.paymentMethod != 'upi') return false;
-      if (_selectedModeFilter == 'Udhar' && sale.paymentMethod != 'credit') return false;
+      if (_selectedModeFilter == 'Cash' && sale.paymentMethod != 'cash' && !(sale.paymentMethod == 'split' && sale.splitCashPaise > 0)) return false;
+      if (_selectedModeFilter == 'UPI' && sale.paymentMethod != 'upi' && !(sale.paymentMethod == 'split' && sale.splitUpiPaise > 0)) return false;
+      if (_selectedModeFilter == 'Udhar' && sale.paymentMethod != 'credit' && !(sale.paymentMethod == 'split' && sale.splitCreditPaise > 0)) return false;
 
       return true;
     }).toList();
@@ -108,9 +108,21 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
   }
 
   int get _totalRevenuePaise => _filteredSales.fold(0, (sum, s) => sum + s.totalAmountPaise);
-  int get _cashRevenuePaise => _filteredSales.where((s) => s.paymentMethod == 'cash').fold(0, (sum, s) => sum + s.totalAmountPaise);
-  int get _upiRevenuePaise => _filteredSales.where((s) => s.paymentMethod == 'upi').fold(0, (sum, s) => sum + s.totalAmountPaise);
-  int get _creditDuePaise => _filteredSales.where((s) => s.paymentMethod == 'credit').fold(0, (sum, s) => sum + s.totalAmountPaise);
+  int get _cashRevenuePaise => _filteredSales.fold(0, (sum, s) {
+    if (s.paymentMethod == 'cash') return sum + s.totalAmountPaise;
+    if (s.paymentMethod == 'split') return sum + s.splitCashPaise;
+    return sum;
+  });
+  int get _upiRevenuePaise => _filteredSales.fold(0, (sum, s) {
+    if (s.paymentMethod == 'upi') return sum + s.totalAmountPaise;
+    if (s.paymentMethod == 'split') return sum + s.splitUpiPaise;
+    return sum;
+  });
+  int get _creditDuePaise => _filteredSales.fold(0, (sum, s) {
+    if (s.paymentMethod == 'credit') return sum + s.totalAmountPaise;
+    if (s.paymentMethod == 'split') return sum + s.splitCreditPaise;
+    return sum;
+  });
 
   void _sendWhatsAppReceipt(SaleModel sale) async {
     HapticFeedback.lightImpact();

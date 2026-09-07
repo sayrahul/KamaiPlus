@@ -37,7 +37,7 @@ class AppTheme {
       onPrimary: Colors.white,
       onSurface: darkTextPrimary,
     ),
-    textTheme: GoogleFonts.outfitTextTheme(
+    textTheme: GoogleFonts.plusJakartaSansTextTheme(
       ThemeData.dark().textTheme,
     ).apply(
       bodyColor: darkTextPrimary,
@@ -79,7 +79,7 @@ class AppTheme {
       onPrimary: Colors.white,
       onSurface: lightTextPrimary,
     ),
-    textTheme: GoogleFonts.outfitTextTheme(
+    textTheme: GoogleFonts.plusJakartaSansTextTheme(
       ThemeData.light().textTheme,
     ).apply(
       bodyColor: lightTextPrimary,

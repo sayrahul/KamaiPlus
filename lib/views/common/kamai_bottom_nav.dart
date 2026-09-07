@@ -108,9 +108,9 @@ class KamaiBottomNav extends StatelessWidget {
               const SizedBox(height: 3),
               Text(
                 label,
-                style: GoogleFonts.outfit(
+                style: GoogleFonts.plusJakartaSans(
                   fontSize: 11,
-                  fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+                  fontWeight: isSelected ? FontWeight.w800 : FontWeight.w500,
                   color: isSelected ? activeColor : inactiveColor,
                 ),
               ),
@@ -170,9 +170,9 @@ class KamaiBottomNav extends StatelessWidget {
               const SizedBox(height: 3),
               Text(
                 'Billing',
-                style: GoogleFonts.outfit(
+                style: GoogleFonts.plusJakartaSans(
                   fontSize: 11,
-                  fontWeight: FontWeight.w700,
+                  fontWeight: isSelected ? FontWeight.w800 : FontWeight.w600,
                   color: isSelected ? const Color(0xFF059669) : const Color(0xFF475569),
                 ),
               ),

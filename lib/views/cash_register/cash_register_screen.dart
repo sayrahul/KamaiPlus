@@ -9,6 +9,9 @@ import '../../core/database/local_database.dart';
 import '../../core/utils/money_formatter.dart';
 import '../../models/models.dart';
 import '../common/kamai_bottom_nav.dart';
+import '../common/owner_privacy_modal.dart';
+import '../common/empty_state_card.dart';
+import 'denomination_tally_modal.dart';
 
 class CashRegisterScreen extends StatefulWidget {
   const CashRegisterScreen({super.key});
@@ -68,11 +71,16 @@ class _CashRegisterScreenState extends State<CashRegisterScreen> {
       final now = DateTime.now();
       final allSales = await LocalDatabase.instance.getAllSales(limit: 300);
       final todaySales = allSales.where((s) =>
-          s.paymentMethod == 'cash' &&
+          (s.paymentMethod == 'cash' || (s.paymentMethod == 'split' && s.splitCashPaise > 0)) &&
           s.createdAt.year == now.year &&
           s.createdAt.month == now.month &&
           s.createdAt.day == now.day);
-      final cashIn = todaySales.fold(0, (sum, s) => sum + s.totalAmountPaise);
+      final cashIn = todaySales.fold(0, (sum, s) {
+        if (s.paymentMethod == 'split') {
+          return sum + s.splitCashPaise;
+        }
+        return sum + s.totalAmountPaise;
+      });
 
       final expenses = await LocalDatabase.instance.getAllExpenses();
       final todayExpenses = expenses.where((e) =>
@@ -105,9 +113,30 @@ class _CashRegisterScreenState extends State<CashRegisterScreen> {
 
   Future<void> _toggleMaskAmounts() async {
     HapticFeedback.selectionClick();
-    setState(() => _maskAmounts = !_maskAmounts);
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool('cash_register_mask_amounts', _maskAmounts);
+    if (_maskAmounts) {
+      OwnerPrivacyModal.show(
+        context,
+        onUnlocked: () async {
+          setState(() => _maskAmounts = false);
+          final prefs = await SharedPreferences.getInstance();
+          await prefs.setBool('cash_register_mask_amounts', false);
+        },
+      );
+    } else {
+      setState(() => _maskAmounts = true);
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool('cash_register_mask_amounts', true);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text('🔒 Cash drawer register figures masked.'),
+            duration: const Duration(seconds: 2),
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          ),
+        );
+      }
+    }
   }
 
   Future<void> _toggleDrawerStatus() async {
@@ -507,208 +536,16 @@ class _CashRegisterScreenState extends State<CashRegisterScreen> {
   // =========================================================================
   void _showDenominationCalculator() {
     HapticFeedback.selectionClick();
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.white,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
-      builder: (ctx) => StatefulBuilder(
-        builder: (context, setModalState) {
-          final countedPaise = _countedTotalPaise;
-          final diffPaise = countedPaise - _expectedCashPaise;
-
-          return Container(
-            height: MediaQuery.of(ctx).size.height * 0.82,
-            padding: const EdgeInsets.fromLTRB(18, 16, 18, 20),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Top handle & header
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Row(
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.all(7),
-                          decoration: BoxDecoration(color: const Color(0xFFECFDF5), borderRadius: BorderRadius.circular(10)),
-                          child: const Icon(Icons.calculate_rounded, color: Color(0xFF059669), size: 20),
-                        ),
-                        const SizedBox(width: 10),
-                        Text(
-                          'Note & Coin Tally Counter',
-                          style: GoogleFonts.outfit(fontSize: 17, fontWeight: FontWeight.w800, color: const Color(0xFF0F172A)),
-                        ),
-                      ],
-                    ),
-                    IconButton(icon: const Icon(Icons.close_rounded, size: 20), onPressed: () => Navigator.pop(ctx)),
-                  ],
-                ),
-                const SizedBox(height: 12),
-
-                // Comparison Banner
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFF8FAFC),
-                    borderRadius: BorderRadius.circular(14),
-                    border: Border.all(color: const Color(0xFFE2E8F0)),
-                  ),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text('PHYSICAL COUNTED', style: GoogleFonts.inter(fontSize: 9.5, fontWeight: FontWeight.w800, color: const Color(0xFF64748B))),
-                            Text(
-                              MoneyFormatter.formatINR(countedPaise),
-                              style: GoogleFonts.outfit(fontSize: 18, fontWeight: FontWeight.w900, color: const Color(0xFF059669)),
-                            ),
-                          ],
-                        ),
-                      ),
-                      Container(width: 1, height: 32, color: const Color(0xFFE2E8F0)),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.end,
-                          children: [
-                            Text('EXPECTED IN DRAWER', style: GoogleFonts.inter(fontSize: 9.5, fontWeight: FontWeight.w800, color: const Color(0xFF64748B))),
-                            Text(
-                              MoneyFormatter.formatINR(_expectedCashPaise),
-                              style: GoogleFonts.outfit(fontSize: 15, fontWeight: FontWeight.w700, color: const Color(0xFF0F172A)),
-                            ),
-                            Text(
-                              diffPaise == 0
-                                  ? '✓ Matched Exactly'
-                                  : (diffPaise > 0
-                                      ? '+${MoneyFormatter.formatINR(diffPaise)} Excess'
-                                      : '-${MoneyFormatter.formatINR(diffPaise.abs())} Short'),
-                              style: GoogleFonts.inter(
-                                fontSize: 10.5,
-                                fontWeight: FontWeight.w800,
-                                color: diffPaise == 0
-                                    ? const Color(0xFF059669)
-                                    : (diffPaise > 0 ? const Color(0xFF0284C7) : const Color(0xFFDC2626)),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 10),
-
-                // Note Tally List
-                Expanded(
-                  child: ListView(
-                    physics: const BouncingScrollPhysics(),
-                    children: _denominations.keys.map((denom) {
-                      final count = _denominations[denom]!;
-                      final totalVal = denom * count;
-                      final label = denom <= 5 ? '₹$denom Coin' : '₹$denom Note';
-
-                      return Container(
-                        margin: const EdgeInsets.only(bottom: 6),
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(10),
-                          border: Border.all(color: const Color(0xFFEEF2F6)),
-                        ),
-                        child: Row(
-                          children: [
-                            Container(
-                              width: 65,
-                              padding: const EdgeInsets.symmetric(vertical: 4),
-                              decoration: BoxDecoration(
-                                color: const Color(0xFFF1F5F9),
-                                borderRadius: BorderRadius.circular(6),
-                              ),
-                              alignment: Alignment.center,
-                              child: Text(
-                                label,
-                                style: GoogleFonts.outfit(fontSize: 13, fontWeight: FontWeight.w800, color: const Color(0xFF0F172A)),
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            IconButton(
-                              onPressed: count > 0
-                                  ? () {
-                                      HapticFeedback.selectionClick();
-                                      setModalState(() => _denominations[denom] = count - 1);
-                                      setState(() {});
-                                    }
-                                  : null,
-                              icon: const Icon(Icons.remove_circle_outline_rounded, size: 20),
-                              color: const Color(0xFF64748B),
-                              visualDensity: VisualDensity.compact,
-                            ),
-                            Container(
-                              width: 34,
-                              alignment: Alignment.center,
-                              child: Text(
-                                '$count',
-                                style: GoogleFonts.outfit(fontSize: 15, fontWeight: FontWeight.w800),
-                              ),
-                            ),
-                            IconButton(
-                              onPressed: () {
-                                HapticFeedback.selectionClick();
-                                setModalState(() => _denominations[denom] = count + 1);
-                                setState(() {});
-                              },
-                              icon: const Icon(Icons.add_circle_outline_rounded, size: 20),
-                              color: const Color(0xFF059669),
-                              visualDensity: VisualDensity.compact,
-                            ),
-                            const Spacer(),
-                            Text(
-                              '₹$totalVal',
-                              style: GoogleFonts.outfit(fontSize: 14, fontWeight: FontWeight.w700, color: const Color(0xFF334155)),
-                            ),
-                          ],
-                        ),
-                      );
-                    }).toList(),
-                  ),
-                ),
-
-                // Reset & Confirm buttons
-                Row(
-                  children: [
-                    TextButton(
-                      onPressed: () {
-                        HapticFeedback.selectionClick();
-                        setModalState(() {
-                          _denominations.updateAll((key, value) => 0);
-                        });
-                        setState(() {});
-                      },
-                      child: Text('Reset', style: GoogleFonts.inter(fontWeight: FontWeight.w600, color: const Color(0xFF64748B))),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: ElevatedButton(
-                        onPressed: () => Navigator.pop(ctx),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFF0F172A),
-                          foregroundColor: Colors.white,
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                          minimumSize: const Size.fromHeight(46),
-                        ),
-                        child: Text('Confirm Note Tally', style: GoogleFonts.outfit(fontSize: 14.5, fontWeight: FontWeight.w700)),
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          );
-        },
-      ),
+    DenominationTallyModal.show(
+      context,
+      expectedCashPaise: _expectedCashPaise,
+      initialDenominations: _denominations,
+      onSaved: (denoms, totalPaise) {
+        setState(() {
+          _denominations.clear();
+          _denominations.addAll(denoms);
+        });
+      },
     );
   }
 
@@ -843,6 +680,220 @@ Generated via KamaiPlus Retail POS
     }
   }
 
+  Future<void> _saveCurrentShiftRecord() async {
+    final shift = CashRegisterShiftModel(
+      id: 'shift_${DateTime.now().millisecondsSinceEpoch}',
+      businessId: 'biz_default_retail',
+      openingCashPaise: _openingFloatPaise,
+      cashSalesPaise: _cashInSalesPaise,
+      cashExpensesPaise: _cashOutExpensesPaise,
+      expectedClosingPaise: _expectedCashPaise,
+      actualClosingPaise: _countedTotalPaise > 0 ? _countedTotalPaise : _expectedCashPaise,
+      differencePaise: _countedTotalPaise > 0 ? (_countedTotalPaise - _expectedCashPaise) : 0,
+      status: 'closed',
+      openedAt: DateTime.now().subtract(const Duration(hours: 8)),
+      closedAt: DateTime.now(),
+    );
+    await LocalDatabase.instance.saveCashRegisterShift(shift);
+  }
+
+  void _showShiftHistoryModal() async {
+    HapticFeedback.selectionClick();
+    List<CashRegisterShiftModel> allShifts = await LocalDatabase.instance.getAllCashRegisterShifts();
+
+    if (!mounted) return;
+
+    DateTime? customDate;
+    String selectedFilter = 'All';
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setModalState) {
+          final now = DateTime.now();
+          final filteredShifts = allShifts.where((s) {
+            if (selectedFilter == 'Today') {
+              return s.openedAt.year == now.year && s.openedAt.month == now.month && s.openedAt.day == now.day;
+            }
+            if (selectedFilter == 'Yesterday') {
+              final yesterday = now.subtract(const Duration(days: 1));
+              return s.openedAt.year == yesterday.year && s.openedAt.month == yesterday.month && s.openedAt.day == yesterday.day;
+            }
+            if (selectedFilter == '7 Days') {
+              return s.openedAt.isAfter(now.subtract(const Duration(days: 7)));
+            }
+            if (selectedFilter == 'Custom' && customDate != null) {
+              return s.openedAt.year == customDate!.year && s.openedAt.month == customDate!.month && s.openedAt.day == customDate!.day;
+            }
+            return true;
+          }).toList();
+
+          return Container(
+            height: MediaQuery.of(ctx).size.height * 0.85,
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Center(
+                  child: Container(
+                    width: 36,
+                    height: 4,
+                    margin: const EdgeInsets.only(bottom: 12),
+                    decoration: BoxDecoration(color: const Color(0xFFCBD5E1), borderRadius: BorderRadius.circular(2)),
+                  ),
+                ),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(7),
+                          decoration: BoxDecoration(color: const Color(0xFFEFF6FF), borderRadius: BorderRadius.circular(10)),
+                          child: const Icon(Icons.history_rounded, color: Color(0xFF0284C7), size: 20),
+                        ),
+                        const SizedBox(width: 10),
+                        Text('Past Shift Z-Reports', style: GoogleFonts.plusJakartaSans(fontSize: 17, fontWeight: FontWeight.w800, color: const Color(0xFF0F172A))),
+                      ],
+                    ),
+                    IconButton(icon: const Icon(Icons.close_rounded, size: 20), onPressed: () => Navigator.pop(ctx)),
+                  ],
+                ),
+                const SizedBox(height: 12),
+
+                // Date Filter Chips
+                SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: Row(
+                    children: [
+                      ...['All', 'Today', 'Yesterday', '7 Days'].map((f) {
+                        final isSel = selectedFilter == f;
+                        return Padding(
+                          padding: const EdgeInsets.only(right: 6),
+                          child: ChoiceChip(
+                            label: Text(f),
+                            selected: isSel,
+                            selectedColor: const Color(0xFF0F172A),
+                            labelStyle: GoogleFonts.inter(fontSize: 11.5, fontWeight: FontWeight.w600, color: isSel ? Colors.white : const Color(0xFF475569)),
+                            backgroundColor: const Color(0xFFF1F5F9),
+                            side: BorderSide.none,
+                            onSelected: (_) => setModalState(() => selectedFilter = f),
+                          ),
+                        );
+                      }),
+                      ChoiceChip(
+                        label: Text(customDate != null ? DateFormat('d MMM (E)').format(customDate!) : 'Pick Date 📅'),
+                        selected: selectedFilter == 'Custom',
+                        selectedColor: const Color(0xFF0F172A),
+                        labelStyle: GoogleFonts.inter(fontSize: 11.5, fontWeight: FontWeight.w600, color: selectedFilter == 'Custom' ? Colors.white : const Color(0xFF475569)),
+                        backgroundColor: const Color(0xFFF1F5F9),
+                        side: BorderSide.none,
+                        onSelected: (_) async {
+                          final picked = await showDatePicker(
+                            context: context,
+                            initialDate: customDate ?? DateTime.now(),
+                            firstDate: DateTime(2025),
+                            lastDate: DateTime.now(),
+                          );
+                          if (picked != null) {
+                            setModalState(() {
+                              customDate = picked;
+                              selectedFilter = 'Custom';
+                            });
+                          }
+                        },
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 12),
+
+                // List of Past Shifts
+                Expanded(
+                  child: filteredShifts.isEmpty
+                      ? EmptyStateCard(
+                          icon: Icons.history_toggle_off_rounded,
+                          title: 'No Past Shifts Found',
+                          description: 'Jab aap Z-report generate karenge, shifts yahan automatically archive hongi.',
+                          actionText: 'Save Current Shift as Z-Report',
+                          onAction: () async {
+                            Navigator.pop(ctx);
+                            await _saveCurrentShiftRecord();
+                            _showZReportDialog();
+                          },
+                        )
+                      : ListView.builder(
+                          physics: const BouncingScrollPhysics(),
+                          itemCount: filteredShifts.length,
+                          itemBuilder: (context, i) {
+                            final s = filteredShifts[i];
+                            final dateStr = DateFormat('dd MMM yyyy, hh:mm a').format(s.openedAt);
+                            final isMatched = s.differencePaise == 0;
+
+                            return Container(
+                              margin: const EdgeInsets.only(bottom: 10),
+                              padding: const EdgeInsets.all(12),
+                              decoration: BoxDecoration(
+                                color: Colors.white,
+                                borderRadius: BorderRadius.circular(14),
+                                border: Border.all(color: const Color(0xFFEEF2F6)),
+                                boxShadow: const [
+                                  BoxShadow(color: Color(0x050F172A), blurRadius: 4, offset: Offset(0, 1.5)),
+                                ],
+                              ),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                    children: [
+                                      Text(dateStr, style: GoogleFonts.plusJakartaSans(fontSize: 13, fontWeight: FontWeight.w800, color: const Color(0xFF0F172A))),
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                                        decoration: BoxDecoration(
+                                          color: isMatched ? const Color(0xFFECFDF5) : const Color(0xFFFEF2F2),
+                                          borderRadius: BorderRadius.circular(6),
+                                        ),
+                                        child: Text(
+                                          isMatched ? '✓ Matched' : (s.differencePaise > 0 ? '+${MoneyFormatter.formatINR(s.differencePaise)} Excess' : '-${MoneyFormatter.formatINR(s.differencePaise.abs())} Short'),
+                                          style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.w800, color: isMatched ? const Color(0xFF059669) : const Color(0xFFDC2626)),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 8),
+                                  Row(
+                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                    children: [
+                                      Text('Opening Float: ${MoneyFormatter.formatINR(s.openingCashPaise)}', style: GoogleFonts.inter(fontSize: 11, color: const Color(0xFF64748B))),
+                                      Text('Sales: +${MoneyFormatter.formatINR(s.cashSalesPaise)}', style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w600, color: const Color(0xFF059669))),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Row(
+                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                    children: [
+                                      Text('Expenses: -${MoneyFormatter.formatINR(s.cashExpensesPaise)}', style: GoogleFonts.inter(fontSize: 11, color: const Color(0xFFDC2626))),
+                                      Text('Closing: ${MoneyFormatter.formatINR(s.actualClosingPaise)}', style: GoogleFonts.plusJakartaSans(fontSize: 12.5, fontWeight: FontWeight.w800, color: const Color(0xFF0F172A))),
+                                    ],
+                                  ),
+                                ],
+                              ),
+                            );
+                          },
+                        ),
+                ),
+              ],
+            ),
+          );
+        },
+      ),
+    );
+  }
+
   // =========================================================================
   // BUILD SCREEN
   // =========================================================================
@@ -908,6 +959,20 @@ Generated via KamaiPlus Retail POS
               child: const Icon(Icons.receipt_long_rounded, size: 18, color: Color(0xFF059669)),
             ),
             onPressed: _showZReportDialog,
+          ),
+          // Shift History
+          IconButton(
+            tooltip: 'Past Shift History',
+            icon: Container(
+              padding: const EdgeInsets.all(6),
+              decoration: BoxDecoration(
+                color: const Color(0xFFEFF6FF),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: const Color(0xFFBFDBFE)),
+              ),
+              child: const Icon(Icons.history_rounded, size: 18, color: Color(0xFF0284C7)),
+            ),
+            onPressed: _showShiftHistoryModal,
           ),
           const SizedBox(width: 8),
         ],
@@ -1277,13 +1342,13 @@ Generated via KamaiPlus Retail POS
             onTap: _showDenominationCalculator,
             child: Row(
               children: [
-                const Icon(Icons.calculate_rounded, size: 16, color: Color(0xFF0284C7)),
-                const SizedBox(width: 6),
+                const Icon(Icons.calculate_rounded, size: 15, color: Color(0xFF0284C7)),
+                const SizedBox(width: 4),
                 Text(
                   _countedTotalPaise > 0
-                      ? 'Counted: ${MoneyFormatter.formatINR(_countedTotalPaise)}'
-                      : 'Count Notes & Till',
-                  style: GoogleFonts.outfit(fontSize: 12, fontWeight: FontWeight.w700, color: const Color(0xFF0284C7)),
+                      ? 'Count: ${MoneyFormatter.formatINR(_countedTotalPaise)}'
+                      : 'Count Till',
+                  style: GoogleFonts.plusJakartaSans(fontSize: 11.5, fontWeight: FontWeight.w700, color: const Color(0xFF0284C7)),
                 ),
               ],
             ),
@@ -1294,11 +1359,26 @@ Generated via KamaiPlus Retail POS
             onTap: _showZReportDialog,
             child: Row(
               children: [
-                const Icon(Icons.receipt_long_rounded, size: 16, color: Color(0xFF059669)),
-                const SizedBox(width: 6),
+                const Icon(Icons.receipt_long_rounded, size: 15, color: Color(0xFF059669)),
+                const SizedBox(width: 4),
                 Text(
-                  'Shift Z-Report',
-                  style: GoogleFonts.outfit(fontSize: 12, fontWeight: FontWeight.w700, color: const Color(0xFF059669)),
+                  'Z-Report',
+                  style: GoogleFonts.plusJakartaSans(fontSize: 11.5, fontWeight: FontWeight.w700, color: const Color(0xFF059669)),
+                ),
+              ],
+            ),
+          ),
+          Container(width: 1, height: 16, color: const Color(0xFFCBD5E1)),
+          // Shift History shortcut
+          InkWell(
+            onTap: _showShiftHistoryModal,
+            child: Row(
+              children: [
+                const Icon(Icons.history_rounded, size: 15, color: Color(0xFF7C3AED)),
+                const SizedBox(width: 4),
+                Text(
+                  'Past Shifts',
+                  style: GoogleFonts.plusJakartaSans(fontSize: 11.5, fontWeight: FontWeight.w700, color: const Color(0xFF7C3AED)),
                 ),
               ],
             ),
@@ -1443,45 +1523,14 @@ Generated via KamaiPlus Retail POS
   // EMPTY EXPENSES STATE
   // =========================================================================
   Widget _buildEmptyExpensesState() {
-    return Container(
-      padding: const EdgeInsets.symmetric(vertical: 30, horizontal: 16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: const Color(0xFFEEF2F6)),
-      ),
-      alignment: Alignment.center,
-      child: Column(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: const BoxDecoration(color: Color(0xFFF1F5F9), shape: BoxShape.circle),
-            child: const Icon(Icons.coffee_rounded, size: 28, color: Color(0xFF94A3B8)),
-          ),
-          const SizedBox(height: 10),
-          Text(
-            'No petty cash outflow recorded today',
-            style: GoogleFonts.outfit(fontSize: 14, fontWeight: FontWeight.w700, color: const Color(0xFF334155)),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            'Chai, tempo, ya carry bag kharche ke liye "+ Outflow" tap karein.',
-            textAlign: TextAlign.center,
-            style: GoogleFonts.inter(fontSize: 11, color: const Color(0xFF94A3B8)),
-          ),
-          const SizedBox(height: 12),
-          OutlinedButton.icon(
-            onPressed: _showAddExpenseDialog,
-            icon: const Icon(Icons.add_rounded, size: 16),
-            label: Text('Record First Expense', style: GoogleFonts.outfit(fontSize: 12.5, fontWeight: FontWeight.w700)),
-            style: OutlinedButton.styleFrom(
-              foregroundColor: const Color(0xFFDC2626),
-              side: const BorderSide(color: Color(0xFFFCA5A5)),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-            ),
-          ),
-        ],
-      ),
+    return EmptyStateCard(
+      icon: Icons.coffee_rounded,
+      iconColor: const Color(0xFFDC2626),
+      iconBgColor: const Color(0xFFFEE2E2),
+      title: 'No Petty Cash Outflow Today',
+      description: 'Chai, tempo, ya carry bag kharche ke liye "+ Outflow" tap karke hisaab darj karein.',
+      actionText: '+ Record Outflow',
+      onAction: _showAddExpenseDialog,
     );
   }
 }

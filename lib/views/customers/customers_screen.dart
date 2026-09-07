@@ -9,6 +9,7 @@ import '../../core/utils/money_formatter.dart';
 import '../../models/models.dart';
 import '../../services/firestore_sync_service.dart';
 import '../common/kamai_bottom_nav.dart';
+import '../common/empty_state_card.dart';
 
 class CustomersScreen extends StatefulWidget {
   const CustomersScreen({super.key});
@@ -584,17 +585,12 @@ class _CustomersScreenState extends State<CustomersScreen> {
 
                   // Customer List
                   if (list.isEmpty)
-                    Container(
-                      padding: const EdgeInsets.symmetric(vertical: 48),
-                      alignment: Alignment.center,
-                      child: Column(
-                        children: [
-                          Icon(Icons.people_outline_rounded, size: 48, color: Colors.grey.shade300),
-                          const SizedBox(height: 12),
-                          Text('No customers found', style: GoogleFonts.outfit(fontSize: 15, fontWeight: FontWeight.w700, color: const Color(0xFF64748B))),
-                          Text('Add a new customer to start maintaining khata and CRM history.', style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF94A3B8))),
-                        ],
-                      ),
+                    EmptyStateCard(
+                      icon: Icons.people_outline_rounded,
+                      title: 'No Customers Found',
+                      description: 'Add a new customer to start maintaining khata, credit limits, and CRM purchase history.',
+                      actionText: '+ Add New Customer',
+                      onAction: _showAddCustomerModal,
                     )
                   else
                     ...list.map((c) => _buildCustomerCard(c)),

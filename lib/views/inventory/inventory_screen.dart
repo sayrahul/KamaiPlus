@@ -6,6 +6,8 @@ import '../../core/database/local_database.dart';
 import '../../core/utils/money_formatter.dart';
 import '../../models/models.dart';
 import '../common/kamai_bottom_nav.dart';
+import '../common/owner_privacy_modal.dart';
+import '../common/empty_state_card.dart';
 import '../dashboard/home_dashboard_screen.dart';
 import '../purchases/ai_inward_sheet.dart';
 
@@ -87,6 +89,26 @@ class _InventoryScreenState extends State<InventoryScreen> {
   String _formatValuation(int paise) {
     if (_isAssetMasked) return '••••••';
     return MoneyFormatter.formatINR(paise);
+  }
+
+  void _toggleAssetMask() {
+    HapticFeedback.selectionClick();
+    if (_isAssetMasked) {
+      OwnerPrivacyModal.show(
+        context,
+        onUnlocked: () => setState(() => _isAssetMasked = false),
+      );
+    } else {
+      setState(() => _isAssetMasked = true);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text('🔒 Inventory asset valuation masked.'),
+          duration: const Duration(seconds: 2),
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        ),
+      );
+    }
   }
 
   void _openInwardSheet() {
@@ -275,10 +297,7 @@ class _InventoryScreenState extends State<InventoryScreen> {
                         ),
                         // Eye Toggle Button
                         InkWell(
-                          onTap: () {
-                            HapticFeedback.selectionClick();
-                            setState(() => _isAssetMasked = !_isAssetMasked);
-                          },
+                          onTap: _toggleAssetMask,
                           borderRadius: BorderRadius.circular(8),
                           child: Container(
                             padding: const EdgeInsets.all(4),
@@ -912,18 +931,10 @@ class _InventoryScreenState extends State<InventoryScreen> {
     }
 
     if (_sales.isEmpty) {
-      return Container(
-        padding: const EdgeInsets.all(28),
-        alignment: Alignment.center,
-        decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16)),
-        child: Column(
-          children: [
-            const Icon(Icons.history_toggle_off_rounded, size: 36, color: Color(0xFF94A3B8)),
-            const SizedBox(height: 8),
-            Text('No recent stock movements recorded', style: GoogleFonts.outfit(fontSize: 14, fontWeight: FontWeight.w700)),
-            Text('Sales and inward deliveries will automatically record audit logs here.', style: GoogleFonts.inter(fontSize: 11, color: const Color(0xFF94A3B8))),
-          ],
-        ),
+      return const EmptyStateCard(
+        icon: Icons.history_toggle_off_rounded,
+        title: 'No Stock Movements Recorded',
+        description: 'Sales and inward deliveries will automatically record audit logs here.',
       );
     }
 

@@ -105,6 +105,15 @@ class LocalDatabase {
     try {
       await db.execute('ALTER TABLE customers ADD COLUMN address TEXT');
     } catch (_) {}
+    try {
+      await db.execute('ALTER TABLE sales ADD COLUMN split_cash_paise INTEGER DEFAULT 0');
+    } catch (_) {}
+    try {
+      await db.execute('ALTER TABLE sales ADD COLUMN split_upi_paise INTEGER DEFAULT 0');
+    } catch (_) {}
+    try {
+      await db.execute('ALTER TABLE sales ADD COLUMN split_credit_paise INTEGER DEFAULT 0');
+    } catch (_) {}
   }
 
   Future _createDB(Database db, int version) async {
@@ -160,6 +169,9 @@ class LocalDatabase {
         discount_paise INTEGER NOT NULL,
         total_amount_paise INTEGER NOT NULL,
         payment_method TEXT NOT NULL,
+        split_cash_paise INTEGER DEFAULT 0,
+        split_upi_paise INTEGER DEFAULT 0,
+        split_credit_paise INTEGER DEFAULT 0,
         status TEXT NOT NULL,
         items_json TEXT NOT NULL,
         created_at TEXT NOT NULL,
@@ -379,6 +391,9 @@ class LocalDatabase {
     required String paymentMethod,
     CustomerModel? customer,
     int discountPaise = 0,
+    int splitCashPaise = 0,
+    int splitUpiPaise = 0,
+    int splitCreditPaise = 0,
   }) async {
     final db = await instance.database;
 
@@ -409,6 +424,9 @@ class LocalDatabase {
       discountPaise: discountPaise,
       totalAmountPaise: totalAmountPaise,
       paymentMethod: paymentMethod,
+      splitCashPaise: splitCashPaise,
+      splitUpiPaise: splitUpiPaise,
+      splitCreditPaise: splitCreditPaise,
       items: itemsList,
       createdAt: DateTime.now(),
       syncStatus: 'pending',
@@ -442,9 +460,13 @@ class LocalDatabase {
         await txn.insert('inventory_movements', movement.toMap());
       }
 
-      // 3. If Udhar (credit), update customer balance and record ledger entry
-      if (paymentMethod == 'credit' && customer != null) {
-        final newBalancePaise = customer.currentBalancePaise + totalAmountPaise;
+      // 3. If full Credit OR Split Credit, update customer balance and record ledger entry
+      final creditDue = paymentMethod == 'credit'
+          ? totalAmountPaise
+          : (paymentMethod == 'split' ? splitCreditPaise : 0);
+
+      if (creditDue > 0 && customer != null) {
+        final newBalancePaise = customer.currentBalancePaise + creditDue;
 
         await txn.rawUpdate('''
           UPDATE customers
@@ -457,9 +479,11 @@ class LocalDatabase {
           businessId: businessId,
           customerId: customer.id,
           type: 'credit', // Credit given to customer
-          amountPaise: totalAmountPaise,
+          amountPaise: creditDue,
           balanceAfterPaise: newBalancePaise,
-          description: 'Bill #$invoiceNumber Udhar',
+          description: paymentMethod == 'split'
+              ? 'Bill #$invoiceNumber Udhar (Split)'
+              : 'Bill #$invoiceNumber Udhar',
           referenceId: saleId,
           createdAt: DateTime.now(),
           syncStatus: 'pending',
@@ -859,5 +883,32 @@ class LocalDatabase {
       return CashRegisterShiftModel.fromMap(result.first);
     }
     return null;
+  }
+
+  Future<List<CashRegisterShiftModel>> getAllCashRegisterShifts({
+    DateTime? from,
+    DateTime? to,
+    int limit = 50,
+  }) async {
+    final db = await instance.database;
+    String? where;
+    List<dynamic>? whereArgs;
+
+    if (from != null && to != null) {
+      where = 'opened_at >= ? AND opened_at <= ?';
+      whereArgs = [from.toIso8601String(), to.toIso8601String()];
+    } else if (from != null) {
+      where = 'opened_at >= ?';
+      whereArgs = [from.toIso8601String()];
+    }
+
+    final result = await db.query(
+      'cash_register_shifts',
+      where: where,
+      whereArgs: whereArgs,
+      orderBy: 'opened_at DESC',
+      limit: limit,
+    );
+    return result.map((m) => CashRegisterShiftModel.fromMap(m)).toList();
   }
 }

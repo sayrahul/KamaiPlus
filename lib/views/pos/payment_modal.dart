@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:qr_flutter/qr_flutter.dart';
-import 'package:url_launcher/url_launcher.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../models/models.dart';
 import '../../core/utils/money_formatter.dart';
@@ -9,6 +8,7 @@ import '../../core/database/local_database.dart';
 import '../../services/soundbox_service.dart';
 import '../../services/firestore_sync_service.dart';
 import '../../services/thermal_printer_service.dart';
+import 'sale_completed_modal.dart';
 
 class PaymentModal extends StatefulWidget {
   final List<CartItemModel> cartItems;
@@ -31,9 +31,6 @@ class _PaymentModalState extends State<PaymentModal> {
 
   String _selectedMethod = 'upi'; // 'cash' | 'upi' | 'credit'
   bool _isProcessing = false;
-  bool _billSuccess = false;
-  bool _isPrinting = false;
-  SaleModel? _completedSale;
 
   int get totalPaise {
     int sum = 0;
@@ -74,11 +71,15 @@ class _PaymentModalState extends State<PaymentModal> {
       // 3. Auto-print if thermal printer is configured
       _autoPrintReceipt(sale);
 
-      setState(() {
-        _isProcessing = false;
-        _billSuccess = true;
-        _completedSale = sale;
-      });
+      setState(() => _isProcessing = false);
+      if (mounted) {
+        Navigator.of(context).pop();
+        SaleCompletedModal.show(
+          context,
+          sale: sale,
+          onNewBill: widget.onBillCompleted,
+        );
+      }
     } catch (e) {
       setState(() => _isProcessing = false);
       if (mounted) {
@@ -114,147 +115,8 @@ class _PaymentModalState extends State<PaymentModal> {
     }
   }
 
-  Future<void> _printReceiptManually() async {
-    if (_completedSale == null) return;
-    setState(() => _isPrinting = true);
-
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final printerAddress = prefs.getString('printer_mac_address');
-      final is80mm = prefs.getBool('printer_is_80mm') ?? false;
-      final storeName = prefs.getString('business_name') ?? 'KamaiPlus Store';
-
-      if (printerAddress == null || printerAddress.isEmpty) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('No Bluetooth printer configured. Go to top-right icon in POS to pair.')),
-          );
-        }
-        setState(() => _isPrinting = false);
-        return;
-      }
-
-      final bytes = ThermalPrinterService.generateReceiptBytes(
-        sale: _completedSale!,
-        storeName: storeName,
-        is80mm: is80mm,
-        kickCashDrawer: true,
-      );
-
-      await _btChannel.invokeMethod('printBytes', {
-        'address': printerAddress,
-        'bytes': bytes,
-      });
-
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Receipt printed successfully! ✅'), backgroundColor: Color(0xFF10B981)),
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Print failed: $e'), backgroundColor: Colors.red),
-        );
-      }
-    } finally {
-      if (mounted) setState(() => _isPrinting = false);
-    }
-  }
-
-  Future<void> _sendWhatsAppReceipt() async {
-    if (_completedSale == null) return;
-    final phone = _completedSale!.customerPhone ?? '919876543210';
-    final msg = Uri.encodeComponent(
-      'Namaste! KamaiPlus bill #${_completedSale!.invoiceNumber} for ${MoneyFormatter.formatINR(_completedSale!.totalAmountPaise)} is generated. Thank you for shopping with us!',
-    );
-    final url = Uri.parse('https://wa.me/91$phone?text=$msg');
-    if (await canLaunchUrl(url)) {
-      await launchUrl(url, mode: LaunchMode.externalApplication);
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
-    if (_billSuccess && _completedSale != null) {
-      return Container(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const CircleAvatar(
-              radius: 36,
-              backgroundColor: Color(0xFFDCFCE7),
-              child: Icon(Icons.check_circle_rounded, color: Color(0xFF16A34A), size: 48),
-            ),
-            const SizedBox(height: 16),
-            const Text(
-              'Payment Received!',
-              style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Color(0xFF0F172A)),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              'Invoice: ${_completedSale!.invoiceNumber}',
-              style: const TextStyle(fontSize: 14, color: Colors.grey, fontWeight: FontWeight.w600),
-            ),
-            const SizedBox(height: 12),
-            Text(
-              MoneyFormatter.formatINR(_completedSale!.totalAmountPaise),
-              style: const TextStyle(fontSize: 32, fontWeight: FontWeight.w900, color: Color(0xFF0F172A)),
-            ),
-            const SizedBox(height: 20),
-
-            // Print Thermal Receipt Button
-            OutlinedButton.icon(
-              onPressed: _isPrinting ? null : _printReceiptManually,
-              icon: _isPrinting
-                  ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
-                  : const Icon(Icons.print, color: Color(0xFF0F172A)),
-              label: const Text('Print ESC/POS Thermal Receipt', style: TextStyle(color: Color(0xFF0F172A), fontWeight: FontWeight.bold)),
-              style: OutlinedButton.styleFrom(
-                padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 20),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                side: const BorderSide(color: Color(0xFFCBD5E1), width: 1.5),
-              ),
-            ),
-            const SizedBox(height: 12),
-
-            Row(
-              children: [
-                Expanded(
-                  child: OutlinedButton.icon(
-                    onPressed: _sendWhatsAppReceipt,
-                    icon: Image.asset('assets/images/whatsapp_logo.png', width: 18, height: 18),
-                    label: const Text('WhatsApp Bill', style: TextStyle(color: Color(0xFF0F172A), fontWeight: FontWeight.bold)),
-                    style: OutlinedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: ElevatedButton.icon(
-                    onPressed: () {
-                      Navigator.pop(context);
-                      widget.onBillCompleted();
-                    },
-                    icon: const Icon(Icons.add, color: Colors.white),
-                    label: const Text('Next Bill', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF0F172A),
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ),
-      );
-    }
-
     return Container(
       padding: const EdgeInsets.all(20),
       child: Column(

@@ -170,22 +170,22 @@ Comprehensive enterprise-grade retail UX upgrade suite aligned with PhonePe Busi
 
 ### 1. 🏠 Home Pulse Dashboard (`lib/views/dashboard/home_pulse_tab.dart`)
 * **KPI Stat Cards (Sales, Bills, Est. Profit, Udhar):** Redesigned with subtle gradients, micro-glow shadows, 1-tap navigation to relevant screens, and an eye toggle to mask/unmask sensitive shop turnover amounts.
-* **Audio Payment Flash (Soundbox Feed):** Live Soundbox audio announcement ticker banner showing real-time UPI & cash receipts with a "Bolo" re-announce button calling `SoundboxService.instance.announceHindiPayment`.
+* **Soundbox Voice Feed:** Audio Payment Flash banner removed per user preference for a cleaner dashboard layout.
 
 ### 2. 📦 Products Master (`lib/views/products/products_screen.dart`)
 * **List / Grid View Instant Toggle:** Dynamic toolbar button toggling between structured 1-column list and compact 2-column image grid.
 * **Smart Stock Badge (Traffic Light Colors):** Red for Out of Stock, Amber for Low Stock (with count left), and Green for Healthy In-Stock.
-* **Pencil Edit Icon:** Prominent, high-contrast dedicated edit button on every product item opening the full `AddProductModal`.
+* **Pencil Edit Icon:** Prominent, high-contrast dedicated edit button on every product item opening the full `AddProductModal`. Made crash-proof with dynamic unit, category, and tax rate fallback.
 * **Quick Price / Stock In-Line Update:** Lightning bolt dialog allowing instantaneous price and stock quantity edits without opening the full product form.
-* **Barcode Visual Strip:** Realistic rendered Code128 visual barcode pattern strip displayed beneath SKU barcode numbers.
-* **Clean Retail Listing:** Long descriptions hidden from default list view; strictly displays SKU Name, Unit, Selling Price, and Stock Quantity.
+* **Clean Retail Listing:** Barcode visual Code128 pattern strip removed per user instruction; clean numeric barcode text pill displayed beneath SKU name.
 
 ### 3. 🧾 POS Billing & Checkout (`lib/views/pos/pos_billing_screen.dart` & `pos_checkout_modal.dart`)
 * **Top Search + Barcode Bar:** Fast SKU search with instant barcode scanner trigger and live camera feed.
 * **Item Tiles Animation:** Tactile bounce scale micro-interaction (`0.94` scale down on press, bouncy spring return) on tapping product tiles into cart.
 * **Floating Bottom Cart Drawer:** Floating elevated pill drawer with item count, total price, and direct checkout CTA.
 * **Quick Tender Cash Chips:** Standard Indian currency note tender shortcuts: Exact, ₹50, ₹100, ₹200, ₹500, ₹1000, ₹2000.
-* **Customer Auto-Suggest:** Real-time customer search dropdown displaying customer name, phone, and current Khata ledger status badge (`₹X Baki` / `₹X Advance` / `₹0 Clear`).
+* **Customer Auto-Suggest Dropdown on Click:** Real-time customer search dropdown displaying immediately on tap/click with customer name, phone, and current Khata ledger status badge (`₹X Baki` / `₹X Advance` / `₹0 Clear`).
+* **Interactive Split Payment Function:** Allows dividing bill across Cash, UPI, and Udhar with live balance validation, auto-fill shortcuts (Auto UPI, Auto Cash, 50-50), and atomic SQLite transaction handling.
 * **Dynamic UPI QR Code Tab:** High-end merchant counter QR display with 150px crisp QR code, accepted payment apps row, Soundbox ready tag, and 5-minute validity countdown timer.
 
 ### 4. 📖 Digital Khata (`lib/views/khata/khata_screen.dart`)
@@ -194,12 +194,13 @@ Comprehensive enterprise-grade retail UX upgrade suite aligned with PhonePe Busi
 * **Date-Wise Voice Note (Audio Only - No Photos):** Integrated audio note recorder inside Jama & Udhar modals with waveform indicator, recording timer, and playback strip in customer statement ledger. Strictly NO photo attachment capability.
 
 ### 5. 💵 Cash Register (`lib/views/cash_register/cash_register_screen.dart`)
-* **Galla Till Balance Card:** Live cash drawer balance card with shift status, opening float, cash sales, cash expenses, and expected closing till.
+* **Galla Till Balance Card:** Live cash drawer balance card with shift status, opening float, cash sales, cash expenses, and expected closing till. Accounts for split cash sales.
 * **Physical Currency Denomination Counter:** Note counter (`₹2000, ₹500, ₹200, ₹100, ₹50, ₹20, ₹10`) and coin counter (`₹5, ₹2, ₹1`) with live count and shortage/excess calculation.
 
 ### 6. 📂 Menu Hub Modal (`lib/views/menu/menu_screen.dart`)
-* **Grouped Bento Grid Tiles:** Asymmetric Bento Grid layout with hero feature tiles for POS Billing and Kamai+ Pro, categorized into Counter & Billing, Stock & Sourcing, Khata & Growth, and Tax & Settings.
-* **Icons & Colors:** Vibrant pastel icon containers, high-contrast borders, and status badge pills (`FAST BILLING`, `AI OCR`, `Z-REPORT`, `UDHAR`, `CA READY`).
+* **Streamlined Daily Billing & Counter:** "Billing (POS) Register" hero card removed from Section 1 (as Center bottom nav button serves as primary POS launcher). Section 1 features Home Pulse, Transactions History, and Cash Register & Galla Till.
+* **Grouped Bento Grid Tiles:** Categorized into Stock & Sourcing, Khata & Growth, and Tax & Settings.
+* **Icons & Colors:** Vibrant pastel icon containers, high-contrast borders, and status badge pills (`AI OCR`, `Z-REPORT`, `UDHAR`, `CA READY`).
 
 ### 7. 🚚 Purchases & Mandi Inward (`lib/views/purchases/purchases_screen.dart` & `ai_inward_sheet.dart`)
 * **AI Vision Parcha OCR Scanner:** High-tech camera viewfinder modal with scanning laser line animation, handwritten mandi parcha slip preview, OCR extraction confidence, margin calculation, and 1-tap stock inventory save.
@@ -220,5 +221,85 @@ Comprehensive enterprise-grade retail UX upgrade suite aligned with PhonePe Busi
   - Every POS sale automatically logs an atomic `inventory_movements` record (`movement_type: 'SALE'`).
   - Stock Audit Trail in `InventoryScreen` reads and renders live movements from `inventory_movements`.
 * **Master Handover Document:** Created `HANDOVER.md` in project root covering all completed features, PWA parity analysis, remaining backend/services integrations (Meta Cloud API, Gemini live OCR, Razorpay Android SDK, Bluetooth hardware auto-connect), and UI enhancements.
+
+---
+
+## 💎 8. MICRO UI/UX IMPROVEMENTS & ADVANCED POLISH (SEPTEMBER 07, 2026)
+
+1. **Universal Typography (Google Sans):**
+   - Globally enforced `GoogleFonts.plusJakartaSans` (Google Sans styled) across all headers, KPI metrics, buttons, badges, and modals. Subtitles standard to `GoogleFonts.inter`.
+
+2. **Ultra-Compact Sale Completed Modal (`lib/views/pos/sale_completed_modal.dart`):**
+   - Minimalistic green transaction card with invoice number, payment badge, and item count.
+   - Large "+ New Bill" primary action button.
+   - 10-digit WhatsApp number field (auto-prefilled if customer was selected, otherwise manual input) with 1-tap WhatsApp sender.
+   - 2x2 compact action grid: Print Receipt (Thermal), Bluetooth Print, Download PDF, and Show PDF Preview.
+   - Discarded bulky "Dispatch & Receipt Actions" section header for maximum space efficiency.
+
+3. **Products Screen & Add Product Modal:**
+   - 2x2 compact grid cards (`childAspectRatio: 0.88`) with clear pricing, stock badge, and pencil edit button.
+   - QR code icon removed from product cards in both grid and list views.
+   - Live camera `BarcodeScannerView` integrated into top search bar.
+   - `AddProductModal`: 2-column compact input rows (Selling Price + Purchase Cost, Opening Stock + Low Stock Alert) + inline "Unlimited Stock ∞" toggle (stores `999999.0`).
+
+4. **Universal Owner Privacy (4-Digit PIN Verification):**
+   - Unmasking sensitive metrics (Today's Profit on Home, Valuation on Inventory, Drawer Cash on Cash Register, Net Turnover on GST Reports) requires 4-digit PIN verification via `OwnerPrivacyModal` (default PIN: `1234`).
+
+5. **Reusable Empty State Card (`lib/views/common/empty_state_card.dart`):**
+   - High-fidelity, clean empty state widget with soft tinted icon container, friendly title, descriptive helper text, and optional action CTA.
+   - Standardized across Digital Khata, Customers Directory, Inventory Audit Trail, and Cash Register Expenses.
+
+6. **Recent Transactions Detail Modal (`lib/views/transactions/sale_detail_modal.dart`):**
+   - Tapping any invoice on Home Pulse opens a complete breakdown modal with invoice timestamp, customer details, itemized table, total/subtotal, thermal Bluetooth printing, and WhatsApp share.
+
+7. **Note & Coin Tally Counter (`lib/views/cash_register/denomination_tally_modal.dart`):**
+   - Reusable counter modal with live counted total, expected cash comparison, excess/shortage variance badge, and 1-tap WhatsApp tally breakdown text generator.
+   - Added as a 1-tap quick action card on Home Pulse tab.
+
+8. **Cash Register Shift History & Past Z-Reports:**
+   - Historical shift lookup by date filter (All, Today, Yesterday, 7 Days, Custom Date picker).
+   - Backed by SQLite persistence (`getAllCashRegisterShifts` in `LocalDatabase`).
+   - Accessible via History icon on Cash Register AppBar and Quick Action Bar.
+
+9. **WhatsApp Growth Hub (`lib/views/growth/growth_campaigns_screen.dart`):**
+   - Birthday Radar banner detecting customer milestones.
+   - 2x2 Campaign cards: Flash Sale, Festival Dhamaka, Khata Udhar Due Reminder, VIP Reward.
+   - Voucher Customizer: Discount %, Min Order, Coupon Code, and Validity.
+   - Realistic WhatsApp chat preview bubble with store name and formatted coupon text.
+   - Recipient queue with audience filter tabs and 1-tap WhatsApp send.
+
+10. **Barcode Studio & Sticker Maker (`lib/views/tools/barcode_studio_screen.dart`):**
+    - 3 label layout sizes: Standard (50x25mm), Compact (38x25mm), Detailed (50x38mm).
+    - 6 toggleable elements: Store Name, Product Title, Barcode Graphic, Code text, MRP/Price, Batch/Expiry, Tax notice.
+    - Preset copies selector (5, 10, 25, 50, 100) + step buttons.
+    - Interactive live thermal sticker preview that updates dimensions and contents in real-time.
+    - Direct Bluetooth thermal print dispatch.
+
+11. **Dedicated Pro Membership Page (`lib/views/settings/pro_membership_screen.dart`):**
+    - Redesigned with world-class fintech aesthetics: Dark titanium card with gold glow, 50% Annual discount toggle.
+    - 3 Plan Tiers: Free Starter, Pro Business (Most Popular), Enterprise Multi-Counter.
+    - ROI value proposition card, 4-category deep-dive feature matrix, verified merchant trust badges, and interactive FAQs accordion.
+    - Linked from Menu sheet and Pro upgrade modal.
+
+12. **Modern Counter UPI Standee Modal (`lib/views/common/upi_standee_modal.dart`):**
+    - High-contrast counter standee modal with updated Google Sans typography, dynamic merchant QR code, and accepted payment apps strip.
+
+13. **Billing Out-of-Stock Protection & Red Outline:**
+    - Non-unlimited items with stock <= 0 (or effective remaining stock <= 0) render with high-contrast Red Outline (`#EF4444`), dimmed background (`#FFF1F2`), and bold red `OUT OF STOCK` badge.
+    - Attempting to add out-of-stock items to cart triggers heavy haptic feedback, blocking addition with warning toast.
+
+14. **Multi-Billing Draft Invoices in POS Checkout Modal:**
+    - Draft invoice tabs (`Bill #1 (3 items • ₹450)`, `Bill #2`, etc.) are located **exclusively inside the POS Checkout Modal (`PosCheckoutModal`)** to keep the main Billing Page uncluttered.
+    - When the cashier taps `+ New Bill` inside the modal, a new draft bill is created, the current bill is held in drafts, and the modal **immediately dismisses downwards (`Navigator.pop`)** so the cashier is right back on the billing screen ready to scan or add items.
+    - Switching tabs inside the modal dynamically switches active bill items, totals, and customer selection.
+
+15. **Bottom Navigation Bar Color Theme:**
+    - Per user preference, the Bottom Navigation Bar retains its original clean Emerald Green theme (`#059669` / `#10B981`) for the active tab indicator and center elevated billing button.
+
+16. **Native Android Status Bar Notifications & Genuine PDF Generation:**
+    - Integrated native Android `NotificationManager` engine (`com.kamaiplus.pos/notifications`) triggering high-priority status bar notifications on bill completion, PDF download, WhatsApp dispatch, and cloud sync.
+    - Built-in Android `PdfDocument` engine (`InvoicePdfService`) generates genuine A4 Tax Invoices, saves directly to the device's public `Downloads/` directory, and provides 1-tap open in system PDF viewers via `FileProvider`.
+
+
 
 

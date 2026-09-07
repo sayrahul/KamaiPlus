@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../core/database/local_database.dart';
 import '../../models/models.dart';
+import '../settings/pro_membership_screen.dart';
 
 class ProUpgradeModal extends StatefulWidget {
   const ProUpgradeModal({super.key});
@@ -135,7 +136,7 @@ class _ProUpgradeModalState extends State<ProUpgradeModal> {
                               const SizedBox(width: 4),
                               Text(
                                 'UNLOCK FULL POS POWER',
-                                style: GoogleFonts.outfit(
+                                style: GoogleFonts.plusJakartaSans(
                                   fontSize: 10,
                                   fontWeight: FontWeight.w900,
                                   letterSpacing: 0.4,
@@ -171,7 +172,7 @@ class _ProUpgradeModalState extends State<ProUpgradeModal> {
                     const SizedBox(height: 10),
                     Text(
                       'Upgrade to Kamai+ Pro',
-                      style: GoogleFonts.outfit(
+                      style: GoogleFonts.plusJakartaSans(
                         fontSize: 21,
                         fontWeight: FontWeight.w900,
                         color: const Color(0xFF0F172A),
@@ -476,7 +477,7 @@ class _ProUpgradeModalState extends State<ProUpgradeModal> {
                                     )
                                   : Text(
                                       'Upgrade to Kamai+ Pro (₹$priceAmount) 🚀',
-                                      style: GoogleFonts.outfit(
+                                      style: GoogleFonts.plusJakartaSans(
                                         fontSize: 13.5,
                                         fontWeight: FontWeight.w900,
                                         color: const Color(0xFF0F172A),
@@ -505,6 +506,24 @@ class _ProUpgradeModalState extends State<ProUpgradeModal> {
                             ),
                           ),
                         ],
+                      ),
+                      const SizedBox(height: 6),
+                      TextButton(
+                        onPressed: () {
+                          Navigator.of(context).pop();
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(builder: (_) => const ProMembershipScreen()),
+                          );
+                        },
+                        child: Text(
+                          'Compare Free vs Pro Plans & FAQs →',
+                          style: GoogleFonts.plusJakartaSans(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
+                            color: const Color(0xFF2563EB),
+                          ),
+                        ),
                       ),
                     ],
                   ),

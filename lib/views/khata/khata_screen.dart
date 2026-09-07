@@ -10,6 +10,7 @@ import '../../core/utils/money_formatter.dart';
 import '../../models/models.dart';
 import '../../services/firestore_sync_service.dart';
 import '../customers/customers_screen.dart';
+import '../common/empty_state_card.dart';
 
 class KhataScreen extends StatefulWidget {
   const KhataScreen({super.key});
@@ -756,25 +757,14 @@ class _KhataScreenState extends State<KhataScreen> {
   }
 
   Widget _buildEmptyCustomersState() {
-    return Container(
-      padding: const EdgeInsets.all(32),
-      alignment: Alignment.center,
-      child: Column(
-        children: [
-          const Icon(Icons.search_off_rounded, size: 48, color: Color(0xFF94A3B8)),
-          const SizedBox(height: 12),
-          Text(
-            'Koi Grahak Nahi Mila',
-            style: GoogleFonts.outfit(fontSize: 16, fontWeight: FontWeight.w700, color: const Color(0xFF334155)),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            'Search badal kar dekhein ya "+ Add" par click karke naya khata kholein.',
-            style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF64748B)),
-            textAlign: TextAlign.center,
-          ),
-        ],
-      ),
+    return EmptyStateCard(
+      icon: Icons.person_search_rounded,
+      iconColor: const Color(0xFFD97706),
+      iconBgColor: const Color(0xFFFEF3C7),
+      title: 'Koi Grahak Nahi Mila',
+      description: 'Search badal kar dekhein ya "+ Add" par click karke naya khata kholein.',
+      actionText: '+ Naya Khata Kholein',
+      onAction: _showAddCustomerModal,
     );
   }
 
@@ -1142,29 +1132,14 @@ class _KhataScreenState extends State<KhataScreen> {
   // -------------------------------------------------------------------------
   Widget _buildLedgerTimelineTab(CustomerModel customer) {
     if (_customerLedger.isEmpty) {
-      return Container(
-        padding: const EdgeInsets.all(32),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: const Color(0xFFE2E8F0)),
-        ),
-        child: Column(
-          children: [
-            const Icon(Icons.receipt_long_outlined, size: 48, color: Color(0xFF94A3B8)),
-            const SizedBox(height: 12),
-            Text(
-              'No Transaction History',
-              style: GoogleFonts.outfit(fontSize: 16, fontWeight: FontWeight.w700, color: const Color(0xFF334155)),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              'Aapne abhi tak is grahak ka koi hisaab nahi joda hai. "+ Udhar Diya" ya "- Jama Mila" se start karein.',
-              style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF64748B)),
-              textAlign: TextAlign.center,
-            ),
-          ],
-        ),
+      return EmptyStateCard(
+        icon: Icons.receipt_long_outlined,
+        iconColor: const Color(0xFF0284C7),
+        iconBgColor: const Color(0xFFE0F2FE),
+        title: 'No Transaction History',
+        description: 'Aapne abhi tak is grahak ka koi hisaab nahi joda hai. "+ Udhar Diya" ya "- Jama Mila" se start karein.',
+        actionText: '+ Udhar Diya',
+        onAction: () => _showGiveUdharModal(customer),
       );
     }
 
@@ -1414,29 +1389,10 @@ class _KhataScreenState extends State<KhataScreen> {
         const SizedBox(height: 12),
 
         if (creditBills.isEmpty)
-          Container(
-            padding: const EdgeInsets.all(32),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: const Color(0xFFE2E8F0)),
-            ),
-            child: Column(
-              children: [
-                const Icon(Icons.receipt_outlined, size: 48, color: Color(0xFF94A3B8)),
-                const SizedBox(height: 12),
-                Text(
-                  'No Bills in this Filter',
-                  style: GoogleFonts.outfit(fontSize: 16, fontWeight: FontWeight.w700, color: const Color(0xFF334155)),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  'Jab aap POS Billing se credit bill banayenge, wo yahan automatic reflect hoga.',
-                  style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF64748B)),
-                  textAlign: TextAlign.center,
-                ),
-              ],
-            ),
+          const EmptyStateCard(
+            icon: Icons.receipt_outlined,
+            title: 'No Bills in this Filter',
+            description: 'Jab aap POS Billing se credit bill banayenge, wo yahan automatic reflect hoga.',
           )
         else
           ...creditBills.map((bill) => _buildCreditBillCard(bill, customer)),

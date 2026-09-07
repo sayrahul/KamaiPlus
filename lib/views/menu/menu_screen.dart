@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
-import '../common/pro_upgrade_modal.dart';
 import '../cash_register/cash_register_screen.dart';
 import '../transactions/transactions_screen.dart';
 import '../inventory/inventory_screen.dart';
@@ -13,6 +12,7 @@ import '../settings/backup_restore_screen.dart';
 import '../settings/store_profile_screen.dart';
 import '../tools/barcode_studio_screen.dart';
 import '../growth/growth_campaigns_screen.dart';
+import '../settings/pro_membership_screen.dart';
 import '../auth/login_screen.dart';
 
 class MenuScreen extends StatefulWidget {
@@ -83,7 +83,10 @@ class _MenuScreenState extends State<MenuScreen> {
     if (widget.isModal && Navigator.canPop(context)) {
       Navigator.pop(context);
     }
-    ProUpgradeModal.show(context);
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const ProMembershipScreen()),
+    );
   }
 
   void _showLogoutDialog() {
@@ -193,23 +196,7 @@ class _MenuScreenState extends State<MenuScreen> {
                   // 1. DAILY BILLING & COUNTER (Bento Hero + Grid)
                   _buildSectionTitle('DAILY BILLING & COUNTER', subtitle: 'Fast register checkout, day history & cash till'),
                   const SizedBox(height: 10),
-                  // Bento Hero Card: POS Billing
-                  _buildBentoHeroCard(
-                    title: 'Billing (POS) Register',
-                    subtitle: 'Express Barcode Scanner, Instant Cart & UPI QR',
-                    badgeText: 'FAST BILLING',
-                    badgeBg: const Color(0xFFECFDF5),
-                    badgeColor: const Color(0xFF059669),
-                    icon: Icons.point_of_sale_rounded,
-                    isDark: widget.currentTabIndex == 2,
-                    gradient: const LinearGradient(
-                      colors: [Color(0xFF0F172A), Color(0xFF1E293B)],
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                    ),
-                    onTap: () => _handleTabTap(2),
-                  ),
-                  const SizedBox(height: 10),
+
                   Row(
                     children: [
                       Expanded(
@@ -615,122 +602,6 @@ class _MenuScreenState extends State<MenuScreen> {
     );
   }
 
-  Widget _buildBentoHeroCard({
-    required String title,
-    required String subtitle,
-    required String badgeText,
-    required Color badgeBg,
-    required Color badgeColor,
-    required IconData icon,
-    bool isDark = true,
-    LinearGradient? gradient,
-    required VoidCallback onTap,
-  }) {
-    return Material(
-      color: Colors.transparent,
-      borderRadius: BorderRadius.circular(18),
-      child: InkWell(
-        onTap: () {
-          HapticFeedback.selectionClick();
-          onTap();
-        },
-        borderRadius: BorderRadius.circular(18),
-        child: Container(
-          padding: const EdgeInsets.all(14),
-          decoration: BoxDecoration(
-            gradient: gradient ??
-                const LinearGradient(
-                  colors: [Color(0xFF0F172A), Color(0xFF1E293B)],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                ),
-            borderRadius: BorderRadius.circular(18),
-            boxShadow: [
-              BoxShadow(
-                color: const Color(0xFF0F172A).withValues(alpha: 0.25),
-                blurRadius: 10,
-                offset: const Offset(0, 4),
-              ),
-            ],
-          ),
-          child: Row(
-            children: [
-              Container(
-                width: 44,
-                height: 44,
-                decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(13),
-                  border: Border.all(color: Colors.white.withValues(alpha: 0.18)),
-                ),
-                child: const Icon(
-                  Icons.point_of_sale_rounded,
-                  size: 24,
-                  color: Color(0xFF34D399),
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Row(
-                      children: [
-                        Flexible(
-                          child: Text(
-                            title,
-                            style: GoogleFonts.outfit(
-                              fontSize: 14.5,
-                              fontWeight: FontWeight.w800,
-                              color: Colors.white,
-                            ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                          decoration: BoxDecoration(
-                            color: badgeBg,
-                            borderRadius: BorderRadius.circular(6),
-                          ),
-                          child: Text(
-                            badgeText,
-                            style: GoogleFonts.inter(
-                              fontSize: 9,
-                              fontWeight: FontWeight.w800,
-                              color: badgeColor,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 3),
-                    Text(
-                      subtitle,
-                      style: GoogleFonts.inter(
-                        fontSize: 11,
-                        color: const Color(0xFF94A3B8),
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ],
-                ),
-              ),
-              const Icon(
-                Icons.arrow_forward_ios_rounded,
-                size: 14,
-                color: Colors.white70,
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
 
   Widget _buildNavCard({
     required String title,

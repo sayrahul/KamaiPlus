@@ -4,7 +4,7 @@ import 'package:uuid/uuid.dart';
 import '../../core/database/local_database.dart';
 import '../../models/models.dart';
 import '../../services/firestore_sync_service.dart';
-import 'barcode_scanner_modal.dart';
+import '../pos/barcode_scanner_view.dart';
 
 class AddProductModal extends StatefulWidget {
   final ProductModel? existingProduct;
@@ -60,6 +60,7 @@ class _AddProductModalState extends State<AddProductModal> {
   late double _selectedTaxRate;
   late List<CategoryModel> _localCategories;
   bool _isSaving = false;
+  bool _isUnlimitedStock = false;
 
   final List<Map<String, String>> _units = [
     {'label': 'Packet / Pouch (pkt)', 'val': 'pkt'},
@@ -70,6 +71,13 @@ class _AddProductModalState extends State<AddProductModal> {
     {'label': 'Milliliter (ml)', 'val': 'ml'},
     {'label': 'Bottle (btl)', 'val': 'btl'},
     {'label': 'Box (box)', 'val': 'box'},
+    {'label': 'Bag / Borri (bag)', 'val': 'bag'},
+    {'label': 'Pouch (pouch)', 'val': 'pouch'},
+    {'label': 'Can / Tin (can)', 'val': 'can'},
+    {'label': 'Jar (jar)', 'val': 'jar'},
+    {'label': 'Meter (m)', 'val': 'm'},
+    {'label': 'Dozen (dz)', 'val': 'dz'},
+    {'label': 'Bundle (bdl)', 'val': 'bdl'},
   ];
 
   final List<Map<String, dynamic>> _taxRates = [
@@ -84,6 +92,7 @@ class _AddProductModalState extends State<AddProductModal> {
   void initState() {
     super.initState();
     final p = widget.existingProduct;
+    _isUnlimitedStock = p != null && p.stockQuantity >= 99999;
     _nameCtrl = TextEditingController(text: p?.name ?? '');
     _barcodeCtrl = TextEditingController(text: p?.barcode ?? '');
     _sellPriceCtrl = TextEditingController(
@@ -96,18 +105,67 @@ class _AddProductModalState extends State<AddProductModal> {
       text: p != null ? (p.purchasePricePaise / 100).toStringAsFixed(2) : '',
     );
     _stockCtrl = TextEditingController(
-      text: p != null ? p.stockQuantity.toInt().toString() : '0',
+      text: p != null ? (_isUnlimitedStock ? '' : p.stockQuantity.toInt().toString()) : '0',
     );
     _thresholdCtrl = TextEditingController(text: '5');
 
-    _localCategories = List.from(widget.categories);
+    // Deduplicate categories by ID
+    final uniqueCats = <String, CategoryModel>{};
+    for (final c in widget.categories) {
+      uniqueCats[c.id] = c;
+    }
+    _localCategories = uniqueCats.values.toList();
     if (_localCategories.isEmpty) {
       _localCategories.add(CategoryModel(id: 'cat_gen', businessId: 'biz_default', name: 'General Products'));
     }
 
-    _selectedCategoryId = p?.categoryId ?? _localCategories.first.id;
-    _selectedUnit = p?.unit ?? 'pkt';
-    _selectedTaxRate = p?.taxRate ?? 0.0;
+    // Safe Category Selection
+    if (p?.categoryId != null && p!.categoryId!.isNotEmpty) {
+      if (!_localCategories.any((c) => c.id == p.categoryId)) {
+        _localCategories.add(CategoryModel(
+          id: p.categoryId!,
+          businessId: p.businessId,
+          name: 'Category (${p.categoryId})',
+        ));
+      }
+      _selectedCategoryId = p.categoryId!;
+    } else {
+      _selectedCategoryId = _localCategories.first.id;
+    }
+
+    // Safe Unit Selection & Dynamic Registration
+    if (p != null && p.unit.isNotEmpty) {
+      final unitClean = p.unit.trim();
+      final match = _units.firstWhere(
+        (u) => u['val']?.toLowerCase() == unitClean.toLowerCase(),
+        orElse: () => {},
+      );
+      if (match.isNotEmpty) {
+        _selectedUnit = match['val']!;
+      } else {
+        _units.add({'label': '$unitClean (Custom)', 'val': unitClean});
+        _selectedUnit = unitClean;
+      }
+    } else {
+      _selectedUnit = 'pkt';
+    }
+
+    // Safe Tax Rate Selection & Dynamic Registration
+    if (p != null) {
+      final taxRateVal = p.taxRate;
+      final matchTax = _taxRates.firstWhere(
+        (t) => ((t['val'] as num).toDouble() - taxRateVal).abs() < 0.001,
+        orElse: () => {},
+      );
+      if (matchTax.isNotEmpty) {
+        _selectedTaxRate = (matchTax['val'] as num).toDouble();
+      } else {
+        _taxRates.add({'label': '$taxRateVal% GST', 'val': taxRateVal});
+        _selectedTaxRate = taxRateVal;
+      }
+    } else {
+      _selectedTaxRate = 0.0;
+    }
   }
 
   @override
@@ -128,15 +186,16 @@ class _AddProductModalState extends State<AddProductModal> {
     return sell - cost;
   }
 
-  void _openBarcodeScanner() {
-    BarcodeScannerModal.show(
+  Future<void> _openBarcodeScanner() async {
+    final scanned = await Navigator.push<String>(
       context,
-      onBarcodeScanned: (scanned) {
-        setState(() {
-          _barcodeCtrl.text = scanned;
-        });
-      },
+      MaterialPageRoute(builder: (context) => const BarcodeScannerView()),
     );
+    if (scanned != null && scanned.isNotEmpty && mounted) {
+      setState(() {
+        _barcodeCtrl.text = scanned;
+      });
+    }
   }
 
   void _showAddCategoryDialog() {
@@ -199,7 +258,7 @@ class _AddProductModalState extends State<AddProductModal> {
       final sellPaise = ((double.tryParse(_sellPriceCtrl.text.trim()) ?? 0.0) * 100).round();
       final mrpPaise = ((double.tryParse(_mrpCtrl.text.trim()) ?? (sellPaise / 100.0)) * 100).round();
       final costPaise = ((double.tryParse(_costPriceCtrl.text.trim()) ?? 0.0) * 100).round();
-      final stockQty = double.tryParse(_stockCtrl.text.trim()) ?? 0.0;
+      final stockQty = _isUnlimitedStock ? 999999.0 : (double.tryParse(_stockCtrl.text.trim()) ?? 0.0);
 
       final p = ProductModel(
         id: widget.existingProduct?.id ?? const Uuid().v4(),
@@ -438,81 +497,102 @@ class _AddProductModalState extends State<AddProductModal> {
                       ),
                       const SizedBox(height: 12),
 
-                      // 2. Category & New Category Link
+                      // 2. Row of Category & Measurement Unit (2-in-1 Row)
                       Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          _buildLabel('Category'),
-                          GestureDetector(
-                            onTap: _showAddCategoryDialog,
-                            child: Text(
-                              '+ New Category',
-                              style: GoogleFonts.inter(
-                                fontSize: 11,
-                                fontWeight: FontWeight.w800,
-                                color: const Color(0xFF0284C7),
-                              ),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    _buildLabel('Category'),
+                                    GestureDetector(
+                                      onTap: _showAddCategoryDialog,
+                                      child: Text(
+                                        '+ New',
+                                        style: GoogleFonts.inter(
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.w800,
+                                          color: const Color(0xFF0284C7),
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 5),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 10),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFFF8FAFC),
+                                    borderRadius: BorderRadius.circular(12),
+                                    border: Border.all(color: const Color(0xFFCBD5E1)),
+                                  ),
+                                  child: DropdownButtonHideUnderline(
+                                    child: DropdownButton<String>(
+                                      value: _localCategories.any((c) => c.id == _selectedCategoryId)
+                                          ? _selectedCategoryId
+                                          : _localCategories.first.id,
+                                      isExpanded: true,
+                                      icon: const Icon(Icons.keyboard_arrow_down_rounded, color: Color(0xFF475569)),
+                                      items: _localCategories.map((c) {
+                                        return DropdownMenuItem<String>(
+                                          value: c.id,
+                                          child: Text(c.name, style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w600), overflow: TextOverflow.ellipsis),
+                                        );
+                                      }).toList(),
+                                      onChanged: (val) {
+                                        if (val != null) setState(() => _selectedCategoryId = val);
+                                      },
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                _buildLabel('Unit'),
+                                const SizedBox(height: 5),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 10),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFFF8FAFC),
+                                    borderRadius: BorderRadius.circular(12),
+                                    border: Border.all(color: const Color(0xFFCBD5E1)),
+                                  ),
+                                  child: DropdownButtonHideUnderline(
+                                    child: DropdownButton<String>(
+                                      value: _units.any((u) => u['val'] == _selectedUnit)
+                                          ? _selectedUnit
+                                          : _units.first['val'],
+                                      isExpanded: true,
+                                      icon: const Icon(Icons.keyboard_arrow_down_rounded, color: Color(0xFF475569)),
+                                      items: _units.map((u) {
+                                        return DropdownMenuItem<String>(
+                                          value: u['val'],
+                                          child: Text(u['label']!, style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w600), overflow: TextOverflow.ellipsis),
+                                        );
+                                      }).toList(),
+                                      onChanged: (val) {
+                                        if (val != null) setState(() => _selectedUnit = val);
+                                      },
+                                    ),
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
                         ],
                       ),
-                      const SizedBox(height: 5),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 12),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFF8FAFC),
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: const Color(0xFFCBD5E1)),
-                        ),
-                        child: DropdownButtonHideUnderline(
-                          child: DropdownButton<String>(
-                            value: _selectedCategoryId,
-                            isExpanded: true,
-                            icon: const Icon(Icons.keyboard_arrow_down_rounded, color: Color(0xFF475569)),
-                            items: _localCategories.map((c) {
-                              return DropdownMenuItem<String>(
-                                value: c.id,
-                                child: Text(c.name, style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w600)),
-                              );
-                            }).toList(),
-                            onChanged: (val) {
-                              if (val != null) setState(() => _selectedCategoryId = val);
-                            },
-                          ),
-                        ),
-                      ),
                       const SizedBox(height: 12),
 
-                      // 3. Measurement Unit
-                      _buildLabel('Measurement Unit'),
-                      const SizedBox(height: 5),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 12),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFF8FAFC),
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: const Color(0xFFCBD5E1)),
-                        ),
-                        child: DropdownButtonHideUnderline(
-                          child: DropdownButton<String>(
-                            value: _selectedUnit,
-                            isExpanded: true,
-                            icon: const Icon(Icons.keyboard_arrow_down_rounded, color: Color(0xFF475569)),
-                            items: _units.map((u) {
-                              return DropdownMenuItem<String>(
-                                value: u['val'],
-                                child: Text(u['label']!, style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w600)),
-                              );
-                            }).toList(),
-                            onChanged: (val) {
-                              if (val != null) setState(() => _selectedUnit = val);
-                            },
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 14),
-
-                      // 4. Pricing & Profit Margins Card
+                      // 3. Compact Pricing & Profit Margins Card
                       Container(
                         padding: const EdgeInsets.all(12),
                         decoration: BoxDecoration(
@@ -527,7 +607,7 @@ class _AddProductModalState extends State<AddProductModal> {
                               mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
                                 Text(
-                                  'Pricing & Profit Margins',
+                                  'Pricing & Margins',
                                   style: GoogleFonts.outfit(
                                     fontSize: 12.5,
                                     fontWeight: FontWeight.w800,
@@ -555,47 +635,113 @@ class _AddProductModalState extends State<AddProductModal> {
                             ),
                             const SizedBox(height: 10),
 
-                            _buildLabel('Selling Price (₹) *'),
-                            const SizedBox(height: 4),
-                            TextFormField(
-                              controller: _sellPriceCtrl,
-                              keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                              style: GoogleFonts.robotoMono(fontSize: 13.5, fontWeight: FontWeight.w700),
-                              decoration: _buildInputDecoration('e.g. 150.00'),
-                              onChanged: (_) => setState(() {}),
-                              validator: (v) {
-                                if (v == null || v.trim().isEmpty) return 'Selling price required';
-                                if ((double.tryParse(v) ?? 0.0) <= 0) return 'Must be greater than 0';
-                                return null;
-                              },
+                            // Row 1: Selling Price & MRP (2 in 1)
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      _buildLabel('Selling Price (₹) *'),
+                                      const SizedBox(height: 4),
+                                      TextFormField(
+                                        controller: _sellPriceCtrl,
+                                        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                                        style: GoogleFonts.robotoMono(fontSize: 13, fontWeight: FontWeight.w700),
+                                        decoration: _buildInputDecoration('e.g. 150.00'),
+                                        onChanged: (_) => setState(() {}),
+                                        validator: (v) {
+                                          if (v == null || v.trim().isEmpty) return 'Selling price required';
+                                          if ((double.tryParse(v) ?? 0.0) <= 0) return 'Must be > 0';
+                                          return null;
+                                        },
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                const SizedBox(width: 10),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      _buildLabel('MRP (₹)'),
+                                      const SizedBox(height: 4),
+                                      TextFormField(
+                                        controller: _mrpCtrl,
+                                        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                                        style: GoogleFonts.robotoMono(fontSize: 13, fontWeight: FontWeight.w700),
+                                        decoration: _buildInputDecoration('e.g. 165.00'),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
                             ),
-                            const SizedBox(height: 8),
+                            const SizedBox(height: 10),
 
-                            _buildLabel('MRP Maximum Retail (₹)'),
-                            const SizedBox(height: 4),
-                            TextFormField(
-                              controller: _mrpCtrl,
-                              keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                              style: GoogleFonts.robotoMono(fontSize: 13.5, fontWeight: FontWeight.w700),
-                              decoration: _buildInputDecoration('e.g. 165.00'),
-                            ),
-                            const SizedBox(height: 8),
-
-                            _buildLabel('Purchase / Cost Price (₹)'),
-                            const SizedBox(height: 4),
-                            TextFormField(
-                              controller: _costPriceCtrl,
-                              keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                              style: GoogleFonts.robotoMono(fontSize: 13.5, fontWeight: FontWeight.w700),
-                              decoration: _buildInputDecoration('e.g. 120.00'),
-                              onChanged: (_) => setState(() {}),
+                            // Row 2: Purchase Cost & GST Rate (2 in 1)
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      _buildLabel('Purchase Cost (₹)'),
+                                      const SizedBox(height: 4),
+                                      TextFormField(
+                                        controller: _costPriceCtrl,
+                                        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                                        style: GoogleFonts.robotoMono(fontSize: 13, fontWeight: FontWeight.w700),
+                                        decoration: _buildInputDecoration('e.g. 120.00'),
+                                        onChanged: (_) => setState(() {}),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                const SizedBox(width: 10),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      _buildLabel('GST Tax Rate (%)'),
+                                      const SizedBox(height: 4),
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 10),
+                                        decoration: BoxDecoration(
+                                          color: Colors.white,
+                                          borderRadius: BorderRadius.circular(12),
+                                          border: Border.all(color: const Color(0xFFCBD5E1)),
+                                        ),
+                                        child: DropdownButtonHideUnderline(
+                                          child: DropdownButton<double>(
+                                            value: _taxRates.any((t) => ((t['val'] as num).toDouble() - _selectedTaxRate).abs() < 0.001)
+                                                ? _selectedTaxRate
+                                                : 0.0,
+                                            isExpanded: true,
+                                            icon: const Icon(Icons.keyboard_arrow_down_rounded, color: Color(0xFF475569)),
+                                            items: _taxRates.map((t) {
+                                              return DropdownMenuItem<double>(
+                                                value: t['val'] as double,
+                                                child: Text(t['label'] as String, style: GoogleFonts.inter(fontSize: 11.5, fontWeight: FontWeight.w600), overflow: TextOverflow.ellipsis),
+                                              );
+                                            }).toList(),
+                                            onChanged: (val) {
+                                              if (val != null) setState(() => _selectedTaxRate = val);
+                                            },
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
                             ),
                           ],
                         ),
                       ),
-                      const SizedBox(height: 14),
+                      const SizedBox(height: 12),
 
-                      // 5. Barcode / EAN-13 + Scan Camera Button
+                      // 4. Barcode / EAN-13 + Scan Camera Button
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
@@ -628,54 +774,142 @@ class _AddProductModalState extends State<AddProductModal> {
                       ),
                       const SizedBox(height: 12),
 
-                      // 6. GST Tax Rate (%)
-                      _buildLabel('GST Tax Rate (%)'),
-                      const SizedBox(height: 5),
+                      // 5. Stock & Inventory Card (With Unlimited Stock Toggle!)
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 12),
+                        padding: const EdgeInsets.all(12),
                         decoration: BoxDecoration(
-                          color: const Color(0xFFF8FAFC),
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: const Color(0xFFCBD5E1)),
-                        ),
-                        child: DropdownButtonHideUnderline(
-                          child: DropdownButton<double>(
-                            value: _selectedTaxRate,
-                            isExpanded: true,
-                            icon: const Icon(Icons.keyboard_arrow_down_rounded, color: Color(0xFF475569)),
-                            items: _taxRates.map((t) {
-                              return DropdownMenuItem<double>(
-                                value: t['val'] as double,
-                                child: Text(t['label'] as String, style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w600)),
-                              );
-                            }).toList(),
-                            onChanged: (val) {
-                              if (val != null) setState(() => _selectedTaxRate = val);
-                            },
+                          color: _isUnlimitedStock ? const Color(0xFFF0FDF4) : const Color(0xFFF8FAFC),
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(
+                            color: _isUnlimitedStock ? const Color(0xFFBBF7D0) : const Color(0xFFE2E8F0),
+                            width: 1.2,
                           ),
                         ),
-                      ),
-                      const SizedBox(height: 12),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Row(
+                                  children: [
+                                    Icon(
+                                      _isUnlimitedStock ? Icons.all_inclusive_rounded : Icons.inventory_2_outlined,
+                                      size: 16,
+                                      color: _isUnlimitedStock ? const Color(0xFF16A34A) : const Color(0xFF475569),
+                                    ),
+                                    const SizedBox(width: 6),
+                                    Text(
+                                      'Stock & Inventory',
+                                      style: GoogleFonts.outfit(
+                                        fontSize: 12.5,
+                                        fontWeight: FontWeight.w800,
+                                        color: const Color(0xFF0F172A),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                // Inline Unlimited Toggle
+                                Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Text(
+                                      'Unlimited Stock ∞',
+                                      style: GoogleFonts.inter(
+                                        fontSize: 10.5,
+                                        fontWeight: FontWeight.w700,
+                                        color: _isUnlimitedStock ? const Color(0xFF16A34A) : const Color(0xFF64748B),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 4),
+                                    Transform.scale(
+                                      scale: 0.75,
+                                      child: Switch(
+                                        value: _isUnlimitedStock,
+                                        activeThumbColor: const Color(0xFF16A34A),
+                                        onChanged: (val) {
+                                          setState(() {
+                                            _isUnlimitedStock = val;
+                                            if (val) {
+                                              _stockCtrl.text = '';
+                                            } else {
+                                              _stockCtrl.text = '10';
+                                            }
+                                          });
+                                        },
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 8),
 
-                      // 7. Current Available Stock
-                      _buildLabel('Current Available Stock'),
-                      const SizedBox(height: 5),
-                      TextFormField(
-                        controller: _stockCtrl,
-                        keyboardType: TextInputType.number,
-                        style: GoogleFonts.robotoMono(fontSize: 13.5, fontWeight: FontWeight.w700),
-                        decoration: _buildInputDecoration('0'),
-                      ),
-                      const SizedBox(height: 12),
-
-                      // 8. Low Stock Warning Threshold
-                      _buildLabel('Low Stock Warning Threshold'),
-                      const SizedBox(height: 5),
-                      TextFormField(
-                        controller: _thresholdCtrl,
-                        keyboardType: TextInputType.number,
-                        style: GoogleFonts.robotoMono(fontSize: 13.5, fontWeight: FontWeight.w700),
-                        decoration: _buildInputDecoration('5'),
+                            if (_isUnlimitedStock)
+                              Container(
+                                width: double.infinity,
+                                padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 10),
+                                decoration: BoxDecoration(
+                                  color: Colors.white,
+                                  borderRadius: BorderRadius.circular(10),
+                                  border: Border.all(color: const Color(0xFFDCFCE7)),
+                                ),
+                                child: Row(
+                                  children: [
+                                    const Icon(Icons.check_circle_rounded, size: 14, color: Color(0xFF16A34A)),
+                                    const SizedBox(width: 6),
+                                    Expanded(
+                                      child: Text(
+                                        'Unlimited stock enabled — No inventory warnings or count tracking needed.',
+                                        style: GoogleFonts.inter(fontSize: 10.5, color: const Color(0xFF15803D), fontWeight: FontWeight.w600),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              )
+                            else
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        _buildLabel('Current Available Stock *'),
+                                        const SizedBox(height: 4),
+                                        TextFormField(
+                                          controller: _stockCtrl,
+                                          keyboardType: TextInputType.number,
+                                          style: GoogleFonts.robotoMono(fontSize: 13, fontWeight: FontWeight.w700),
+                                          decoration: _buildInputDecoration('e.g. 25'),
+                                          validator: (v) {
+                                            if (_isUnlimitedStock) return null;
+                                            if (v == null || v.trim().isEmpty) return 'Stock required';
+                                            return null;
+                                          },
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  const SizedBox(width: 10),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        _buildLabel('Low Alert Threshold'),
+                                        const SizedBox(height: 4),
+                                        TextFormField(
+                                          controller: _thresholdCtrl,
+                                          keyboardType: TextInputType.number,
+                                          style: GoogleFonts.robotoMono(fontSize: 13, fontWeight: FontWeight.w700),
+                                          decoration: _buildInputDecoration('e.g. 5'),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              ),
+                          ],
+                        ),
                       ),
                       const SizedBox(height: 20),
 

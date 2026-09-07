@@ -8,10 +8,11 @@ import '../common/pwa_top_bar.dart';
 import '../common/owner_privacy_modal.dart';
 import 'ai_inward_modal.dart';
 import 'add_product_modal.dart';
-import 'barcode_scanner_modal.dart';
+import '../pos/barcode_scanner_view.dart';
 
 class ProductsScreen extends StatefulWidget {
-  const ProductsScreen({super.key});
+  final bool autoOpenFirstEdit;
+  const ProductsScreen({super.key, this.autoOpenFirstEdit = false});
 
   @override
   State<ProductsScreen> createState() => _ProductsScreenState();
@@ -52,6 +53,14 @@ class _ProductsScreenState extends State<ProductsScreen> {
       _categories = cats;
       _isLoading = false;
     });
+
+    if (widget.autoOpenFirstEdit && prods.isNotEmpty) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          _openAddProductSheet(existingProduct: prods.first);
+        }
+      });
+    }
   }
 
   int get _totalInventoryCostValuationPaise {
@@ -117,16 +126,17 @@ class _ProductsScreenState extends State<ProductsScreen> {
     );
   }
 
-  void _openBarcodeScanner() {
-    BarcodeScannerModal.show(
+  Future<void> _openBarcodeScanner() async {
+    final scanned = await Navigator.push<String>(
       context,
-      onBarcodeScanned: (scanned) {
-        setState(() {
-          _searchCtrl.text = scanned;
-          _searchQuery = scanned;
-        });
-      },
+      MaterialPageRoute(builder: (context) => const BarcodeScannerView()),
     );
+    if (scanned != null && scanned.isNotEmpty && mounted) {
+      setState(() {
+        _searchCtrl.text = scanned;
+        _searchQuery = scanned;
+      });
+    }
   }
 
   void _openQuickUpdateDialog(ProductModel product) {
@@ -234,26 +244,6 @@ class _ProductsScreenState extends State<ProductsScreen> {
     );
   }
 
-  Widget _buildBarcodeStrip(String barcode) {
-    return Container(
-      height: 12,
-      padding: const EdgeInsets.symmetric(horizontal: 2),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: List.generate(16, (index) {
-          final isThick = (barcode.hashCode ^ (index * 7)) % 3 == 0;
-          final isSpace = (barcode.hashCode ^ (index * 13)) % 5 == 0;
-          if (isSpace) return const SizedBox(width: 1.5);
-          return Container(
-            width: isThick ? 2.0 : 1.0,
-            height: 12,
-            margin: const EdgeInsets.symmetric(horizontal: 0.6),
-            color: const Color(0xFF334155),
-          );
-        }),
-      ),
-    );
-  }
 
   Widget _buildStockTrafficBadge(double qty, String unit) {
     final Color bg;
@@ -376,7 +366,7 @@ class _ProductsScreenState extends State<ProductsScreen> {
                 itemCount: filtered.length,
                 gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                   crossAxisCount: 2,
-                  childAspectRatio: 0.72,
+                  childAspectRatio: 0.88,
                   crossAxisSpacing: 10,
                   mainAxisSpacing: 10,
                 ),
@@ -1011,22 +1001,13 @@ class _ProductsScreenState extends State<ProductsScreen> {
                     borderRadius: BorderRadius.circular(6),
                     border: Border.all(color: const Color(0xFFE2E8F0)),
                   ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Icon(Icons.qr_code_2_rounded, size: 11, color: Color(0xFF64748B)),
-                      const SizedBox(width: 3),
-                      Text(
-                        product.barcode!,
-                        style: GoogleFonts.robotoMono(
-                          fontSize: 9.5,
-                          fontWeight: FontWeight.w600,
-                          color: const Color(0xFF64748B),
-                        ),
-                      ),
-                      const SizedBox(width: 4),
-                      _buildBarcodeStrip(product.barcode!),
-                    ],
+                  child: Text(
+                    product.barcode!,
+                    style: GoogleFonts.robotoMono(
+                      fontSize: 9.5,
+                      fontWeight: FontWeight.w600,
+                      color: const Color(0xFF64748B),
+                    ),
                   ),
                 ),
             ],
@@ -1202,11 +1183,6 @@ class _ProductsScreenState extends State<ProductsScreen> {
           ),
           const SizedBox(height: 4),
 
-          // Barcode Visual Strip if available
-          if (product.barcode != null && product.barcode!.isNotEmpty) ...[
-            _buildBarcodeStrip(product.barcode!),
-            const SizedBox(height: 4),
-          ],
 
           // Stock Traffic Badge
           _buildStockTrafficBadge(product.stockQuantity, product.unit),

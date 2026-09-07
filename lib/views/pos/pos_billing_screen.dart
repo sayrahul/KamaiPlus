@@ -8,26 +8,18 @@ import '../../services/firestore_sync_service.dart';
 import 'pos_checkout_modal.dart';
 import 'barcode_scanner_view.dart';
 
-class CartTab {
-  String id;
-  String name;
-  int number;
-  Map<String, CartItemModel> items;
-  CustomerModel? customer;
-
-  CartTab({
-    required this.id,
-    required this.name,
-    required this.number,
-    required this.items,
-    this.customer,
-  });
-}
 
 class PosBillingScreen extends StatefulWidget {
   final bool autoOpenCheckout;
+  final bool autoOpenCustomerDropdown;
+  final bool autoOpenSplit;
 
-  const PosBillingScreen({super.key, this.autoOpenCheckout = false});
+  const PosBillingScreen({
+    super.key,
+    this.autoOpenCheckout = false,
+    this.autoOpenCustomerDropdown = false,
+    this.autoOpenSplit = false,
+  });
 
   @override
   State<PosBillingScreen> createState() => _PosBillingScreenState();
@@ -131,6 +123,33 @@ class _PosBillingScreenState extends State<PosBillingScreen> {
   }
 
   void _addToCart(ProductModel product) {
+    final currentQty = _cart[product.id]?.quantity.toInt() ?? 0;
+    final isUnlimited = product.stockQuantity >= 900000;
+
+    if (!isUnlimited && (product.stockQuantity <= 0 || currentQty >= product.stockQuantity)) {
+      HapticFeedback.heavyImpact();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Row(
+            children: [
+              const Icon(Icons.block_rounded, color: Colors.white, size: 20),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  '⚠️ "${product.name}" is Out of Stock! (Available: ${product.stockQuantity.toInt()})',
+                  style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700),
+                ),
+              ),
+            ],
+          ),
+          backgroundColor: const Color(0xFFDC2626),
+          behavior: SnackBarBehavior.floating,
+          duration: const Duration(seconds: 2),
+        ),
+      );
+      return;
+    }
+
     HapticFeedback.lightImpact();
     setState(() {
       if (_cart.containsKey(product.id)) {
@@ -175,17 +194,32 @@ class _PosBillingScreenState extends State<PosBillingScreen> {
       return;
     }
     setState(() {
-      final newIndex = _tabs.length + 1;
-      _tabs.add(CartTab(id: 'tab_$newIndex', name: 'Bill #$newIndex', number: newIndex, items: {}));
+      int maxNum = 0;
+      for (final t in _tabs) {
+        if (t.number > maxNum) maxNum = t.number;
+      }
+      final newNum = maxNum + 1;
+      _tabs.add(CartTab(id: 'tab_$newNum', name: 'Bill #$newNum', number: newNum, items: {}));
       _activeTabIndex = _tabs.length - 1;
     });
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text('Bill #${_tabs.length - 1} held. Switched to Bill #${_tabs.length}'),
+        content: Text('Naya Bill #${_tabs.last.number} open ho gaya. Products add karein.'),
         backgroundColor: const Color(0xFF0F172A),
-        duration: const Duration(seconds: 1),
+        behavior: SnackBarBehavior.floating,
+        duration: const Duration(seconds: 2),
       ),
     );
+  }
+
+  void _closeTab(int index) {
+    if (_tabs.length <= 1) return;
+    setState(() {
+      _tabs.removeAt(index);
+      if (_activeTabIndex >= _tabs.length) {
+        _activeTabIndex = _tabs.length - 1;
+      }
+    });
   }
 
   void _openCheckoutModal() {
@@ -197,6 +231,19 @@ class _PosBillingScreenState extends State<PosBillingScreen> {
       allCustomers: _customers,
       activeBillTitle: currentTab.name,
       activeBillTabNumber: currentTab.number,
+      tabs: _tabs,
+      activeTabIndex: _activeTabIndex,
+      onSwitchTab: (newIndex) {
+        setState(() {
+          _activeTabIndex = newIndex;
+        });
+      },
+      onAddNewBill: () {
+        _holdBillAndNew();
+      },
+      onCloseTab: (idx) {
+        _closeTab(idx);
+      },
       onUpdateQuantity: _updateItemQuantity,
       onRemoveItem: _removeItem,
       onClearCart: _clearCart,
@@ -211,11 +258,20 @@ class _PosBillingScreenState extends State<PosBillingScreen> {
       },
       onSaleCompleted: () {
         setState(() {
-          _cart.clear();
-          currentTab.customer = null;
+          if (_tabs.length > 1) {
+            _tabs.removeAt(_activeTabIndex);
+            if (_activeTabIndex >= _tabs.length) {
+              _activeTabIndex = _tabs.length - 1;
+            }
+          } else {
+            _cart.clear();
+            currentTab.customer = null;
+          }
         });
         _loadData(); // refresh stock numbers
       },
+      autoOpenCustomerDropdown: widget.autoOpenCustomerDropdown,
+      autoOpenSplit: widget.autoOpenSplit,
     );
   }
 
@@ -273,7 +329,7 @@ class _PosBillingScreenState extends State<PosBillingScreen> {
                 // 2. Category Filter Pills
                 _buildCategoryPills(),
 
-                // 3. 2-Column Product Cards Grid
+                // 4. 2-Column Product Cards Grid
                 Expanded(
                   child: _isLoading
                       ? const Center(child: CircularProgressIndicator(color: Color(0xFFF59E0B)))
@@ -715,10 +771,13 @@ class _PosProductGridItemState extends State<_PosProductGridItem> {
   @override
   Widget build(BuildContext context) {
     final isInCart = widget.inCartQty > 0;
-    final effectiveStock = (widget.product.stockQuantity - widget.inCartQty).clamp(0.0, 99999.0);
-    final stockLeftStr = effectiveStock % 1 == 0
-        ? effectiveStock.toInt().toString()
-        : effectiveStock.toStringAsFixed(1);
+    final isUnlimited = widget.product.stockQuantity >= 900000;
+    final effectiveStock = (widget.product.stockQuantity - widget.inCartQty);
+    final isStockDepleted = !isUnlimited && effectiveStock <= 0;
+
+    final stockLeftStr = isUnlimited
+        ? '∞ Unlimited'
+        : (effectiveStock <= 0 ? '0 left' : '${effectiveStock.toInt()} left');
     final priceRupees = (widget.product.sellingPricePaise / 100.0).toStringAsFixed(2);
     final unitDisplay = widget.product.unit.isNotEmpty ? widget.product.unit : 'packet';
 
@@ -734,116 +793,140 @@ class _PosProductGridItemState extends State<_PosProductGridItem> {
         child: Container(
           padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
-            color: Colors.white,
+            color: isStockDepleted ? const Color(0xFFFFF1F2) : Colors.white,
             borderRadius: BorderRadius.circular(16),
             border: Border.all(
-              color: isInCart ? const Color(0xFFFBBF24) : const Color(0xFFEEF2F6),
-              width: isInCart ? 1.6 : 1.0,
+              color: isStockDepleted
+                  ? const Color(0xFFEF4444)
+                  : (isInCart ? const Color(0xFFFBBF24) : const Color(0xFFEEF2F6)),
+              width: (isStockDepleted || isInCart) ? 1.6 : 1.0,
             ),
             boxShadow: [
               BoxShadow(
-                color: isInCart ? const Color(0xFFFBBF24).withValues(alpha: 0.18) : Colors.black.withValues(alpha: 0.03),
+                color: isStockDepleted
+                    ? const Color(0xFFEF4444).withValues(alpha: 0.12)
+                    : (isInCart ? const Color(0xFFFBBF24).withValues(alpha: 0.18) : Colors.black.withValues(alpha: 0.03)),
                 blurRadius: 6,
                 offset: const Offset(0, 2),
               ),
             ],
           ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              // Top Row: Category Subtitle + 'X in cart' Gold Badge
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Expanded(
-                    child: Text(
-                      widget.categoryDisplay,
-                      style: GoogleFonts.plusJakartaSans(
-                        fontSize: 9.5,
-                        fontWeight: FontWeight.w700,
-                        letterSpacing: 0.4,
-                        color: const Color(0xFF94A3B8),
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                  if (isInCart)
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFFEF3C7),
-                        borderRadius: BorderRadius.circular(6),
-                        border: Border.all(color: const Color(0xFFFDE68A)),
-                      ),
+          child: Opacity(
+            opacity: isStockDepleted ? 0.75 : 1.0,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                // Top Row: Category Subtitle + 'X in cart' Gold Badge or OUT OF STOCK Red Badge
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Expanded(
                       child: Text(
-                        '${widget.inCartQty} in cart',
+                        widget.categoryDisplay,
                         style: GoogleFonts.plusJakartaSans(
                           fontSize: 9.5,
-                          fontWeight: FontWeight.w800,
-                          color: const Color(0xFF92400E),
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: 0.4,
+                          color: const Color(0xFF94A3B8),
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    if (isStockDepleted)
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFFEE2E2),
+                          borderRadius: BorderRadius.circular(6),
+                          border: Border.all(color: const Color(0xFFFCA5A5)),
+                        ),
+                        child: Text(
+                          'OUT OF STOCK',
+                          style: GoogleFonts.plusJakartaSans(
+                            fontSize: 8.5,
+                            fontWeight: FontWeight.w900,
+                            color: const Color(0xFFDC2626),
+                          ),
+                        ),
+                      )
+                    else if (isInCart)
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFFEF3C7),
+                          borderRadius: BorderRadius.circular(6),
+                          border: Border.all(color: const Color(0xFFFDE68A)),
+                        ),
+                        child: Text(
+                          '${widget.inCartQty} in cart',
+                          style: GoogleFonts.plusJakartaSans(
+                            fontSize: 9.5,
+                            fontWeight: FontWeight.w800,
+                            color: const Color(0xFF92400E),
+                          ),
                         ),
                       ),
-                    ),
-                ],
-              ),
-              // Middle: Product Name
-              Text(
-                widget.product.name,
-                style: GoogleFonts.plusJakartaSans(
-                  fontSize: 13.5,
-                  fontWeight: FontWeight.w700,
-                  color: const Color(0xFF0F172A),
-                  height: 1.25,
+                  ],
                 ),
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-              ),
-              // Bottom Row: Price / unit and Stock left
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                crossAxisAlignment: CrossAxisAlignment.baseline,
-                textBaseline: TextBaseline.alphabetic,
-                children: [
-                  Flexible(
-                    child: RichText(
-                      text: TextSpan(
-                        children: [
-                          TextSpan(
-                            text: '₹$priceRupees ',
-                            style: GoogleFonts.jetBrainsMono(
-                              fontSize: 12.5,
-                              fontWeight: FontWeight.w800,
-                              color: const Color(0xFF0F172A),
+                // Middle: Product Name
+                Text(
+                  widget.product.name,
+                  style: GoogleFonts.plusJakartaSans(
+                    fontSize: 13.5,
+                    fontWeight: FontWeight.w700,
+                    color: isStockDepleted ? const Color(0xFF475569) : const Color(0xFF0F172A),
+                    height: 1.25,
+                  ),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                // Bottom Row: Price / unit and Stock left
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  crossAxisAlignment: CrossAxisAlignment.baseline,
+                  textBaseline: TextBaseline.alphabetic,
+                  children: [
+                    Flexible(
+                      child: RichText(
+                        text: TextSpan(
+                          children: [
+                            TextSpan(
+                              text: '₹$priceRupees ',
+                              style: GoogleFonts.jetBrainsMono(
+                                fontSize: 12.5,
+                                fontWeight: FontWeight.w800,
+                                color: isStockDepleted ? const Color(0xFF64748B) : const Color(0xFF0F172A),
+                              ),
                             ),
-                          ),
-                          TextSpan(
-                            text: '/$unitDisplay',
-                            style: GoogleFonts.plusJakartaSans(
-                              fontSize: 10.5,
-                              fontWeight: FontWeight.w500,
-                              color: const Color(0xFF64748B),
+                            TextSpan(
+                              text: '/$unitDisplay',
+                              style: GoogleFonts.plusJakartaSans(
+                                fontSize: 10.5,
+                                fontWeight: FontWeight.w500,
+                                color: const Color(0xFF64748B),
+                              ),
                             ),
-                          ),
-                        ],
+                          ],
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
                     ),
-                  ),
-                  const SizedBox(width: 4),
-                  Text(
-                    '$stockLeftStr left',
-                    style: GoogleFonts.plusJakartaSans(
-                      fontSize: 10.5,
-                      fontWeight: FontWeight.w600,
-                      color: const Color(0xFF64748B),
+                    const SizedBox(width: 4),
+                    Text(
+                      isStockDepleted ? 'Out of Stock' : stockLeftStr,
+                      style: GoogleFonts.plusJakartaSans(
+                        fontSize: 10.5,
+                        fontWeight: FontWeight.w700,
+                        color: isStockDepleted ? const Color(0xFFDC2626) : const Color(0xFF64748B),
+                      ),
                     ),
-                  ),
-                ],
-              ),
-            ],
+                  ],
+                ),
+              ],
+            ),
           ),
         ),
       ),

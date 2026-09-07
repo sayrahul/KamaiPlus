@@ -94,7 +94,7 @@ class _UpiStandeeModalState extends State<UpiStandeeModal> {
                         const SizedBox(width: 8),
                         Text(
                           'OFFICIAL COUNTER UPI STANDEE',
-                          style: GoogleFonts.outfit(
+                          style: GoogleFonts.plusJakartaSans(
                             fontSize: 11,
                             fontWeight: FontWeight.w900,
                             letterSpacing: 0.6,
@@ -159,7 +159,7 @@ class _UpiStandeeModalState extends State<UpiStandeeModal> {
                       Text(
                         storeName,
                         textAlign: TextAlign.center,
-                        style: GoogleFonts.outfit(
+                        style: GoogleFonts.plusJakartaSans(
                           fontSize: 19,
                           fontWeight: FontWeight.w900,
                           color: const Color(0xFF0F172A),
@@ -447,7 +447,7 @@ class _UpiStandeeModalState extends State<UpiStandeeModal> {
               const SizedBox(width: 5),
               Text(
                 label,
-                style: GoogleFonts.outfit(
+                style: GoogleFonts.plusJakartaSans(
                   fontSize: 12,
                   fontWeight: FontWeight.w800,
                   color: textColor,

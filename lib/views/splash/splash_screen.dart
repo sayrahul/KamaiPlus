@@ -47,15 +47,34 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
         final isOnboarded = prefs.getBool('is_onboarded') ?? false;
 
         final testScreen = prefs.getString('test_screen');
+        if (testScreen != null) {
+          await prefs.remove('test_screen');
+        }
         Widget target;
         if (testScreen == 'home') {
           target = HomeDashboardScreen(key: HomeDashboardScreen.dashboardKey, initialIndex: 0);
         } else if (testScreen == 'product') {
           target = HomeDashboardScreen(key: HomeDashboardScreen.dashboardKey, initialIndex: 1);
+        } else if (testScreen == 'product_edit') {
+          target = HomeDashboardScreen(key: HomeDashboardScreen.dashboardKey, initialIndex: 1, autoOpenFirstEdit: true);
         } else if (testScreen == 'pos') {
           target = HomeDashboardScreen(key: HomeDashboardScreen.dashboardKey, initialIndex: 2);
         } else if (testScreen == 'checkout') {
           target = HomeDashboardScreen(key: HomeDashboardScreen.dashboardKey, initialIndex: 2, autoOpenCheckout: true);
+        } else if (testScreen == 'checkout_customer') {
+          target = HomeDashboardScreen(
+            key: HomeDashboardScreen.dashboardKey,
+            initialIndex: 2,
+            autoOpenCheckout: true,
+            autoOpenCustomerDropdown: true,
+          );
+        } else if (testScreen == 'checkout_split') {
+          target = HomeDashboardScreen(
+            key: HomeDashboardScreen.dashboardKey,
+            initialIndex: 2,
+            autoOpenCheckout: true,
+            autoOpenSplit: true,
+          );
         } else if (testScreen == 'khata') {
           target = HomeDashboardScreen(key: HomeDashboardScreen.dashboardKey, initialIndex: 3);
         } else if (testScreen == 'menu') {

@@ -11,11 +11,17 @@ import '../common/kamai_bottom_nav.dart';
 class HomeDashboardScreen extends StatefulWidget {
   final int initialIndex;
   final bool autoOpenCheckout;
+  final bool autoOpenCustomerDropdown;
+  final bool autoOpenSplit;
+  final bool autoOpenFirstEdit;
 
   const HomeDashboardScreen({
     super.key,
     this.initialIndex = 2,
     this.autoOpenCheckout = false,
+    this.autoOpenCustomerDropdown = false,
+    this.autoOpenSplit = false,
+    this.autoOpenFirstEdit = false,
   });
 
   static final GlobalKey<HomeDashboardScreenState> dashboardKey = GlobalKey<HomeDashboardScreenState>();
@@ -81,8 +87,12 @@ class HomeDashboardScreenState extends State<HomeDashboardScreen> {
         onNavigateToKhata: () => setTab(3),
         onNavigateToProducts: () => setTab(1),
       ),
-      const ProductsScreen(),
-      PosBillingScreen(autoOpenCheckout: widget.autoOpenCheckout),
+      ProductsScreen(autoOpenFirstEdit: widget.autoOpenFirstEdit),
+      PosBillingScreen(
+        autoOpenCheckout: widget.autoOpenCheckout,
+        autoOpenCustomerDropdown: widget.autoOpenCustomerDropdown,
+        autoOpenSplit: widget.autoOpenSplit,
+      ),
       const KhataScreen(),
     ];
 

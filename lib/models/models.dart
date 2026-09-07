@@ -234,6 +234,9 @@ class SaleModel {
   final int discountPaise;
   final int totalAmountPaise;
   final String paymentMethod; // 'cash' | 'upi' | 'credit' (udhar) | 'split'
+  final int splitCashPaise;
+  final int splitUpiPaise;
+  final int splitCreditPaise;
   final String status;
   final List<Map<String, dynamic>> items;
   final DateTime createdAt;
@@ -251,6 +254,9 @@ class SaleModel {
     this.discountPaise = 0,
     required this.totalAmountPaise,
     required this.paymentMethod,
+    this.splitCashPaise = 0,
+    this.splitUpiPaise = 0,
+    this.splitCreditPaise = 0,
     this.status = 'completed',
     required this.items,
     required this.createdAt,
@@ -269,6 +275,9 @@ class SaleModel {
     'discount_paise': discountPaise,
     'total_amount_paise': totalAmountPaise,
     'payment_method': paymentMethod,
+    'split_cash_paise': splitCashPaise,
+    'split_upi_paise': splitUpiPaise,
+    'split_credit_paise': splitCreditPaise,
     'status': status,
     'items_json': jsonEncode(items),
     'created_at': createdAt.toIso8601String(),
@@ -295,6 +304,9 @@ class SaleModel {
       discountPaise: map['discount_paise'] ?? 0,
       totalAmountPaise: map['total_amount_paise'] ?? 0,
       paymentMethod: map['payment_method'] ?? 'cash',
+      splitCashPaise: map['split_cash_paise'] ?? 0,
+      splitUpiPaise: map['split_upi_paise'] ?? 0,
+      splitCreditPaise: map['split_credit_paise'] ?? 0,
       status: map['status'] ?? 'completed',
       items: parsedItems,
       createdAt: DateTime.tryParse(map['created_at'] ?? '') ?? DateTime.now(),
@@ -440,19 +452,19 @@ class StoreProfileModel {
   final String upiAccountsJson;
 
   StoreProfileModel({
-    this.storeName = 'Rahul Shramas',
+    this.storeName = 'KamaiPlus Store',
     this.tagline = 'Always Fresh, Best Wholesale Rates',
-    this.ownerName = 'Divyaang Pratishthan',
-    this.phone = '9595997711',
-    this.email = 'iamdivyaang@gmail.com',
-    this.upiVpa = 'rahuljadhav44@ybl',
-    this.category = 'Grocery / Kirana',
-    this.address = 'Shop No. 12, Gandhi Market, Station Road',
-    this.pincode = '400001',
+    this.ownerName = 'Store Owner',
+    this.phone = '',
+    this.email = '',
+    this.upiVpa = '',
+    this.category = 'Retail Store',
+    this.address = 'Main Market, Station Road',
+    this.pincode = '',
     this.gstin = '',
     this.fssai = '',
     this.logoUrl = '',
-    this.upiAccountsJson = '[{"id":"upi_1","label":"Shop Primary QR","upi_vpa":"rahuljadhav44@ybl","is_default":1}]',
+    this.upiAccountsJson = '[]',
   });
 
   Map<String, dynamic> toMap() => {
@@ -472,19 +484,19 @@ class StoreProfileModel {
   };
 
   factory StoreProfileModel.fromMap(Map<String, dynamic> map) => StoreProfileModel(
-    storeName: map['store_name'] ?? 'Rahul Shramas',
-    tagline: map['tagline'] ?? 'Always Fresh, Best Wholesale Rates',
-    ownerName: map['owner_name'] ?? 'Divyaang Pratishthan',
-    phone: map['phone'] ?? '9595997711',
-    email: map['email'] ?? 'iamdivyaang@gmail.com',
-    upiVpa: map['upi_vpa'] ?? 'rahuljadhav44@ybl',
-    category: map['category'] ?? 'Grocery / Kirana',
-    address: map['address'] ?? 'Shop No. 12, Gandhi Market, Station Road',
-    pincode: map['pincode'] ?? '400001',
+    storeName: (map['store_name'] as String?)?.isNotEmpty == true ? map['store_name'] : 'KamaiPlus Store',
+    tagline: (map['tagline'] as String?)?.isNotEmpty == true ? map['tagline'] : 'Always Fresh, Best Wholesale Rates',
+    ownerName: (map['owner_name'] as String?)?.isNotEmpty == true ? map['owner_name'] : 'Store Owner',
+    phone: map['phone'] ?? '',
+    email: map['email'] ?? '',
+    upiVpa: map['upi_vpa'] ?? '',
+    category: (map['category'] as String?)?.isNotEmpty == true ? map['category'] : 'Retail Store',
+    address: map['address'] ?? 'Main Market, Station Road',
+    pincode: map['pincode'] ?? '',
     gstin: map['gstin'] ?? '',
     fssai: map['fssai'] ?? '',
     logoUrl: map['logo_url'] ?? '',
-    upiAccountsJson: map['upi_accounts_json'] ?? '[{"id":"upi_1","label":"Shop Primary QR","upi_vpa":"rahuljadhav44@ybl","is_default":1}]',
+    upiAccountsJson: map['upi_accounts_json'] ?? '[]',
   );
 }
 
@@ -639,4 +651,25 @@ class CashRegisterShiftModel {
     closedAt: map['closed_at'] != null ? DateTime.tryParse(map['closed_at']) : null,
   );
 }
+
+class CartTabModel {
+  String id;
+  String name;
+  int number;
+  Map<String, CartItemModel> items;
+  CustomerModel? customer;
+
+  CartTabModel({
+    required this.id,
+    required this.name,
+    required this.number,
+    required this.items,
+    this.customer,
+  });
+
+  int get totalItemCount => items.values.fold<int>(0, (sum, it) => sum + it.quantity.toInt());
+  int get grossTotalPaise => items.values.fold<int>(0, (sum, it) => sum + it.grossTotalPaise);
+}
+
+typedef CartTab = CartTabModel;
 

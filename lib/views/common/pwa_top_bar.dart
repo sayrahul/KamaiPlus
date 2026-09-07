@@ -35,8 +35,11 @@ class _PwaTopBarState extends State<PwaTopBar> {
 
   @override
   Widget build(BuildContext context) {
-    final storeName = _profile.storeName.isNotEmpty ? _profile.storeName : 'Sharma Kirana Store';
-    final ownerSubtitle = '${_profile.ownerName.isNotEmpty ? _profile.ownerName : "Rahul jathee"} • Grocery';
+    final storeName = _profile.storeName.isNotEmpty ? _profile.storeName : 'KamaiPlus Store';
+    final categoryClean = _profile.category.isNotEmpty
+        ? (_profile.category.contains('/') ? _profile.category.split('/').first.trim() : _profile.category)
+        : 'Retail';
+    final ownerSubtitle = '${_profile.ownerName.isNotEmpty ? _profile.ownerName : "Store Owner"} • $categoryClean';
 
     return Container(
       decoration: const BoxDecoration(

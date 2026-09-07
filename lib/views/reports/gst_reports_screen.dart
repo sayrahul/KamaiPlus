@@ -5,6 +5,7 @@ import '../../core/database/local_database.dart';
 import '../../core/utils/money_formatter.dart';
 import '../../models/models.dart';
 import '../common/kamai_bottom_nav.dart';
+import '../common/owner_privacy_modal.dart';
 
 class GstReportsScreen extends StatefulWidget {
   const GstReportsScreen({super.key});
@@ -66,6 +67,26 @@ class _GstReportsScreenState extends State<GstReportsScreen> {
   String _formatAmount(int paise) {
     if (_isTurnoverMasked) return '••••••';
     return MoneyFormatter.formatINR(paise);
+  }
+
+  void _toggleTurnoverMask() {
+    HapticFeedback.selectionClick();
+    if (_isTurnoverMasked) {
+      OwnerPrivacyModal.show(
+        context,
+        onUnlocked: () => setState(() => _isTurnoverMasked = false),
+      );
+    } else {
+      setState(() => _isTurnoverMasked = true);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text('🔒 GST turnover and tax figures masked.'),
+          duration: const Duration(seconds: 2),
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        ),
+      );
+    }
   }
 
   void _showExportModal(String type) {
@@ -252,10 +273,7 @@ class _GstReportsScreenState extends State<GstReportsScreen> {
                           ),
                         ),
                         InkWell(
-                          onTap: () {
-                            HapticFeedback.selectionClick();
-                            setState(() => _isTurnoverMasked = !_isTurnoverMasked);
-                          },
+                          onTap: _toggleTurnoverMask,
                           borderRadius: BorderRadius.circular(8),
                           child: Container(
                             padding: const EdgeInsets.all(4),
