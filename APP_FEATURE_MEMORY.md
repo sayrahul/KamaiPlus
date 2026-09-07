@@ -303,6 +303,9 @@ Comprehensive enterprise-grade retail UX upgrade suite aligned with PhonePe Busi
     - Integrated native Android `NotificationManager` engine (`com.kamaiplus.pos/notifications`) triggering high-priority status bar notifications on bill completion, PDF download, WhatsApp dispatch, and cloud sync.
     - Built-in Android `PdfDocument` engine (`InvoicePdfService`) generates genuine A4 Tax Invoices, saves directly to the device's public `Downloads/` directory, and provides 1-tap open in system PDF viewers via `FileProvider`.
 
+17. **Business-Type Starter Catalogs:**
+    - During store onboarding, the selected business type replaces the existing starter catalog when preload is enabled.
+    - Grocery / Kirana, Apparel / Clothing, Electronics & Mobile, and Cafe / Restaurant each receive four relevant categories and 15 essential products with integer-paise prices and starter stock.
 
 
 

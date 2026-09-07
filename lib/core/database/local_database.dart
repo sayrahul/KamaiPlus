@@ -344,6 +344,156 @@ class LocalDatabase {
     }
   }
 
+  /// Replaces the starter catalog with products relevant to the selected store type.
+  Future<void> seedCatalogForStoreType({
+    required String businessId,
+    required String storeType,
+  }) async {
+    final db = await instance.database;
+    final catalog = _catalogForStoreType(storeType);
+
+    await db.transaction((txn) async {
+      await txn.delete('products', where: 'business_id = ?', whereArgs: [businessId]);
+      await txn.delete('categories', where: 'business_id = ?', whereArgs: [businessId]);
+
+      for (final category in catalog.categories) {
+        await txn.insert('categories', {
+          'id': '${businessId}_${category.id}',
+          'business_id': businessId,
+          'name': category.name,
+        });
+      }
+
+      for (final product in catalog.products) {
+        await txn.insert('products', {
+          'id': '${businessId}_${product.id}',
+          'business_id': businessId,
+          'name': product.name,
+          'barcode': product.barcode,
+          'category_id': '${businessId}_${product.categoryId}',
+          'selling_price_paise': product.sellingPricePaise,
+          'mrp_paise': product.mrpPaise,
+          'purchase_price_paise': product.purchasePricePaise,
+          'stock_quantity': product.stockQuantity,
+          'tax_rate': product.taxRate,
+          'is_tax_inclusive': 1,
+          'unit': product.unit,
+          'sync_status': 'pending',
+        });
+      }
+    });
+  }
+
+  _StarterCatalog _catalogForStoreType(String storeType) {
+    switch (storeType) {
+      case 'Apparel / Clothing':
+        return _StarterCatalog(
+          categories: const [
+            _StarterCategory('apparel', 'Men & Women Clothing'),
+            _StarterCategory('kids', 'Kids Wear'),
+            _StarterCategory('footwear', 'Footwear'),
+            _StarterCategory('accessories', 'Fashion Accessories'),
+          ],
+          products: const [
+            _StarterProduct('shirt_cotton', 'Men Cotton Casual Shirt', 'apparel', 'pcs', 79900, 99900, 52000, 25, 5),
+            _StarterProduct('jeans_regular', 'Men Regular Fit Jeans', 'apparel', 'pcs', 109900, 139900, 72000, 18, 12),
+            _StarterProduct('tshirt_basic', 'Unisex Cotton T-Shirt', 'apparel', 'pcs', 39900, 49900, 24000, 40, 5),
+            _StarterProduct('kurti_printed', 'Women Printed Daily Kurti', 'apparel', 'pcs', 69900, 89900, 43000, 22, 5),
+            _StarterProduct('leggings', 'Women Stretch Leggings', 'apparel', 'pcs', 34900, 44900, 21000, 30, 5),
+            _StarterProduct('saree_cotton', 'Cotton Daily Wear Saree', 'apparel', 'pcs', 89900, 119900, 57000, 18, 5),
+            _StarterProduct('dress_kids', 'Kids Party Dress', 'kids', 'pcs', 84900, 109900, 54000, 15, 5),
+            _StarterProduct('school_shirt', 'Kids School Shirt', 'kids', 'pcs', 44900, 59900, 28000, 20, 5),
+            _StarterProduct('school_pant', 'Kids School Pant', 'kids', 'pcs', 49900, 64900, 30000, 20, 5),
+            _StarterProduct('sports_shoe', 'Unisex Sports Shoes', 'footwear', 'pair', 99900, 129900, 62000, 18, 18),
+            _StarterProduct('slippers', 'Daily Wear Slippers', 'footwear', 'pair', 24900, 29900, 14000, 35, 5),
+            _StarterProduct('sandal_women', 'Women Casual Sandals', 'footwear', 'pair', 59900, 79900, 36000, 20, 18),
+            _StarterProduct('belt', 'Leather Finish Belt', 'accessories', 'pcs', 29900, 39900, 15000, 25, 18),
+            _StarterProduct('wallet', 'Men Wallet', 'accessories', 'pcs', 34900, 49900, 19000, 25, 18),
+            _StarterProduct('cap', 'Cotton Adjustable Cap', 'accessories', 'pcs', 19900, 29900, 10000, 30, 5),
+          ],
+        );
+      case 'Electronics & Mobile':
+        return _StarterCatalog(
+          categories: const [
+            _StarterCategory('mobile', 'Mobile Phones'),
+            _StarterCategory('accessories', 'Mobile Accessories'),
+            _StarterCategory('power', 'Power & Charging'),
+            _StarterCategory('audio', 'Audio & Gadgets'),
+          ],
+          products: const [
+            _StarterProduct('phone_entry', 'Android Smartphone 4GB/64GB', 'mobile', 'pcs', 899900, 999900, 820000, 8, 18),
+            _StarterProduct('phone_mid', 'Android Smartphone 6GB/128GB', 'mobile', 'pcs', 1499900, 1699900, 1320000, 5, 18),
+            _StarterProduct('phone_premium', 'Android Smartphone 8GB/256GB', 'mobile', 'pcs', 2499900, 2799900, 2200000, 3, 18),
+            _StarterProduct('case_clear', 'Universal Clear Mobile Cover', 'accessories', 'pcs', 19900, 29900, 8000, 40, 18),
+            _StarterProduct('case_premium', 'Premium Shockproof Mobile Cover', 'accessories', 'pcs', 39900, 59900, 18000, 30, 18),
+            _StarterProduct('tempered', '9H Tempered Glass Screen Guard', 'accessories', 'pcs', 14900, 29900, 5000, 60, 18),
+            _StarterProduct('cable_typec', 'Fast Charging Type-C Cable', 'power', 'pcs', 24900, 39900, 11000, 45, 18),
+            _StarterProduct('cable_iphone', 'Lightning Charging Cable', 'power', 'pcs', 39900, 59900, 20000, 30, 18),
+            _StarterProduct('charger_20w', '20W Fast Wall Charger', 'power', 'pcs', 79900, 99900, 45000, 25, 18),
+            _StarterProduct('charger_65w', '65W GaN Fast Charger', 'power', 'pcs', 179900, 229900, 115000, 12, 18),
+            _StarterProduct('powerbank', '10000mAh Power Bank', 'power', 'pcs', 99900, 129900, 68000, 18, 18),
+            _StarterProduct('neckband', 'Bluetooth Wireless Neckband', 'audio', 'pcs', 89900, 119900, 56000, 20, 18),
+            _StarterProduct('earbuds', 'TWS Wireless Earbuds', 'audio', 'pcs', 129900, 169900, 80000, 15, 18),
+            _StarterProduct('speaker', 'Portable Bluetooth Speaker', 'audio', 'pcs', 149900, 199900, 95000, 10, 18),
+            _StarterProduct('smartwatch', 'Bluetooth Smart Watch', 'audio', 'pcs', 99900, 149900, 58000, 12, 18),
+          ],
+        );
+      case 'Cafe / Restaurant':
+        return _StarterCatalog(
+          categories: const [
+            _StarterCategory('breakfast', 'Breakfast & Snacks'),
+            _StarterCategory('meals', 'Meals & Combos'),
+            _StarterCategory('beverages', 'Tea, Coffee & Beverages'),
+            _StarterCategory('desserts', 'Desserts & Add-ons'),
+          ],
+          products: const [
+            _StarterProduct('tea', 'Masala Tea', 'beverages', 'cup', 1500, 1500, 500, 999999, 5),
+            _StarterProduct('coffee', 'Filter Coffee', 'beverages', 'cup', 3000, 3000, 1000, 999999, 5),
+            _StarterProduct('lemonade', 'Fresh Lemonade', 'beverages', 'glass', 4000, 4000, 1500, 999999, 5),
+            _StarterProduct('poha', 'Kanda Poha', 'breakfast', 'plate', 5000, 5000, 2200, 999999, 5),
+            _StarterProduct('idli', 'Idli Sambar (2 pcs)', 'breakfast', 'plate', 6000, 6000, 2600, 999999, 5),
+            _StarterProduct('vada', 'Medu Vada Sambar (2 pcs)', 'breakfast', 'plate', 7000, 7000, 3000, 999999, 5),
+            _StarterProduct('sandwich', 'Veg Grilled Sandwich', 'breakfast', 'plate', 9000, 9000, 4000, 999999, 5),
+            _StarterProduct('thali', 'Regular Veg Thali', 'meals', 'plate', 14000, 14000, 6500, 999999, 5),
+            _StarterProduct('rice_bowl', 'Veg Rice Bowl', 'meals', 'bowl', 12000, 12000, 5500, 999999, 5),
+            _StarterProduct('paneer_roll', 'Paneer Tikka Roll', 'meals', 'pcs', 11000, 11000, 5000, 999999, 5),
+            _StarterProduct('noodles', 'Veg Hakka Noodles', 'meals', 'plate', 13000, 13000, 6000, 999999, 5),
+            _StarterProduct('fries', 'Masala French Fries', 'meals', 'plate', 8000, 8000, 3500, 999999, 5),
+            _StarterProduct('samosa', 'Samosa', 'breakfast', 'pcs', 2000, 2000, 800, 999999, 5),
+            _StarterProduct('brownie', 'Chocolate Brownie', 'desserts', 'pcs', 7000, 7000, 3000, 999999, 5),
+            _StarterProduct('icecream', 'Vanilla Ice Cream Scoop', 'desserts', 'scoop', 5000, 5000, 2200, 999999, 5),
+          ],
+        );
+      case 'Grocery / Kirana':
+      default:
+        return _StarterCatalog(
+          categories: const [
+            _StarterCategory('staples', 'Grocery & Staples'),
+            _StarterCategory('dairy', 'Dairy & Bakery'),
+            _StarterCategory('snacks', 'Snacks & Beverages'),
+            _StarterCategory('homecare', 'Personal & Home Care'),
+          ],
+          products: const [
+            _StarterProduct('atta', 'Aashirvaad Shudh Chakki Atta (5kg)', 'staples', 'bag', 24500, 26000, 22000, 40, 0),
+            _StarterProduct('rice', 'India Gate Basmati Rice (5kg)', 'staples', 'bag', 49900, 56000, 43000, 25, 5),
+            _StarterProduct('oil', 'Fortune Sunflower Oil (1L)', 'staples', 'pouch', 15500, 17000, 14000, 50, 5),
+            _StarterProduct('salt', 'Tata Salt (1kg)', 'staples', 'pkt', 2800, 3000, 2400, 100, 0),
+            _StarterProduct('sugar', 'Madhur Sugar (1kg)', 'staples', 'pkt', 4800, 5200, 4200, 80, 0),
+            _StarterProduct('dal', 'Toor Dal (1kg)', 'staples', 'pkt', 14900, 17500, 12500, 60, 5),
+            _StarterProduct('butter', 'Amul Butter (500g)', 'dairy', 'pcs', 27500, 28500, 25000, 25, 12),
+            _StarterProduct('milk', 'Amul Taaza Milk (1L)', 'dairy', 'pkt', 6800, 7000, 6000, 60, 0),
+            _StarterProduct('bread', 'Modern Sandwich Bread', 'dairy', 'pkt', 4500, 5000, 3600, 35, 0),
+            _StarterProduct('biscuits', 'Parle-G Biscuits (800g)', 'snacks', 'pkt', 7500, 8000, 6200, 50, 5),
+            _StarterProduct('maggi', 'Maggi Masala Noodles (70g)', 'snacks', 'pcs', 1400, 1400, 1150, 120, 12),
+            _StarterProduct('chips', 'Lays Classic Salted Chips', 'snacks', 'pkt', 2000, 2000, 1600, 80, 12),
+            _StarterProduct('soap', 'Dettol Bathing Soap (125g)', 'homecare', 'pcs', 6500, 6800, 5400, 60, 18),
+            _StarterProduct('shampoo', 'Clinic Plus Shampoo Sachet', 'homecare', 'pcs', 1000, 1000, 700, 100, 18),
+            _StarterProduct('detergent', 'Surf Excel Matic (1kg)', 'homecare', 'pkt', 21000, 23000, 17500, 30, 18),
+          ],
+        );
+    }
+  }
+
   // --- QUERY APIS ---
   Future<List<ProductModel>> getAllProducts() async {
     final db = await instance.database;
@@ -911,4 +1061,47 @@ class LocalDatabase {
     );
     return result.map((m) => CashRegisterShiftModel.fromMap(m)).toList();
   }
+}
+
+class _StarterCatalog {
+  final List<_StarterCategory> categories;
+  final List<_StarterProduct> products;
+
+  const _StarterCatalog({
+    required this.categories,
+    required this.products,
+  });
+}
+
+class _StarterCategory {
+  final String id;
+  final String name;
+
+  const _StarterCategory(this.id, this.name);
+}
+
+class _StarterProduct {
+  final String id;
+  final String name;
+  final String categoryId;
+  final String unit;
+  final int sellingPricePaise;
+  final int mrpPaise;
+  final int purchasePricePaise;
+  final double stockQuantity;
+  final double taxRate;
+
+  const _StarterProduct(
+    this.id,
+    this.name,
+    this.categoryId,
+    this.unit,
+    this.sellingPricePaise,
+    this.mrpPaise,
+    this.purchasePricePaise,
+    this.stockQuantity,
+    this.taxRate,
+  );
+
+  String get barcode => '890${id.hashCode.abs().toString().padLeft(10, '0').substring(0, 10)}';
 }

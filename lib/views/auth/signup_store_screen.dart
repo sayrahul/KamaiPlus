@@ -107,6 +107,12 @@ class _SignupStoreScreenState extends State<SignupStoreScreen> {
 
       // Save to SQLite
       await LocalDatabase.instance.saveStoreProfile(profile);
+      if (_preloadCatalog) {
+        await LocalDatabase.instance.seedCatalogForStoreType(
+          businessId: 'biz_starter_pos',
+          storeType: _selectedCategory,
+        );
+      }
 
       // Save login & onboarding status
       final prefs = await SharedPreferences.getInstance();
@@ -492,7 +498,7 @@ class _SignupStoreScreenState extends State<SignupStoreScreen> {
                                   ),
                                   const SizedBox(height: 2),
                                   Text(
-                                    'Automatically seeds 8 popular items for Grocery / Kirana with standard prices.',
+                                    'Automatically adds 15 essential products for your selected store type.',
                                     style: GoogleFonts.inter(
                                       fontSize: 11,
                                       color: const Color(0xFF94A3B8),
