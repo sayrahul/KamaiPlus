@@ -317,3 +317,22 @@ Comprehensive enterprise-grade retail UX upgrade suite aligned with PhonePe Busi
 
 
 
+
+18. **Store-Type-Wise (Vertical) Dynamic Retail Engine:**
+    - 5 Canonical Verticals supported: `grocery`, `pharmacy`, `clothing`, `hardware`, `restaurant`.
+    - Backed by SQLite DB Version 2 (`business_type` column on `store_profile`, and `batch_number`, `expiry_date`, `size`, `color`, `imei_serial`, `hsn_code`, `is_loose_item` on `products`).
+    - Dynamic search hints, recommended measurement units, quick category chips, and specialized vertical input rows.
+    - Verified and deployed to physical Redmi 6 device on 07 September 2026, 09:55 PM IST.
+
+19. **Google OAuth Authentication & Firebase / Local Notification Architecture:**
+    - **Google OAuth (`lib/services/auth_service.dart`):**
+      - Google Sign-In singleton initialized at app startup (`initGoogleSignIn`).
+      - Uses Google Auth ID token for Firebase Authentication (`FirebaseAuth.signInWithCredential`).
+      - "Continue with Google" button added to `LoginScreen` with automatic routing: new users route to `SignupStoreScreen`, existing users route directly to `HomeDashboardScreen`.
+      - Seamless silent sign-in (`signInSilently`) on app boot; logout clears Google & Firebase sessions from `StoreProfileScreen`.
+    - **Local & Remote Push Notifications (`lib/services/notification_service.dart`):**
+      - High-priority Android notification channel (`kamai_pos_channel` - "KamaiPlus POS Alerts & Invoices").
+      - Firebase Cloud Messaging (FCM) push token generated, cached in `SharedPreferences` (`fcm_token`), and synced with Firestore.
+      - Foreground heads-up notification banner on bill generation (`showSaleNotification`), low stock alerts, and shift closing reports.
+      - Android desugaring enabled (`com.android.tools:desugar_jdk_libs:2.1.4`) to support Java 8+ APIs required by `flutter_local_notifications`.
+      - Deployed, verified, and FCM token registered on physical Redmi 6 device (`de7ea8af7d29`) on 07 September 2026, 10:32 PM IST.

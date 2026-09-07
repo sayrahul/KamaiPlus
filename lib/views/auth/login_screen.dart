@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../core/utils/app_validators.dart';
+import '../../services/auth_service.dart';
 import '../dashboard/home_dashboard_screen.dart';
 import 'signup_store_screen.dart';
 
@@ -57,7 +58,62 @@ class _LoginScreenState extends State<LoginScreen> {
         context,
         MaterialPageRoute(builder: (_) => HomeDashboardScreen(key: HomeDashboardScreen.dashboardKey)),
       );
+    }
+  }
 
+  Future<void> _handleGoogleSignIn() async {
+    HapticFeedback.mediumImpact();
+    setState(() => _isLoading = true);
+
+    try {
+      final userCredential = await AuthService.instance.signInWithGoogle();
+      if (userCredential == null) {
+        if (mounted) setState(() => _isLoading = false);
+        return;
+      }
+
+      final prefs = await SharedPreferences.getInstance();
+      final isOnboarded = prefs.getBool('is_onboarded') ?? false;
+
+      if (!mounted) return;
+      setState(() => _isLoading = false);
+
+      final displayName = userCredential.user?.displayName ?? userCredential.user?.email ?? 'User';
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('✓ Welcome, $displayName!'),
+          backgroundColor: const Color(0xFF059669),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+
+      if (!isOnboarded) {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => SignupStoreScreen(
+              initialPhone: userCredential.user?.phoneNumber ?? '',
+            ),
+          ),
+        );
+      } else {
+        await prefs.setBool('is_logged_in', true);
+        if (!mounted) return;
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (_) => HomeDashboardScreen(key: HomeDashboardScreen.dashboardKey)),
+        );
+      }
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _isLoading = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Google Sign-In: $e'),
+          backgroundColor: const Color(0xFFDC2626),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
     }
   }
 
@@ -489,7 +545,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   width: double.infinity,
                   height: 48,
                   child: ElevatedButton(
-                    onPressed: _isLoading ? null : () => _proceedLogin(),
+                    onPressed: _isLoading ? null : _handleGoogleSignIn,
                     style: ElevatedButton.styleFrom(
                       backgroundColor: Colors.white,
                       foregroundColor: const Color(0xFF0F172A),

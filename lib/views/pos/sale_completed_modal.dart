@@ -8,6 +8,7 @@ import '../../core/utils/money_formatter.dart';
 import '../../models/models.dart';
 import '../../services/thermal_printer_service.dart';
 import '../../services/native_notification_service.dart';
+import '../../services/notification_service.dart';
 import '../../services/invoice_pdf_service.dart';
 import '../settings/bluetooth_printer_dialog.dart';
 
@@ -58,6 +59,12 @@ class _SaleCompletedModalState extends State<SaleCompletedModal> {
       invoiceNumber: widget.sale.invoiceNumber,
       amountFormatted: MoneyFormatter.formatINR(widget.sale.totalAmountPaise),
       paymentMode: widget.sale.paymentMethod,
+    );
+    // Also fire Flutter Local Notification banner (FCM-style heads-up)
+    NotificationService.instance.showSaleNotification(
+      invoiceNo: widget.sale.invoiceNumber,
+      totalPaise: widget.sale.totalAmountPaise,
+      customerName: widget.sale.customerName,
     );
   }
 

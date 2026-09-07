@@ -14,6 +14,7 @@ import '../common/upi_standee_modal.dart';
 import '../common/kamai_bottom_nav.dart';
 import '../growth/growth_campaigns_screen.dart';
 import '../auth/login_screen.dart';
+import '../../services/auth_service.dart';
 
 class StoreProfileScreen extends StatefulWidget {
   final int initialTab;
@@ -298,8 +299,10 @@ class _StoreProfileScreenState extends State<StoreProfileScreen> {
             child: Text('Cancel', style: GoogleFonts.inter(fontWeight: FontWeight.w600, color: const Color(0xFF64748B))),
           ),
           ElevatedButton(
-            onPressed: () {
+            onPressed: () async {
               Navigator.pop(ctx);
+              await AuthService.instance.signOut();
+              if (!mounted) return;
               Navigator.pushAndRemoveUntil(
                 context,
                 MaterialPageRoute(builder: (_) => const LoginScreen()),

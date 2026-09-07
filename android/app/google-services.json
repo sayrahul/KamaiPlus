@@ -1,0 +1,55 @@
+{
+  "project_info": {
+    "project_number": "714323283488",
+    "project_id": "kamaiplus",
+    "storage_bucket": "kamaiplus.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:714323283488:android:99601b31042474bf367645",
+        "android_client_info": {
+          "package_name": "com.kamaiplus.pos"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "714323283488-i2th8n7brqa5mr13kg5s3qctgl6tee66.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.kamaiplus.pos",
+            "certificate_hash": "f58cbcc42606388b6937174415991fef28a120fb"
+          }
+        },
+        {
+          "client_id": "714323283488-uo9nj13ls6c54tpaps2rm6kfmsr7ep25.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.kamaiplus.pos",
+            "certificate_hash": "5e2a9bd433d68628b75b590db334d8221160442a"
+          }
+        },
+        {
+          "client_id": "714323283488-p39mse5qsgofq7u1iva651cpucvt988u.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCujOKyv2U919r7W49nC_tv-9_g5ibBGaI"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "714323283488-p39mse5qsgofq7u1iva651cpucvt988u.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
