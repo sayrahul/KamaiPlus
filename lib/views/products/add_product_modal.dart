@@ -63,23 +63,7 @@ class _AddProductModalState extends State<AddProductModal> {
   bool _isSaving = false;
   bool _isUnlimitedStock = false;
 
-  final List<Map<String, String>> _units = [
-    {'label': 'Packet / Pouch (pkt)', 'val': 'pkt'},
-    {'label': 'Pieces (pcs)', 'val': 'pcs'},
-    {'label': 'Kilogram (kg)', 'val': 'kg'},
-    {'label': 'Gram (g)', 'val': 'g'},
-    {'label': 'Liter (ltr)', 'val': 'ltr'},
-    {'label': 'Milliliter (ml)', 'val': 'ml'},
-    {'label': 'Bottle (btl)', 'val': 'btl'},
-    {'label': 'Box (box)', 'val': 'box'},
-    {'label': 'Bag / Borri (bag)', 'val': 'bag'},
-    {'label': 'Pouch (pouch)', 'val': 'pouch'},
-    {'label': 'Can / Tin (can)', 'val': 'can'},
-    {'label': 'Jar (jar)', 'val': 'jar'},
-    {'label': 'Meter (m)', 'val': 'm'},
-    {'label': 'Dozen (dz)', 'val': 'dz'},
-    {'label': 'Bundle (bdl)', 'val': 'bdl'},
-  ];
+  late final List<Map<String, String>> _units;
 
   final List<Map<String, dynamic>> _taxRates = [
     {'label': '0% (Exempt / Nil Rated)', 'val': 0.0},
@@ -93,6 +77,12 @@ class _AddProductModalState extends State<AddProductModal> {
   void initState() {
     super.initState();
     final p = widget.existingProduct;
+    final vert = BusinessVerticals.resolve(BusinessVerticals.activeBusinessTypeNotifier.value);
+    _units = vert.recommendedUnits.map((u) {
+      final label = BusinessVerticals.unitDisplayLabels[u] ?? '$u ($u)';
+      return {'label': label, 'val': u};
+    }).toList();
+
     _isUnlimitedStock = p != null && p.stockQuantity >= 99999;
     _nameCtrl = TextEditingController(text: p?.name ?? '');
     _barcodeCtrl = TextEditingController(text: p?.barcode ?? '');
@@ -144,11 +134,14 @@ class _AddProductModalState extends State<AddProductModal> {
       if (match.isNotEmpty) {
         _selectedUnit = match['val']!;
       } else {
-        _units.add({'label': '$unitClean (Custom)', 'val': unitClean});
+        final customLabel = BusinessVerticals.unitDisplayLabels[unitClean.toLowerCase()] ?? '$unitClean (Saved)';
+        _units.add({'label': customLabel, 'val': unitClean});
         _selectedUnit = unitClean;
       }
     } else {
-      _selectedUnit = 'pkt';
+      _selectedUnit = vert.defaultUnit.isNotEmpty && _units.any((u) => u['val'] == vert.defaultUnit)
+          ? vert.defaultUnit
+          : (_units.isNotEmpty ? _units.first['val']! : 'pcs');
     }
 
     // Safe Tax Rate Selection & Dynamic Registration
