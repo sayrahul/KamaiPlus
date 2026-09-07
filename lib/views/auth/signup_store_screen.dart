@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../../core/constants/business_vertical_config.dart';
 import '../../core/database/local_database.dart';
 import '../../core/utils/app_validators.dart';
 import '../../models/models.dart';
@@ -33,21 +34,31 @@ class _SignupStoreScreenState extends State<SignupStoreScreen> {
   final List<Map<String, dynamic>> _categories = [
     {
       'title': 'Grocery / Kirana',
+      'businessTypeId': 'grocery',
       'desc': 'Loose weights, FMCG, Rice, Atta & Barcodes',
       'icon': Icons.storefront_rounded,
     },
     {
+      'title': 'Medical / Pharmacy',
+      'businessTypeId': 'pharmacy',
+      'desc': 'Batch numbers, Expiry dates & Strips',
+      'icon': Icons.local_pharmacy_rounded,
+    },
+    {
       'title': 'Apparel / Clothing',
+      'businessTypeId': 'clothing',
       'desc': 'Sizes S/M/L/XL, Colors & Garments',
       'icon': Icons.checkroom_rounded,
     },
     {
       'title': 'Electronics & Mobile',
+      'businessTypeId': 'hardware',
       'desc': 'Serial numbers, Accessories & Gadgets',
       'icon': Icons.devices_other_rounded,
     },
     {
       'title': 'Cafe / Restaurant',
+      'businessTypeId': 'restaurant',
       'desc': 'Table orders, Food items & KOT tokens',
       'icon': Icons.restaurant_rounded,
     },
@@ -90,6 +101,12 @@ class _SignupStoreScreenState extends State<SignupStoreScreen> {
         }
       ];
 
+      final selectedCat = _categories.firstWhere(
+        (c) => c['title'] == _selectedCategory,
+        orElse: () => _categories.first,
+      );
+      final businessTypeId = selectedCat['businessTypeId'] as String? ?? 'grocery';
+
       final profile = StoreProfileModel(
         storeName: storeName.isNotEmpty ? storeName : 'Sharma Kirana Store',
         tagline: 'Always Fresh, Best Wholesale Rates',
@@ -98,6 +115,7 @@ class _SignupStoreScreenState extends State<SignupStoreScreen> {
         email: '',
         upiVpa: upiVpa.isNotEmpty ? upiVpa : 'sharmakirana@paytm',
         category: _selectedCategory,
+        businessType: businessTypeId,
         address: 'Shop #4, Main Market Road',
         pincode: '400001',
         gstin: '',
@@ -107,6 +125,7 @@ class _SignupStoreScreenState extends State<SignupStoreScreen> {
 
       // Save to SQLite
       await LocalDatabase.instance.saveStoreProfile(profile);
+      BusinessVerticals.updateActiveBusinessType(businessTypeId);
 
       // Save login & onboarding status
       final prefs = await SharedPreferences.getInstance();
@@ -114,6 +133,7 @@ class _SignupStoreScreenState extends State<SignupStoreScreen> {
       await prefs.setBool('is_onboarded', true);
       await prefs.setString('business_name', storeName);
       await prefs.setString('merchant_phone', phone);
+      await prefs.setString('business_type', businessTypeId);
 
       if (!mounted) return;
 
