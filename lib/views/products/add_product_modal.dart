@@ -55,6 +55,8 @@ class _AddProductModalState extends State<AddProductModal> {
   late final TextEditingController _costPriceCtrl;
   late final TextEditingController _stockCtrl;
   late final TextEditingController _thresholdCtrl;
+  late final TextEditingController _batchNumberCtrl;
+  late final TextEditingController _expiryDateCtrl;
 
   late String _selectedCategoryId;
   late String _selectedUnit;
@@ -99,6 +101,8 @@ class _AddProductModalState extends State<AddProductModal> {
       text: p != null ? (_isUnlimitedStock ? '' : p.stockQuantity.toInt().toString()) : '0',
     );
     _thresholdCtrl = TextEditingController(text: '5');
+    _batchNumberCtrl = TextEditingController(text: p?.batchNumber ?? '');
+    _expiryDateCtrl = TextEditingController(text: p?.expiryDate ?? '');
 
     // Deduplicate categories by ID
     final uniqueCats = <String, CategoryModel>{};
@@ -171,6 +175,8 @@ class _AddProductModalState extends State<AddProductModal> {
     _costPriceCtrl.dispose();
     _stockCtrl.dispose();
     _thresholdCtrl.dispose();
+    _batchNumberCtrl.dispose();
+    _expiryDateCtrl.dispose();
     super.dispose();
   }
 
@@ -178,6 +184,33 @@ class _AddProductModalState extends State<AddProductModal> {
     final sell = double.tryParse(_sellPriceCtrl.text) ?? 0.0;
     final cost = double.tryParse(_costPriceCtrl.text) ?? 0.0;
     return sell - cost;
+  }
+
+  Future<void> _pickExpiryDate() async {
+    final now = DateTime.now();
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: now.add(const Duration(days: 180)),
+      firstDate: DateTime(now.year - 2),
+      lastDate: DateTime(now.year + 10),
+      builder: (ctx, child) {
+        return Theme(
+          data: Theme.of(ctx).copyWith(
+            colorScheme: const ColorScheme.light(
+              primary: Color(0xFF0F172A),
+              onPrimary: Colors.white,
+            ),
+          ),
+          child: child!,
+        );
+      },
+    );
+    if (picked != null) {
+      final monthStr = picked.month.toString().padLeft(2, '0');
+      setState(() {
+        _expiryDateCtrl.text = '$monthStr/${picked.year}';
+      });
+    }
   }
 
   Future<void> _openBarcodeScanner() async {
@@ -267,6 +300,8 @@ class _AddProductModalState extends State<AddProductModal> {
         taxRate: _selectedTaxRate,
         isTaxInclusive: true,
         unit: _selectedUnit,
+        batchNumber: _batchNumberCtrl.text.trim().isNotEmpty ? _batchNumberCtrl.text.trim() : widget.existingProduct?.batchNumber,
+        expiryDate: _expiryDateCtrl.text.trim().isNotEmpty ? _expiryDateCtrl.text.trim() : widget.existingProduct?.expiryDate,
         syncStatus: 'synced',
       );
 
@@ -301,6 +336,7 @@ class _AddProductModalState extends State<AddProductModal> {
   @override
   Widget build(BuildContext context) {
     final isEditing = widget.existingProduct != null;
+    final vert = BusinessVerticals.resolve(BusinessVerticals.activeBusinessTypeNotifier.value);
 
     return Container(
       decoration: const BoxDecoration(
@@ -736,6 +772,52 @@ class _AddProductModalState extends State<AddProductModal> {
                         ),
                       ),
                       const SizedBox(height: 12),
+
+                      // Batch Number & Expiry Date (Pharmacy Only)
+                      if (vert.toggles.showBatchExpiry) ...[
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  _buildLabel('Batch Number'),
+                                  const SizedBox(height: 4),
+                                  TextFormField(
+                                    controller: _batchNumberCtrl,
+                                    style: GoogleFonts.robotoMono(fontSize: 13, fontWeight: FontWeight.w700),
+                                    decoration: _buildInputDecoration('e.g. BATCH-2026-X'),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  _buildLabel('Expiry Date'),
+                                  const SizedBox(height: 4),
+                                  InkWell(
+                                    onTap: _pickExpiryDate,
+                                    borderRadius: BorderRadius.circular(12),
+                                    child: IgnorePointer(
+                                      child: TextFormField(
+                                        controller: _expiryDateCtrl,
+                                        style: GoogleFonts.robotoMono(fontSize: 13, fontWeight: FontWeight.w700),
+                                        decoration: _buildInputDecoration('MM/YYYY').copyWith(
+                                          suffixIcon: const Icon(Icons.calendar_today_rounded, size: 16, color: Color(0xFF64748B)),
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 12),
+                      ],
 
                       // 4. Barcode / EAN-13 + Scan Camera Button
                       Row(
