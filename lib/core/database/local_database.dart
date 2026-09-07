@@ -859,6 +859,17 @@ class LocalDatabase {
     await db.update('sales', {'sync_status': 'synced'}, where: 'id = ?', whereArgs: [saleId]);
   }
 
+  Future<List<SaleModel>> getPendingSales({int limit = 50}) async {
+    final db = await instance.database;
+    final result = await db.query(
+      'sales',
+      where: 'sync_status = ?',
+      whereArgs: ['pending'],
+      limit: limit,
+    );
+    return result.map((m) => SaleModel.fromMap(m)).toList();
+  }
+
   Future<void> addExpense(ExpenseModel expense) async {
     final db = await instance.database;
     await db.insert('expenses', expense.toMap(), conflictAlgorithm: ConflictAlgorithm.replace);

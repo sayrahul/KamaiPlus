@@ -1,6 +1,7 @@
 {
   "project_info": {
     "project_number": "714323283488",
+    "firebase_url": "https://kamaiplus-default-rtdb.asia-southeast1.firebasedatabase.app",
     "project_id": "kamaiplus",
     "storage_bucket": "kamaiplus.firebasestorage.app"
   },

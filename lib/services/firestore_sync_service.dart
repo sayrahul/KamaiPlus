@@ -1,18 +1,14 @@
-﻿import 'dart:async';
+import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../models/models.dart';
 import '../core/database/local_database.dart';
 
 enum SyncState { synced, syncing, offline, error }
 
 class FirestoreSyncService {
-  static Future<void> syncAllPending() async {
-    // Simulates or triggers cloud firestore batch synchronization
-    await Future.delayed(const Duration(milliseconds: 600));
-  }
-
   static final FirestoreSyncService instance = FirestoreSyncService._init();
   FirestoreSyncService._init();
 
@@ -26,6 +22,58 @@ class FirestoreSyncService {
 
   String get activeBusinessId => _activeBusinessId;
 
+  /// Batch sync all pending local records (sales, store profile, etc.) to Cloud Firestore
+  static Future<void> syncAllPending() async {
+    final service = FirestoreSyncService.instance;
+    try {
+      service.syncState.value = SyncState.syncing;
+
+      if (!service._isInitialized) {
+        await service.initialize();
+      }
+
+      final firestore = FirebaseFirestore.instance;
+      final bizId = service.activeBusinessId;
+
+      // 1. Sync Store Profile & FCM Device Token to businesses/{bizId}
+      final profile = await LocalDatabase.instance.getStoreProfile();
+      final prefs = await SharedPreferences.getInstance();
+      final fcmToken = prefs.getString('fcm_token');
+
+      await firestore.collection('businesses').doc(bizId).set({
+        'store_name': profile.storeName,
+        'tagline': profile.tagline,
+        'owner_name': profile.ownerName,
+        'phone': profile.phone,
+        'email': profile.email,
+        'upi_vpa': profile.upiVpa,
+        'category': profile.category,
+        'business_type': profile.businessType,
+        'address': profile.address,
+        'pincode': profile.pincode,
+        'gstin': profile.gstin,
+        'fssai': profile.fssai,
+        'fcm_token': fcmToken,
+        'last_synced_at': FieldValue.serverTimestamp(),
+        'platform': 'android_native',
+      }, SetOptions(merge: true));
+
+      // 2. Sync all pending sales bills
+      final pendingSales = await LocalDatabase.instance.getPendingSales(limit: 50);
+      for (final sale in pendingSales) {
+        await service.pushSaleToCloud(sale);
+      }
+
+      service.syncState.value = SyncState.synced;
+      service.liveSyncCounter.value++;
+      debugPrint('Cloud sync complete: ${pendingSales.length} pending sales pushed.');
+    } catch (e) {
+      debugPrint('Cloud sync error in syncAllPending: $e');
+      service.syncState.value = SyncState.offline;
+    }
+  }
+
+  /// Initialize Cloud Firestore connection and background listeners
   Future<void> initialize({String? businessId}) async {
     if (businessId != null && businessId.isNotEmpty) {
       _activeBusinessId = businessId;
@@ -34,17 +82,9 @@ class FirestoreSyncService {
     try {
       syncState.value = SyncState.syncing;
 
-      // Initialize Firebase with official KamaiPlus credentials
+      // Initialize Firebase if not already initialized
       if (Firebase.apps.isEmpty) {
-        await Firebase.initializeApp(
-          options: const FirebaseOptions(
-            apiKey: 'AIzaSyCXq5B7MdPcaa48HpRATpMZbCW-K2vCtb0',
-            appId: '1:714323283488:web:39405f194ea4a5f9367645',
-            messagingSenderId: '714323283488',
-            projectId: 'kamaiplus',
-            storageBucket: 'kamaiplus.firebasestorage.app',
-          ),
-        );
+        await Firebase.initializeApp();
       }
 
       _isInitialized = true;
@@ -53,8 +93,8 @@ class FirestoreSyncService {
       // Start Realtime Cloud Listeners
       _startLiveCloudListeners();
 
-      // Initial cloud fetch
-      await initialCloudRestore();
+      // Initial cloud fetch in background
+      initialCloudRestore();
     } catch (e) {
       debugPrint('Firebase sync initialization notice: $e');
       syncState.value = SyncState.offline;
@@ -224,24 +264,28 @@ class FirestoreSyncService {
         'discount_paise': sale.discountPaise,
         'total_amount_paise': sale.totalAmountPaise,
         'payment_method': sale.paymentMethod,
+        'status': sale.status,
         'items': sale.items,
         'created_at': sale.createdAt.toIso8601String(),
         'source': 'mobile_native_pos',
-      });
+        'synced_at': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
 
-      // Decrement stock in Firestore
-      for (var item in sale.items) {
-        final prodId = item['product_id'];
-        final qty = (item['quantity'] ?? 1.0).toDouble();
-        if (prodId != null) {
-          firestore
-              .collection('businesses')
-              .doc(_activeBusinessId)
-              .collection('products')
-              .doc(prodId)
-              .update({
-            'stock_quantity': FieldValue.increment(-qty),
-          }).catchError((_) {});
+      // Decrement stock in Firestore if not already refunded
+      if (sale.status != 'refunded') {
+        for (var item in sale.items) {
+          final prodId = item['product_id'] ?? item['id'];
+          final qty = (item['quantity'] ?? item['qty'] ?? 1.0).toDouble();
+          if (prodId != null) {
+            firestore
+                .collection('businesses')
+                .doc(_activeBusinessId)
+                .collection('products')
+                .doc(prodId)
+                .update({
+              'stock_quantity': FieldValue.increment(-qty),
+            }).catchError((_) {});
+          }
         }
       }
 
