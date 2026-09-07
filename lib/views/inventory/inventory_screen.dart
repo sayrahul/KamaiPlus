@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
+import '../../core/constants/business_vertical_config.dart';
 import '../../core/database/local_database.dart';
 import '../../core/utils/money_formatter.dart';
 import '../../models/models.dart';
@@ -216,23 +217,25 @@ class _InventoryScreenState extends State<InventoryScreen> {
                   _buildMetricGrid(),
                   const SizedBox(height: 14),
 
-                  // 3. 3-PILL INTERACTIVE TAB BAR
+                  // 3. 3-PILL INTERACTIVE TAB BAR (2 tabs for non-pharmacy, 3 for pharmacy)
                   _buildInteractiveTabBar(),
                   const SizedBox(height: 12),
 
-                  // 4. SEARCH FILTER TOOLBAR (when in Reorder Radar or Near Expiry)
-                  if (_activeTabIndex != 2) ...[
-                    _buildSearchToolbar(),
-                    const SizedBox(height: 12),
-                  ],
+                  // 4. SEARCH FILTER TOOLBAR (when in Reorder Radar)
+                  Builder(builder: (ctx) {
+                    final showExpiry = BusinessVerticals.resolve(BusinessVerticals.activeBusinessTypeNotifier.value).toggles.showBatchExpiry;
+                    // Tab index 0=Reorder, 1=NearExpiry(pharmacy only), last=Audit
+                    final auditIndex = showExpiry ? 2 : 1;
+                    return _activeTabIndex != auditIndex ? Column(children: [_buildSearchToolbar(), const SizedBox(height: 12)]) : const SizedBox.shrink();
+                  }),
 
                   // 5. TAB CONTENT
-                  if (_activeTabIndex == 0)
-                    _buildReorderRadarContent(lowStock)
-                  else if (_activeTabIndex == 1)
-                    _buildNearExpiryContent()
-                  else
-                    _buildStockAuditTrailContent(),
+                  Builder(builder: (ctx) {
+                    final showExpiry = BusinessVerticals.resolve(BusinessVerticals.activeBusinessTypeNotifier.value).toggles.showBatchExpiry;
+                    if (_activeTabIndex == 0) return _buildReorderRadarContent(lowStock);
+                    if (showExpiry && _activeTabIndex == 1) return _buildNearExpiryContent();
+                    return _buildStockAuditTrailContent();
+                  }),
                 ],
               ),
             ),
@@ -542,6 +545,7 @@ class _InventoryScreenState extends State<InventoryScreen> {
   // 3. INTERACTIVE 3-PILL TAB BAR
   // =========================================================================
   Widget _buildInteractiveTabBar() {
+    final showExpiry = BusinessVerticals.resolve(BusinessVerticals.activeBusinessTypeNotifier.value).toggles.showBatchExpiry;
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
       physics: const BouncingScrollPhysics(),
@@ -552,15 +556,17 @@ class _InventoryScreenState extends State<InventoryScreen> {
             icon: Icons.warning_amber_rounded,
             title: 'Reorder Radar (${_lowStockProducts.length})',
           ),
+          if (showExpiry) ...[
+            const SizedBox(width: 8),
+            _buildPillTab(
+              index: 1,
+              icon: Icons.access_time_rounded,
+              title: 'Near Expiry (${_nearExpiryBatches.length})',
+            ),
+          ],
           const SizedBox(width: 8),
           _buildPillTab(
-            index: 1,
-            icon: Icons.access_time_rounded,
-            title: 'Near Expiry (${_nearExpiryBatches.length})',
-          ),
-          const SizedBox(width: 8),
-          _buildPillTab(
-            index: 2,
+            index: showExpiry ? 2 : 1,
             icon: Icons.history_rounded,
             title: 'Stock Audit Trail',
           ),
