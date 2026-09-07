@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
+import '../../core/constants/business_vertical_config.dart';
 import '../cash_register/cash_register_screen.dart';
 import '../transactions/transactions_screen.dart';
 import '../inventory/inventory_screen.dart';
@@ -170,6 +171,7 @@ class _MenuScreenState extends State<MenuScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final vert = BusinessVerticals.resolve(BusinessVerticals.activeBusinessTypeNotifier.value);
     final bodyContent = Container(
       height: widget.isModal ? MediaQuery.of(context).size.height * 0.88 : null,
       decoration: BoxDecoration(
@@ -249,8 +251,8 @@ class _MenuScreenState extends State<MenuScreen> {
                     children: [
                       Expanded(
                         child: _buildNavCard(
-                          title: 'Products & FMCG',
-                          subtitle: 'Catalog & Barcodes',
+                          title: vert.productsMenuTitle,
+                          subtitle: vert.productsMenuSubtitle,
                           icon: Icons.inventory_2_rounded,
                           iconColor: const Color(0xFF3B82F6),
                           iconBg: const Color(0xFFEFF6FF),
@@ -263,8 +265,8 @@ class _MenuScreenState extends State<MenuScreen> {
                       const SizedBox(width: 10),
                       Expanded(
                         child: _buildNavCard(
-                          title: 'Wholesale Inward',
-                          subtitle: 'Mandi & Vendor Bills',
+                          title: vert.purchasesMenuTitle,
+                          subtitle: vert.purchasesMenuSubtitle,
                           icon: Icons.shopping_bag_rounded,
                           iconColor: const Color(0xFF059669),
                           iconBg: const Color(0xFFECFDF5),
@@ -292,19 +294,21 @@ class _MenuScreenState extends State<MenuScreen> {
                           onTap: () => _handleScreenPush(const InventoryScreen()),
                         ),
                       ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: _buildNavCard(
-                          title: 'Barcode Studio',
-                          subtitle: 'Sticker & Label Print',
-                          icon: Icons.document_scanner_rounded,
-                          iconColor: const Color(0xFF7C3AED),
-                          iconBg: const Color(0xFFF5F3FF),
-                          borderColor: const Color(0xFFDDD6FE),
-                          badgeText: 'PRINT',
-                          onTap: () => _handleScreenPush(const BarcodeStudioScreen()),
+                      if (vert.toggles.showBarcode) ...[
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: _buildNavCard(
+                            title: 'Barcode Studio',
+                            subtitle: 'Sticker & Label Print',
+                            icon: Icons.document_scanner_rounded,
+                            iconColor: const Color(0xFF7C3AED),
+                            iconBg: const Color(0xFFF5F3FF),
+                            borderColor: const Color(0xFFDDD6FE),
+                            badgeText: 'PRINT',
+                            onTap: () => _handleScreenPush(const BarcodeStudioScreen()),
+                          ),
                         ),
-                      ),
+                      ],
                     ],
                   ),
                   const SizedBox(height: 22),

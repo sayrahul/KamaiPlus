@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:qr_flutter/qr_flutter.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import '../../core/constants/business_vertical_config.dart';
 import '../common/kamai_bottom_nav.dart';
 import '../common/pro_upgrade_modal.dart';
 
@@ -43,9 +45,25 @@ class _InvoiceThemesScreenState extends State<InvoiceThemesScreen> {
   final TextEditingController _termsCtrl = TextEditingController(
     text: '1. Goods once sold will not be taken back.\n2. Subject to local jurisdiction.',
   );
-  final TextEditingController _footerCtrl = TextEditingController(
-    text: 'Thank you for your business!',
-  );
+  late final TextEditingController _footerCtrl;
+
+  @override
+  void initState() {
+    super.initState();
+    final vert = BusinessVerticals.resolve(BusinessVerticals.activeBusinessTypeNotifier.value);
+    _footerCtrl = TextEditingController(text: vert.placeholders.invoiceFooterNote);
+    _loadSavedFooter();
+  }
+
+  Future<void> _loadSavedFooter() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final saved = prefs.getString('custom_invoice_footer');
+      if (saved != null && saved.isNotEmpty) {
+        _footerCtrl.text = saved;
+      }
+    } catch (_) {}
+  }
 
   @override
   void dispose() {
@@ -54,8 +72,13 @@ class _InvoiceThemesScreenState extends State<InvoiceThemesScreen> {
     super.dispose();
   }
 
-  void _saveSettings() {
+  void _saveSettings() async {
     HapticFeedback.mediumImpact();
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('custom_invoice_footer', _footerCtrl.text.trim());
+    } catch (_) {}
+    if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Row(
