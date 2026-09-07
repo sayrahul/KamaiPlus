@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
+import '../../core/constants/business_vertical_config.dart';
 import '../../core/utils/money_formatter.dart';
 import '../common/kamai_bottom_nav.dart';
 import 'ai_inward_sheet.dart';
@@ -827,7 +828,7 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
                         TextField(
                           controller: supplierCtrl,
                           decoration: InputDecoration(
-                            hintText: 'e.g. Metro Cash & Carry, Parle Agency...',
+                            hintText: BusinessVerticals.resolve(BusinessVerticals.activeBusinessTypeNotifier.value).placeholders.supplierNameExample,
                             hintStyle: GoogleFonts.inter(fontSize: 13, color: const Color(0xFF94A3B8)),
                             contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
                             filled: true,
@@ -836,29 +837,41 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
                           ),
                         ),
                         const SizedBox(height: 10),
-                        // Quick Supplier Chips
-                        SingleChildScrollView(
-                          scrollDirection: Axis.horizontal,
-                          child: Row(
-                            children: ['Metro Wholesale', 'Hindustan Unilever', 'Parle Agency', 'Amul Dairy Agency', 'Local Mandi'].map((name) {
-                              return Padding(
-                                padding: const EdgeInsets.only(right: 6),
-                                child: InkWell(
-                                  onTap: () => setModalState(() => supplierCtrl.text = name),
-                                  borderRadius: BorderRadius.circular(14),
-                                  child: Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
-                                    decoration: BoxDecoration(
-                                      color: const Color(0xFFF1F5F9),
-                                      borderRadius: BorderRadius.circular(14),
+                        // Quick Supplier Chips (vertical-specific)
+                        Builder(builder: (context) {
+                          final vert = BusinessVerticals.resolve(BusinessVerticals.activeBusinessTypeNotifier.value);
+                          // Use first 5 quickCategories as quick supplier chips fallback; but for pharmacy/hardware pick domain-specific ones
+                          final Map<String, List<String>> vertSupplierChips = {
+                            'grocery': ['Metro Wholesale', 'Hindustan Unilever', 'Parle Agency', 'Amul Dairy', 'Local Mandi'],
+                            'pharmacy': ['Zenith Pharma', 'Apex Distributors', 'Cipla Stockist', 'Sun Pharma', 'Local Chemist'],
+                            'clothing': ['Surat Textile', 'Tiruppur Knits', 'Jaipur Prints', 'Local Wholesaler', 'Brand Distributor'],
+                            'hardware': ['Havells Dist.', 'Asian Paints', 'Anchor Electricals', 'Local Hardware', 'Buildmart'],
+                            'restaurant': ['Local Sabzi Mandi', 'Amul Dairy', 'Chicken Supplier', 'Bakery Supplier', 'Dry Fruits'],
+                          };
+                          final chips = vertSupplierChips[vert.id] ?? vertSupplierChips['grocery']!;
+                          return SingleChildScrollView(
+                            scrollDirection: Axis.horizontal,
+                            child: Row(
+                              children: chips.map((name) {
+                                return Padding(
+                                  padding: const EdgeInsets.only(right: 6),
+                                  child: InkWell(
+                                    onTap: () => setModalState(() => supplierCtrl.text = name),
+                                    borderRadius: BorderRadius.circular(14),
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+                                      decoration: BoxDecoration(
+                                        color: const Color(0xFFF1F5F9),
+                                        borderRadius: BorderRadius.circular(14),
+                                      ),
+                                      child: Text(name, style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.w600, color: const Color(0xFF334155))),
                                     ),
-                                    child: Text(name, style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.w600, color: const Color(0xFF334155))),
                                   ),
-                                ),
-                              );
-                            }).toList(),
-                          ),
-                        ),
+                                );
+                              }).toList(),
+                            ),
+                          );
+                        }),
                         const SizedBox(height: 14),
                         Row(
                           children: [
@@ -1157,21 +1170,24 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
                 const SizedBox(height: 14),
                 Row(
                   children: [
-                    Expanded(
-                      child: ElevatedButton.icon(
-                        onPressed: _openAiBillScanner,
-                        icon: const Icon(Icons.document_scanner_rounded, size: 16),
-                        label: Text('AI Bill / Parcha OCR', style: GoogleFonts.outfit(fontSize: 13, fontWeight: FontWeight.w700)),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFF0F172A),
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(vertical: 12),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                          elevation: 0,
+                    // AI Bill Scan — hide for restaurant (hasBillScan = false)
+                    if (BusinessVerticals.resolve(BusinessVerticals.activeBusinessTypeNotifier.value).toggles.hasBillScan) ...[
+                      Expanded(
+                        child: ElevatedButton.icon(
+                          onPressed: _openAiBillScanner,
+                          icon: const Icon(Icons.document_scanner_rounded, size: 16),
+                          label: Text('AI Bill / Parcha OCR', style: GoogleFonts.outfit(fontSize: 13, fontWeight: FontWeight.w700)),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFF0F172A),
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                            elevation: 0,
+                          ),
                         ),
                       ),
-                    ),
-                    const SizedBox(width: 10),
+                      const SizedBox(width: 10),
+                    ],
                     Expanded(
                       child: OutlinedButton.icon(
                         onPressed: _showCreateManualOrderSheet,
