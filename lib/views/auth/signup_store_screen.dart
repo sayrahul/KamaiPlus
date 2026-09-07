@@ -3,7 +3,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:uuid/uuid.dart';
 import '../../core/constants/business_vertical_config.dart';
+import '../../core/constants/default_products.dart';
 import '../../core/database/local_database.dart';
 import '../../core/utils/app_validators.dart';
 import '../../models/models.dart';
@@ -127,6 +129,11 @@ class _SignupStoreScreenState extends State<SignupStoreScreen> {
       await LocalDatabase.instance.saveStoreProfile(profile);
       BusinessVerticals.updateActiveBusinessType(businessTypeId);
 
+      // Seed default products if user opted in
+      if (_preloadCatalog) {
+        await _seedDefaultProducts(businessTypeId);
+      }
+
       // Save login & onboarding status
       final prefs = await SharedPreferences.getInstance();
       await prefs.setBool('is_logged_in', true);
@@ -176,6 +183,51 @@ class _SignupStoreScreenState extends State<SignupStoreScreen> {
           SnackBar(content: Text('Error completing setup: $e')),
         );
       }
+    }
+  }
+
+  /// Seeds vertical-specific default products into SQLite on first onboarding.
+  /// Each category name from [DefaultProductSeed] is first upserted as a
+  /// [CategoryModel], then each product is inserted as a [ProductModel].
+  Future<void> _seedDefaultProducts(String businessTypeId) async {
+    final seeds = kDefaultProductsByVertical[businessTypeId];
+    if (seeds == null || seeds.isEmpty) return;
+
+    const uuid = Uuid();
+    final db = LocalDatabase.instance;
+
+    // Build a quick category name -> id map to avoid duplicate inserts
+    final Map<String, String> categoryIdMap = {};
+
+    for (final seed in seeds) {
+      // Upsert category
+      if (!categoryIdMap.containsKey(seed.categoryName)) {
+        final catId = uuid.v4();
+        final cat = CategoryModel(
+          id: catId,
+          businessId: 'default',
+          name: seed.categoryName,
+        );
+        await db.upsertCategory(cat);
+        categoryIdMap[seed.categoryName] = catId;
+      }
+
+      // Insert product
+      final product = ProductModel(
+        id: uuid.v4(),
+        businessId: 'default',
+        name: seed.name,
+        categoryId: categoryIdMap[seed.categoryName],
+        sellingPricePaise: seed.sellingPricePaise,
+        mrpPaise: seed.mrpPaise,
+        purchasePricePaise: seed.purchasePricePaise,
+        stockQuantity: seed.stockQuantity,
+        unit: seed.unit,
+        taxRate: seed.taxRate,
+        isTaxInclusive: true,
+        syncStatus: 'pending',
+      );
+      await db.upsertProduct(product);
     }
   }
 
@@ -511,13 +563,20 @@ class _SignupStoreScreenState extends State<SignupStoreScreen> {
                                     ),
                                   ),
                                   const SizedBox(height: 2),
-                                  Text(
-                                    'Automatically seeds 8 popular items for Grocery / Kirana with standard prices.',
-                                    style: GoogleFonts.inter(
-                                      fontSize: 11,
-                                      color: const Color(0xFF94A3B8),
-                                    ),
-                                  ),
+                                  Builder(builder: (context) {
+                                     final selectedCat = _categories.firstWhere(
+                                       (c) => c['title'] == _selectedCategory,
+                                       orElse: () => _categories.first,
+                                     );
+                                     final verticalName = (selectedCat['title'] as String).split('/').first.trim();
+                                     return Text(
+                                       'Auto-seeds 10-12 popular products for $verticalName with market prices. You can edit or delete them anytime.',
+                                       style: GoogleFonts.inter(
+                                         fontSize: 11,
+                                         color: const Color(0xFF94A3B8),
+                                       ),
+                                     );
+                                   }),
                                 ],
                               ),
                             ),

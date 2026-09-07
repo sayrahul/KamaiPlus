@@ -345,5 +345,19 @@ Comprehensive enterprise-grade retail UX upgrade suite aligned with PhonePe Busi
       4. `completeFactoryReset({bool resetStoreProfile = false})`: Atomic SQLite wipe across all operational retail tables (`sales`, `products`, `categories`, `inventory_movements`, `customers`, `ledger_transactions`, `expenses`, `cash_register_shifts`, `suppliers`), with optional store profile preservation.
     - **UI & Security Invariants:**
       - High-contrast Danger Zone section with red warning badges and explanatory text.
-      - **Owner Security PIN Guard (`1234`)** enforced before allowing complete factory wipe to prevent accidental employee deletion.
+    - **Owner Security PIN Guard (`1234`)** enforced before allowing complete factory wipe to prevent accidental employee deletion.
       - Accessible via Settings and Menu Hub modal ("Backup & Reset" tile).
+
+21. **Category-Specific Onboarding & Default Product Seeding (`lib/core/constants/default_products.dart` + `lib/views/auth/signup_store_screen.dart`):**
+    - **How It Works:**
+      - During signup, user selects a Business Category (Grocery, Pharmacy, Apparel, Hardware, Restaurant).
+      - If the "Pre-load starter product catalog" checkbox is checked (default: ON), `_seedDefaultProducts(businessTypeId)` is called after `saveStoreProfile`.
+      - The seed function reads from `kDefaultProductsByVertical[businessTypeId]` — a `const Map` in `default_products.dart`.
+      - For each unique `categoryName` in the seeds, a `CategoryModel` is upserted first, then each `ProductModel` is upserted with a fresh `uuid.v4()` ID.
+    - **Product Counts per Vertical:** Grocery: 12 | Pharmacy: 10 | Apparel: 10 | Hardware: 10 | Restaurant: 11
+    - **Financial Invariant:** All `sellingPricePaise`, `mrpPaise`, `purchasePricePaise` values are integer paise (₹1 = 100 paise). No floats.
+    - **UI Invariant:** Checkbox subtitle text is dynamic — updates to show the currently selected vertical name (e.g., "Auto-seeds 10-12 popular products for Grocery with market prices.").
+    - **User Control:** All seeded products appear in `ProductsScreen` and are fully editable/deletable by the user — no protection.
+    - **Seeding happens only once:** At onboarding. If user opts out (unchecks checkbox), no products are seeded.
+    - **Implemented & Verified:** `flutter analyze` — No issues found. Committed as `feat: category-specific onboarding default product seeding`.
+
