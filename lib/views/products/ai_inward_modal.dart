@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import '../../services/csv_inward_service.dart';
 import '../purchases/ai_inward_sheet.dart';
+import '../purchases/bill_scan_review_sheet.dart';
 
 class AiInwardModal extends StatelessWidget {
   final VoidCallback onSelectManual;
@@ -29,124 +31,27 @@ class AiInwardModal extends StatelessWidget {
     );
   }
 
-  void _simulateAiScan(BuildContext context, String modeName) {
+  Future<void> _handleCsvImport(BuildContext context) async {
     Navigator.of(context).pop();
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: Colors.white,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
-        title: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: const Color(0xFFFEF3C7),
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: const Icon(Icons.auto_awesome_rounded, color: Color(0xFFD97706), size: 20),
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Text(
-                'AI Vision OCR Extraction',
-                style: GoogleFonts.outfit(fontSize: 16, fontWeight: FontWeight.w800),
-              ),
-            ),
-          ],
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Extracted from: $modeName (Wholesale Invoice #INV-8832)',
-              style: GoogleFonts.inter(fontSize: 11, color: const Color(0xFF64748B)),
-            ),
-            const SizedBox(height: 12),
-            _buildExtractedRow('Fortune Sunlite Oil (1L)', '24 Pcs', '₹125.00', '₹145.00'),
-            const SizedBox(height: 6),
-            _buildExtractedRow('Tata Sampann Toor Dal (1kg)', '30 Pcs', '₹140.00', '₹165.00'),
-            const SizedBox(height: 6),
-            _buildExtractedRow('Aashirvaad Chakki Atta (10kg)', '15 Pcs', '₹380.00', '₹425.00'),
-            const Divider(height: 20, color: Color(0xFFE2E8F0)),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text('Total Inward Value:', style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w700)),
-                Text(
-                  '₹12,900.00',
-                  style: GoogleFonts.outfit(fontSize: 15, fontWeight: FontWeight.w900, color: const Color(0xFF059669)),
-                ),
-              ],
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: Text('Cancel', style: GoogleFonts.inter(fontWeight: FontWeight.w600, color: const Color(0xFF64748B))),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              Navigator.pop(ctx);
-              onInwardSuccess();
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Row(
-                    children: [
-                      const Icon(Icons.check_circle_rounded, color: Color(0xFF10B981), size: 18),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          '3 wholesale items added to catalog & stock updated!',
-                          style: GoogleFonts.inter(fontWeight: FontWeight.w700),
-                        ),
-                      ),
-                    ],
-                  ),
-                  backgroundColor: const Color(0xFF0F172A),
-                  behavior: SnackBarBehavior.floating,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                ),
-              );
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF0F172A),
-              foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-            ),
-            child: Text('Import to Catalog', style: GoogleFonts.inter(fontWeight: FontWeight.w800)),
-          ),
-        ],
-      ),
-    );
-  }
+    final res = await CsvInwardService.pickAndParseCsv();
+    if (!context.mounted) return;
 
-  Widget _buildExtractedRow(String name, String qty, String cost, String sell) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
-      decoration: BoxDecoration(
-        color: const Color(0xFFF8FAFC),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: const Color(0xFFE2E8F0)),
-      ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(name, style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w700, color: const Color(0xFF0F172A))),
-                Text('$qty • Cost: $cost', style: GoogleFonts.inter(fontSize: 9.5, color: const Color(0xFF64748B))),
-              ],
-            ),
-          ),
-          Text(sell, style: GoogleFonts.robotoMono(fontSize: 12, fontWeight: FontWeight.w800, color: const Color(0xFF059669))),
-        ],
-      ),
+    if (!res.success) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(res.errorMessage ?? 'Could not parse CSV file.'),
+          backgroundColor: Colors.red,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
+
+    BillScanReviewSheet.show(
+      context,
+      items: res.items,
+      billNumber: res.fileName != null ? 'FILE-${res.fileName}' : null,
+      onInwardComplete: onInwardSuccess,
     );
   }
 
@@ -195,7 +100,7 @@ class AiInwardModal extends StatelessWidget {
                 Row(
                   children: [
                     Text(
-                      'AI Wholesale Invoice & Inward',
+                      'AI Wholesale Inward & Restock',
                       style: GoogleFonts.outfit(
                         fontSize: 17,
                         fontWeight: FontWeight.w900,
@@ -211,7 +116,7 @@ class AiInwardModal extends StatelessWidget {
                         border: Border.all(color: const Color(0xFFA7F3D0)),
                       ),
                       child: Text(
-                        'AI VISION',
+                        'REAL OCR',
                         style: GoogleFonts.inter(
                           fontSize: 9,
                           fontWeight: FontWeight.w900,
@@ -241,7 +146,7 @@ class AiInwardModal extends StatelessWidget {
             ),
             const SizedBox(height: 4),
             Text(
-              'Scan wholesale invoices, parchas, or upload PDFs to auto-add products, prices & stock.',
+              'Scan wholesale invoices, mandi slips, or upload PDFs/CSVs to auto-add products, prices & stock.',
               style: GoogleFonts.inter(
                 fontSize: 11.5,
                 color: const Color(0xFF64748B),
@@ -269,7 +174,7 @@ class AiInwardModal extends StatelessWidget {
             ),
             const SizedBox(height: 10),
 
-            // Option 2: Upload Invoice PDF (FASTER)
+            // Option 2: Upload Invoice PDF
             _buildOptionCard(
               context: context,
               icon: Icons.picture_as_pdf_outlined,
@@ -277,11 +182,14 @@ class AiInwardModal extends StatelessWidget {
               iconBgColor: const Color(0xFFEFF6FF),
               borderColor: const Color(0xFFBFDBFE),
               title: 'Upload Invoice PDF',
-              badgeLabel: 'FASTER',
+              badgeLabel: 'AI VISION',
               badgeBg: const Color(0xFFEFF6FF),
               badgeColor: const Color(0xFF1D4ED8),
-              subtitle: 'Single or multi-page digital invoice / tariff document',
-              onTap: () => _simulateAiScan(context, 'PDF Invoice Import'),
+              subtitle: 'Single or multi-page digital invoice document',
+              onTap: () {
+                Navigator.pop(context);
+                AiInwardSheet.show(context, onInwardComplete: onInwardSuccess);
+              },
             ),
             const SizedBox(height: 10),
 
@@ -293,11 +201,11 @@ class AiInwardModal extends StatelessWidget {
               iconBgColor: const Color(0xFFECFDF5),
               borderColor: const Color(0xFFA7F3D0),
               title: 'Upload Excel / CSV File',
-              badgeLabel: 'BULK',
+              badgeLabel: '100% OFFLINE',
               badgeBg: const Color(0xFFECFDF5),
               badgeColor: const Color(0xFF047857),
-              subtitle: 'Spreadsheet with item names, prices & stock',
-              onTap: () => _simulateAiScan(context, 'CSV / Excel Spreadsheet'),
+              subtitle: 'Spreadsheet with item names, prices & stock (<20ms)',
+              onTap: () => _handleCsvImport(context),
             ),
           ],
         ),

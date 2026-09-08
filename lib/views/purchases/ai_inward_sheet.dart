@@ -1,13 +1,12 @@
+import 'dart:typed_data';
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:uuid/uuid.dart';
-import '../../core/database/local_database.dart';
-import '../../core/utils/money_formatter.dart';
-import '../../models/models.dart';
+import 'package:url_launcher/url_launcher.dart';
+import '../../services/csv_inward_service.dart';
 import '../../services/gemini_ai_service.dart';
-import '../../services/firestore_sync_service.dart';
+import 'bill_scan_review_sheet.dart';
 
 class AiInwardSheet extends StatelessWidget {
   final VoidCallback? onInwardComplete;
@@ -60,8 +59,8 @@ class AiInwardSheet extends StatelessWidget {
                   decoration: BoxDecoration(color: const Color(0xFFEFF6FF), borderRadius: BorderRadius.circular(10)),
                   child: const Icon(Icons.photo_library_rounded, color: Color(0xFF2563EB)),
                 ),
-                title: Text('Gallery / Files', style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700)),
-                subtitle: Text('Pick photo from phone gallery or WhatsApp download', style: GoogleFonts.plusJakartaSans(fontSize: 11)),
+                title: Text('Gallery / Photos', style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700)),
+                subtitle: Text('Pick bill photo from gallery or WhatsApp', style: GoogleFonts.plusJakartaSans(fontSize: 11)),
                 onTap: () {
                   Navigator.pop(sheetCtx);
                   _processImageScan(context, ImageSource.gallery);
@@ -88,316 +87,352 @@ class AiInwardSheet extends StatelessWidget {
       final bytes = await file.readAsBytes();
       if (!context.mounted) return;
 
-      _runGeminiExtraction(context, bytes);
+      _runExtraction(context, bytes, mimeType: 'image/jpeg', title: 'Analyzing Bill Photo');
     } catch (e) {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Could not open image picker: $e'), backgroundColor: Colors.red),
+          SnackBar(content: Text('Could not open image: $e'), backgroundColor: Colors.red),
         );
       }
     }
   }
 
-  void _runGeminiExtraction(BuildContext context, Uint8List imageBytes) {
+  Future<void> _processPdfScan(BuildContext context) async {
+    try {
+      final files = await FilePicker.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['pdf'],
+      );
+
+      if (files.isEmpty) return;
+
+      final file = files.first;
+      final bytes = await file.readAsBytes();
+
+      if (bytes.isEmpty) {
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Could not read PDF file.')),
+          );
+        }
+        return;
+      }
+
+      if (!context.mounted) return;
+      _runExtraction(context, bytes, mimeType: 'application/pdf', title: 'Parsing PDF Invoice');
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('PDF Picker error: $e'), backgroundColor: Colors.red),
+        );
+      }
+    }
+  }
+
+  Future<void> _processCsvScan(BuildContext context) async {
+    try {
+      final res = await CsvInwardService.pickAndParseCsv();
+      if (!context.mounted) return;
+
+      if (!res.success) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(res.errorMessage ?? 'Failed to parse CSV/Excel file.'),
+            backgroundColor: Colors.red,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+        return;
+      }
+
+      // Open review sheet with parsed items
+      BillScanReviewSheet.show(
+        context,
+        items: res.items,
+        billNumber: res.fileName != null ? 'FILE-${res.fileName}' : null,
+        onInwardComplete: onInwardComplete,
+      );
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
+        );
+      }
+    }
+  }
+
+  void _runExtraction(
+    BuildContext context,
+    Uint8List bytes, {
+    required String mimeType,
+    required String title,
+  }) {
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (dialogCtx) => StatefulBuilder(
-        builder: (ctx, setDialogState) {
-          return FutureBuilder<AiInwardResult>(
-            future: GeminiAiService.extractItemsFromImage(imageBytes),
-            builder: (context, snapshot) {
-              if (snapshot.connectionState == ConnectionState.waiting) {
-                // Scanning viewfinder animation
-                return AlertDialog(
-                  backgroundColor: const Color(0xFF0F172A),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-                  contentPadding: const EdgeInsets.all(20),
-                  content: Column(
-                    mainAxisSize: MainAxisSize.min,
+      builder: (dialogCtx) => FutureBuilder<AiInwardResult>(
+        future: GeminiAiService.extractItemsFromImage(bytes, mimeType: mimeType),
+        builder: (ctx, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            // Scanning viewfinder animation
+            return AlertDialog(
+              backgroundColor: const Color(0xFF0F172A),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+              contentPadding: const EdgeInsets.all(22),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          Row(
-                            children: [
-                              Container(
-                                padding: const EdgeInsets.all(6),
-                                decoration: BoxDecoration(
-                                  color: const Color(0xFF10B981).withValues(alpha: 0.2),
-                                  borderRadius: BorderRadius.circular(8),
-                                ),
-                                child: const Icon(Icons.document_scanner_rounded, color: Color(0xFF34D399), size: 18),
-                              ),
-                              const SizedBox(width: 8),
-                              Text(
-                                'Gemini 1.5 Vision OCR',
-                                style: GoogleFonts.outfit(fontSize: 15, fontWeight: FontWeight.w700, color: Colors.white),
-                              ),
-                            ],
-                          ),
                           Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                            padding: const EdgeInsets.all(6),
                             decoration: BoxDecoration(
-                              color: const Color(0xFF10B981).withValues(alpha: 0.15),
-                              borderRadius: BorderRadius.circular(6),
-                              border: Border.all(color: const Color(0xFF10B981).withValues(alpha: 0.4)),
+                              color: const Color(0xFF10B981).withValues(alpha: 0.2),
+                              borderRadius: BorderRadius.circular(8),
                             ),
-                            child: Text(
-                              'ANALYZING',
-                              style: GoogleFonts.inter(fontSize: 9, fontWeight: FontWeight.w800, color: const Color(0xFF34D399)),
-                            ),
+                            child: const Icon(Icons.document_scanner_rounded, color: Color(0xFF34D399), size: 18),
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            title,
+                            style: GoogleFonts.outfit(fontSize: 15, fontWeight: FontWeight.w700, color: Colors.white),
                           ),
                         ],
                       ),
-                      const SizedBox(height: 18),
-
                       Container(
-                        height: 160,
-                        width: double.infinity,
+                        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
                         decoration: BoxDecoration(
-                          color: const Color(0xFF1E293B),
-                          borderRadius: BorderRadius.circular(16),
-                          border: Border.all(color: const Color(0xFF334155), width: 1.5),
+                          color: const Color(0xFF10B981).withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(6),
+                          border: Border.all(color: const Color(0xFF10B981).withValues(alpha: 0.4)),
                         ),
-                        child: Stack(
-                          alignment: Alignment.center,
-                          children: [
-                            const Icon(Icons.receipt_long_rounded, color: Color(0xFF64748B), size: 54),
-                            Positioned(
-                              bottom: 16,
-                              child: Text(
-                                'Reading rates, quantities & items...',
-                                style: GoogleFonts.plusJakartaSans(color: const Color(0xFF94A3B8), fontSize: 11),
-                              ),
-                            ),
-                            Positioned(
-                              top: 8,
-                              left: 8,
-                              child: Container(width: 14, height: 14, decoration: const BoxDecoration(border: Border(top: BorderSide(color: Color(0xFF34D399), width: 2), left: BorderSide(color: Color(0xFF34D399), width: 2)))),
-                            ),
-                            Positioned(
-                              top: 8,
-                              right: 8,
-                              child: Container(width: 14, height: 14, decoration: const BoxDecoration(border: Border(top: BorderSide(color: Color(0xFF34D399), width: 2), right: BorderSide(color: Color(0xFF34D399), width: 2)))),
-                            ),
-                            Positioned(
-                              bottom: 8,
-                              left: 8,
-                              child: Container(width: 14, height: 14, decoration: const BoxDecoration(border: Border(bottom: BorderSide(color: Color(0xFF34D399), width: 2), left: BorderSide(color: Color(0xFF34D399), width: 2)))),
-                            ),
-                            Positioned(
-                              bottom: 8,
-                              right: 8,
-                              child: Container(width: 14, height: 14, decoration: const BoxDecoration(border: Border(bottom: BorderSide(color: Color(0xFF34D399), width: 2), right: BorderSide(color: Color(0xFF34D399), width: 2)))),
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-                      const LinearProgressIndicator(
-                        valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF10B981)),
-                        backgroundColor: Color(0xFF334155),
-                        minHeight: 4,
-                      ),
-                    ],
-                  ),
-                );
-              }
-
-              final res = snapshot.data;
-              if (res == null || !res.success) {
-                // Quota exceeded or error
-                final isQuota = res?.isQuotaExceeded ?? false;
-                return AlertDialog(
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-                  title: Row(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.all(8),
-                        decoration: BoxDecoration(
-                          color: isQuota ? const Color(0xFFFEF3C7) : const Color(0xFFFEE2E2),
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        child: Icon(isQuota ? Icons.lock_rounded : Icons.error_outline, color: isQuota ? const Color(0xFFD97706) : const Color(0xFFDC2626)),
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
                         child: Text(
-                          isQuota ? 'Monthly Limit Reached' : 'Scan Failed',
-                          style: GoogleFonts.plusJakartaSans(fontSize: 16, fontWeight: FontWeight.w800),
+                          'AI VISION',
+                          style: GoogleFonts.inter(fontSize: 9, fontWeight: FontWeight.w800, color: const Color(0xFF34D399)),
                         ),
                       ),
                     ],
                   ),
-                  content: Text(
-                    res?.errorMessage ?? 'Could not parse bill slip. Please check photo clarity.',
-                    style: GoogleFonts.plusJakartaSans(fontSize: 13, color: const Color(0xFF475569)),
-                  ),
-                  actions: [
-                    TextButton(
-                      onPressed: () => Navigator.pop(dialogCtx),
-                      child: Text('Close', style: GoogleFonts.plusJakartaSans(color: const Color(0xFF64748B))),
+                  const SizedBox(height: 18),
+                  Container(
+                    height: 150,
+                    width: double.infinity,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF1E293B),
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: const Color(0xFF334155), width: 1.5),
                     ),
-                    if (isQuota)
-                      ElevatedButton(
-                        onPressed: () {
-                          Navigator.pop(dialogCtx);
-                          Navigator.pushNamed(context, '/settings');
-                        },
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFFFBBF24),
-                          foregroundColor: const Color(0xFF0F172A),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                        ),
-                        child: Text('Upgrade to Pro', style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w800)),
-                      ),
-                  ],
-                );
-              }
-
-              // SUCCESS: Review and confirm inward dialog
-              final items = res.items;
-              int totalCostPaise = items.fold<int>(0, (sum, it) => sum + (it.purchasePricePaise * it.quantity).round());
-
-              return AlertDialog(
-                backgroundColor: Colors.white,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
-                insetPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 24),
-                title: Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(color: const Color(0xFFECFDF5), borderRadius: BorderRadius.circular(10)),
-                      child: const Icon(Icons.auto_awesome_rounded, color: Color(0xFF059669), size: 20),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text('AI Inward Extraction', style: GoogleFonts.plusJakartaSans(fontSize: 15.5, fontWeight: FontWeight.w800)),
-                          Text('${items.length} Products Detected', style: GoogleFonts.plusJakartaSans(fontSize: 11, color: const Color(0xFF059669), fontWeight: FontWeight.w700)),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-                content: SizedBox(
-                  width: double.maxFinite,
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      ConstrainedBox(
-                        constraints: const BoxConstraints(maxHeight: 260),
-                        child: ListView.separated(
-                          shrinkWrap: true,
-                          itemCount: items.length,
-                          separatorBuilder: (_, _) => const Divider(height: 1, color: Color(0xFFF1F5F9)),
-                          itemBuilder: (c, idx) {
-                            final it = items[idx];
-                            return Padding(
-                              padding: const EdgeInsets.symmetric(vertical: 6),
-                              child: Row(
-                                children: [
-                                  Expanded(
-                                    child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      children: [
-                                        Text(it.productName, style: GoogleFonts.plusJakartaSans(fontSize: 12, fontWeight: FontWeight.w700)),
-                                        const SizedBox(height: 2),
-                                        Text(
-                                          'Buy: ${MoneyFormatter.formatINR(it.purchasePricePaise)} • Sell: ${MoneyFormatter.formatINR(it.sellingPricePaise)}',
-                                          style: GoogleFonts.jetBrainsMono(fontSize: 10, color: const Color(0xFF64748B)),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                    decoration: BoxDecoration(color: const Color(0xFFF1F5F9), borderRadius: BorderRadius.circular(6)),
-                                    child: Text(
-                                      '${it.quantity % 1 == 0 ? it.quantity.toInt() : it.quantity} ${it.unit}',
-                                      style: GoogleFonts.jetBrainsMono(fontSize: 10, fontWeight: FontWeight.w700),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            );
-                          },
-                        ),
-                      ),
-                      const Divider(height: 16),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Text('Total Inward Cost:', style: GoogleFonts.plusJakartaSans(fontSize: 12, fontWeight: FontWeight.w700, color: const Color(0xFF475569))),
-                          Text(MoneyFormatter.formatINR(totalCostPaise), style: GoogleFonts.plusJakartaSans(fontSize: 15, fontWeight: FontWeight.w900, color: const Color(0xFF059669))),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-                actions: [
-                  TextButton(
-                    onPressed: () => Navigator.pop(dialogCtx),
-                    child: Text('Discard', style: GoogleFonts.plusJakartaSans(color: const Color(0xFF64748B))),
-                  ),
-                  ElevatedButton(
-                    onPressed: () async {
-                      Navigator.pop(dialogCtx);
-                      final bizId = FirestoreSyncService.instance.activeBusinessId;
-
-                      // Save extracted items into SQLite database
-                      for (final item in items) {
-                        final prod = ProductModel(
-                          id: const Uuid().v4(),
-                          businessId: bizId,
-                          name: item.productName,
-                          purchasePricePaise: item.purchasePricePaise,
-                          sellingPricePaise: item.sellingPricePaise,
-                          mrpPaise: item.mrpPaise,
-                          stockQuantity: item.quantity,
-                          unit: item.unit,
-                        );
-                        await LocalDatabase.instance.upsertProduct(prod);
-                      }
-
-                      onInwardComplete?.call();
-
-                      if (context.mounted) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            content: Text('✅ ${items.length} items successfully inwarded to Inventory!'),
-                            backgroundColor: const Color(0xFF059669),
-                            behavior: SnackBarBehavior.floating,
+                    child: Stack(
+                      alignment: Alignment.center,
+                      children: [
+                        const Icon(Icons.receipt_long_rounded, color: Color(0xFF64748B), size: 54),
+                        Positioned(
+                          bottom: 16,
+                          child: Text(
+                            'Reading items, quantities & wholesale rates...',
+                            style: GoogleFonts.plusJakartaSans(color: const Color(0xFF94A3B8), fontSize: 11),
                           ),
-                        );
-                      }
-                    },
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF059669),
-                      foregroundColor: Colors.white,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                        ),
+                      ],
                     ),
-                    child: Text('Confirm & Save Stock', style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700)),
+                  ),
+                  const SizedBox(height: 16),
+                  const LinearProgressIndicator(
+                    valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF10B981)),
+                    backgroundColor: Color(0xFF334155),
+                    minHeight: 4,
                   ),
                 ],
-              );
-            },
-          );
+              ),
+            );
+          }
+
+          final res = snapshot.data;
+          if (res == null || !res.success) {
+            final isQuota = res?.isQuotaExceeded ?? false;
+            return AlertDialog(
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+              title: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: isQuota ? const Color(0xFFFEF3C7) : const Color(0xFFFEE2E2),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Icon(isQuota ? Icons.lock_rounded : Icons.error_outline, color: isQuota ? const Color(0xFFD97706) : const Color(0xFFDC2626)),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      isQuota ? 'Monthly Limit Reached' : 'OCR Scan Failed',
+                      style: GoogleFonts.plusJakartaSans(fontSize: 16, fontWeight: FontWeight.w800),
+                    ),
+                  ),
+                ],
+              ),
+              content: Text(
+                res?.errorMessage ?? 'Could not parse bill slip. Please check photo clarity or configure API key.',
+                style: GoogleFonts.plusJakartaSans(fontSize: 13, color: const Color(0xFF475569)),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(dialogCtx),
+                  child: Text('Close', style: GoogleFonts.plusJakartaSans(color: const Color(0xFF64748B))),
+                ),
+                TextButton(
+                  onPressed: () {
+                    Navigator.pop(dialogCtx);
+                    _showApiKeyDialog(context);
+                  },
+                  child: Text('AI Key Settings', style: GoogleFonts.plusJakartaSans(color: const Color(0xFF0284C7), fontWeight: FontWeight.w700)),
+                ),
+                if (isQuota)
+                  ElevatedButton(
+                    onPressed: () {
+                      Navigator.pop(dialogCtx);
+                      Navigator.pushNamed(context, '/settings');
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFFFBBF24),
+                      foregroundColor: const Color(0xFF0F172A),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                    ),
+                    child: Text('Upgrade to Pro', style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w800)),
+                  ),
+              ],
+            );
+          }
+
+          // SUCCESS: Dismiss scanning dialog and open full review sheet
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            Navigator.pop(dialogCtx);
+            BillScanReviewSheet.show(
+              context,
+              items: res.items,
+              supplierName: res.supplierName,
+              billNumber: res.billNumber,
+              billDate: res.billDate,
+              onInwardComplete: onInwardComplete,
+            );
+          });
+
+          return const SizedBox.shrink();
         },
       ),
     );
   }
 
-  void _simulateFileScan(BuildContext context, String mode) {
-    Navigator.pop(context);
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('📄 Unlimited $mode Inward: Please upload file or select bill photo.'),
-        backgroundColor: const Color(0xFF0284C7),
-        behavior: SnackBarBehavior.floating,
+  void _showApiKeyDialog(BuildContext context) async {
+    final currentKey = await GeminiAiService.getEffectiveApiKey();
+    final ctrl = TextEditingController(text: currentKey);
+
+    if (!context.mounted) return;
+
+    bool isTesting = false;
+    String? testStatus;
+
+    showDialog(
+      context: context,
+      builder: (dlgCtx) => StatefulBuilder(
+        builder: (ctx, setDlgState) {
+          return AlertDialog(
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+            title: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(6),
+                  decoration: BoxDecoration(color: const Color(0xFFECFDF5), borderRadius: BorderRadius.circular(8)),
+                  child: const Icon(Icons.key_rounded, color: Color(0xFF059669), size: 20),
+                ),
+                const SizedBox(width: 8),
+                Text('Gemini AI Vision Key', style: GoogleFonts.plusJakartaSans(fontSize: 16, fontWeight: FontWeight.w800)),
+              ],
+            ),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Enter your Google AI Studio Gemini API Key for OCR scanning of bills and mandi parchas.',
+                  style: GoogleFonts.plusJakartaSans(fontSize: 12, color: const Color(0xFF64748B)),
+                ),
+                const SizedBox(height: 12),
+                TextFormField(
+                  controller: ctrl,
+                  decoration: InputDecoration(
+                    labelText: 'Gemini API Key (AIzaSy...)',
+                    labelStyle: GoogleFonts.plusJakartaSans(fontSize: 11),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                    isDense: true,
+                  ),
+                  style: GoogleFonts.jetBrainsMono(fontSize: 12),
+                ),
+                const SizedBox(height: 8),
+                InkWell(
+                  onTap: () => launchUrl(Uri.parse('https://aistudio.google.com/app/apikey'), mode: LaunchMode.externalApplication),
+                  child: Text(
+                    '🔗 Get a 100% Free Gemini API Key from Google AI Studio',
+                    style: GoogleFonts.plusJakartaSans(fontSize: 11, color: const Color(0xFF0284C7), fontWeight: FontWeight.w700),
+                  ),
+                ),
+                if (testStatus != null) ...[
+                  const SizedBox(height: 8),
+                  Text(
+                    testStatus!,
+                    style: GoogleFonts.plusJakartaSans(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                      color: testStatus!.contains('✅') ? const Color(0xFF059669) : const Color(0xFFDC2626),
+                    ),
+                  ),
+                ],
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(dlgCtx),
+                child: Text('Cancel', style: GoogleFonts.plusJakartaSans(color: const Color(0xFF64748B))),
+              ),
+              TextButton(
+                onPressed: isTesting
+                    ? null
+                    : () async {
+                        setDlgState(() {
+                          isTesting = true;
+                          testStatus = 'Testing API Key...';
+                        });
+                        final ok = await GeminiAiService.testApiKey(ctrl.text.trim());
+                        setDlgState(() {
+                          isTesting = false;
+                          testStatus = ok ? '✅ API Key is Valid & Active!' : '❌ Invalid API Key. Please verify.';
+                        });
+                      },
+                child: Text('Test Key', style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700)),
+              ),
+              ElevatedButton(
+                onPressed: () async {
+                  await GeminiAiService.setCustomApiKey(ctrl.text.trim());
+                  if (ctx.mounted) Navigator.pop(dlgCtx);
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('✅ Gemini API Key saved successfully!'), backgroundColor: Color(0xFF059669)),
+                    );
+                  }
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF059669),
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                ),
+                child: Text('Save Key', style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w800)),
+              ),
+            ],
+          );
+        },
       ),
     );
   }
@@ -431,7 +466,7 @@ class AiInwardSheet extends StatelessWidget {
           Row(
             children: [
               Text(
-                'AI Wholesale Inward (OCR)',
+                'Wholesale Inward & Restock',
                 style: GoogleFonts.outfit(
                   fontSize: 16,
                   fontWeight: FontWeight.w700,
@@ -447,11 +482,16 @@ class AiInwardSheet extends StatelessWidget {
                   border: Border.all(color: const Color(0xFFA7F3D0)),
                 ),
                 child: Text(
-                  'GEMINI 1.5',
+                  'REAL OCR',
                   style: GoogleFonts.inter(fontSize: 9, fontWeight: FontWeight.w800, color: const Color(0xFF059669)),
                 ),
               ),
               const Spacer(),
+              IconButton(
+                icon: const Icon(Icons.key_rounded, size: 20, color: Color(0xFF64748B)),
+                tooltip: 'Configure Gemini API Key',
+                onPressed: () => _showApiKeyDialog(context),
+              ),
               IconButton(
                 icon: const Icon(Icons.close_rounded, size: 20, color: Color(0xFF94A3B8)),
                 onPressed: () => Navigator.pop(context),
@@ -459,7 +499,7 @@ class AiInwardSheet extends StatelessWidget {
             ],
           ),
           Text(
-            'Scan mandi parchas or wholesale bills. 10 picture scans/month on Free (Unlimited on Pro).',
+            'Scan mandi parchas, digital PDF bills, or upload Excel/CSV spreadsheets directly into stock.',
             style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF64748B)),
           ),
           const SizedBox(height: 18),
@@ -490,10 +530,13 @@ class AiInwardSheet extends StatelessWidget {
             iconColor: const Color(0xFF0284C7),
             borderColor: const Color(0xFFBAE6FD),
             title: 'Upload Invoice PDF',
-            badge: 'FREE UNLIMITED',
+            badge: 'AI VISION',
             badgeColor: const Color(0xFF0284C7),
-            subtitle: 'Single or multi-page digital invoice document',
-            onTap: () => _simulateFileScan(context, 'PDF'),
+            subtitle: 'Single or multi-page digital wholesale invoice PDF',
+            onTap: () {
+              Navigator.pop(context);
+              _processPdfScan(context);
+            },
           ),
           const SizedBox(height: 10),
 
@@ -505,10 +548,13 @@ class AiInwardSheet extends StatelessWidget {
             iconColor: const Color(0xFF059669),
             borderColor: const Color(0xFFA7F3D0),
             title: 'Upload Excel / CSV File',
-            badge: 'FREE UNLIMITED',
+            badge: '100% OFFLINE',
             badgeColor: const Color(0xFF059669),
-            subtitle: 'Spreadsheet with item names, prices & stock',
-            onTap: () => _simulateFileScan(context, 'Excel'),
+            subtitle: 'Instant spreadsheet inward with item names, prices & stock',
+            onTap: () {
+              Navigator.pop(context);
+              _processCsvScan(context);
+            },
           ),
         ],
       ),
