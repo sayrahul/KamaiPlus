@@ -7,14 +7,53 @@ import '../../models/models.dart';
 class LocalDatabase {
   static final LocalDatabase instance = LocalDatabase._init();
   static Database? _database;
+  static String _activeDbName = 'kamaiplus_local.db';
   static const _uuid = Uuid();
 
   LocalDatabase._init();
 
   Future<Database> get database async {
-    if (_database != null) return _database!;
-    _database = await _initDB('kamaiplus_local.db');
+    if (_database != null && _database!.isOpen) return _database!;
+    _database = await _initDB(_activeDbName);
     return _database!;
+  }
+
+  /// Switch the active SQLite database to a user-scoped database file.
+  /// Each user/email gets their own isolated local database: `kamaiplus_<safeId>.db`.
+  /// This ensures multi-account isolation (e.g. User A has Store 1, User B has Store 2).
+  Future<void> switchUser(String? userId) async {
+    String targetDb;
+    if (userId != null && userId.trim().isNotEmpty) {
+      final safeId = userId.trim().replaceAll(RegExp(r'[^a-zA-Z0-9_]'), '_');
+      targetDb = 'kamaiplus_$safeId.db';
+    } else {
+      targetDb = 'kamaiplus_local.db';
+    }
+
+    if (_activeDbName == targetDb && _database != null && _database!.isOpen) {
+      return;
+    }
+
+    if (_database != null) {
+      try {
+        await _database!.close();
+      } catch (_) {}
+      _database = null;
+    }
+
+    _activeDbName = targetDb;
+    _database = await _initDB(_activeDbName);
+  }
+
+  /// Closes database connection on sign-out
+  Future<void> closeDatabase() async {
+    if (_database != null) {
+      try {
+        await _database!.close();
+      } catch (_) {}
+      _database = null;
+    }
+    _activeDbName = 'kamaiplus_local.db';
   }
 
   Future<Database> _initDB(String filePath) async {

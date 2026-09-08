@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../../core/constants/business_vertical_config.dart';
 import '../../core/database/local_database.dart';
 import '../../services/auth_service.dart';
 import '../dashboard/home_dashboard_screen.dart';
@@ -23,29 +24,44 @@ class _LoginScreenState extends State<LoginScreen> {
 
     try {
       final userCredential = await AuthService.instance.signInWithGoogle();
-      if (userCredential == null) {
+      if (userCredential == null || userCredential.user == null) {
         if (mounted) setState(() => _isLoading = false);
         return;
       }
 
+      final user = userCredential.user!;
+      final uid = user.uid;
+
+      // 1. Switch to user-scoped isolated SQLite database
+      await LocalDatabase.instance.switchUser(uid);
+
+      // 2. Check if THIS specific user already has a store profile setup
+      final profile = await LocalDatabase.instance.getStoreProfile();
+      final bool hasStore = profile.storeName.trim().isNotEmpty && profile.businessType.trim().isNotEmpty;
+
+      // 3. Persist session
       final prefs = await SharedPreferences.getInstance();
-      var isOnboarded = prefs.getBool('is_onboarded') ?? false;
-      if (!isOnboarded) {
-        try {
-          final profile = await LocalDatabase.instance.getStoreProfile();
-          if (profile.storeName.isNotEmpty) {
-            isOnboarded = true;
-          }
-        } catch (_) {}
+      await prefs.setBool('is_logged_in', true);
+      await prefs.setString('auth_user_id', uid);
+      await prefs.setString('auth_user_email', user.email ?? '');
+      await prefs.setString('auth_user_name', user.displayName ?? '');
+      if (user.photoURL != null) {
+        await prefs.setString('auth_user_photo', user.photoURL!);
       }
 
-      await prefs.setBool('is_logged_in', true);
-      await prefs.setBool('is_onboarded', true);
+      if (hasStore) {
+        await prefs.setBool('is_onboarded', true);
+        await prefs.setString('business_name', profile.storeName);
+        await prefs.setString('business_type', profile.businessType);
+        BusinessVerticals.updateActiveBusinessType(profile.businessType);
+      } else {
+        await prefs.setBool('is_onboarded', false);
+      }
 
       if (!mounted) return;
       setState(() => _isLoading = false);
 
-      final displayName = userCredential.user?.displayName ?? userCredential.user?.email ?? 'User';
+      final displayName = user.displayName ?? user.email ?? 'User';
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('✓ Welcome, $displayName!'),
@@ -54,20 +70,21 @@ class _LoginScreenState extends State<LoginScreen> {
         ),
       );
 
-      if (!isOnboarded) {
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (_) => SignupStoreScreen(
-              initialPhone: userCredential.user?.phoneNumber ?? '',
-            ),
-          ),
-        );
-      } else {
-        if (!mounted) return;
+      if (hasStore) {
         Navigator.pushReplacement(
           context,
           MaterialPageRoute(builder: (_) => HomeDashboardScreen(key: HomeDashboardScreen.dashboardKey)),
+        );
+      } else {
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(
+            builder: (_) => SignupStoreScreen(
+              initialEmail: user.email,
+              initialOwnerName: user.displayName,
+              initialPhone: user.phoneNumber ?? '',
+            ),
+          ),
         );
       }
     } catch (e) {

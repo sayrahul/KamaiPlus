@@ -14,8 +14,15 @@ import '../purchases/purchases_screen.dart';
 
 class SignupStoreScreen extends StatefulWidget {
   final String? initialPhone;
+  final String? initialEmail;
+  final String? initialOwnerName;
 
-  const SignupStoreScreen({super.key, this.initialPhone});
+  const SignupStoreScreen({
+    super.key,
+    this.initialPhone,
+    this.initialEmail,
+    this.initialOwnerName,
+  });
 
   @override
   State<SignupStoreScreen> createState() => _SignupStoreScreenState();
@@ -24,7 +31,7 @@ class SignupStoreScreen extends StatefulWidget {
 class _SignupStoreScreenState extends State<SignupStoreScreen> {
   final _formKey = GlobalKey<FormState>();
   final _storeNameCtrl = TextEditingController(text: 'Sharma Kirana & General Store');
-  final _ownerNameCtrl = TextEditingController(text: 'Rahul Jadhav');
+  late final TextEditingController _ownerNameCtrl;
   late final TextEditingController _phoneCtrl;
   final _upiCtrl = TextEditingController(text: 'sharmakirana@paytm');
 
@@ -69,6 +76,7 @@ class _SignupStoreScreenState extends State<SignupStoreScreen> {
   @override
   void initState() {
     super.initState();
+    _ownerNameCtrl = TextEditingController(text: widget.initialOwnerName ?? 'Rahul Jadhav');
     _phoneCtrl = TextEditingController(text: widget.initialPhone ?? '98765 43210');
   }
 
@@ -109,12 +117,15 @@ class _SignupStoreScreenState extends State<SignupStoreScreen> {
       );
       final businessTypeId = selectedCat['businessTypeId'] as String? ?? 'grocery';
 
+      // 1. Wipe existing operational data in this active user's DB so vertical seeding is completely clean!
+      await LocalDatabase.instance.completeFactoryReset(resetStoreProfile: true);
+
       final profile = StoreProfileModel(
         storeName: storeName.isNotEmpty ? storeName : 'Sharma Kirana Store',
         tagline: 'Always Fresh, Best Wholesale Rates',
         ownerName: ownerName.isNotEmpty ? ownerName : 'Rahul Jadhav',
         phone: phone.isNotEmpty ? phone : '9876543210',
-        email: '',
+        email: widget.initialEmail ?? '',
         upiVpa: upiVpa.isNotEmpty ? upiVpa : 'sharmakirana@paytm',
         category: _selectedCategory,
         businessType: businessTypeId,

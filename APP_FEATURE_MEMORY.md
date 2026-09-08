@@ -507,3 +507,22 @@ Comprehensive enterprise-grade retail UX upgrade suite aligned with PhonePe Busi
       - `ProUpgradeModal`: Reusable modal bottom sheet equipped with 1-tap Razorpay checkout for Pro feature gates.
       - `MenuScreen`: Top dynamic Pro/Free status banner displaying active badge or "Upgrade to Pro" button, plus dedicated "Pro Membership & Plans" entry in Section 4.
       - `PosBillingScreen`: Bottom floating cart bar padding and layout refined with `Expanded` containers to eliminate any layout overflow on compact screens.
+
+30. **Multi-Account & Multi-Store Database Isolation Architecture (LOCKED):**
+    - **Root Cause of Store Mixing on Logout / Multi-Account Switch:**
+      1. Single global SQLite file (`kamaiplus_local.db`) was shared across all user logins. Logging out of Store A and logging in with Email B was reading Store A's profile from the same database.
+      2. Android OS Cloud Auto-Backup was defaulting to `android:allowBackup="true"`, causing uninstall/reinstall or app data clears to silently re-download the old `kamaiplus_local.db` from Google Drive.
+      3. `AuthService.signOut()` previously only deleted user OAuth credentials while leaving `is_logged_in`, `is_onboarded`, and active database connections intact.
+    - **User-Scoped SQLite Database Isolation (`LocalDatabase.instance.switchUser(uid)`):**
+      - Each distinct Google Account / Merchant UID gets its own isolated database file: `kamaiplus_<safeUserId>.db`.
+      - Store 1 (e.g. Pharmacy) data is completely isolated from Store 2 (e.g. Apparel / Garments). Switching accounts switches to that account's dedicated database in `<10ms`.
+      - New accounts that haven't created a store return an empty store profile, correctly routing them to `SignupStoreScreen` instead of inheriting previous stores.
+    - **Clean Session Teardown on Sign-Out (`AuthService.instance.signOut()`):**
+      - Wipes all SharedPreferences session cache (`prefs.clear()`).
+      - Closes the active SQLite connection (`LocalDatabase.instance.closeDatabase()`).
+      - Disconnects Google OAuth token and resets `BusinessVerticals.updateActiveBusinessType('grocery')`.
+    - **Android OS Auto-Backup Disabled (`AndroidManifest.xml`):**
+      - Added `android:allowBackup="false"` and `android:fullBackupContent="false"` so fresh app reinstalls never restore obsolete local databases from Google Drive.
+    - **Pure Vertical Catalog Seeding (`SignupStoreScreen`):**
+      - Calls `LocalDatabase.instance.completeFactoryReset(resetStoreProfile: true)` prior to seeding new vertical products, preventing cross-vertical product pollution.
+

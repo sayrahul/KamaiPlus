@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../core/constants/business_vertical_config.dart';
 import '../core/database/local_database.dart';
 import '../models/models.dart';
 
@@ -125,18 +126,25 @@ class AuthService {
     }
   }
 
-  /// Sign out from Firebase Auth & Google OAuth
+  /// Sign out from Firebase Auth & Google OAuth, clear session and reset database
   Future<void> signOut() async {
     try {
       await GoogleSignIn.instance.disconnect();
+    } catch (_) {}
+    try {
       await _auth.signOut();
+    } catch (_) {}
+    try {
       final prefs = await SharedPreferences.getInstance();
-      await prefs.remove('auth_user_id');
-      await prefs.remove('auth_user_email');
-      await prefs.remove('auth_user_name');
-      await prefs.remove('auth_user_photo');
+      await prefs.clear();
     } catch (e) {
-      debugPrint('Error during signOut: $e');
+      debugPrint('Error clearing prefs during signOut: $e');
     }
+    try {
+      await LocalDatabase.instance.closeDatabase();
+    } catch (_) {}
+    try {
+      BusinessVerticals.updateActiveBusinessType('grocery');
+    } catch (_) {}
   }
 }

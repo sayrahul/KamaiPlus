@@ -3,9 +3,11 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import '../../core/constants/business_vertical_config.dart';
 import '../../core/database/local_database.dart';
-import '../dashboard/home_dashboard_screen.dart';
 import '../auth/login_screen.dart';
+import '../auth/signup_store_screen.dart';
+import '../dashboard/home_dashboard_screen.dart';
 import '../cash_register/cash_register_screen.dart';
 import '../purchases/purchases_screen.dart';
 import '../reports/gst_reports_screen.dart';
@@ -46,29 +48,24 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
       if (mounted) {
         final prefs = await SharedPreferences.getInstance();
         final isLoggedIn = prefs.getBool('is_logged_in') ?? false;
-        final isOnboarded = prefs.getBool('is_onboarded') ?? false;
         final firebaseUser = FirebaseAuth.instance.currentUser;
-        final authUserId = prefs.getString('auth_user_id');
+        final authUserId = prefs.getString('auth_user_id') ?? firebaseUser?.uid;
 
-        // Multi-Layer Session Resilience:
-        // A retail POS user must NEVER be repeatedly asked to log in on app restart.
-        bool hasActiveSession = (isLoggedIn && isOnboarded) ||
-            (firebaseUser != null) ||
-            (authUserId != null && authUserId.isNotEmpty);
+        // Session check: User must be signed in with Firebase or have active logged-in flag with valid userId
+        final bool hasActiveSession = (firebaseUser != null || isLoggedIn) && (authUserId != null && authUserId.isNotEmpty);
 
-        if (!hasActiveSession) {
+        bool hasStore = false;
+        if (hasActiveSession) {
           try {
+            await LocalDatabase.instance.switchUser(authUserId);
             final profile = await LocalDatabase.instance.getStoreProfile();
-            if (profile.storeName.isNotEmpty) {
-              hasActiveSession = true;
+            if (profile.storeName.trim().isNotEmpty && profile.businessType.trim().isNotEmpty) {
+              hasStore = true;
+              BusinessVerticals.updateActiveBusinessType(profile.businessType);
+              await prefs.setBool('is_logged_in', true);
+              await prefs.setBool('is_onboarded', true);
             }
           } catch (_) {}
-        }
-
-        // Lock session flags so subsequent launches are ultra-fast
-        if (hasActiveSession) {
-          await prefs.setBool('is_logged_in', true);
-          await prefs.setBool('is_onboarded', true);
         }
 
         final testScreen = prefs.getString('test_screen');
@@ -111,9 +108,19 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
         } else if (testScreen == 'gst_reports') {
           target = const GstReportsScreen();
         } else {
-          target = hasActiveSession
-              ? HomeDashboardScreen(key: HomeDashboardScreen.dashboardKey)
-              : const LoginScreen();
+          if (hasActiveSession) {
+            if (hasStore) {
+              target = HomeDashboardScreen(key: HomeDashboardScreen.dashboardKey);
+            } else {
+              target = SignupStoreScreen(
+                initialEmail: prefs.getString('auth_user_email') ?? firebaseUser?.email,
+                initialOwnerName: prefs.getString('auth_user_name') ?? firebaseUser?.displayName,
+                initialPhone: prefs.getString('merchant_phone') ?? '',
+              );
+            }
+          } else {
+            target = const LoginScreen();
+          }
         }
 
 
