@@ -45,22 +45,32 @@ class ExtractedBillItem {
   }
 
   factory ExtractedBillItem.fromJson(Map<String, dynamic> json) {
-    int parsePaise(dynamic val) {
+    int parsePaise(dynamic val, {bool isAlreadyPaise = false}) {
       if (val == null) return 0;
-      if (val is int) return val > 50000 ? val : val * 100;
-      if (val is num) return (val * 100).round();
+      if (val is int) {
+        return isAlreadyPaise ? val : val * 100;
+      }
+      if (val is double) {
+        return isAlreadyPaise ? val.round() : (val * 100).round();
+      }
       if (val is String) {
         final clean = val.replaceAll(RegExp(r'[^0-9.]'), '');
         final d = double.tryParse(clean) ?? 0.0;
-        return (d * 100).round();
+        return isAlreadyPaise ? d.round() : (d * 100).round();
       }
       return 0;
     }
 
     final qty = (json['quantity'] as num?)?.toDouble() ?? 1.0;
-    final purchasePaise = parsePaise(json['purchase_price_paise'] ?? json['rate'] ?? json['price'] ?? json['purchase_price']);
-    final mrpPaise = parsePaise(json['mrp_paise'] ?? json['mrp']);
-    final sellingPaise = parsePaise(json['selling_price_paise'] ?? json['selling_price']);
+    final purchasePaise = json['purchase_price_paise'] != null
+        ? parsePaise(json['purchase_price_paise'], isAlreadyPaise: true)
+        : parsePaise(json['rate'] ?? json['price'] ?? json['purchase_price'], isAlreadyPaise: false);
+    final mrpPaise = json['mrp_paise'] != null
+        ? parsePaise(json['mrp_paise'], isAlreadyPaise: true)
+        : parsePaise(json['mrp'], isAlreadyPaise: false);
+    final sellingPaise = json['selling_price_paise'] != null
+        ? parsePaise(json['selling_price_paise'], isAlreadyPaise: true)
+        : parsePaise(json['selling_price'], isAlreadyPaise: false);
 
     return ExtractedBillItem(
       productName: json['product_name'] ?? json['name'] ?? json['item_name'] ?? 'Inventory Item',

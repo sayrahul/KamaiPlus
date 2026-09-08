@@ -142,6 +142,8 @@ class _PosCheckoutModalState extends State<PosCheckoutModal> {
   // Restaurant: Table Selection
   String _selectedTable = 'Takeaway';
 
+  StoreProfileModel? _storeProfile;
+
   bool _isProcessing = false;
 
   List<CartItemModel> get currentCartItems {
@@ -199,6 +201,28 @@ class _PosCheckoutModalState extends State<PosCheckoutModal> {
     }
 
     _loadDoctors();
+    _loadStoreProfile();
+  }
+
+  Future<void> _loadStoreProfile() async {
+    try {
+      final p = await LocalDatabase.instance.getStoreProfile();
+      if (mounted) {
+        setState(() => _storeProfile = p);
+      }
+    } catch (_) {}
+  }
+
+  String get _activeUpiVpa {
+    final v = _storeProfile?.upiVpa.trim();
+    if (v != null && v.isNotEmpty) return v;
+    return 'proventure@icici';
+  }
+
+  String get _activeStoreName {
+    final n = _storeProfile?.storeName.trim();
+    if (n != null && n.isNotEmpty) return n;
+    return 'KamaiPlus Store';
   }
 
   Future<void> _loadDoctors() async {
@@ -2050,7 +2074,7 @@ class _PosCheckoutModalState extends State<PosCheckoutModal> {
                             child: Column(
                               children: [
                                 QrImageView(
-                                  data: 'upi://pay?pa=proventure@icici&pn=KamaiPlus+Store&am=${(grandTotalPaise / 100.0)}&cu=INR&tn=POS+Bill',
+                                  data: 'upi://pay?pa=$_activeUpiVpa&pn=${Uri.encodeComponent(_activeStoreName)}&am=${(grandTotalPaise / 100.0).toStringAsFixed(2)}&cu=INR&tn=POS+Bill',
                                   version: QrVersions.auto,
                                   size: 150,
                                 ),
@@ -2103,7 +2127,7 @@ class _PosCheckoutModalState extends State<PosCheckoutModal> {
                                 final phone = _currentCustomer!.phone.replaceAll(RegExp(r'\D'), '');
                                 final cleanPhone = phone.length == 10 ? '91$phone' : phone;
                                 final amountRupees = (grandTotalPaise / 100.0).toStringAsFixed(2);
-                                final upiUri = 'upi://pay?pa=proventure@icici&pn=KamaiPlus+Store&am=$amountRupees&cu=INR&tn=POS+Bill';
+                                final upiUri = 'upi://pay?pa=$_activeUpiVpa&pn=${Uri.encodeComponent(_activeStoreName)}&am=$amountRupees&cu=INR&tn=POS+Bill';
                                 final text = Uri.encodeComponent(
                                   '🙏 Namaste ${_currentCustomer!.name} Ji!\n\n'
                                   'Aapka KamaiPlus Bill amount: ₹$amountRupees\n'

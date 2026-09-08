@@ -614,4 +614,18 @@ Comprehensive enterprise-grade retail UX upgrade suite aligned with PhonePe Busi
       - **Broadcast Announcements:** Send system-wide announcements to all store devices.
       - **Discount Coupons & Subscriptions:** Manage promo coupon codes and audit subscription transactions.
 
+36. **Core Bug Fixes & Payment Integrity Audit (LOCKED):**
+    - **Merchant UPI QR & WhatsApp Link Resolution (`pos_checkout_modal.dart` & `payment_modal.dart`):**
+      - Resolved critical bug where POS counter QR code and WhatsApp 1-tap pay links were hardcoded to `proventure@icici`.
+      - Now dynamically reads `_storeProfile.upiVpa` and `_storeProfile.storeName` from SQLite `store_profile` table so customer payments go directly to the merchant's own registered bank VPA.
+    - **SplashScreen Timer Memory Leak & Smoke Test Fix (`splash_screen.dart` & `widget_test.dart`):**
+      - Created managed `Timer? _splashTimer` and explicitly cancelled in `SplashScreen.dispose()`.
+      - Eliminates `!timersPending` assertion crash and prevents memory leaks during fast transitions.
+    - **Web Admin Dashboard Multi-Tenant Schema Alignment (`firestore_sync_service.dart`):**
+      - Fixed store name display in Super Admin Dashboard by populating `name`, `shop_name`, `business_name`, `city`, and `subscription_tier` in `businesses/{bizId}` and mirroring to `merchants/{bizId}`.
+      - Synchronized Pro membership activation so admin-granted licenses (`subscription_tier == 'pro'`) are immediately recognized during cloud restore.
+    - **OCR Integer Paise Extraction Precision (`gemini_ai_service.dart`):**
+      - Eliminated dangerous `val > 50000` heuristic in `ExtractedBillItem.fromJson`. Explicitly respects `_paise` schema fields vs rupee rates to prevent 100x multiplier errors on wholesale inventory items.
+
+
 

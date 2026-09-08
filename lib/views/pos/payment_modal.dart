@@ -31,6 +31,20 @@ class _PaymentModalState extends State<PaymentModal> {
 
   String _selectedMethod = 'upi'; // 'cash' | 'upi' | 'credit'
   bool _isProcessing = false;
+  StoreProfileModel? _storeProfile;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadStoreProfile();
+  }
+
+  Future<void> _loadStoreProfile() async {
+    try {
+      final p = await LocalDatabase.instance.getStoreProfile();
+      if (mounted) setState(() => _storeProfile = p);
+    } catch (_) {}
+  }
 
   int get totalPaise {
     int sum = 0;
@@ -43,7 +57,11 @@ class _PaymentModalState extends State<PaymentModal> {
   // Generates standard UPI payment URI
   String get upiPaymentUrl {
     final double rupees = totalPaise / 100.0;
-    return 'upi://pay?pa=proventure@icici&pn=KamaiPlus+Store&am=$rupees&cu=INR&tn=POS+Bill';
+    final vpa = _storeProfile?.upiVpa.trim();
+    final activeVpa = (vpa != null && vpa.isNotEmpty) ? vpa : 'proventure@icici';
+    final sName = _storeProfile?.storeName.trim();
+    final activeName = (sName != null && sName.isNotEmpty) ? sName : 'KamaiPlus Store';
+    return 'upi://pay?pa=$activeVpa&pn=${Uri.encodeComponent(activeName)}&am=${rupees.toStringAsFixed(2)}&cu=INR&tn=POS+Bill';
   }
 
   Future<void> _processPayment() async {

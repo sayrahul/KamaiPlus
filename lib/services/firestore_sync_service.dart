@@ -43,6 +43,11 @@ class FirestoreSyncService {
       final currentUid = FirebaseAuth.instance.currentUser?.uid ?? '';
 
       await firestore.collection('businesses').doc(bizId).set({
+        'id': bizId,
+        'business_id': bizId,
+        'name': profile.storeName,
+        'shop_name': profile.storeName,
+        'business_name': profile.storeName,
         'store_name': profile.storeName,
         'tagline': profile.tagline,
         'owner_name': profile.ownerName,
@@ -54,16 +59,35 @@ class FirestoreSyncService {
         'business_type': profile.businessType,
         'address': profile.address,
         'pincode': profile.pincode,
+        'city': profile.pincode,
         'gstin': profile.gstin,
         'fssai': profile.fssai,
         'is_pro': profile.isPro,
         'pro_plan': profile.proPlan,
         'pro_expiry': profile.proExpiry,
+        'subscription_tier': profile.isPro ? (profile.proPlan.isNotEmpty ? profile.proPlan : 'pro') : 'free',
+        'subscription_expires_at': profile.proExpiry,
         'razorpay_payment_id': profile.razorpayPaymentId,
         'fcm_token': fcmToken,
         'last_synced_at': FieldValue.serverTimestamp(),
         'platform': 'android_native',
       }, SetOptions(merge: true));
+
+      // Also mirror to merchants collection for Admin Portal fast lookup
+      try {
+        await firestore.collection('merchants').doc(bizId).set({
+          'id': bizId,
+          'business_id': bizId,
+          'name': profile.storeName,
+          'owner_name': profile.ownerName,
+          'phone': profile.phone,
+          'email': profile.email,
+          'is_pro': profile.isPro,
+          'subscription_tier': profile.isPro ? (profile.proPlan.isNotEmpty ? profile.proPlan : 'pro') : 'free',
+          'subscription_expires_at': profile.proExpiry,
+          'updated_at': FieldValue.serverTimestamp(),
+        }, SetOptions(merge: true));
+      } catch (_) {}
 
       // 2. Sync all pending sales bills
       final pendingSales = await LocalDatabase.instance.getPendingSales(limit: 50);
@@ -200,10 +224,10 @@ class FirestoreSyncService {
         final bizDoc = await firestore.collection('businesses').doc(_activeBusinessId).get();
         if (bizDoc.exists) {
           final d = bizDoc.data();
-          if (d != null && (d['is_pro'] == true || d['is_pro'] == 1)) {
-            final plan = d['pro_plan']?.toString() ?? 'annual';
+          if (d != null && (d['is_pro'] == true || d['is_pro'] == 1 || d['subscription_tier'] == 'pro' || d['subscription_tier'] == 'annual' || d['subscription_tier'] == 'monthly')) {
+            final plan = d['pro_plan']?.toString() ?? d['subscription_tier']?.toString() ?? 'annual';
             final paymentId = d['razorpay_payment_id']?.toString() ?? 'cloud_verified';
-            final expiryStr = d['pro_expiry']?.toString();
+            final expiryStr = (d['pro_expiry'] ?? d['subscription_expires_at'] ?? d['subscription_valid_until'])?.toString();
             final expiry = expiryStr != null ? DateTime.tryParse(expiryStr) : null;
             await LocalDatabase.instance.activateProMembership(
               plan: plan,

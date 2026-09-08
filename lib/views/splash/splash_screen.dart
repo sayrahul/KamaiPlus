@@ -23,6 +23,7 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
   late AnimationController _controller;
   late Animation<double> _scaleAnimation;
   late Animation<double> _fadeAnimation;
+  Timer? _splashTimer;
 
   @override
   void initState() {
@@ -44,7 +45,7 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
 
     _controller.forward();
 
-    Timer(const Duration(milliseconds: 2200), () async {
+    _splashTimer = Timer(const Duration(milliseconds: 2200), () async {
       if (mounted) {
         final prefs = await SharedPreferences.getInstance();
         final isLoggedIn = prefs.getBool('is_logged_in') ?? false;
@@ -142,6 +143,7 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
 
   @override
   void dispose() {
+    _splashTimer?.cancel();
     _controller.dispose();
     super.dispose();
   }
