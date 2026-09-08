@@ -22,6 +22,7 @@ class CustomersScreen extends StatefulWidget {
 class _CustomersScreenState extends State<CustomersScreen> {
   List<CustomerModel> _customers = [];
   bool _isLoading = true;
+  bool _isPro = false;
   String _search = '';
   String _filter = 'All';
 
@@ -33,9 +34,11 @@ class _CustomersScreenState extends State<CustomersScreen> {
 
   Future<void> _loadCustomers() async {
     try {
+      final profile = await LocalDatabase.instance.getStoreProfile();
       final customers = await LocalDatabase.instance.getAllCustomers();
       if (mounted) {
         setState(() {
+          _isPro = profile.isPro;
           _customers = customers;
           _isLoading = false;
         });
@@ -63,6 +66,56 @@ class _CustomersScreenState extends State<CustomersScreen> {
   int get _activeUdharCount => _customers.where((c) => c.currentBalancePaise > 0).length;
 
   void _showAddCustomerModal() {
+    if (!_isPro && _customers.length >= 100) {
+      showDialog(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
+          title: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFEF3C7),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: const Icon(Icons.group_add_rounded, color: Color(0xFFD97706), size: 22),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  'Customer Limit Reached',
+                  style: GoogleFonts.plusJakartaSans(fontSize: 16.5, fontWeight: FontWeight.w800),
+                ),
+              ),
+            ],
+          ),
+          content: Text(
+            'KamaiPlus Free plan supports up to 100 customers with basic ledger.\n\nTo manage unlimited customers, bulk WhatsApp reminders, and multi-device cloud backup, please upgrade to KamaiPlus Pro.',
+            style: GoogleFonts.plusJakartaSans(fontSize: 13, color: const Color(0xFF475569)),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: Text('Close', style: GoogleFonts.plusJakartaSans(color: const Color(0xFF64748B))),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                Navigator.pop(ctx);
+                Navigator.pushNamed(context, '/settings');
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFFFBBF24),
+                foregroundColor: const Color(0xFF0F172A),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              ),
+              child: Text('Upgrade to Pro', style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w800)),
+            ),
+          ],
+        ),
+      );
+      return;
+    }
     final nameCtrl = TextEditingController();
     final phoneCtrl = TextEditingController();
     final limitCtrl = TextEditingController(text: '5000');

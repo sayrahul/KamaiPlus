@@ -100,59 +100,7 @@ class _LoginScreenState extends State<LoginScreen> {
     }
   }
 
-  void _showResetConfirmDialog() {
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: const Color(0xFF0F172A),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(20),
-          side: const BorderSide(color: Color(0xFF1E293B)),
-        ),
-        title: Row(
-          children: [
-            const Icon(Icons.cleaning_services_rounded, color: Color(0xFFF59E0B), size: 22),
-            const SizedBox(width: 10),
-            Text(
-              'Start Fresh Onboarding?',
-              style: GoogleFonts.outfit(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 18),
-            ),
-          ],
-        ),
-        content: Text(
-          'Is option se device ka onboarding status reset ho jayega aur aap ek naya store profile setup kar sakenge.',
-          style: GoogleFonts.inter(color: const Color(0xFF94A3B8), fontSize: 13),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: Text('Cancel', style: GoogleFonts.inter(color: const Color(0xFF64748B))),
-          ),
-          ElevatedButton(
-            onPressed: () async {
-              Navigator.pop(ctx);
-              final prefs = await SharedPreferences.getInstance();
-              await prefs.setBool('is_onboarded', false);
-              await prefs.setBool('is_logged_in', false);
-              if (!mounted) return;
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => const SignupStoreScreen(),
-                ),
-              );
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFFF59E0B),
-              foregroundColor: const Color(0xFF0F172A),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-            ),
-            child: Text('Start Fresh', style: GoogleFonts.outfit(fontWeight: FontWeight.w700)),
-          ),
-        ],
-      ),
-    );
-  }
+
 
   @override
   Widget build(BuildContext context) {
@@ -394,36 +342,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     ),
                   ],
                 ),
-                const SizedBox(height: 24),
-
-                // Reset Device Data Link (Start Fresh Signup)
-                GestureDetector(
-                  onTap: _showResetConfirmDialog,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF1E293B).withValues(alpha: 0.6),
-                      borderRadius: BorderRadius.circular(10),
-                      border: Border.all(color: const Color(0xFF334155), width: 0.9),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const Icon(Icons.cleaning_services_rounded, size: 14, color: Color(0xFFF59E0B)),
-                        const SizedBox(width: 7),
-                        Text(
-                          'Reset Device Data (Start Fresh)',
-                          style: GoogleFonts.inter(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                            color: const Color(0xFFCBD5E1),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 24),
+                const SizedBox(height: 20),
 
                 // Feature Badges: 100% Offline POS & Cloud Sync & Backup
                 Row(

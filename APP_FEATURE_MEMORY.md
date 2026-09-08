@@ -526,3 +526,31 @@ Comprehensive enterprise-grade retail UX upgrade suite aligned with PhonePe Busi
     - **Pure Vertical Catalog Seeding (`SignupStoreScreen`):**
       - Calls `LocalDatabase.instance.completeFactoryReset(resetStoreProfile: true)` prior to seeding new vertical products, preventing cross-vertical product pollution.
 
+31. **Vertical Customizations, Soundbox Audio Toggle, Real Gemini AI Inward, & Free vs Pro Tiering (LOCKED):**
+    - **Login Screen Clean-up:**
+      - Removed "Reset Device Data (Start Fresh)" button and its dialog from `LoginScreen` to avoid accidental merchant data wipe on production.
+    - **Soundbox Audio Toggle in Top Bar (`PwaTopBar`):**
+      - Replaced WhatsApp icon in `PwaTopBar` with an interactive Audio On/Off toggle button (`Icons.volume_up_rounded` / `Icons.volume_off_rounded`).
+      - State is persisted via `SharedPreferences` key `soundbox_audio_enabled`.
+      - When disabled, all TTS voice announcements in `SoundboxService` are cleanly bypassed.
+    - **Pharmacy Vertical Doctor Management (`DoctorModel`, `doctors` table):**
+      - Pharmacy checkout features prescribing Doctor selection (`Dr. Self / General`, added doctors, or "+ Add Doctor").
+      - Doctors are persisted in SQLite `doctors` table (`id`, `name`, `phone`, `qualification`, `reg_number`, `created_at`). User can add and delete doctors anytime.
+      - Doctor Name is stored with the sale (`sales.doctor_name`) and rendered on the POS receipt preview and native A4 PDF invoice.
+    - **Restaurant Vertical Dine-In Table Selection:**
+      - Restaurant checkout features Table selector (`Takeaway`, `Table 1` to `Table 10`).
+      - Selected table is stored in `sales.table_number` and rendered on receipt preview and native A4 PDF invoice.
+    - **Real Google Gemini 1.5 Flash AI Inward (Bill Parcha OCR):**
+      - Implemented `GeminiAiService` using Google Gemini 1.5 Flash endpoint (`dart:io` `HttpClient` + JSON schema prompt, zero external dependencies).
+      - API Key retrieved from `env.local`.
+      - Captures camera / gallery parcha images, sends base64, cleans Markdown/JSON formatting, and extracts structured items (`itemName`, `qty`, `costPricePaise`, `sellingPricePaise`, `hsnCode`, `gstRatePercent`).
+      - Monthly scan counter (`ai_picture_scan_count_YYYY_MM`) tracks usage and enforces a 10 picture scan/month limit for Free users. Excel & PDF inward remains unlimited.
+      - Confirmed items are batch-inserted directly into SQLite `products`.
+    - **Free vs Pro Feature Gates & Invariants:**
+      - **Unlimited Bills/Day & Unlimited Catalog:** Always 100% Free for all Indian retail merchants.
+      - **7-Day Sales History on Free Plan:** `TransactionsScreen` restricts historical sales view and date filters to 7 days for Free merchants; displays info banner and upgrade dialog for older records.
+      - **100 Customers Limit on Free Plan:** Free merchants can create up to 100 customers with full basic ledger; adding the 101st customer requires Pro upgrade.
+      - **Screen-only GST Reports on Free Plan:** Dashboard tax summaries and HSN breakdowns are viewable on screen for Free; CA Excel export, Tally Prime XML, and GSTR-1 JSON downloads are locked behind Pro.
+      - **"Powered by KamaiPlus" Invoice Branding:** Free invoices include the KamaiPlus branding box at the bottom of the native A4 PDF; Pro invoices feature clean custom merchant footer notes.
+
+

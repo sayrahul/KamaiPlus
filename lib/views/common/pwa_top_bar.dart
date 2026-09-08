@@ -1,3 +1,5 @@
+import 'package:flutter/services.dart';
+import '../../services/soundbox_service.dart';
 import 'upi_standee_modal.dart';
 import 'pro_upgrade_modal.dart';
 import 'store_logo_avatar.dart';
@@ -6,7 +8,6 @@ import 'package:google_fonts/google_fonts.dart';
 import '../../core/database/local_database.dart';
 import '../../models/models.dart';
 import '../settings/store_profile_screen.dart';
-import '../growth/growth_campaigns_screen.dart';
 
 class PwaTopBar extends StatefulWidget implements PreferredSizeWidget {
   const PwaTopBar({super.key});
@@ -20,11 +21,13 @@ class PwaTopBar extends StatefulWidget implements PreferredSizeWidget {
 
 class _PwaTopBarState extends State<PwaTopBar> {
   StoreProfileModel _profile = StoreProfileModel();
+  bool _isSoundboxEnabled = true;
 
   @override
   void initState() {
     super.initState();
     _loadProfile();
+    _isSoundboxEnabled = SoundboxService.instance.isAudioEnabled;
   }
 
   Future<void> _loadProfile() async {
@@ -32,6 +35,38 @@ class _PwaTopBarState extends State<PwaTopBar> {
       final p = await LocalDatabase.instance.getStoreProfile();
       if (mounted) setState(() => _profile = p);
     } catch (_) {}
+  }
+
+  Future<void> _toggleSoundbox() async {
+    HapticFeedback.mediumImpact();
+    final newState = !_isSoundboxEnabled;
+    await SoundboxService.instance.setAudioEnabled(newState);
+    if (!mounted) return;
+    setState(() => _isSoundboxEnabled = newState);
+    ScaffoldMessenger.of(context).hideCurrentSnackBar();
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Row(
+          children: [
+            Icon(
+              newState ? Icons.volume_up_rounded : Icons.volume_off_rounded,
+              color: Colors.white,
+              size: 20,
+            ),
+            const SizedBox(width: 8),
+            Text(
+              newState
+                  ? 'Voice Soundbox ON (Payment bolkar batayega)'
+                  : 'Voice Soundbox MUTE (Audio off hai)',
+              style: GoogleFonts.outfit(fontWeight: FontWeight.w600, fontSize: 13),
+            ),
+          ],
+        ),
+        backgroundColor: newState ? const Color(0xFF059669) : const Color(0xFF475569),
+        behavior: SnackBarBehavior.floating,
+        duration: const Duration(seconds: 2),
+      ),
+    );
   }
 
   @override
@@ -107,30 +142,27 @@ class _PwaTopBarState extends State<PwaTopBar> {
               ),
               const SizedBox(width: 6),
 
-              // 3. Official WhatsApp Button
+              // 3. Voice Soundbox Audio Toggle Button (Mute / Unmute)
               Material(
                 color: Colors.transparent,
                 child: InkWell(
-                  onTap: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(builder: (_) => const GrowthCampaignsScreen()),
-                    );
-                  },
+                  onTap: _toggleSoundbox,
                   borderRadius: BorderRadius.circular(8),
                   child: Container(
                     width: 32,
                     height: 32,
                     decoration: BoxDecoration(
-                      color: const Color(0xFFECFDF5),
+                      color: _isSoundboxEnabled ? const Color(0xFFECFDF5) : const Color(0xFFF1F5F9),
                       borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: const Color(0xFFA7F3D0)),
+                      border: Border.all(
+                        color: _isSoundboxEnabled ? const Color(0xFFA7F3D0) : const Color(0xFFCBD5E1),
+                      ),
                     ),
-                    padding: const EdgeInsets.all(7),
-                    child: Image.asset(
-                      'assets/images/whatsapp_logo.png',
-                      width: 18,
-                      height: 18,
+                    padding: const EdgeInsets.all(5),
+                    child: Icon(
+                      _isSoundboxEnabled ? Icons.volume_up_rounded : Icons.volume_off_rounded,
+                      size: 19,
+                      color: _isSoundboxEnabled ? const Color(0xFF059669) : const Color(0xFF64748B),
                     ),
                   ),
                 ),

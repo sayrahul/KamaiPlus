@@ -20,6 +20,7 @@ class TransactionsScreen extends StatefulWidget {
 class _TransactionsScreenState extends State<TransactionsScreen> {
   List<SaleModel> _sales = [];
   bool _isLoading = true;
+  bool _isPro = false;
   String _searchQuery = '';
   String _selectedDateFilter = 'All'; // 'All' | 'Today' | 'Yesterday' | '7 Days' | 'Month'
   String _selectedModeFilter = 'All'; // 'All' | 'Cash' | 'UPI' | 'Udhar'
@@ -36,9 +37,11 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
 
   Future<void> _loadSales() async {
     try {
+      final profile = await LocalDatabase.instance.getStoreProfile();
       final sales = await LocalDatabase.instance.getAllSales(limit: 300);
       if (mounted) {
         setState(() {
+          _isPro = profile.isPro;
           _sales = sales;
           _isLoading = false;
         });
@@ -48,9 +51,66 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
     }
   }
 
+  void _show7DayLimitDialog() {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: const Color(0xFFFEF3C7),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: const Icon(Icons.lock_rounded, color: Color(0xFFD97706), size: 22),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                '7-Day History Limit',
+                style: GoogleFonts.plusJakartaSans(fontSize: 16.5, fontWeight: FontWeight.w800),
+              ),
+            ),
+          ],
+        ),
+        content: Text(
+          'KamaiPlus Free plan provides 7 days sales history with unlimited daily billing.\n\nUpgrade to KamaiPlus Pro for Lifetime Sales History, Unlimited CA Reports, GSTR-1, and Real-time Cloud Backup.',
+          style: GoogleFonts.plusJakartaSans(fontSize: 13, color: const Color(0xFF475569)),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text('Close', style: GoogleFonts.plusJakartaSans(color: const Color(0xFF64748B))),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(ctx);
+              Navigator.pushNamed(context, '/settings');
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFFFBBF24),
+              foregroundColor: const Color(0xFF0F172A),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            ),
+            child: Text('Upgrade to Pro', style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w800)),
+          ),
+        ],
+      ),
+    );
+  }
+
   List<SaleModel> get _filteredSales {
     final now = DateTime.now();
     var list = _sales.where((sale) {
+      // 0. Free Plan: Enforce 7-Day History Limit
+      if (!_isPro) {
+        if (now.difference(sale.createdAt).inDays > 7) {
+          return false;
+        }
+      }
+
       // 1. Search Filter
       if (_searchQuery.isNotEmpty) {
         final query = _searchQuery.toLowerCase();
@@ -458,6 +518,52 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
                   ),
                   const SizedBox(height: 10),
 
+                  // Free Plan 7-Day Notice Banner
+                  if (!_isPro)
+                    Container(
+                      margin: const EdgeInsets.only(bottom: 10),
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFFFFBEB),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: const Color(0xFFFDE68A)),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.history_rounded, size: 16, color: Color(0xFFD97706)),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              'Free Plan: Showing last 7 days. Upgrade for lifetime history.',
+                              style: GoogleFonts.inter(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w600,
+                                color: const Color(0xFF92400E),
+                              ),
+                            ),
+                          ),
+                          GestureDetector(
+                            onTap: _show7DayLimitDialog,
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFF59E0B),
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                              child: Text(
+                                'UNLOCK',
+                                style: GoogleFonts.outfit(
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w800,
+                                  color: Colors.white,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+
                   // 5. Transaction Invoices List
                   if (list.isEmpty)
                     _buildEmptyState()
@@ -747,6 +853,10 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
                   visualDensity: VisualDensity.compact,
                   onSelected: (_) {
                     HapticFeedback.selectionClick();
+                    if (!_isPro && (df == 'Month' || df == 'All')) {
+                      _show7DayLimitDialog();
+                      return;
+                    }
                     setState(() => _selectedDateFilter = df);
                   },
                 ),

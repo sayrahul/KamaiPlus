@@ -274,6 +274,10 @@ public class MainActivity extends FlutterActivity implements TextToSpeech.OnInit
                                 String footerNote = call.argument("footerNote");
                                 Boolean showDynamicUpiQr = call.argument("showDynamicUpiQr");
                                 String upiId = call.argument("upiId");
+                                String doctorName = call.argument("doctorName");
+                                String tableNumber = call.argument("tableNumber");
+                                Boolean isPro = call.argument("isPro");
+                                if (isPro == null) isPro = false;
 
                                 if (invoiceNumber == null) invoiceNumber = "INV-" + System.currentTimeMillis();
                                 if (storeName == null || storeName.trim().isEmpty()) storeName = "KamaiPlus Store";
@@ -455,7 +459,13 @@ public class MainActivity extends FlutterActivity implements TextToSpeech.OnInit
 
                                         String custStr = "BILLED TO: " + customerName;
                                         if (customerPhone != null && !customerPhone.trim().isEmpty()) {
-                                            custStr += "  •  Mobile: " + customerPhone;
+                                            custStr += "  •  Mob: " + customerPhone;
+                                        }
+                                        if (doctorName != null && !doctorName.trim().isEmpty()) {
+                                            custStr += "  •  Dr: " + doctorName;
+                                        }
+                                        if (tableNumber != null && !tableNumber.trim().isEmpty()) {
+                                            custStr += "  •  Table: " + tableNumber;
                                         }
                                         canvas.drawText(custStr, 46, 126, boldTextPaint);
 
@@ -600,12 +610,14 @@ public class MainActivity extends FlutterActivity implements TextToSpeech.OnInit
                                         promoText.setTextSize(8.5f);
                                         promoText.setFakeBoldText(true);
                                         promoText.setAntiAlias(true);
-                                        canvas.drawText("⚡ Billed with Kamai+ POS • " + footerNote, 46, promoY + 14, promoText);
+                                        String promoLabel = isPro ? ("⚡ " + storeName + " • " + footerNote) : ("⚡ Powered by KamaiPlus • " + footerNote);
+                                        canvas.drawText(promoLabel, 46, promoY + 14, promoText);
                                     }
 
                                     // --- FOOTER ON EVERY PAGE ---
                                     canvas.drawLine(36, 810, 559, 810, linePaint);
-                                    canvas.drawText("Kamai+ POS • Retail & Inventory Software", 36, 822, subPaint);
+                                    String footerBranding = isPro ? (storeName + " • Certified GST/Retail Invoice") : "Powered by KamaiPlus • Retail & Inventory Software";
+                                    canvas.drawText(footerBranding, 36, 822, subPaint);
                                     canvas.drawText("Page " + pageIdx + " of " + totalPages, 505, 822, boldTextPaint);
 
                                     document.finishPage(page);

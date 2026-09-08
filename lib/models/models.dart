@@ -278,6 +278,42 @@ class CartItemModel {
   };
 }
 
+class DoctorModel {
+  final String id;
+  final String businessId;
+  final String name;
+  final String? qualification;
+  final String? registrationNumber;
+  final String? phone;
+
+  DoctorModel({
+    required this.id,
+    required this.businessId,
+    required this.name,
+    this.qualification,
+    this.registrationNumber,
+    this.phone,
+  });
+
+  Map<String, dynamic> toMap() => {
+    'id': id,
+    'business_id': businessId,
+    'name': name,
+    'qualification': qualification,
+    'registration_number': registrationNumber,
+    'phone': phone,
+  };
+
+  factory DoctorModel.fromMap(Map<String, dynamic> map) => DoctorModel(
+    id: map['id'] ?? '',
+    businessId: map['business_id'] ?? '',
+    name: map['name'] ?? '',
+    qualification: map['qualification'],
+    registrationNumber: map['registration_number'],
+    phone: map['phone'],
+  );
+}
+
 class SaleModel {
   final String id;
   final String businessId;
@@ -285,6 +321,8 @@ class SaleModel {
   final String? customerId;
   final String? customerName;
   final String? customerPhone;
+  final String? doctorName;
+  final String? tableNumber;
   final int subtotalPaise;
   final int taxAmountPaise;
   final int discountPaise;
@@ -305,6 +343,8 @@ class SaleModel {
     this.customerId,
     this.customerName,
     this.customerPhone,
+    this.doctorName,
+    this.tableNumber,
     required this.subtotalPaise,
     required this.taxAmountPaise,
     this.discountPaise = 0,
@@ -326,6 +366,8 @@ class SaleModel {
     'customer_id': customerId,
     'customer_name': customerName,
     'customer_phone': customerPhone,
+    'doctor_name': doctorName,
+    'table_number': tableNumber,
     'subtotal_paise': subtotalPaise,
     'tax_amount_paise': taxAmountPaise,
     'discount_paise': discountPaise,
@@ -355,6 +397,8 @@ class SaleModel {
       customerId: map['customer_id'],
       customerName: map['customer_name'],
       customerPhone: map['customer_phone'],
+      doctorName: map['doctor_name'],
+      tableNumber: map['table_number'],
       subtotalPaise: map['subtotal_paise'] ?? 0,
       taxAmountPaise: map['tax_amount_paise'] ?? 0,
       discountPaise: map['discount_paise'] ?? 0,

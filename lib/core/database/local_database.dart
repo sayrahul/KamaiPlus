@@ -190,6 +190,22 @@ class LocalDatabase {
     try {
       await db.execute('ALTER TABLE sales ADD COLUMN split_credit_paise INTEGER DEFAULT 0');
     } catch (_) {}
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS doctors (
+        id TEXT PRIMARY KEY,
+        business_id TEXT NOT NULL,
+        name TEXT NOT NULL,
+        qualification TEXT,
+        registration_number TEXT,
+        phone TEXT
+      )
+    ''');
+    try {
+      await db.execute('ALTER TABLE sales ADD COLUMN doctor_name TEXT');
+    } catch (_) {}
+    try {
+      await db.execute('ALTER TABLE sales ADD COLUMN table_number TEXT');
+    } catch (_) {}
   }
 
   Future _createDB(Database db, int version) async {
@@ -241,6 +257,17 @@ class LocalDatabase {
     ''');
 
     await db.execute('''
+      CREATE TABLE doctors (
+        id TEXT PRIMARY KEY,
+        business_id TEXT NOT NULL,
+        name TEXT NOT NULL,
+        qualification TEXT,
+        registration_number TEXT,
+        phone TEXT
+      )
+    ''');
+
+    await db.execute('''
       CREATE TABLE sales (
         id TEXT PRIMARY KEY,
         business_id TEXT NOT NULL,
@@ -248,6 +275,8 @@ class LocalDatabase {
         customer_id TEXT,
         customer_name TEXT,
         customer_phone TEXT,
+        doctor_name TEXT,
+        table_number TEXT,
         subtotal_paise INTEGER NOT NULL,
         tax_amount_paise INTEGER NOT NULL,
         discount_paise INTEGER NOT NULL,
@@ -474,6 +503,8 @@ class LocalDatabase {
     required List<CartItemModel> cartItems,
     required String paymentMethod,
     CustomerModel? customer,
+    String? doctorName,
+    String? tableNumber,
     int discountPaise = 0,
     int splitCashPaise = 0,
     int splitUpiPaise = 0,
@@ -503,6 +534,8 @@ class LocalDatabase {
       customerId: customer?.id,
       customerName: customer?.name,
       customerPhone: customer?.phone,
+      doctorName: doctorName,
+      tableNumber: tableNumber,
       subtotalPaise: subtotalPaise,
       taxAmountPaise: totalTaxPaise,
       discountPaise: discountPaise,
@@ -1229,5 +1262,22 @@ class LocalDatabase {
         await txn.delete('store_profile');
       }
     });
+  }
+
+  // --- DOCTOR MANAGEMENT (Pharmacy Vertical) ---
+  Future<List<DoctorModel>> getDoctors() async {
+    final db = await instance.database;
+    final result = await db.query('doctors', orderBy: 'name ASC');
+    return result.map((json) => DoctorModel.fromMap(json)).toList();
+  }
+
+  Future<void> upsertDoctor(DoctorModel doctor) async {
+    final db = await instance.database;
+    await db.insert('doctors', doctor.toMap(), conflictAlgorithm: ConflictAlgorithm.replace);
+  }
+
+  Future<void> deleteDoctor(String id) async {
+    final db = await instance.database;
+    await db.delete('doctors', where: 'id = ?', whereArgs: [id]);
   }
 }

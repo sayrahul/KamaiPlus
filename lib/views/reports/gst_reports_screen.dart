@@ -30,6 +30,7 @@ class _GstReportsScreenState extends State<GstReportsScreen> {
 
   List<SaleModel> _sales = [];
   bool _isLoading = true;
+  bool _isPro = false;
 
   @override
   void initState() {
@@ -39,9 +40,11 @@ class _GstReportsScreenState extends State<GstReportsScreen> {
 
   Future<void> _loadSales() async {
     try {
+      final profile = await LocalDatabase.instance.getStoreProfile();
       final sales = await LocalDatabase.instance.getAllSales(limit: 500);
       if (mounted) {
         setState(() {
+          _isPro = profile.isPro;
           _sales = sales;
           _isLoading = false;
         });
@@ -91,6 +94,84 @@ class _GstReportsScreenState extends State<GstReportsScreen> {
 
   void _showExportModal(String type) {
     HapticFeedback.mediumImpact();
+
+    if (!_isPro) {
+      showDialog(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
+          title: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFEF3C7),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: const Icon(Icons.lock_rounded, color: Color(0xFFD97706), size: 22),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  'Download Lock (Pro)',
+                  style: GoogleFonts.outfit(fontSize: 17, fontWeight: FontWeight.w800),
+                ),
+              ),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFECFDF5),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: const Color(0xFFA7F3D0)),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.check_circle_rounded, color: Color(0xFF059669), size: 16),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'Screen summary view is 100% Free on KamaiPlus!',
+                        style: GoogleFonts.inter(fontSize: 11.5, fontWeight: FontWeight.w700, color: const Color(0xFF065F46)),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 12),
+              Text(
+                'Exporting $type requires KamaiPlus Pro.\n\nPro unlocks:\n• Official CA-ready Excel / CSV tax filings\n• 1-Click Tally Prime XML import file\n• GSTR-1 government portal JSON file\n• Unlimited lifetime transaction history\n• Multi-device real-time sync',
+                style: GoogleFonts.inter(fontSize: 12.5, color: const Color(0xFF475569), height: 1.4),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: Text('Close', style: GoogleFonts.inter(fontWeight: FontWeight.w600, color: const Color(0xFF64748B))),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                Navigator.pop(ctx);
+                Navigator.pushNamed(context, '/settings');
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFFFBBF24),
+                foregroundColor: const Color(0xFF0F172A),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              ),
+              child: Text('Upgrade to Pro', style: GoogleFonts.outfit(fontSize: 13, fontWeight: FontWeight.w800)),
+            ),
+          ],
+        ),
+      );
+      return;
+    }
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(

@@ -1,370 +1,403 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:uuid/uuid.dart';
 import '../../core/database/local_database.dart';
+import '../../core/utils/money_formatter.dart';
 import '../../models/models.dart';
+import '../../services/gemini_ai_service.dart';
+import '../../services/firestore_sync_service.dart';
 
 class AiInwardSheet extends StatelessWidget {
   final VoidCallback? onInwardComplete;
 
   const AiInwardSheet({super.key, this.onInwardComplete});
 
-  void _simulateAiScan(BuildContext context, String mode) {
-    int scanStep = 0; // 0: Scanning viewfinder, 1: Review extracted parcha
+  static Future<void> show(BuildContext context, {VoidCallback? onInwardComplete}) {
+    return showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => AiInwardSheet(onInwardComplete: onInwardComplete),
+    );
+  }
+
+  void _showImageSourcePicker(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (sheetCtx) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Select Bill Photo Source',
+                style: GoogleFonts.plusJakartaSans(fontSize: 16, fontWeight: FontWeight.w800),
+              ),
+              const SizedBox(height: 14),
+              ListTile(
+                leading: Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(color: const Color(0xFFFEF3C7), borderRadius: BorderRadius.circular(10)),
+                  child: const Icon(Icons.camera_alt_rounded, color: Color(0xFFD97706)),
+                ),
+                title: Text('Camera (Click Live Parcha)', style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700)),
+                subtitle: Text('Capture paper bill or mandi slip directly', style: GoogleFonts.plusJakartaSans(fontSize: 11)),
+                onTap: () {
+                  Navigator.pop(sheetCtx);
+                  _processImageScan(context, ImageSource.camera);
+                },
+              ),
+              const Divider(height: 1),
+              ListTile(
+                leading: Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(color: const Color(0xFFEFF6FF), borderRadius: BorderRadius.circular(10)),
+                  child: const Icon(Icons.photo_library_rounded, color: Color(0xFF2563EB)),
+                ),
+                title: Text('Gallery / Files', style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700)),
+                subtitle: Text('Pick photo from phone gallery or WhatsApp download', style: GoogleFonts.plusJakartaSans(fontSize: 11)),
+                onTap: () {
+                  Navigator.pop(sheetCtx);
+                  _processImageScan(context, ImageSource.gallery);
+                },
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _processImageScan(BuildContext context, ImageSource source) async {
+    try {
+      final picker = ImagePicker();
+      final XFile? file = await picker.pickImage(
+        source: source,
+        imageQuality: 85,
+        maxWidth: 1600,
+      );
+
+      if (file == null) return;
+
+      final bytes = await file.readAsBytes();
+      if (!context.mounted) return;
+
+      _runGeminiExtraction(context, bytes);
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Could not open image picker: $e'), backgroundColor: Colors.red),
+        );
+      }
+    }
+  }
+
+  void _runGeminiExtraction(BuildContext context, Uint8List imageBytes) {
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (ctx) => StatefulBuilder(
-        builder: (context, setDialogState) {
-          if (scanStep == 0) {
-            // Auto transition from scanning to extracted items after 1.5 seconds
-            Future.delayed(const Duration(milliseconds: 1600), () {
-              if (ctx.mounted && scanStep == 0) {
-                setDialogState(() => scanStep = 1);
-              }
-            });
-
-            return AlertDialog(
-              backgroundColor: const Color(0xFF0F172A),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-              contentPadding: const EdgeInsets.all(20),
-              content: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  // Viewfinder Header
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      builder: (dialogCtx) => StatefulBuilder(
+        builder: (ctx, setDialogState) {
+          return FutureBuilder<AiInwardResult>(
+            future: GeminiAiService.extractItemsFromImage(imageBytes),
+            builder: (context, snapshot) {
+              if (snapshot.connectionState == ConnectionState.waiting) {
+                // Scanning viewfinder animation
+                return AlertDialog(
+                  backgroundColor: const Color(0xFF0F172A),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+                  contentPadding: const EdgeInsets.all(20),
+                  content: Column(
+                    mainAxisSize: MainAxisSize.min,
                     children: [
                       Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          Container(
-                            padding: const EdgeInsets.all(6),
-                            decoration: BoxDecoration(
-                              color: const Color(0xFF10B981).withValues(alpha: 0.2),
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: const Icon(Icons.document_scanner_rounded, color: Color(0xFF34D399), size: 18),
+                          Row(
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.all(6),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFF10B981).withValues(alpha: 0.2),
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: const Icon(Icons.document_scanner_rounded, color: Color(0xFF34D399), size: 18),
+                              ),
+                              const SizedBox(width: 8),
+                              Text(
+                                'Gemini 1.5 Vision OCR',
+                                style: GoogleFonts.outfit(fontSize: 15, fontWeight: FontWeight.w700, color: Colors.white),
+                              ),
+                            ],
                           ),
-                          const SizedBox(width: 8),
-                          Text(
-                            'AI Vision Parcha OCR',
-                            style: GoogleFonts.outfit(fontSize: 15, fontWeight: FontWeight.w700, color: Colors.white),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF10B981).withValues(alpha: 0.15),
+                              borderRadius: BorderRadius.circular(6),
+                              border: Border.all(color: const Color(0xFF10B981).withValues(alpha: 0.4)),
+                            ),
+                            child: Text(
+                              'ANALYZING',
+                              style: GoogleFonts.inter(fontSize: 9, fontWeight: FontWeight.w800, color: const Color(0xFF34D399)),
+                            ),
                           ),
                         ],
                       ),
+                      const SizedBox(height: 18),
+
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                        height: 160,
+                        width: double.infinity,
                         decoration: BoxDecoration(
-                          color: const Color(0xFF10B981).withValues(alpha: 0.15),
-                          borderRadius: BorderRadius.circular(6),
-                          border: Border.all(color: const Color(0xFF10B981).withValues(alpha: 0.4)),
+                          color: const Color(0xFF1E293B),
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(color: const Color(0xFF334155), width: 1.5),
                         ),
-                        child: Text(
-                          'PROCESSING',
-                          style: GoogleFonts.inter(fontSize: 9, fontWeight: FontWeight.w800, color: const Color(0xFF34D399)),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 18),
-
-                  // Simulated Camera Viewfinder with Parcha Paper
-                  Container(
-                    height: 180,
-                    width: double.infinity,
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF1E293B),
-                      borderRadius: BorderRadius.circular(16),
-                      border: Border.all(color: const Color(0xFF334155), width: 1.5),
-                    ),
-                    child: Stack(
-                      alignment: Alignment.center,
-                      children: [
-                        // Parcha Paper Graphic
-                        Container(
-                          width: 170,
-                          height: 130,
-                          padding: const EdgeInsets.all(12),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFFFFFBEB),
-                            borderRadius: BorderRadius.circular(8),
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.black.withValues(alpha: 0.4),
-                                blurRadius: 12,
-                                offset: const Offset(0, 4),
+                        child: Stack(
+                          alignment: Alignment.center,
+                          children: [
+                            const Icon(Icons.receipt_long_rounded, color: Color(0xFF64748B), size: 54),
+                            Positioned(
+                              bottom: 16,
+                              child: Text(
+                                'Reading rates, quantities & items...',
+                                style: GoogleFonts.plusJakartaSans(color: const Color(0xFF94A3B8), fontSize: 11),
                               ),
-                            ],
-                          ),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Row(
-                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                children: [
-                                  Text('MANDI INWARD SLIP', style: GoogleFonts.inter(fontSize: 8, fontWeight: FontWeight.w900, color: const Color(0xFF78350F))),
-                                  Text('#9821', style: GoogleFonts.inter(fontSize: 8, color: const Color(0xFF92400E))),
-                                ],
-                              ),
-                              const Divider(height: 8, color: Color(0xFFFDE68A)),
-                              Text('1. Fortune Oil 1L x 24', style: GoogleFonts.inter(fontSize: 8, fontWeight: FontWeight.w600, color: const Color(0xFF451A03))),
-                              Text('2. Toor Dal 1kg x 30', style: GoogleFonts.inter(fontSize: 8, fontWeight: FontWeight.w600, color: const Color(0xFF451A03))),
-                              Text('3. Chakki Atta 10kg x 15', style: GoogleFonts.inter(fontSize: 8, fontWeight: FontWeight.w600, color: const Color(0xFF451A03))),
-                              const Spacer(),
-                              Row(
-                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                children: [
-                                  Text('TOTAL DUE:', style: GoogleFonts.inter(fontSize: 7.5, fontWeight: FontWeight.w800, color: const Color(0xFF78350F))),
-                                  Text('₹12,900', style: GoogleFonts.inter(fontSize: 8.5, fontWeight: FontWeight.w900, color: const Color(0xFFB45309))),
-                                ],
-                              ),
-                            ],
-                          ),
-                        ),
-
-                        // Corner Reticles
-                        Positioned(
-                          top: 8,
-                          left: 8,
-                          child: Container(width: 14, height: 14, decoration: const BoxDecoration(border: Border(top: BorderSide(color: Color(0xFF34D399), width: 2), left: BorderSide(color: Color(0xFF34D399), width: 2)))),
-                        ),
-                        Positioned(
-                          top: 8,
-                          right: 8,
-                          child: Container(width: 14, height: 14, decoration: const BoxDecoration(border: Border(top: BorderSide(color: Color(0xFF34D399), width: 2), right: BorderSide(color: Color(0xFF34D399), width: 2)))),
-                        ),
-                        Positioned(
-                          bottom: 8,
-                          left: 8,
-                          child: Container(width: 14, height: 14, decoration: const BoxDecoration(border: Border(bottom: BorderSide(color: Color(0xFF34D399), width: 2), left: BorderSide(color: Color(0xFF34D399), width: 2)))),
-                        ),
-                        Positioned(
-                          bottom: 8,
-                          right: 8,
-                          child: Container(width: 14, height: 14, decoration: const BoxDecoration(border: Border(bottom: BorderSide(color: Color(0xFF34D399), width: 2), right: BorderSide(color: Color(0xFF34D399), width: 2)))),
-                        ),
-
-                        // Scanning Laser Line
-                        Positioned(
-                          left: 0,
-                          right: 0,
-                          child: Container(
-                            height: 2,
-                            decoration: BoxDecoration(
-                              color: const Color(0xFF34D399),
-                              boxShadow: [
-                                BoxShadow(color: const Color(0xFF34D399).withValues(alpha: 0.8), blurRadius: 8, spreadRadius: 2),
-                              ],
                             ),
-                          ),
+                            Positioned(
+                              top: 8,
+                              left: 8,
+                              child: Container(width: 14, height: 14, decoration: const BoxDecoration(border: Border(top: BorderSide(color: Color(0xFF34D399), width: 2), left: BorderSide(color: Color(0xFF34D399), width: 2)))),
+                            ),
+                            Positioned(
+                              top: 8,
+                              right: 8,
+                              child: Container(width: 14, height: 14, decoration: const BoxDecoration(border: Border(top: BorderSide(color: Color(0xFF34D399), width: 2), right: BorderSide(color: Color(0xFF34D399), width: 2)))),
+                            ),
+                            Positioned(
+                              bottom: 8,
+                              left: 8,
+                              child: Container(width: 14, height: 14, decoration: const BoxDecoration(border: Border(bottom: BorderSide(color: Color(0xFF34D399), width: 2), left: BorderSide(color: Color(0xFF34D399), width: 2)))),
+                            ),
+                            Positioned(
+                              bottom: 8,
+                              right: 8,
+                              child: Container(width: 14, height: 14, decoration: const BoxDecoration(border: Border(bottom: BorderSide(color: Color(0xFF34D399), width: 2), right: BorderSide(color: Color(0xFF34D399), width: 2)))),
+                            ),
+                          ],
                         ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-
-                  // Progress & Status
-                  const LinearProgressIndicator(
-                    valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF10B981)),
-                    backgroundColor: Color(0xFF334155),
-                    minHeight: 4,
-                  ),
-                  const SizedBox(height: 12),
-                  Text(
-                    'Reading handwritten mandi parcha & bill rates...',
-                    style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF94A3B8)),
-                    textAlign: TextAlign.center,
-                  ),
-                ],
-              ),
-            );
-          }
-
-          // Stage 1: Extracted items with verification
-          return AlertDialog(
-            backgroundColor: Colors.white,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-            title: Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFECFDF5),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: const Icon(Icons.auto_awesome_rounded, color: Color(0xFF10B981), size: 22),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'AI Vision OCR Extraction',
-                        style: GoogleFonts.outfit(fontSize: 16.5, fontWeight: FontWeight.w800, color: const Color(0xFF0F172A)),
                       ),
-                      Text(
-                        'Matched: 3 Products • 99.1% Confidence',
-                        style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w600, color: const Color(0xFF059669)),
+                      const SizedBox(height: 16),
+                      const LinearProgressIndicator(
+                        valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF10B981)),
+                        backgroundColor: Color(0xFF334155),
+                        minHeight: 4,
                       ),
                     ],
                   ),
-                ),
-              ],
-            ),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFF8FAFC),
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: const Color(0xFFE2E8F0)),
-                  ),
-                  child: Row(
+                );
+              }
+
+              final res = snapshot.data;
+              if (res == null || !res.success) {
+                // Quota exceeded or error
+                final isQuota = res?.isQuotaExceeded ?? false;
+                return AlertDialog(
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                  title: Row(
                     children: [
-                      const Icon(Icons.store_rounded, size: 14, color: Color(0xFF64748B)),
-                      const SizedBox(width: 6),
+                      Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: isQuota ? const Color(0xFFFEF3C7) : const Color(0xFFFEE2E2),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Icon(isQuota ? Icons.lock_rounded : Icons.error_outline, color: isQuota ? const Color(0xFFD97706) : const Color(0xFFDC2626)),
+                      ),
+                      const SizedBox(width: 10),
                       Expanded(
                         child: Text(
-                          'Wholesale Invoice: Metro Cash & Carry #INV-9821',
-                          style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w600, color: const Color(0xFF334155)),
-                          overflow: TextOverflow.ellipsis,
+                          isQuota ? 'Monthly Limit Reached' : 'Scan Failed',
+                          style: GoogleFonts.plusJakartaSans(fontSize: 16, fontWeight: FontWeight.w800),
                         ),
                       ),
                     ],
                   ),
-                ),
-                const SizedBox(height: 12),
-                _buildExtractedRow('Fortune Sunlite Oil (1L)', '24 Pcs', '₹125.00', '₹145.00', '+16% Margin'),
-                _buildExtractedRow('Tata Sampann Toor Dal (1kg)', '30 Pcs', '₹140.00', '₹165.00', '+18% Margin'),
-                _buildExtractedRow('Aashirvaad Chakki Atta (10kg)', '15 Bags', '₹380.00', '₹425.00', '+12% Margin'),
-                const Divider(height: 20),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text('Total Inward Value:', style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w600, color: const Color(0xFF64748B))),
-                    Text('₹12,900.00', style: GoogleFonts.outfit(fontSize: 16, fontWeight: FontWeight.w900, color: const Color(0xFF059669))),
+                  content: Text(
+                    res?.errorMessage ?? 'Could not parse bill slip. Please check photo clarity.',
+                    style: GoogleFonts.plusJakartaSans(fontSize: 13, color: const Color(0xFF475569)),
+                  ),
+                  actions: [
+                    TextButton(
+                      onPressed: () => Navigator.pop(dialogCtx),
+                      child: Text('Close', style: GoogleFonts.plusJakartaSans(color: const Color(0xFF64748B))),
+                    ),
+                    if (isQuota)
+                      ElevatedButton(
+                        onPressed: () {
+                          Navigator.pop(dialogCtx);
+                          Navigator.pushNamed(context, '/settings');
+                        },
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFFFBBF24),
+                          foregroundColor: const Color(0xFF0F172A),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                        ),
+                        child: Text('Upgrade to Pro', style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w800)),
+                      ),
                   ],
-                ),
-              ],
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(ctx),
-                child: Text('Cancel', style: GoogleFonts.inter(fontWeight: FontWeight.w600, color: const Color(0xFF64748B))),
-              ),
-              ElevatedButton(
-                onPressed: () async {
-                  final messenger = ScaffoldMessenger.of(context);
-                  Navigator.pop(ctx);
-                  // Insert or update extracted products
-                  final p1 = ProductModel(
-                    id: const Uuid().v4(),
-                    businessId: 'default_business',
-                    name: 'Fortune Sunlite Oil (1L)',
-                    purchasePricePaise: 12500,
-                    sellingPricePaise: 14500,
-                    mrpPaise: 15000,
-                    stockQuantity: 24,
-                    unit: 'bottle',
-                  );
-                  final p2 = ProductModel(
-                    id: const Uuid().v4(),
-                    businessId: 'default_business',
-                    name: 'Tata Sampann Toor Dal (1kg)',
-                    purchasePricePaise: 14000,
-                    sellingPricePaise: 16500,
-                    mrpPaise: 17500,
-                    stockQuantity: 30,
-                    unit: 'packet',
-                  );
-                  final p3 = ProductModel(
-                    id: const Uuid().v4(),
-                    businessId: 'default_business',
-                    name: 'Aashirvaad Shudh Chakki Atta (10kg)',
-                    purchasePricePaise: 38000,
-                    sellingPricePaise: 42500,
-                    mrpPaise: 44000,
-                    stockQuantity: 15,
-                    unit: 'bag',
-                  );
-                  await LocalDatabase.instance.upsertProduct(p1);
-                  await LocalDatabase.instance.upsertProduct(p2);
-                  await LocalDatabase.instance.upsertProduct(p3);
+                );
+              }
 
-                  onInwardComplete?.call();
-                  messenger.showSnackBar(
-                    const SnackBar(
-                      content: Row(
+              // SUCCESS: Review and confirm inward dialog
+              final items = res.items;
+              int totalCostPaise = items.fold<int>(0, (sum, it) => sum + (it.purchasePricePaise * it.quantity).round());
+
+              return AlertDialog(
+                backgroundColor: Colors.white,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
+                insetPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 24),
+                title: Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(color: const Color(0xFFECFDF5), borderRadius: BorderRadius.circular(10)),
+                      child: const Icon(Icons.auto_awesome_rounded, color: Color(0xFF059669), size: 20),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Icon(Icons.check_circle_rounded, color: Colors.white, size: 18),
-                          SizedBox(width: 8),
-                          Text('✓ 3 items successfully added to inventory via AI Inward!'),
+                          Text('AI Inward Extraction', style: GoogleFonts.plusJakartaSans(fontSize: 15.5, fontWeight: FontWeight.w800)),
+                          Text('${items.length} Products Detected', style: GoogleFonts.plusJakartaSans(fontSize: 11, color: const Color(0xFF059669), fontWeight: FontWeight.w700)),
                         ],
                       ),
-                      backgroundColor: Color(0xFF059669),
                     ),
-                  );
-                },
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF0F172A),
-                  foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  ],
                 ),
-                child: Text('Confirm & Save Stock', style: GoogleFonts.outfit(fontWeight: FontWeight.w700)),
-              ),
-            ],
+                content: SizedBox(
+                  width: double.maxFinite,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      ConstrainedBox(
+                        constraints: const BoxConstraints(maxHeight: 260),
+                        child: ListView.separated(
+                          shrinkWrap: true,
+                          itemCount: items.length,
+                          separatorBuilder: (_, _) => const Divider(height: 1, color: Color(0xFFF1F5F9)),
+                          itemBuilder: (c, idx) {
+                            final it = items[idx];
+                            return Padding(
+                              padding: const EdgeInsets.symmetric(vertical: 6),
+                              child: Row(
+                                children: [
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Text(it.productName, style: GoogleFonts.plusJakartaSans(fontSize: 12, fontWeight: FontWeight.w700)),
+                                        const SizedBox(height: 2),
+                                        Text(
+                                          'Buy: ${MoneyFormatter.formatINR(it.purchasePricePaise)} • Sell: ${MoneyFormatter.formatINR(it.sellingPricePaise)}',
+                                          style: GoogleFonts.jetBrainsMono(fontSize: 10, color: const Color(0xFF64748B)),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                    decoration: BoxDecoration(color: const Color(0xFFF1F5F9), borderRadius: BorderRadius.circular(6)),
+                                    child: Text(
+                                      '${it.quantity % 1 == 0 ? it.quantity.toInt() : it.quantity} ${it.unit}',
+                                      style: GoogleFonts.jetBrainsMono(fontSize: 10, fontWeight: FontWeight.w700),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                      const Divider(height: 16),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text('Total Inward Cost:', style: GoogleFonts.plusJakartaSans(fontSize: 12, fontWeight: FontWeight.w700, color: const Color(0xFF475569))),
+                          Text(MoneyFormatter.formatINR(totalCostPaise), style: GoogleFonts.plusJakartaSans(fontSize: 15, fontWeight: FontWeight.w900, color: const Color(0xFF059669))),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(dialogCtx),
+                    child: Text('Discard', style: GoogleFonts.plusJakartaSans(color: const Color(0xFF64748B))),
+                  ),
+                  ElevatedButton(
+                    onPressed: () async {
+                      Navigator.pop(dialogCtx);
+                      final bizId = FirestoreSyncService.instance.activeBusinessId;
+
+                      // Save extracted items into SQLite database
+                      for (final item in items) {
+                        final prod = ProductModel(
+                          id: const Uuid().v4(),
+                          businessId: bizId,
+                          name: item.productName,
+                          purchasePricePaise: item.purchasePricePaise,
+                          sellingPricePaise: item.sellingPricePaise,
+                          mrpPaise: item.mrpPaise,
+                          stockQuantity: item.quantity,
+                          unit: item.unit,
+                        );
+                        await LocalDatabase.instance.upsertProduct(prod);
+                      }
+
+                      onInwardComplete?.call();
+
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text('✅ ${items.length} items successfully inwarded to Inventory!'),
+                            backgroundColor: const Color(0xFF059669),
+                            behavior: SnackBarBehavior.floating,
+                          ),
+                        );
+                      }
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF059669),
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                    ),
+                    child: Text('Confirm & Save Stock', style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700)),
+                  ),
+                ],
+              );
+            },
           );
         },
       ),
     );
   }
 
-  Widget _buildExtractedRow(String name, String qty, String buy, String sell, String margin) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Container(
-        padding: const EdgeInsets.all(8),
-        decoration: BoxDecoration(
-          color: const Color(0xFFF8FAFC),
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: const Color(0xFFEEF2F6)),
-        ),
-        child: Row(
-          children: [
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(name, style: GoogleFonts.outfit(fontSize: 13, fontWeight: FontWeight.w700, color: const Color(0xFF0F172A))),
-                  const SizedBox(height: 2),
-                  Row(
-                    children: [
-                      Text('Buy: $buy • Sell: $sell', style: GoogleFonts.inter(fontSize: 11, color: const Color(0xFF64748B))),
-                      const SizedBox(width: 6),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFECFDF5),
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                        child: Text(margin, style: GoogleFonts.inter(fontSize: 9, fontWeight: FontWeight.w700, color: const Color(0xFF059669))),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-              decoration: BoxDecoration(color: const Color(0xFFE2E8F0), borderRadius: BorderRadius.circular(6)),
-              child: Text(qty, style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w800, color: const Color(0xFF1E293B))),
-            ),
-          ],
-        ),
+  void _simulateFileScan(BuildContext context, String mode) {
+    Navigator.pop(context);
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('📄 Unlimited $mode Inward: Please upload file or select bill photo.'),
+        backgroundColor: const Color(0xFF0284C7),
+        behavior: SnackBarBehavior.floating,
       ),
     );
   }
@@ -398,7 +431,7 @@ class AiInwardSheet extends StatelessWidget {
           Row(
             children: [
               Text(
-                'AI Wholesale Invoice & Inward',
+                'AI Wholesale Inward (OCR)',
                 style: GoogleFonts.outfit(
                   fontSize: 16,
                   fontWeight: FontWeight.w700,
@@ -414,7 +447,7 @@ class AiInwardSheet extends StatelessWidget {
                   border: Border.all(color: const Color(0xFFA7F3D0)),
                 ),
                 child: Text(
-                  'AI VISION',
+                  'GEMINI 1.5',
                   style: GoogleFonts.inter(fontSize: 9, fontWeight: FontWeight.w800, color: const Color(0xFF059669)),
                 ),
               ),
@@ -426,7 +459,7 @@ class AiInwardSheet extends StatelessWidget {
             ],
           ),
           Text(
-            'Scan wholesale invoices, parchas, or upload PDFs to auto-add products, prices & stock.',
+            'Scan mandi parchas or wholesale bills. 10 picture scans/month on Free (Unlimited on Pro).',
             style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF64748B)),
           ),
           const SizedBox(height: 18),
@@ -439,17 +472,17 @@ class AiInwardSheet extends StatelessWidget {
             iconColor: const Color(0xFFD97706),
             borderColor: const Color(0xFFFDE68A),
             title: 'Scan Bill / Parcha Photo',
-            badge: 'RECOMMENDED',
+            badge: 'GEMINI AI',
             badgeColor: const Color(0xFFD97706),
-            subtitle: 'Camera photo of invoice, slip or wholesale parcha',
+            subtitle: 'Camera or gallery photo of mandi slip or invoice',
             onTap: () {
               Navigator.pop(context);
-              _simulateAiScan(context, 'camera');
+              _showImageSourcePicker(context);
             },
           ),
           const SizedBox(height: 10),
 
-          // Option 2: Upload PDF [FASTER]
+          // Option 2: Upload PDF [UNLIMITED FREE]
           _buildOptionCard(
             context: context,
             icon: Icons.picture_as_pdf_rounded,
@@ -457,17 +490,14 @@ class AiInwardSheet extends StatelessWidget {
             iconColor: const Color(0xFF0284C7),
             borderColor: const Color(0xFFBAE6FD),
             title: 'Upload Invoice PDF',
-            badge: 'FASTER',
+            badge: 'FREE UNLIMITED',
             badgeColor: const Color(0xFF0284C7),
-            subtitle: 'Single or multi-page digital invoice / tariff document',
-            onTap: () {
-              Navigator.pop(context);
-              _simulateAiScan(context, 'pdf');
-            },
+            subtitle: 'Single or multi-page digital invoice document',
+            onTap: () => _simulateFileScan(context, 'PDF'),
           ),
           const SizedBox(height: 10),
 
-          // Option 3: Upload Excel [BULK]
+          // Option 3: Upload Excel [UNLIMITED FREE]
           _buildOptionCard(
             context: context,
             icon: Icons.table_chart_rounded,
@@ -475,13 +505,10 @@ class AiInwardSheet extends StatelessWidget {
             iconColor: const Color(0xFF059669),
             borderColor: const Color(0xFFA7F3D0),
             title: 'Upload Excel / CSV File',
-            badge: 'BULK',
+            badge: 'FREE UNLIMITED',
             badgeColor: const Color(0xFF059669),
             subtitle: 'Spreadsheet with item names, prices & stock',
-            onTap: () {
-              Navigator.pop(context);
-              _simulateAiScan(context, 'excel');
-            },
+            onTap: () => _simulateFileScan(context, 'Excel'),
           ),
         ],
       ),
@@ -530,18 +557,26 @@ class AiInwardSheet extends StatelessWidget {
                     children: [
                       Text(
                         title,
-                        style: GoogleFonts.outfit(fontSize: 14, fontWeight: FontWeight.w700, color: const Color(0xFF0F172A)),
+                        style: GoogleFonts.outfit(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w700,
+                          color: const Color(0xFF0F172A),
+                        ),
                       ),
                       const SizedBox(width: 6),
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                        padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
                         decoration: BoxDecoration(
-                          color: iconBg,
+                          color: badgeColor.withValues(alpha: 0.1),
                           borderRadius: BorderRadius.circular(4),
                         ),
                         child: Text(
                           badge,
-                          style: GoogleFonts.inter(fontSize: 8, fontWeight: FontWeight.w800, color: badgeColor),
+                          style: GoogleFonts.inter(
+                            fontSize: 8.5,
+                            fontWeight: FontWeight.w800,
+                            color: badgeColor,
+                          ),
                         ),
                       ),
                     ],
@@ -549,14 +584,15 @@ class AiInwardSheet extends StatelessWidget {
                   const SizedBox(height: 2),
                   Text(
                     subtitle,
-                    style: GoogleFonts.inter(fontSize: 11, color: const Color(0xFF64748B)),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
+                    style: GoogleFonts.inter(
+                      fontSize: 11,
+                      color: const Color(0xFF64748B),
+                    ),
                   ),
                 ],
               ),
             ),
-            Icon(Icons.arrow_forward_ios_rounded, size: 14, color: badgeColor),
+            const Icon(Icons.chevron_right_rounded, color: Color(0xFFCBD5E1), size: 20),
           ],
         ),
       ),

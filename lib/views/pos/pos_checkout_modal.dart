@@ -12,6 +12,7 @@ import '../../services/soundbox_service.dart';
 import '../../services/firestore_sync_service.dart';
 import '../../services/thermal_printer_service.dart';
 import '../../core/utils/money_formatter.dart';
+import '../../core/constants/business_vertical_config.dart';
 import 'pos_item_edit_modal.dart';
 import 'sale_completed_modal.dart';
 
@@ -134,6 +135,13 @@ class _PosCheckoutModalState extends State<PosCheckoutModal> {
   bool _isSearchingCustomer = false;
   List<CustomerModel> _filteredCustomers = [];
 
+  // Pharmacy: Doctor Management
+  List<DoctorModel> _doctors = [];
+  DoctorModel? _selectedDoctor;
+
+  // Restaurant: Table Selection
+  String _selectedTable = 'Takeaway';
+
   bool _isProcessing = false;
 
   List<CartItemModel> get currentCartItems {
@@ -189,6 +197,22 @@ class _PosCheckoutModalState extends State<PosCheckoutModal> {
     if (widget.autoOpenSplit) {
       _paymentMode = 'split';
     }
+
+    _loadDoctors();
+  }
+
+  Future<void> _loadDoctors() async {
+    try {
+      final docs = await LocalDatabase.instance.getDoctors();
+      if (mounted) {
+        setState(() {
+          _doctors = docs;
+          if (_selectedDoctor == null && docs.isNotEmpty) {
+            _selectedDoctor = docs.first;
+          }
+        });
+      }
+    } catch (_) {}
   }
 
   void _switchToTab(int index) {
@@ -369,6 +393,16 @@ class _PosCheckoutModalState extends State<PosCheckoutModal> {
                 );
                 return;
               }
+
+              // Check Free plan customer limit (100 customers)
+              final profile = await LocalDatabase.instance.getStoreProfile();
+              if (!mounted) return;
+              if (!profile.isPro && widget.allCustomers.length >= 100) {
+                if (ctx.mounted) Navigator.of(ctx).pop();
+                _showCustomerLimitReachedDialog();
+                return;
+              }
+
               final rawPhone = phoneCtrl.text.trim();
               String cleanPhone = '';
               if (rawPhone.isNotEmpty) {
@@ -407,6 +441,410 @@ class _PosCheckoutModalState extends State<PosCheckoutModal> {
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
             ),
             child: Text('Save & Select', style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showCustomerLimitReachedDialog() {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: const Color(0xFFFEF3C7),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: const Icon(Icons.lock_rounded, color: Color(0xFFD97706), size: 20),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                'Customer Limit Reached',
+                style: GoogleFonts.plusJakartaSans(fontSize: 16, fontWeight: FontWeight.w800),
+              ),
+            ),
+          ],
+        ),
+        content: Text(
+          'KamaiPlus Free plan allows up to 100 customer ledgers.\n\nUpgrade to KamaiPlus Pro for Unlimited Customer Khata, 1-Click WhatsApp Reminders, and Multi-Device Sync.',
+          style: GoogleFonts.plusJakartaSans(fontSize: 13, color: const Color(0xFF475569)),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: Text('Close', style: GoogleFonts.plusJakartaSans(color: const Color(0xFF64748B))),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.of(ctx).pop();
+              Navigator.pushNamed(context, '/settings');
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFFFBBF24),
+              foregroundColor: const Color(0xFF0F172A),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            ),
+            child: Text('Upgrade to Pro', style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w800)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showAddDoctorDialog() {
+    final nameCtrl = TextEditingController();
+    final qualCtrl = TextEditingController();
+    final regCtrl = TextEditingController();
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: const Color(0xFFEFF6FF),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: const Icon(Icons.medical_services_rounded, color: Color(0xFF2563EB), size: 20),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                'Add Doctor (Rx)',
+                style: GoogleFonts.plusJakartaSans(fontSize: 16, fontWeight: FontWeight.w800),
+              ),
+            ),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: nameCtrl,
+              decoration: InputDecoration(
+                labelText: 'Doctor Name *',
+                hintText: 'e.g. Dr. Rajesh Sharma',
+                labelStyle: GoogleFonts.plusJakartaSans(fontSize: 12),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: qualCtrl,
+              decoration: InputDecoration(
+                labelText: 'Degree / Specialty',
+                hintText: 'e.g. MBBS, MD (General Medicine)',
+                labelStyle: GoogleFonts.plusJakartaSans(fontSize: 12),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: regCtrl,
+              decoration: InputDecoration(
+                labelText: 'Registration No. (Optional)',
+                hintText: 'e.g. MCI-12345',
+                labelStyle: GoogleFonts.plusJakartaSans(fontSize: 12),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: Text('Cancel', style: GoogleFonts.plusJakartaSans(color: const Color(0xFF64748B))),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              final rawName = nameCtrl.text.trim();
+              if (rawName.isEmpty) return;
+              final name = rawName.startsWith('Dr.') ? rawName : 'Dr. $rawName';
+              final doc = DoctorModel(
+                id: const Uuid().v4(),
+                businessId: FirestoreSyncService.instance.activeBusinessId,
+                name: name,
+                qualification: qualCtrl.text.trim().isNotEmpty ? qualCtrl.text.trim() : null,
+                registrationNumber: regCtrl.text.trim().isNotEmpty ? regCtrl.text.trim() : null,
+              );
+              await LocalDatabase.instance.upsertDoctor(doc);
+              await _loadDoctors();
+              setState(() => _selectedDoctor = doc);
+              if (ctx.mounted) Navigator.of(ctx).pop();
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF2563EB),
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            ),
+            child: Text('Save Doctor', style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _deleteDoctor(DoctorModel doc) async {
+    await LocalDatabase.instance.deleteDoctor(doc.id);
+    if (_selectedDoctor?.id == doc.id) {
+      _selectedDoctor = null;
+    }
+    await _loadDoctors();
+  }
+
+  Widget _buildDoctorSection() {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF0FDF4),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFFBBF7D0)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Row(
+                children: [
+                  const Icon(Icons.medical_services_outlined, size: 14, color: Color(0xFF16A34A)),
+                  const SizedBox(width: 6),
+                  Text(
+                    'PRESCRIBING DOCTOR (Rx)',
+                    style: GoogleFonts.plusJakartaSans(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: 0.5,
+                      color: const Color(0xFF15803D),
+                    ),
+                  ),
+                ],
+              ),
+              GestureDetector(
+                onTap: _showAddDoctorDialog,
+                child: Row(
+                  children: [
+                    const Icon(Icons.add_circle_outline, size: 14, color: Color(0xFF2563EB)),
+                    const SizedBox(width: 4),
+                    Text(
+                      '+ Add Doctor',
+                      style: GoogleFonts.plusJakartaSans(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                        color: const Color(0xFF2563EB),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          if (_doctors.isEmpty)
+            InkWell(
+              onTap: _showAddDoctorDialog,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: const Color(0xFFCBD5E1)),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.add, size: 16, color: Color(0xFF64748B)),
+                    const SizedBox(width: 8),
+                    Text(
+                      'No doctor saved. Tap "+ Add Doctor" to set doctor name',
+                      style: GoogleFonts.plusJakartaSans(fontSize: 11.5, color: const Color(0xFF64748B)),
+                    ),
+                  ],
+                ),
+              ),
+            )
+          else
+            Wrap(
+              spacing: 6,
+              runSpacing: 6,
+              children: [
+                ...List.generate(_doctors.length, (i) {
+                  final doc = _doctors[i];
+                  final isSel = _selectedDoctor?.id == doc.id;
+                  return InkWell(
+                    onTap: () {
+                      HapticFeedback.selectionClick();
+                      setState(() {
+                        _selectedDoctor = isSel ? null : doc;
+                      });
+                    },
+                    borderRadius: BorderRadius.circular(8),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+                      decoration: BoxDecoration(
+                        color: isSel ? const Color(0xFF059669) : Colors.white,
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(
+                          color: isSel ? const Color(0xFF059669) : const Color(0xFFCBD5E1),
+                          width: isSel ? 1.5 : 1,
+                        ),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            isSel ? Icons.check_circle_rounded : Icons.person_outline,
+                            size: 14,
+                            color: isSel ? Colors.white : const Color(0xFF475569),
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            doc.name,
+                            style: GoogleFonts.plusJakartaSans(
+                              fontSize: 11.5,
+                              fontWeight: isSel ? FontWeight.w800 : FontWeight.w600,
+                              color: isSel ? Colors.white : const Color(0xFF1E293B),
+                            ),
+                          ),
+                          if (doc.qualification != null && doc.qualification!.isNotEmpty) ...[
+                            const SizedBox(width: 4),
+                            Text(
+                              '(${doc.qualification})',
+                              style: GoogleFonts.plusJakartaSans(
+                                fontSize: 10,
+                                color: isSel ? Colors.white70 : const Color(0xFF64748B),
+                              ),
+                            ),
+                          ],
+                          const SizedBox(width: 6),
+                          GestureDetector(
+                            onTap: () => _deleteDoctor(doc),
+                            child: Icon(
+                              Icons.close,
+                              size: 12,
+                              color: isSel ? Colors.white70 : const Color(0xFF94A3B8),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  );
+                }),
+              ],
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTableSection() {
+    const tableOptions = [
+      'Takeaway',
+      'Table 1',
+      'Table 2',
+      'Table 3',
+      'Table 4',
+      'Table 5',
+      'Table 6',
+      'Table 7',
+      'Table 8',
+      'Table 9',
+      'Table 10',
+    ];
+
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFFF7ED),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFFFED7AA)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Row(
+                children: [
+                  const Icon(Icons.table_restaurant_rounded, size: 14, color: Color(0xFFEA580C)),
+                  const SizedBox(width: 6),
+                  Text(
+                    'TABLE / ORDER TYPE',
+                    style: GoogleFonts.plusJakartaSans(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: 0.5,
+                      color: const Color(0xFFC2410C),
+                    ),
+                  ),
+                ],
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFEA580C),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Text(
+                  _selectedTable,
+                  style: GoogleFonts.plusJakartaSans(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w800,
+                    color: Colors.white,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: tableOptions.map((opt) {
+                final isSel = _selectedTable == opt;
+                return Padding(
+                  padding: const EdgeInsets.only(right: 6),
+                  child: ChoiceChip(
+                    label: Text(
+                      opt,
+                      style: GoogleFonts.plusJakartaSans(
+                        fontSize: 11,
+                        fontWeight: isSel ? FontWeight.w800 : FontWeight.w600,
+                        color: isSel ? Colors.white : const Color(0xFF475569),
+                      ),
+                    ),
+                    selected: isSel,
+                    selectedColor: const Color(0xFFEA580C),
+                    backgroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                      side: BorderSide(
+                        color: isSel ? const Color(0xFFEA580C) : const Color(0xFFE2E8F0),
+                      ),
+                    ),
+                    onSelected: (val) {
+                      if (val) {
+                        HapticFeedback.selectionClick();
+                        setState(() => _selectedTable = opt);
+                      }
+                    },
+                  ),
+                );
+              }).toList(),
+            ),
           ),
         ],
       ),
@@ -459,12 +897,16 @@ class _PosCheckoutModalState extends State<PosCheckoutModal> {
 
     try {
       final bizId = FirestoreSyncService.instance.activeBusinessId;
+      final activeType = BusinessVerticals.activeBusinessTypeNotifier.value;
+      final vertical = BusinessVerticals.resolve(activeType);
 
       final sale = await LocalDatabase.instance.processPosBill(
         businessId: bizId,
         cartItems: currentCartItems,
         paymentMethod: _paymentMode,
         customer: _currentCustomer,
+        doctorName: vertical.toggles.showDoctorPrescription ? _selectedDoctor?.name : null,
+        tableNumber: vertical.toggles.showTableOrderType ? _selectedTable : null,
         discountPaise: billDiscountPaise,
         splitCashPaise: _paymentMode == 'split' ? splitCashPaise : (_paymentMode == 'cash' ? grandTotalPaise : 0),
         splitUpiPaise: _paymentMode == 'split' ? splitUpiPaise : (_paymentMode == 'upi' ? grandTotalPaise : 0),
@@ -1059,6 +1501,27 @@ class _PosCheckoutModalState extends State<PosCheckoutModal> {
                       );
                     },
                   ),
+
+                  // Pharmacy Doctor or Restaurant Table Section
+                  ValueListenableBuilder<String>(
+                    valueListenable: BusinessVerticals.activeBusinessTypeNotifier,
+                    builder: (context, activeType, _) {
+                      final vertical = BusinessVerticals.resolve(activeType);
+                      final isPharmacy = vertical.toggles.showDoctorPrescription;
+                      final isRestaurant = vertical.toggles.showTableOrderType;
+
+                      if (!isPharmacy && !isRestaurant) return const SizedBox.shrink();
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const SizedBox(height: 14),
+                          if (isPharmacy) _buildDoctorSection(),
+                          if (isRestaurant) _buildTableSection(),
+                        ],
+                      );
+                    },
+                  ),
+
                   const SizedBox(height: 18),
 
                   // 3. Cart Items Section Header

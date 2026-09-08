@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import '../purchases/ai_inward_sheet.dart';
 
 class AiInwardModal extends StatelessWidget {
   final VoidCallback onSelectManual;
@@ -261,7 +262,10 @@ class AiInwardModal extends StatelessWidget {
               badgeBg: const Color(0xFFFEF3C7),
               badgeColor: const Color(0xFFB45309),
               subtitle: 'Camera photo of invoice, slip or wholesale parcha',
-              onTap: () => _simulateAiScan(context, 'Parcha Photo Camera Scan'),
+              onTap: () {
+                Navigator.pop(context);
+                AiInwardSheet.show(context, onInwardComplete: onInwardSuccess);
+              },
             ),
             const SizedBox(height: 10),
 

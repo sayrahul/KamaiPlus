@@ -465,7 +465,7 @@ Have a wonderful day! Visit us again soon.
                         ),
                         const SizedBox(height: 4),
                         Text(
-                          'Customer: $customerDisplay  •  Payment: $paymentDisplay',
+                          'Customer: $customerDisplay  •  Payment: $paymentDisplay${sale.doctorName != null && sale.doctorName!.isNotEmpty ? '  •  Dr: ${sale.doctorName}' : ''}${sale.tableNumber != null && sale.tableNumber!.isNotEmpty ? '  •  Table: ${sale.tableNumber}' : ''}',
                           style: GoogleFonts.plusJakartaSans(
                             fontSize: 11,
                             fontWeight: FontWeight.w600,

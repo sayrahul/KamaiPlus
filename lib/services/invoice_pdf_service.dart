@@ -48,6 +48,8 @@ class InvoicePdfService {
         };
       }).toList();
 
+      final isPro = prefs.getBool('is_pro') ?? false;
+
       final String? filePath = await _channel.invokeMethod<String>('generateAndSaveInvoicePdf', {
         'invoiceNumber': sale.invoiceNumber,
         'storeName': storeName,
@@ -57,6 +59,9 @@ class InvoicePdfService {
         'logoPath': logoPath ?? '',
         'customerName': sale.customerName?.isNotEmpty == true ? sale.customerName : 'Cash Customer',
         'customerPhone': customerPhone ?? sale.customerPhone ?? '',
+        'doctorName': sale.doctorName ?? '',
+        'tableNumber': sale.tableNumber ?? '',
+        'isPro': isPro,
         'dateStr': dateStr,
         'paymentMode': sale.paymentMethod,
         'subtotalAmount': subtotalAmount,
