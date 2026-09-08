@@ -449,7 +449,30 @@ Comprehensive enterprise-grade retail UX upgrade suite aligned with PhonePe Busi
     - **Live Device Testing on OPPO CPH2691 (Android 16):**
       - Installed and verified live on physical device (`88e61059`). Zero runtime exceptions.
       - Tested POS billing, Cash Register with real ₹ note/coin PNG counter, modal bottom sheets, and multi-page A4 PDF invoicing.
-    - **Locked Version:** `v4.18.0` (`pubspec.yaml: 4.18.0+41801`).
 
-
-
+28. **Retail Operations & POS Invoicing Refinements (LOCKED):**
+    - **Tally Counter Note Adjustments (`DenominationTallyModal` & `CashRegisterScreen`):**
+      - ₹20 note image properly linked (`assets/images/20.png`).
+      - ₹2000 denomination note completely removed as per modern Indian retail operations.
+    - **WhatsApp Growth Campaigns Grid Fix (`GrowthCampaignsScreen`):**
+      - Fixed page view card container height to `212` with aspect ratio `1.95`, preventing any card bottom-clipping.
+    - **VIP Customer Feature Across Entire App:**
+      - SQLite database schema updated with `is_vip INTEGER DEFAULT 0` and `toggleCustomerVip()` method.
+      - `CustomerModel` updated with `isVip` field and serialization.
+      - Gold `👑 VIP` badge on customer cards in Customer Directory, Digital Khata list & statement header, and POS Checkout customer indicator.
+      - Interactive VIP toggle switches in Add Customer modal, Customer Details sheet, and Khata 360 customer statement view.
+    - **POS Billing Screen Compact Products & Multi-Bill Tabs (`PosBillingScreen`):**
+      - Grid item aspect ratio adjusted to `1.72` with high-density padding (8h, 5v) and refined font sizes for compact, minimalistic counter billing.
+      - Dynamic multi-bill horizontal draft tabs bar `_buildBillTabsBar()` right above categories: `[• Bill #1] [Bill #2] [+ New Bill]`, fully synchronized with checkout tabs and bottom floating cart bar.
+    - **POS Checkout Modal View Cart Scroller (`PosCheckoutModal`):**
+      - Cart items list constrained to `maxHeight: 230` with internal scrollbar showing exactly 3-4 items, keeping checkout buttons and totals visible on all phone screen sizes.
+    - **Compulsory Validation in Red UI (`PosCheckoutModal`):**
+      - When Credit (Udhar) mode is selected without a customer, the customer section automatically turns prominent red (`#EF4444` border, `#FFF1F2` soft red background, red warning hint, and an alert banner) so cashiers immediately recognize customer selection is compulsory.
+    - **Space-Saving Expandable Bill Discount (`PosCheckoutModal`):**
+      - Replaced static 120px box with an expandable dropdown pill (`_isDiscountExpanded`) displaying current discount summary or "Add Bill Discount / Coupon", smoothly expanding to Flat/% inputs.
+    - **1-Tap WhatsApp UPI Link Dispatch (`PosCheckoutModal`):**
+      - When UPI payment mode is selected and a customer is chosen, a prominent WhatsApp button appears: `Send 1-Tap UPI Link to <Customer> via WhatsApp` sending `upi://pay?pa=...&am=...` for one-tap direct customer payment.
+    - **A4 PDF Invoicing Matching Theme Preview & WhatsApp Attachment:**
+      - Theme settings (`invoice_theme_color_hex`, `invoice_heading`, `invoice_terms`, `custom_invoice_footer`, `invoice_show_dynamic_upi_qr`) persisted in `SharedPreferences`.
+      - Native `MainActivity.java` A4 PDF generator renders theme-colored header banner, table header bar, dynamic UPI payment QR box, and grand total pill matching `InvoiceThemesScreen` preview.
+      - "Send Bill to WhatsApp" in `SaleCompletedModal` generates the styled A4 PDF and attaches it directly via WhatsApp.

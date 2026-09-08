@@ -31,7 +31,6 @@ class _CashRegisterScreenState extends State<CashRegisterScreen> {
 
   // Denomination notes state for quick tally
   final Map<int, int> _denominations = {
-    2000: 0,
     500: 0,
     200: 0,
     100: 0,

@@ -52,8 +52,7 @@ class _CustomersScreenState extends State<CustomersScreen> {
         if (!c.name.toLowerCase().contains(q) && !c.phone.contains(q)) return false;
       }
       if (_filter == 'Udhar Due' && c.currentBalancePaise <= 0) return false;
-      if (_filter == 'VIP' && c.creditLimitPaise >= 1000000) return true;
-      if (_filter == 'VIP' && c.creditLimitPaise < 1000000) return false;
+      if (_filter == 'VIP') return c.isVip;
       if (_filter == 'Settled' && c.currentBalancePaise != 0) return false;
       return true;
     }).toList();
@@ -68,108 +67,155 @@ class _CustomersScreenState extends State<CustomersScreen> {
     final phoneCtrl = TextEditingController();
     final limitCtrl = TextEditingController(text: '5000');
 
+    bool isVip = false;
+
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.white,
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
-      builder: (ctx) => Padding(
-        padding: EdgeInsets.only(
-          left: 20,
-          right: 20,
-          top: 20,
-          bottom: MediaQuery.of(ctx).viewInsets.bottom + 24,
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text('Add New Customer', style: GoogleFonts.outfit(fontSize: 18, fontWeight: FontWeight.w700)),
-                IconButton(icon: const Icon(Icons.close_rounded), onPressed: () => Navigator.pop(ctx)),
-              ],
-            ),
-            const SizedBox(height: 16),
-            TextField(
-              controller: nameCtrl,
-              decoration: InputDecoration(
-                labelText: 'Customer Full Name *',
-                hintText: 'e.g. Ramesh Patel',
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+      builder: (ctx) => StatefulBuilder(
+        builder: (modalCtx, setModalState) => Padding(
+          padding: EdgeInsets.only(
+            left: 20,
+            right: 20,
+            top: 20,
+            bottom: MediaQuery.of(modalCtx).viewInsets.bottom + 24,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text('Add New Customer', style: GoogleFonts.outfit(fontSize: 18, fontWeight: FontWeight.w700)),
+                  IconButton(icon: const Icon(Icons.close_rounded), onPressed: () => Navigator.pop(modalCtx)),
+                ],
               ),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: phoneCtrl,
-              keyboardType: TextInputType.phone,
-              decoration: InputDecoration(
-                labelText: 'WhatsApp Mobile Number *',
-                hintText: 'e.g. 9876543210',
-                prefixText: '+91 ',
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-              ),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: limitCtrl,
-              keyboardType: TextInputType.number,
-              decoration: InputDecoration(
-                labelText: 'Udhar Credit Limit (₹)',
-                hintText: '5000',
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-              ),
-            ),
-            const SizedBox(height: 20),
-            SizedBox(
-              width: double.infinity,
-              height: 48,
-              child: ElevatedButton(
-                onPressed: () async {
-                  final name = nameCtrl.text.trim();
-                  if (name.isEmpty) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('Please enter customer full name'),
-                        backgroundColor: Color(0xFFDC2626),
-                      ),
-                    );
-                    return;
-                  }
-                  final phoneErr = AppValidators.validatePhone(phoneCtrl.text.trim());
-                  if (phoneErr != null) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text(phoneErr),
-                        backgroundColor: const Color(0xFFDC2626),
-                      ),
-                    );
-                    return;
-                  }
-                  final cleanPhone = AppValidators.cleanPhone(phoneCtrl.text.trim());
-                  final limit = int.tryParse(limitCtrl.text.trim()) ?? 5000;
-                  final newCust = CustomerModel(
-                    id: const Uuid().v4(),
-                    businessId: FirestoreSyncService.instance.activeBusinessId,
-                    name: name,
-                    phone: cleanPhone,
-                    creditLimitPaise: limit * 100,
-                  );
-                  await LocalDatabase.instance.upsertCustomer(newCust);
-                  if (!ctx.mounted) return;
-                  Navigator.pop(ctx);
-                  _loadCustomers();
-                },
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF0F172A),
-                  foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              const SizedBox(height: 16),
+              TextField(
+                controller: nameCtrl,
+                decoration: InputDecoration(
+                  labelText: 'Customer Full Name *',
+                  hintText: 'e.g. Ramesh Patel',
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
                 ),
-                child: Text('Save Customer Account', style: GoogleFonts.outfit(fontSize: 15, fontWeight: FontWeight.w700)),
               ),
-            ),
-          ],
+              const SizedBox(height: 12),
+              TextField(
+                controller: phoneCtrl,
+                keyboardType: TextInputType.phone,
+                decoration: InputDecoration(
+                  labelText: 'WhatsApp Mobile Number *',
+                  hintText: 'e.g. 9876543210',
+                  prefixText: '+91 ',
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: limitCtrl,
+                keyboardType: TextInputType.number,
+                decoration: InputDecoration(
+                  labelText: 'Udhar Credit Limit (₹)',
+                  hintText: '5000',
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                ),
+              ),
+              const SizedBox(height: 12),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                decoration: BoxDecoration(
+                  color: isVip ? const Color(0xFFFEF3C7) : const Color(0xFFF8FAFC),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: isVip ? const Color(0xFFF59E0B) : const Color(0xFFE2E8F0)),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Row(
+                      children: [
+                        const Text('👑', style: TextStyle(fontSize: 18)),
+                        const SizedBox(width: 8),
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'VIP Customer Status',
+                              style: GoogleFonts.outfit(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w700,
+                                color: isVip ? const Color(0xFFB45309) : const Color(0xFF0F172A),
+                              ),
+                            ),
+                            Text(
+                              'Special loyalty & priority service badge',
+                              style: GoogleFonts.inter(fontSize: 10, color: const Color(0xFF64748B)),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                    Switch(
+                      value: isVip,
+                      activeColor: const Color(0xFFF59E0B),
+                      onChanged: (v) => setModalState(() => isVip = v),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 18),
+              SizedBox(
+                width: double.infinity,
+                height: 48,
+                child: ElevatedButton(
+                  onPressed: () async {
+                    final name = nameCtrl.text.trim();
+                    if (name.isEmpty) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('Please enter customer full name'),
+                          backgroundColor: Color(0xFFDC2626),
+                        ),
+                      );
+                      return;
+                    }
+                    final phoneErr = AppValidators.validatePhone(phoneCtrl.text.trim());
+                    if (phoneErr != null) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text(phoneErr),
+                          backgroundColor: const Color(0xFFDC2626),
+                        ),
+                      );
+                      return;
+                    }
+                    final cleanPhone = AppValidators.cleanPhone(phoneCtrl.text.trim());
+                    final limit = int.tryParse(limitCtrl.text.trim()) ?? 5000;
+                    final newCust = CustomerModel(
+                      id: const Uuid().v4(),
+                      businessId: FirestoreSyncService.instance.activeBusinessId,
+                      name: name,
+                      phone: cleanPhone,
+                      creditLimitPaise: limit * 100,
+                      isVip: isVip,
+                    );
+                    await LocalDatabase.instance.upsertCustomer(newCust);
+                    if (!modalCtx.mounted) return;
+                    Navigator.pop(modalCtx);
+                    _loadCustomers();
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF0F172A),
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                  child: Text('Save Customer Account', style: GoogleFonts.outfit(fontSize: 15, fontWeight: FontWeight.w700)),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -220,7 +266,25 @@ class _CustomersScreenState extends State<CustomersScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(customer.name, style: GoogleFonts.outfit(fontSize: 18, fontWeight: FontWeight.w800)),
+                        Row(
+                          children: [
+                            Flexible(
+                              child: Text(customer.name, style: GoogleFonts.outfit(fontSize: 18, fontWeight: FontWeight.w800), overflow: TextOverflow.ellipsis),
+                            ),
+                            if (customer.isVip) ...[
+                              const SizedBox(width: 6),
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFFFEF3C7),
+                                  borderRadius: BorderRadius.circular(6),
+                                  border: Border.all(color: const Color(0xFFF59E0B), width: 0.8),
+                                ),
+                                child: Text('👑 VIP', style: GoogleFonts.outfit(fontSize: 10, fontWeight: FontWeight.w800, color: const Color(0xFFB45309))),
+                              ),
+                            ],
+                          ],
+                        ),
                         Text('+91 ${customer.phone}', style: GoogleFonts.inter(fontSize: 13, color: const Color(0xFF64748B))),
                       ],
                     ),
@@ -282,7 +346,57 @@ class _CustomersScreenState extends State<CustomersScreen> {
                   ),
                 ],
               ),
-              const SizedBox(height: 20),
+              const SizedBox(height: 14),
+
+              // VIP Status Toggle Box
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                decoration: BoxDecoration(
+                  color: customer.isVip ? const Color(0xFFFEF3C7) : const Color(0xFFF8FAFC),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: customer.isVip ? const Color(0xFFF59E0B) : const Color(0xFFE2E8F0)),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Row(
+                      children: [
+                        const Text('👑', style: TextStyle(fontSize: 18)),
+                        const SizedBox(width: 8),
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              customer.isVip ? 'VIP Customer Account' : 'Standard Account',
+                              style: GoogleFonts.outfit(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w700,
+                                color: customer.isVip ? const Color(0xFFB45309) : const Color(0xFF0F172A),
+                              ),
+                            ),
+                            Text(
+                              customer.isVip ? 'Priority loyalty member' : 'Set as VIP member',
+                              style: GoogleFonts.inter(fontSize: 10, color: const Color(0xFF64748B)),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                    Switch(
+                      value: customer.isVip,
+                      activeColor: const Color(0xFFF59E0B),
+                      onChanged: (val) async {
+                        HapticFeedback.lightImpact();
+                        await LocalDatabase.instance.toggleCustomerVip(customer.id, val);
+                        if (!ctx.mounted) return;
+                        Navigator.pop(ctx);
+                        _loadCustomers();
+                      },
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
 
               // Actions
               Row(
@@ -570,7 +684,7 @@ class _CustomersScreenState extends State<CustomersScreen> {
                       ),
                       const SizedBox(width: 12),
                       Expanded(
-                        child: _buildMetricBox('VIP Members', 'High-Value', '${_customers.where((c) => c.creditLimitPaise >= 1000000).length}', const Color(0xFFD97706)),
+                        child: _buildMetricBox('VIP Members', 'High-Value', '${_customers.where((c) => c.isVip).length}', const Color(0xFFD97706)),
                       ),
                     ],
                   ),
@@ -704,7 +818,32 @@ class _CustomersScreenState extends State<CustomersScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(customer.name, style: GoogleFonts.outfit(fontSize: 14, fontWeight: FontWeight.w700, color: const Color(0xFF0F172A))),
+                      Row(
+                        children: [
+                          Flexible(
+                            child: Text(
+                              customer.name,
+                              style: GoogleFonts.outfit(fontSize: 14, fontWeight: FontWeight.w700, color: const Color(0xFF0F172A)),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          if (customer.isVip) ...[
+                            const SizedBox(width: 6),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFFEF3C7),
+                                borderRadius: BorderRadius.circular(5),
+                                border: Border.all(color: const Color(0xFFF59E0B), width: 0.7),
+                              ),
+                              child: Text(
+                                '👑 VIP',
+                                style: GoogleFonts.outfit(fontSize: 9, fontWeight: FontWeight.w800, color: const Color(0xFFB45309)),
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
                       Text('+91 ${customer.phone}', style: GoogleFonts.inter(fontSize: 11, color: const Color(0xFF64748B))),
                     ],
                   ),

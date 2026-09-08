@@ -571,7 +571,7 @@ Aapka Swagat Hai! Visit store today.
           ),
           const SizedBox(height: 8),
           SizedBox(
-            height: 188,
+            height: 212,
             child: PageView.builder(
               controller: _campaignPageController,
               onPageChanged: (p) => setState(() => _campaignPageIndex = p),
@@ -591,7 +591,7 @@ Aapka Swagat Hai! Visit store today.
                     crossAxisCount: 2,
                     crossAxisSpacing: 8,
                     mainAxisSpacing: 8,
-                    childAspectRatio: 1.85,
+                    childAspectRatio: 1.95,
                   ),
                   itemCount: pageItems.length,
                   itemBuilder: (context, idx) {
@@ -613,7 +613,7 @@ Aapka Swagat Hai! Visit store today.
                       },
                       borderRadius: BorderRadius.circular(14),
                       child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                         decoration: BoxDecoration(
                           color: isSel ? Colors.white : const Color(0xFFFAFAFA),
                           borderRadius: BorderRadius.circular(14),

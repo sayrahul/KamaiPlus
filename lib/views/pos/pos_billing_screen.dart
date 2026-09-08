@@ -342,7 +342,10 @@ class _PosBillingScreenState extends State<PosBillingScreen> {
                 // 1. Top Search & Barcode Row
                 _buildTopSearchBar(),
 
-                // 2. Category Filter Pills
+                // 2. Dynamic Bill Counter Tabs (Multi-Bill System)
+                _buildBillTabsBar(),
+
+                // 3. Category Filter Pills
                 _buildCategoryPills(),
 
                 // 4. 2-Column Product Cards Grid
@@ -487,6 +490,132 @@ class _PosBillingScreenState extends State<PosBillingScreen> {
     );
   }
 
+  // 1.5 DYNAMIC BILL COUNTER TABS
+  Widget _buildBillTabsBar() {
+    return Container(
+      height: 36,
+      margin: const EdgeInsets.only(bottom: 4),
+      child: ListView.builder(
+        scrollDirection: Axis.horizontal,
+        physics: const BouncingScrollPhysics(),
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        itemCount: _tabs.length + 1,
+        itemBuilder: (ctx, i) {
+          if (i == _tabs.length) {
+            // + New Bill button
+            return Padding(
+              padding: const EdgeInsets.only(right: 6),
+              child: InkWell(
+                onTap: _holdBillAndNew,
+                borderRadius: BorderRadius.circular(8),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFECFDF5),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: const Color(0xFFA7F3D0), width: 1.1),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.add_rounded, size: 15, color: Color(0xFF059669)),
+                      const SizedBox(width: 4),
+                      Text(
+                        'New Bill',
+                        style: GoogleFonts.plusJakartaSans(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                          color: const Color(0xFF059669),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            );
+          }
+
+          final tab = _tabs[i];
+          final isSel = i == _activeTabIndex;
+          final count = tab.items.values.fold<int>(0, (sum, it) => sum + it.quantity.toInt());
+
+          return Padding(
+            padding: const EdgeInsets.only(right: 6),
+            child: InkWell(
+              onTap: () {
+                HapticFeedback.selectionClick();
+                setState(() => _activeTabIndex = i);
+              },
+              borderRadius: BorderRadius.circular(8),
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 150),
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
+                  color: isSel ? const Color(0xFF0F172A) : Colors.white,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(
+                    color: isSel ? const Color(0xFF0F172A) : const Color(0xFFCBD5E1),
+                    width: isSel ? 1.4 : 1.0,
+                  ),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      width: 6,
+                      height: 6,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: isSel ? const Color(0xFFFBBF24) : const Color(0xFF94A3B8),
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    Text(
+                      tab.name,
+                      style: GoogleFonts.plusJakartaSans(
+                        fontSize: 11.5,
+                        fontWeight: FontWeight.w700,
+                        color: isSel ? Colors.white : const Color(0xFF334155),
+                      ),
+                    ),
+                    if (count > 0) ...[
+                      const SizedBox(width: 5),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                        decoration: BoxDecoration(
+                          color: isSel ? const Color(0xFF1E293B) : const Color(0xFFF1F5F9),
+                          borderRadius: BorderRadius.circular(5),
+                        ),
+                        child: Text(
+                          '$count',
+                          style: GoogleFonts.jetBrainsMono(
+                            fontSize: 9.5,
+                            fontWeight: FontWeight.w800,
+                            color: isSel ? const Color(0xFF34D399) : const Color(0xFF059669),
+                          ),
+                        ),
+                      ),
+                    ],
+                    if (_tabs.length > 1 && !isSel) ...[
+                      const SizedBox(width: 4),
+                      GestureDetector(
+                        onTap: () {
+                          HapticFeedback.lightImpact();
+                          _closeTab(i);
+                        },
+                        child: const Icon(Icons.close_rounded, size: 13, color: Color(0xFF94A3B8)),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
   // 2. CATEGORY PILLS
   Widget _buildCategoryPills() {
     final allCount = _getCategoryProductCount(null);
@@ -617,7 +746,7 @@ class _PosBillingScreenState extends State<PosBillingScreen> {
         crossAxisCount: 2,
         crossAxisSpacing: 8,
         mainAxisSpacing: 8,
-        childAspectRatio: 1.48,
+        childAspectRatio: 1.72,
       ),
       itemCount: prods.length,
       itemBuilder: (context, index) {
@@ -708,7 +837,7 @@ class _PosBillingScreenState extends State<PosBillingScreen> {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Text(
-                    '$count items',
+                    '${currentTab.name} • $count items',
                     style: GoogleFonts.plusJakartaSans(
                       fontSize: 11.5,
                       fontWeight: FontWeight.w600,
@@ -803,27 +932,27 @@ class _PosProductGridItemState extends State<_PosProductGridItem> {
       onTapUp: (_) => setState(() => _isPressed = false),
       onTapCancel: () => setState(() => _isPressed = false),
       child: AnimatedScale(
-        scale: _isPressed ? 0.94 : 1.0,
+        scale: _isPressed ? 0.96 : 1.0,
         duration: const Duration(milliseconds: 100),
         curve: Curves.easeOutCubic,
         child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
           decoration: BoxDecoration(
             color: isStockDepleted ? const Color(0xFFFFF1F2) : Colors.white,
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(10),
             border: Border.all(
               color: isStockDepleted
                   ? const Color(0xFFEF4444)
                   : (isInCart ? const Color(0xFFFBBF24) : const Color(0xFFEEF2F6)),
-              width: (isStockDepleted || isInCart) ? 1.5 : 1.0,
+              width: (isStockDepleted || isInCart) ? 1.4 : 0.9,
             ),
             boxShadow: [
               BoxShadow(
                 color: isStockDepleted
-                    ? const Color(0xFFEF4444).withValues(alpha: 0.10)
-                    : (isInCart ? const Color(0xFFFBBF24).withValues(alpha: 0.15) : Colors.black.withValues(alpha: 0.02)),
-                blurRadius: 4,
-                offset: const Offset(0, 1.5),
+                    ? const Color(0xFFEF4444).withValues(alpha: 0.08)
+                    : (isInCart ? const Color(0xFFFBBF24).withValues(alpha: 0.12) : Colors.black.withValues(alpha: 0.02)),
+                blurRadius: 3,
+                offset: const Offset(0, 1),
               ),
             ],
           ),
@@ -841,9 +970,9 @@ class _PosProductGridItemState extends State<_PosProductGridItem> {
                       child: Text(
                         widget.categoryDisplay,
                         style: GoogleFonts.plusJakartaSans(
-                          fontSize: 9,
+                          fontSize: 8.5,
                           fontWeight: FontWeight.w700,
-                          letterSpacing: 0.3,
+                          letterSpacing: 0.2,
                           color: const Color(0xFF94A3B8),
                         ),
                         maxLines: 1,
@@ -852,16 +981,16 @@ class _PosProductGridItemState extends State<_PosProductGridItem> {
                     ),
                     if (isStockDepleted)
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
+                        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
                         decoration: BoxDecoration(
                           color: const Color(0xFFFEE2E2),
-                          borderRadius: BorderRadius.circular(5),
-                          border: Border.all(color: const Color(0xFFFCA5A5)),
+                          borderRadius: BorderRadius.circular(4),
+                          border: Border.all(color: const Color(0xFFFCA5A5), width: 0.8),
                         ),
                         child: Text(
                           'OUT OF STOCK',
                           style: GoogleFonts.plusJakartaSans(
-                            fontSize: 8,
+                            fontSize: 7.5,
                             fontWeight: FontWeight.w900,
                             color: const Color(0xFFDC2626),
                           ),
@@ -869,16 +998,16 @@ class _PosProductGridItemState extends State<_PosProductGridItem> {
                       )
                     else if (isInCart)
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
+                        padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
                         decoration: BoxDecoration(
                           color: const Color(0xFFFEF3C7),
-                          borderRadius: BorderRadius.circular(5),
-                          border: Border.all(color: const Color(0xFFFDE68A)),
+                          borderRadius: BorderRadius.circular(4),
+                          border: Border.all(color: const Color(0xFFFDE68A), width: 0.8),
                         ),
                         child: Text(
                           '${widget.inCartQty} in cart',
                           style: GoogleFonts.plusJakartaSans(
-                            fontSize: 9,
+                            fontSize: 8.5,
                             fontWeight: FontWeight.w800,
                             color: const Color(0xFF92400E),
                           ),
@@ -890,10 +1019,10 @@ class _PosProductGridItemState extends State<_PosProductGridItem> {
                 Text(
                   widget.product.name,
                   style: GoogleFonts.plusJakartaSans(
-                    fontSize: 12.5,
+                    fontSize: 12,
                     fontWeight: FontWeight.w700,
                     color: isStockDepleted ? const Color(0xFF475569) : const Color(0xFF0F172A),
-                    height: 1.2,
+                    height: 1.15,
                   ),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
@@ -911,7 +1040,7 @@ class _PosProductGridItemState extends State<_PosProductGridItem> {
                             TextSpan(
                               text: '₹$priceRupees ',
                               style: GoogleFonts.jetBrainsMono(
-                                fontSize: 12,
+                                fontSize: 11.5,
                                 fontWeight: FontWeight.w800,
                                 color: isStockDepleted ? const Color(0xFF64748B) : const Color(0xFF0F172A),
                               ),
@@ -919,7 +1048,7 @@ class _PosProductGridItemState extends State<_PosProductGridItem> {
                             TextSpan(
                               text: '/$unitDisplay',
                               style: GoogleFonts.plusJakartaSans(
-                                fontSize: 10,
+                                fontSize: 9.5,
                                 fontWeight: FontWeight.w500,
                                 color: const Color(0xFF64748B),
                               ),
@@ -934,7 +1063,7 @@ class _PosProductGridItemState extends State<_PosProductGridItem> {
                     Text(
                       isStockDepleted ? 'Out of Stock' : stockLeftStr,
                       style: GoogleFonts.plusJakartaSans(
-                        fontSize: 10,
+                        fontSize: 9,
                         fontWeight: FontWeight.w700,
                         color: isStockDepleted ? const Color(0xFFDC2626) : const Color(0xFF64748B),
                       ),

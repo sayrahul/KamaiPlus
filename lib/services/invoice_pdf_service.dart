@@ -1,5 +1,6 @@
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../core/utils/money_formatter.dart';
 import '../models/models.dart';
 
@@ -17,6 +18,15 @@ class InvoicePdfService {
     String? customerPhone,
   }) async {
     try {
+      final prefs = await SharedPreferences.getInstance();
+      final themeColorHex = prefs.getString('invoice_theme_color_hex') ?? '#0284C7';
+      final headingText = prefs.getString('invoice_heading') ?? 'TAX INVOICE';
+      final termsText = prefs.getString('invoice_terms') ??
+          '1. Goods once sold cannot be taken back or exchanged.\n2. Electronic invoice generated via Kamai+ POS System.';
+      final footerNote = prefs.getString('custom_invoice_footer') ?? 'Thank you for shopping with us! Visit again.';
+      final showDynamicUpiQr = prefs.getBool('invoice_show_dynamic_upi_qr') ?? true;
+      final upiId = prefs.getString('store_upi_id') ?? 'proventure@icici';
+
       final dateStr = DateFormat('dd MMM yyyy, hh:mm a').format(sale.createdAt);
       final totalAmount = MoneyFormatter.formatPaise(sale.totalAmountPaise);
       final subtotalAmount = MoneyFormatter.formatPaise(sale.subtotalPaise);
@@ -54,6 +64,12 @@ class InvoicePdfService {
         'taxAmount': taxAmount,
         'totalAmount': totalAmount,
         'items': itemsList,
+        'themeColorHex': themeColorHex,
+        'headingText': headingText,
+        'termsText': termsText,
+        'footerNote': footerNote,
+        'showDynamicUpiQr': showDynamicUpiQr,
+        'upiId': upiId,
       });
 
       return filePath;
@@ -72,17 +88,19 @@ class InvoicePdfService {
     }
   }
 
-  /// Triggers native Android Share Sheet (WhatsApp, Email, Drive, Nearby Share) with the PDF attached
+  /// Triggers native Android Share Sheet or directs to WhatsApp with the PDF attached
   static Future<bool> sharePdf({
     required String filePath,
     required String invoiceNumber,
     required String storeName,
+    String? phone,
   }) async {
     try {
       final res = await _channel.invokeMethod<bool>('sharePdf', {
         'path': filePath,
         'invoiceNumber': invoiceNumber,
         'storeName': storeName,
+        'phone': phone ?? '',
       });
       return res ?? false;
     } catch (_) {
@@ -90,7 +108,7 @@ class InvoicePdfService {
     }
   }
 
-  /// Generates the PDF and immediately launches the native Android Share Sheet
+  /// Generates the PDF and immediately launches the native Android Share Sheet / WhatsApp
   static Future<bool> generateAndSharePdf({
     required SaleModel sale,
     required String storeName,
@@ -99,6 +117,7 @@ class InvoicePdfService {
     String? gstin,
     String? logoPath,
     String? customerPhone,
+    String? phone,
   }) async {
     final path = await generateAndDownloadPdf(
       sale: sale,
@@ -114,6 +133,7 @@ class InvoicePdfService {
       filePath: path,
       invoiceNumber: sale.invoiceNumber,
       storeName: storeName,
+      phone: phone ?? customerPhone ?? sale.customerPhone,
     );
   }
 }

@@ -102,7 +102,7 @@ class _KhataScreenState extends State<KhataScreen> {
 
       if (_selectedFilter == 'Due') return c.currentBalancePaise > 0;
       if (_selectedFilter == 'Clear') return c.currentBalancePaise <= 0;
-      if (_selectedFilter == 'VIP') return c.creditLimitPaise >= 1000000;
+      if (_selectedFilter == 'VIP') return c.isVip;
 
       return true;
     }).toList();
@@ -642,15 +642,36 @@ class _KhataScreenState extends State<KhataScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Text(
-                        cust.name,
-                        style: GoogleFonts.outfit(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w700,
-                          color: const Color(0xFF0F172A),
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
+                      Row(
+                        children: [
+                          Flexible(
+                            child: Text(
+                              cust.name,
+                              style: GoogleFonts.outfit(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w700,
+                                color: const Color(0xFF0F172A),
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          if (cust.isVip) ...[
+                            const SizedBox(width: 6),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFFEF3C7),
+                                borderRadius: BorderRadius.circular(5),
+                                border: Border.all(color: const Color(0xFFF59E0B), width: 0.7),
+                              ),
+                              child: Text(
+                                '👑 VIP',
+                                style: GoogleFonts.outfit(fontSize: 9, fontWeight: FontWeight.w800, color: const Color(0xFFB45309)),
+                              ),
+                            ),
+                          ],
+                        ],
                       ),
                       const SizedBox(height: 2),
                       Row(
@@ -922,15 +943,55 @@ class _KhataScreenState extends State<KhataScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
-                          customer.name,
-                          style: GoogleFonts.outfit(
-                            fontSize: 15,
-                            fontWeight: FontWeight.w800,
-                            color: const Color(0xFF0F172A),
-                          ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
+                        Row(
+                          children: [
+                            Flexible(
+                              child: Text(
+                                customer.name,
+                                style: GoogleFonts.outfit(
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.w800,
+                                  color: const Color(0xFF0F172A),
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                            const SizedBox(width: 6),
+                            InkWell(
+                              onTap: () async {
+                                HapticFeedback.lightImpact();
+                                final newStatus = !customer.isVip;
+                                await LocalDatabase.instance.toggleCustomerVip(customer.id, newStatus);
+                                final updated = customer.copyWith(isVip: newStatus);
+                                setState(() {
+                                  _selectedCustomer = updated;
+                                  final idx = _customers.indexWhere((c) => c.id == customer.id);
+                                  if (idx != -1) _customers[idx] = updated;
+                                });
+                              },
+                              borderRadius: BorderRadius.circular(6),
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
+                                decoration: BoxDecoration(
+                                  color: customer.isVip ? const Color(0xFFFEF3C7) : const Color(0xFFF1F5F9),
+                                  borderRadius: BorderRadius.circular(6),
+                                  border: Border.all(
+                                    color: customer.isVip ? const Color(0xFFF59E0B) : const Color(0xFFCBD5E1),
+                                    width: 0.8,
+                                  ),
+                                ),
+                                child: Text(
+                                  customer.isVip ? '👑 VIP' : '+ Set VIP',
+                                  style: GoogleFonts.outfit(
+                                    fontSize: 9.5,
+                                    fontWeight: FontWeight.w800,
+                                    color: customer.isVip ? const Color(0xFFB45309) : const Color(0xFF64748B),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
                         const SizedBox(height: 2),
                         Text(

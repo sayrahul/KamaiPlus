@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:uuid/uuid.dart';
 import '../../models/models.dart';
 import '../../core/database/local_database.dart';
@@ -10,6 +11,7 @@ import '../../core/utils/app_validators.dart';
 import '../../services/soundbox_service.dart';
 import '../../services/firestore_sync_service.dart';
 import '../../services/thermal_printer_service.dart';
+import '../../core/utils/money_formatter.dart';
 import 'pos_item_edit_modal.dart';
 import 'sale_completed_modal.dart';
 
@@ -125,6 +127,7 @@ class _PosCheckoutModalState extends State<PosCheckoutModal> {
   // Bill Discount state
   String _billDiscountType = 'flat'; // 'flat' | 'percentage'
   final TextEditingController _billDiscountController = TextEditingController();
+  bool _isDiscountExpanded = false;
 
   // Customer search
   final TextEditingController _customerSearchController = TextEditingController();
@@ -739,150 +742,238 @@ class _PosCheckoutModalState extends State<PosCheckoutModal> {
                   const SizedBox(height: 16),
 
                   // 2. Customer Section
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(
-                        'CUSTOMER',
-                        style: GoogleFonts.plusJakartaSans(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w800,
-                          letterSpacing: 0.5,
-                          color: const Color(0xFF64748B),
-                        ),
-                      ),
-                      GestureDetector(
-                        onTap: _showNewCustomerDialog,
-                        child: Row(
-                          children: [
-                            const Icon(Icons.person_add_alt_1, size: 14, color: Color(0xFF2563EB)),
-                            const SizedBox(width: 4),
-                            Text(
-                              '+ New Customer',
-                              style: GoogleFonts.plusJakartaSans(
-                                fontSize: 11,
-                                fontWeight: FontWeight.w700,
-                                color: const Color(0xFF2563EB),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 6),
-
-                  if (_currentCustomer != null)
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFEFF6FF),
-                        borderRadius: BorderRadius.circular(10),
-                        border: Border.all(color: const Color(0xFFBFDBFE)),
-                      ),
-                      child: Row(
+                  Builder(
+                    builder: (context) {
+                      final isCustomerCompulsoryMissing = (_paymentMode == 'credit' || (_paymentMode == 'split' && splitCreditPaise > 0)) && _currentCustomer == null;
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const Icon(Icons.account_circle, size: 24, color: Color(0xFF2563EB)),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Row(
+                                children: [
+                                  Text(
+                                    'CUSTOMER',
+                                    style: GoogleFonts.plusJakartaSans(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w800,
+                                      letterSpacing: 0.5,
+                                      color: isCustomerCompulsoryMissing ? const Color(0xFFDC2626) : const Color(0xFF64748B),
+                                    ),
+                                  ),
+                                  if (isCustomerCompulsoryMissing) ...[
+                                    const SizedBox(width: 6),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                                      decoration: BoxDecoration(
+                                        color: const Color(0xFFFEE2E2),
+                                        borderRadius: BorderRadius.circular(4),
+                                        border: Border.all(color: const Color(0xFFFCA5A5)),
+                                      ),
+                                      child: Text(
+                                        'COMPULSORY *',
+                                        style: GoogleFonts.plusJakartaSans(
+                                          fontSize: 9,
+                                          fontWeight: FontWeight.w900,
+                                          color: const Color(0xFFDC2626),
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ],
+                              ),
+                              GestureDetector(
+                                onTap: _showNewCustomerDialog,
+                                child: Row(
+                                  children: [
+                                    const Icon(Icons.person_add_alt_1, size: 14, color: Color(0xFF2563EB)),
+                                    const SizedBox(width: 4),
+                                    Text(
+                                      '+ New Customer',
+                                      style: GoogleFonts.plusJakartaSans(
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w700,
+                                        color: const Color(0xFF2563EB),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 6),
+
+                          if (_currentCustomer != null)
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFEFF6FF),
+                                borderRadius: BorderRadius.circular(10),
+                                border: Border.all(color: const Color(0xFFBFDBFE)),
+                              ),
+                              child: Row(
+                                children: [
+                                  const Icon(Icons.account_circle, size: 24, color: Color(0xFF2563EB)),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Row(
+                                          children: [
+                                            Flexible(
+                                              child: Text(
+                                                _currentCustomer!.name,
+                                                style: GoogleFonts.plusJakartaSans(
+                                                  fontSize: 13,
+                                                  fontWeight: FontWeight.w700,
+                                                  color: const Color(0xFF1E3A8A),
+                                                ),
+                                                overflow: TextOverflow.ellipsis,
+                                              ),
+                                            ),
+                                            if (_currentCustomer!.isVip) ...[
+                                              const SizedBox(width: 6),
+                                              Container(
+                                                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                                                decoration: BoxDecoration(
+                                                  color: const Color(0xFFFEF3C7),
+                                                  borderRadius: BorderRadius.circular(5),
+                                                  border: Border.all(color: const Color(0xFFF59E0B), width: 0.7),
+                                                ),
+                                                child: Text(
+                                                  '👑 VIP',
+                                                  style: GoogleFonts.outfit(fontSize: 9, fontWeight: FontWeight.w800, color: const Color(0xFFB45309)),
+                                                ),
+                                              ),
+                                            ],
+                                          ],
+                                        ),
+                                        if (_currentCustomer!.phone.isNotEmpty)
+                                          Text(
+                                            _currentCustomer!.phone,
+                                            style: GoogleFonts.jetBrainsMono(
+                                              fontSize: 11,
+                                              color: const Color(0xFF3B82F6),
+                                            ),
+                                          ),
+                                      ],
+                                    ),
+                                  ),
+                                  IconButton(
+                                    icon: const Icon(Icons.close, size: 18, color: Color(0xFF64748B)),
+                                    onPressed: () {
+                                      setState(() => _currentCustomer = null);
+                                      widget.onCustomerChanged(null);
+                                    },
+                                  ),
+                                ],
+                              ),
+                            )
+                          else
+                            Column(
                               children: [
-                                Text(
-                                  _currentCustomer!.name,
-                                  style: GoogleFonts.plusJakartaSans(
-                                    fontSize: 13,
-                                    fontWeight: FontWeight.w700,
-                                    color: const Color(0xFF1E3A8A),
+                                Container(
+                                  height: 42,
+                                  decoration: BoxDecoration(
+                                    color: isCustomerCompulsoryMissing ? const Color(0xFFFFF1F2) : Colors.white,
+                                    borderRadius: BorderRadius.circular(10),
+                                    border: Border.all(
+                                      color: isCustomerCompulsoryMissing
+                                          ? const Color(0xFFEF4444)
+                                          : (_isSearchingCustomer ? const Color(0xFF2563EB) : const Color(0xFFCBD5E1)),
+                                      width: isCustomerCompulsoryMissing ? 1.8 : (_isSearchingCustomer ? 1.4 : 1.0),
+                                    ),
+                                  ),
+                                  padding: const EdgeInsets.symmetric(horizontal: 10),
+                                  child: Row(
+                                    children: [
+                                      Icon(
+                                        isCustomerCompulsoryMissing ? Icons.error_outline_rounded : Icons.search,
+                                        size: 18,
+                                        color: isCustomerCompulsoryMissing ? const Color(0xFFEF4444) : const Color(0xFF94A3B8),
+                                      ),
+                                      const SizedBox(width: 8),
+                                      Expanded(
+                                        child: TextField(
+                                          controller: _customerSearchController,
+                                          onTap: () {
+                                            setState(() {
+                                              _isSearchingCustomer = true;
+                                              if (_customerSearchController.text.trim().isEmpty) {
+                                                _filteredCustomers = widget.allCustomers;
+                                              } else {
+                                                _onCustomerSearch(_customerSearchController.text);
+                                              }
+                                            });
+                                          },
+                                          onChanged: _onCustomerSearch,
+                                          style: GoogleFonts.plusJakartaSans(
+                                            fontSize: 12,
+                                            fontWeight: FontWeight.w600,
+                                            color: const Color(0xFF0F172A),
+                                          ),
+                                          decoration: InputDecoration(
+                                            hintText: isCustomerCompulsoryMissing
+                                                ? '⚠️ Udhar ke liye Customer add karna jaruri hai (Tap here)...'
+                                                : 'Search or tap to choose customer...',
+                                            hintStyle: GoogleFonts.plusJakartaSans(
+                                              fontSize: 12,
+                                              color: isCustomerCompulsoryMissing ? const Color(0xFFDC2626) : const Color(0xFF94A3B8),
+                                              fontWeight: isCustomerCompulsoryMissing ? FontWeight.w600 : FontWeight.normal,
+                                            ),
+                                            border: InputBorder.none,
+                                            isDense: true,
+                                          ),
+                                        ),
+                                      ),
+                                      if (_isSearchingCustomer)
+                                        InkWell(
+                                          onTap: () {
+                                            setState(() {
+                                              _isSearchingCustomer = false;
+                                              _customerSearchController.clear();
+                                            });
+                                          },
+                                          child: const Padding(
+                                            padding: EdgeInsets.all(4),
+                                            child: Icon(Icons.close, size: 16, color: Color(0xFF64748B)),
+                                          ),
+                                        ),
+                                    ],
                                   ),
                                 ),
-                                if (_currentCustomer!.phone.isNotEmpty)
-                                  Text(
-                                    _currentCustomer!.phone,
-                                    style: GoogleFonts.jetBrainsMono(
-                                      fontSize: 11,
-                                      color: const Color(0xFF3B82F6),
+                                if (isCustomerCompulsoryMissing)
+                                  Container(
+                                    margin: const EdgeInsets.only(top: 6),
+                                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                    decoration: BoxDecoration(
+                                      color: const Color(0xFFFEE2E2),
+                                      borderRadius: BorderRadius.circular(8),
+                                      border: Border.all(color: const Color(0xFFFCA5A5)),
+                                    ),
+                                    child: Row(
+                                      children: [
+                                        const Icon(Icons.error_outline_rounded, size: 16, color: Color(0xFFDC2626)),
+                                        const SizedBox(width: 6),
+                                        Expanded(
+                                          child: Text(
+                                            '⚠️ Udhar / Khata sale ke liye Customer select karna anivarya (compulsory) hai!',
+                                            style: GoogleFonts.plusJakartaSans(
+                                              fontSize: 11,
+                                              fontWeight: FontWeight.w700,
+                                              color: const Color(0xFFDC2626),
+                                            ),
+                                          ),
+                                        ),
+                                      ],
                                     ),
                                   ),
                               ],
                             ),
-                          ),
-                          IconButton(
-                            icon: const Icon(Icons.close, size: 18, color: Color(0xFF64748B)),
-                            onPressed: () {
-                              setState(() => _currentCustomer = null);
-                              widget.onCustomerChanged(null);
-                            },
-                          ),
-                        ],
-                      ),
-                    )
-                  else
-                    Column(
-                      children: [
-                        Container(
-                          height: 42,
-                          decoration: BoxDecoration(
-                            color: Colors.white,
-                            borderRadius: BorderRadius.circular(10),
-                            border: Border.all(
-                              color: _isSearchingCustomer ? const Color(0xFF2563EB) : const Color(0xFFCBD5E1),
-                              width: _isSearchingCustomer ? 1.4 : 1.0,
-                            ),
-                          ),
-                          padding: const EdgeInsets.symmetric(horizontal: 10),
-                          child: Row(
-                            children: [
-                              const Icon(Icons.search, size: 18, color: Color(0xFF94A3B8)),
-                              const SizedBox(width: 8),
-                              Expanded(
-                                child: TextField(
-                                  controller: _customerSearchController,
-                                  onTap: () {
-                                    setState(() {
-                                      _isSearchingCustomer = true;
-                                      if (_customerSearchController.text.trim().isEmpty) {
-                                        _filteredCustomers = widget.allCustomers;
-                                      } else {
-                                        _onCustomerSearch(_customerSearchController.text);
-                                      }
-                                    });
-                                  },
-                                  onChanged: _onCustomerSearch,
-                                  style: GoogleFonts.plusJakartaSans(
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.w600,
-                                    color: const Color(0xFF0F172A),
-                                  ),
-                                  decoration: InputDecoration(
-                                    hintText: 'Search or tap to choose customer...',
-                                    hintStyle: GoogleFonts.plusJakartaSans(
-                                      fontSize: 12,
-                                      color: const Color(0xFF94A3B8),
-                                    ),
-                                    border: InputBorder.none,
-                                    isDense: true,
-                                  ),
-                                ),
-                              ),
-                              if (_isSearchingCustomer)
-                                InkWell(
-                                  onTap: () {
-                                    setState(() {
-                                      _isSearchingCustomer = false;
-                                      _customerSearchController.clear();
-                                    });
-                                  },
-                                  child: const Padding(
-                                    padding: EdgeInsets.all(4),
-                                    child: Icon(Icons.close, size: 16, color: Color(0xFF64748B)),
-                                  ),
-                                ),
-                            ],
-                          ),
-                        ),
-                        if (_isSearchingCustomer)
-                          Container(
+                          if (_isSearchingCustomer)
+                            Container(
                             margin: const EdgeInsets.only(top: 4),
                             padding: const EdgeInsets.all(4),
                             decoration: BoxDecoration(
@@ -963,9 +1054,11 @@ class _PosCheckoutModalState extends State<PosCheckoutModal> {
                                       );
                                     },
                                   ),
-                          ),
-                      ],
-                    ),
+                            ),
+                        ],
+                      );
+                    },
+                  ),
                   const SizedBox(height: 18),
 
                   // 3. Cart Items Section Header
@@ -1074,152 +1167,165 @@ class _PosCheckoutModalState extends State<PosCheckoutModal> {
                       ),
                     )
                   else
-                    ...currentCartItems.map((item) {
-                      final itemPriceRupees = item.unitPricePaise / 100.0;
-                      final itemTotalRupees = item.grossTotalPaise / 100.0;
-                      final unitDisplay = item.product.unit.isNotEmpty ? item.product.unit : 'packet';
+                    ConstrainedBox(
+                      constraints: const BoxConstraints(maxHeight: 230),
+                      child: Scrollbar(
+                        thumbVisibility: currentCartItems.length > 3,
+                        child: ListView.builder(
+                          shrinkWrap: true,
+                          padding: EdgeInsets.zero,
+                          physics: const BouncingScrollPhysics(),
+                          itemCount: currentCartItems.length,
+                          itemBuilder: (context, idx) {
+                            final item = currentCartItems[idx];
+                            final itemPriceRupees = item.unitPricePaise / 100.0;
+                            final itemTotalRupees = item.grossTotalPaise / 100.0;
+                            final unitDisplay = item.product.unit.isNotEmpty ? item.product.unit : 'packet';
 
-                      return Container(
-                        margin: const EdgeInsets.only(bottom: 8),
-                        padding: const EdgeInsets.all(10),
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: const Color(0xFFF1F5F9)),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.black.withValues(alpha: 0.02),
-                              blurRadius: 4,
-                              offset: const Offset(0, 1),
-                            ),
-                          ],
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                Expanded(
-                                  child: Text(
-                                    item.product.name,
-                                    style: GoogleFonts.plusJakartaSans(
-                                      fontSize: 13,
-                                      fontWeight: FontWeight.w700,
-                                      color: const Color(0xFF0F172A),
-                                    ),
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
+                            return Container(
+                              margin: const EdgeInsets.only(bottom: 8),
+                              padding: const EdgeInsets.all(10),
+                              decoration: BoxDecoration(
+                                color: Colors.white,
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(color: const Color(0xFFF1F5F9)),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: Colors.black.withValues(alpha: 0.02),
+                                    blurRadius: 4,
+                                    offset: const Offset(0, 1),
                                   ),
-                                ),
-                                Text(
-                                  '₹${itemTotalRupees.toStringAsFixed(2)}',
-                                  style: GoogleFonts.jetBrainsMono(
-                                    fontSize: 13,
-                                    fontWeight: FontWeight.w800,
-                                    color: const Color(0xFF0F172A),
-                                  ),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 4),
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                Text(
-                                  '₹${itemPriceRupees.toStringAsFixed(2)} × ${item.quantity % 1 == 0 ? item.quantity.toInt() : item.quantity} $unitDisplay',
-                                  style: GoogleFonts.plusJakartaSans(
-                                    fontSize: 11,
-                                    color: const Color(0xFF64748B),
-                                  ),
-                                ),
-                                Row(
-                                  children: [
-                                    // Stepper [-]
-                                    InkWell(
-                                      onTap: () {
-                                        if (item.quantity > 1) {
-                                          widget.onUpdateQuantity(item, (item.quantity - 1).toInt());
-                                        } else {
-                                          widget.onRemoveItem(item);
-                                        }
-                                        setState(() {});
-                                      },
-                                      borderRadius: BorderRadius.circular(6),
-                                      child: Container(
-                                        padding: const EdgeInsets.all(4),
-                                        decoration: BoxDecoration(
-                                          border: Border.all(color: const Color(0xFFE2E8F0)),
-                                          borderRadius: BorderRadius.circular(6),
+                                ],
+                              ),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                    children: [
+                                      Expanded(
+                                        child: Text(
+                                          item.product.name,
+                                          style: GoogleFonts.plusJakartaSans(
+                                            fontSize: 13,
+                                            fontWeight: FontWeight.w700,
+                                            color: const Color(0xFF0F172A),
+                                          ),
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
                                         ),
-                                        child: const Icon(Icons.remove, size: 14, color: Color(0xFF64748B)),
                                       ),
-                                    ),
-                                    const SizedBox(width: 8),
-                                    Text(
-                                      item.quantity % 1 == 0 ? item.quantity.toInt().toString() : item.quantity.toString(),
-                                      style: GoogleFonts.jetBrainsMono(
-                                        fontSize: 12,
-                                        fontWeight: FontWeight.w700,
-                                        color: const Color(0xFF0F172A),
-                                      ),
-                                    ),
-                                    const SizedBox(width: 8),
-                                    // Stepper [+]
-                                    InkWell(
-                                      onTap: () {
-                                        widget.onUpdateQuantity(item, (item.quantity + 1).toInt());
-                                        setState(() {});
-                                      },
-                                      borderRadius: BorderRadius.circular(6),
-                                      child: Container(
-                                        padding: const EdgeInsets.all(4),
-                                        decoration: BoxDecoration(
-                                          border: Border.all(color: const Color(0xFFE2E8F0)),
-                                          borderRadius: BorderRadius.circular(6),
+                                      Text(
+                                        '₹${itemTotalRupees.toStringAsFixed(2)}',
+                                        style: GoogleFonts.jetBrainsMono(
+                                          fontSize: 13,
+                                          fontWeight: FontWeight.w800,
+                                          color: const Color(0xFF0F172A),
                                         ),
-                                        child: const Icon(Icons.add, size: 14, color: Color(0xFF64748B)),
                                       ),
-                                    ),
-                                    const SizedBox(width: 10),
-                                    // Pencil Edit Icon -> opens PosItemEditModal
-                                    InkWell(
-                                      onTap: () {
-                                        PosItemEditModal.show(
-                                          context,
-                                          cartItem: item,
-                                          onUpdate: (updated) {
-                                            setState(() {});
-                                          },
-                                        );
-                                      },
-                                      borderRadius: BorderRadius.circular(6),
-                                      child: Container(
-                                        padding: const EdgeInsets.all(4),
-                                        child: const Icon(Icons.edit_outlined, size: 16, color: Color(0xFF64748B)),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Row(
+                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                    children: [
+                                      Text(
+                                        '₹${itemPriceRupees.toStringAsFixed(2)} × ${item.quantity % 1 == 0 ? item.quantity.toInt() : item.quantity} $unitDisplay',
+                                        style: GoogleFonts.plusJakartaSans(
+                                          fontSize: 11,
+                                          color: const Color(0xFF64748B),
+                                        ),
                                       ),
-                                    ),
-                                    const SizedBox(width: 4),
-                                    // Trash Icon
-                                    InkWell(
-                                      onTap: () {
-                                        widget.onRemoveItem(item);
-                                        setState(() {});
-                                      },
-                                      borderRadius: BorderRadius.circular(6),
-                                      child: Container(
-                                        padding: const EdgeInsets.all(4),
-                                        child: const Icon(Icons.delete_outline, size: 16, color: Color(0xFF94A3B8)),
+                                      Row(
+                                        children: [
+                                          // Stepper [-]
+                                          InkWell(
+                                            onTap: () {
+                                              if (item.quantity > 1) {
+                                                widget.onUpdateQuantity(item, (item.quantity - 1).toInt());
+                                              } else {
+                                                widget.onRemoveItem(item);
+                                              }
+                                              setState(() {});
+                                            },
+                                            borderRadius: BorderRadius.circular(6),
+                                            child: Container(
+                                              padding: const EdgeInsets.all(4),
+                                              decoration: BoxDecoration(
+                                                border: Border.all(color: const Color(0xFFE2E8F0)),
+                                                borderRadius: BorderRadius.circular(6),
+                                              ),
+                                              child: const Icon(Icons.remove, size: 14, color: Color(0xFF64748B)),
+                                            ),
+                                          ),
+                                          const SizedBox(width: 8),
+                                          Text(
+                                            item.quantity % 1 == 0 ? item.quantity.toInt().toString() : item.quantity.toString(),
+                                            style: GoogleFonts.jetBrainsMono(
+                                              fontSize: 12,
+                                              fontWeight: FontWeight.w700,
+                                              color: const Color(0xFF0F172A),
+                                            ),
+                                          ),
+                                          const SizedBox(width: 8),
+                                          // Stepper [+]
+                                          InkWell(
+                                            onTap: () {
+                                              widget.onUpdateQuantity(item, (item.quantity + 1).toInt());
+                                              setState(() {});
+                                            },
+                                            borderRadius: BorderRadius.circular(6),
+                                            child: Container(
+                                              padding: const EdgeInsets.all(4),
+                                              decoration: BoxDecoration(
+                                                border: Border.all(color: const Color(0xFFE2E8F0)),
+                                                borderRadius: BorderRadius.circular(6),
+                                              ),
+                                              child: const Icon(Icons.add, size: 14, color: Color(0xFF64748B)),
+                                            ),
+                                          ),
+                                          const SizedBox(width: 10),
+                                          // Pencil Edit Icon -> opens PosItemEditModal
+                                          InkWell(
+                                            onTap: () {
+                                              PosItemEditModal.show(
+                                                context,
+                                                cartItem: item,
+                                                onUpdate: (updated) {
+                                                  setState(() {});
+                                                },
+                                              );
+                                            },
+                                            borderRadius: BorderRadius.circular(6),
+                                            child: Container(
+                                              padding: const EdgeInsets.all(4),
+                                              child: const Icon(Icons.edit_outlined, size: 16, color: Color(0xFF64748B)),
+                                            ),
+                                          ),
+                                          const SizedBox(width: 4),
+                                          // Trash Icon
+                                          InkWell(
+                                            onTap: () {
+                                              widget.onRemoveItem(item);
+                                              setState(() {});
+                                            },
+                                            borderRadius: BorderRadius.circular(6),
+                                            child: Container(
+                                              padding: const EdgeInsets.all(4),
+                                              child: const Icon(Icons.delete_outline, size: 16, color: Color(0xFF94A3B8)),
+                                            ),
+                                          ),
+                                        ],
                                       ),
-                                    ),
-                                  ],
-                                ),
-                              ],
-                            ),
-                          ],
+                                    ],
+                                  ),
+                                ],
+                              ),
+                            );
+                          },
                         ),
-                      );
-                    }),
+                      ),
+                    ),
                   const SizedBox(height: 16),
 
                   // 4. Payment Mode Selector
@@ -1527,6 +1633,66 @@ class _PosCheckoutModalState extends State<PosCheckoutModal> {
                               ),
                             ],
                           ),
+                          if (_currentCustomer != null && _currentCustomer!.phone.isNotEmpty) ...[
+                            const SizedBox(height: 12),
+                            InkWell(
+                              onTap: () async {
+                                final phone = _currentCustomer!.phone.replaceAll(RegExp(r'\D'), '');
+                                final cleanPhone = phone.length == 10 ? '91$phone' : phone;
+                                final amountRupees = (grandTotalPaise / 100.0).toStringAsFixed(2);
+                                final upiUri = 'upi://pay?pa=proventure@icici&pn=KamaiPlus+Store&am=$amountRupees&cu=INR&tn=POS+Bill';
+                                final text = Uri.encodeComponent(
+                                  '🙏 Namaste ${_currentCustomer!.name} Ji!\n\n'
+                                  'Aapka KamaiPlus Bill amount: ₹$amountRupees\n'
+                                  'Direct 1-Tap UPI se pay karne ke liye niche link par click karein:\n'
+                                  '$upiUri\n\n'
+                                  'Payment hone par bill turant update ho jayega. Dhanyawad! ✨'
+                                );
+                                final url = Uri.parse('https://wa.me/$cleanPhone?text=$text');
+                                if (await canLaunchUrl(url)) {
+                                  await launchUrl(url, mode: LaunchMode.externalApplication);
+                                }
+                              },
+                              borderRadius: BorderRadius.circular(10),
+                              child: Container(
+                                width: double.infinity,
+                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFF25D366).withValues(alpha: 0.15),
+                                  borderRadius: BorderRadius.circular(10),
+                                  border: Border.all(color: const Color(0xFF25D366), width: 1.2),
+                                ),
+                                child: Row(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    const Icon(Icons.send_rounded, size: 14, color: Color(0xFF25D366)),
+                                    const SizedBox(width: 6),
+                                    Flexible(
+                                      child: Text(
+                                        'Send 1-Tap UPI Link to ${_currentCustomer!.name}',
+                                        style: GoogleFonts.plusJakartaSans(
+                                          fontSize: 11.5,
+                                          fontWeight: FontWeight.w700,
+                                          color: const Color(0xFF25D366),
+                                        ),
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ] else ...[
+                            const SizedBox(height: 8),
+                            Text(
+                              '💡 Select customer above to send 1-Tap UPI WhatsApp pay link',
+                              style: GoogleFonts.inter(
+                                fontSize: 10,
+                                fontStyle: FontStyle.italic,
+                                color: const Color(0xFF94A3B8),
+                              ),
+                            ),
+                          ],
                         ],
                       ),
                     ),
@@ -1536,123 +1702,184 @@ class _PosCheckoutModalState extends State<PosCheckoutModal> {
                     const SizedBox(height: 14),
                   ],
 
-                  // 6. Bill Discount Section
+                  // 6. Bill Discount Section (Space-Saving Expandable Dropdown)
                   Container(
-                    padding: const EdgeInsets.all(10),
                     decoration: BoxDecoration(
                       color: Colors.white,
                       borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: const Color(0xFFE2E8F0)),
+                      border: Border.all(
+                        color: billDiscountPaise > 0 ? const Color(0xFF10B981) : const Color(0xFFE2E8F0),
+                        width: billDiscountPaise > 0 ? 1.4 : 1.0,
+                      ),
                     ),
                     child: Column(
                       children: [
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Row(
+                        InkWell(
+                          onTap: () => setState(() => _isDiscountExpanded = !_isDiscountExpanded),
+                          borderRadius: BorderRadius.circular(12),
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+                            child: Row(
                               children: [
-                                const Icon(Icons.local_offer_outlined, size: 16, color: Color(0xFF10B981)),
-                                const SizedBox(width: 6),
-                                Text(
-                                  'Bill Discount',
-                                  style: GoogleFonts.plusJakartaSans(
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.w700,
-                                    color: const Color(0xFF334155),
+                                Icon(
+                                  Icons.local_offer_outlined,
+                                  size: 16,
+                                  color: billDiscountPaise > 0 ? const Color(0xFF10B981) : const Color(0xFF64748B),
+                                ),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    billDiscountPaise > 0
+                                        ? 'Discount: -${MoneyFormatter.formatINR(billDiscountPaise)} (${_billDiscountType == 'flat' ? '₹ Flat' : '${_billDiscountController.text}%'})'
+                                        : 'Add Bill Discount / Coupon',
+                                    style: GoogleFonts.plusJakartaSans(
+                                      fontSize: 12,
+                                      fontWeight: billDiscountPaise > 0 ? FontWeight.w700 : FontWeight.w600,
+                                      color: billDiscountPaise > 0 ? const Color(0xFF047857) : const Color(0xFF334155),
+                                    ),
+                                  ),
+                                ),
+                                if (billDiscountPaise > 0)
+                                  GestureDetector(
+                                    onTap: () {
+                                      setState(() {
+                                        _billDiscountController.clear();
+                                      });
+                                    },
+                                    child: Padding(
+                                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                      child: Text(
+                                        'Remove',
+                                        style: GoogleFonts.inter(
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.w700,
+                                          color: const Color(0xFFEF4444),
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                Icon(
+                                  _isDiscountExpanded ? Icons.keyboard_arrow_up_rounded : Icons.keyboard_arrow_down_rounded,
+                                  size: 20,
+                                  color: const Color(0xFF64748B),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                        if (_isDiscountExpanded) ...[
+                          const Divider(height: 1, color: Color(0xFFF1F5F9)),
+                          Padding(
+                            padding: const EdgeInsets.all(10),
+                            child: Column(
+                              children: [
+                                Row(
+                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    Text(
+                                      'Type:',
+                                      style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w600, color: const Color(0xFF64748B)),
+                                    ),
+                                    Container(
+                                      padding: const EdgeInsets.all(2),
+                                      decoration: BoxDecoration(
+                                        color: const Color(0xFFF1F5F9),
+                                        borderRadius: BorderRadius.circular(6),
+                                      ),
+                                      child: Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          GestureDetector(
+                                            onTap: () => setState(() => _billDiscountType = 'flat'),
+                                            child: Container(
+                                              padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+                                              decoration: BoxDecoration(
+                                                color: _billDiscountType == 'flat' ? Colors.white : Colors.transparent,
+                                                borderRadius: BorderRadius.circular(4),
+                                                boxShadow: _billDiscountType == 'flat'
+                                                    ? [const BoxShadow(color: Color(0x0D000000), blurRadius: 2)]
+                                                    : null,
+                                              ),
+                                              child: Text(
+                                                '₹ Flat',
+                                                style: GoogleFonts.plusJakartaSans(
+                                                  fontSize: 11,
+                                                  fontWeight: FontWeight.w700,
+                                                  color: _billDiscountType == 'flat' ? const Color(0xFF0F172A) : const Color(0xFF64748B),
+                                                ),
+                                              ),
+                                            ),
+                                          ),
+                                          GestureDetector(
+                                            onTap: () => setState(() => _billDiscountType = 'percentage'),
+                                            child: Container(
+                                              padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+                                              decoration: BoxDecoration(
+                                                color: _billDiscountType == 'percentage' ? Colors.white : Colors.transparent,
+                                                borderRadius: BorderRadius.circular(4),
+                                                boxShadow: _billDiscountType == 'percentage'
+                                                    ? [const BoxShadow(color: Color(0x0D000000), blurRadius: 2)]
+                                                    : null,
+                                              ),
+                                              child: Text(
+                                                '% Percent',
+                                                style: GoogleFonts.plusJakartaSans(
+                                                  fontSize: 11,
+                                                  fontWeight: FontWeight.w700,
+                                                  color: _billDiscountType == 'percentage' ? const Color(0xFF0F172A) : const Color(0xFF64748B),
+                                                ),
+                                              ),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 8),
+                                Container(
+                                  height: 38,
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFFF8FAFC),
+                                    borderRadius: BorderRadius.circular(8),
+                                    border: Border.all(color: const Color(0xFFCBD5E1)),
+                                  ),
+                                  padding: const EdgeInsets.symmetric(horizontal: 10),
+                                  child: Row(
+                                    children: [
+                                      Text(
+                                        _billDiscountType == 'flat' ? '₹ ' : '% ',
+                                        style: GoogleFonts.jetBrainsMono(
+                                          fontSize: 13,
+                                          fontWeight: FontWeight.w700,
+                                          color: const Color(0xFF64748B),
+                                        ),
+                                      ),
+                                      Expanded(
+                                        child: TextField(
+                                          controller: _billDiscountController,
+                                          keyboardType: TextInputType.number,
+                                          style: GoogleFonts.jetBrainsMono(
+                                            fontSize: 13,
+                                            fontWeight: FontWeight.w700,
+                                            color: const Color(0xFF0F172A),
+                                          ),
+                                          decoration: InputDecoration(
+                                            hintText: _billDiscountType == 'flat' ? 'Enter discount amount (e.g. 50)' : 'Enter discount percentage (e.g. 10)',
+                                            hintStyle: GoogleFonts.plusJakartaSans(fontSize: 11, color: const Color(0xFF94A3B8)),
+                                            border: InputBorder.none,
+                                            isDense: true,
+                                          ),
+                                          onChanged: (_) => setState(() {}),
+                                        ),
+                                      ),
+                                    ],
                                   ),
                                 ),
                               ],
                             ),
-                            Container(
-                              padding: const EdgeInsets.all(2),
-                              decoration: BoxDecoration(
-                                color: const Color(0xFFE2E8F0),
-                                borderRadius: BorderRadius.circular(6),
-                              ),
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  GestureDetector(
-                                    onTap: () => setState(() => _billDiscountType = 'flat'),
-                                    child: Container(
-                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                                      decoration: BoxDecoration(
-                                        color: _billDiscountType == 'flat' ? Colors.white : Colors.transparent,
-                                        borderRadius: BorderRadius.circular(4),
-                                      ),
-                                      child: Text(
-                                        '₹ Flat',
-                                        style: GoogleFonts.plusJakartaSans(
-                                          fontSize: 10.5,
-                                          fontWeight: FontWeight.w700,
-                                          color: _billDiscountType == 'flat' ? const Color(0xFF0F172A) : const Color(0xFF64748B),
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                  GestureDetector(
-                                    onTap: () => setState(() => _billDiscountType = 'percentage'),
-                                    child: Container(
-                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                                      decoration: BoxDecoration(
-                                        color: _billDiscountType == 'percentage' ? Colors.white : Colors.transparent,
-                                        borderRadius: BorderRadius.circular(4),
-                                      ),
-                                      child: Text(
-                                        '% Percent',
-                                        style: GoogleFonts.plusJakartaSans(
-                                          fontSize: 10.5,
-                                          fontWeight: FontWeight.w700,
-                                          color: _billDiscountType == 'percentage' ? const Color(0xFF0F172A) : const Color(0xFF64748B),
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 8),
-                        Container(
-                          height: 38,
-                          decoration: BoxDecoration(
-                            color: const Color(0xFFF8FAFC),
-                            borderRadius: BorderRadius.circular(8),
-                            border: Border.all(color: const Color(0xFFCBD5E1)),
                           ),
-                          padding: const EdgeInsets.symmetric(horizontal: 10),
-                          child: Row(
-                            children: [
-                              Text(
-                                _billDiscountType == 'flat' ? '₹ ' : '% ',
-                                style: GoogleFonts.jetBrainsMono(
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.w700,
-                                  color: const Color(0xFF64748B),
-                                ),
-                              ),
-                              Expanded(
-                                child: TextField(
-                                  controller: _billDiscountController,
-                                  keyboardType: TextInputType.number,
-                                  style: GoogleFonts.jetBrainsMono(
-                                    fontSize: 13,
-                                    fontWeight: FontWeight.w700,
-                                    color: const Color(0xFF0F172A),
-                                  ),
-                                  decoration: InputDecoration(
-                                    hintText: 'e.g. 50',
-                                    hintStyle: GoogleFonts.plusJakartaSans(fontSize: 12, color: const Color(0xFF94A3B8)),
-                                    border: InputBorder.none,
-                                    isDense: true,
-                                  ),
-                                  onChanged: (_) => setState(() {}),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
+                        ],
                       ],
                     ),
                   ),

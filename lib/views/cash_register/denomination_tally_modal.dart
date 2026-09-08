@@ -48,6 +48,7 @@ class _DenominationTallyModalState extends State<DenominationTallyModal> {
     200: 'assets/images/200.png',
     100: 'assets/images/100.png',
     50: 'assets/images/50.png',
+    20: 'assets/images/20.png',
     10: 'assets/images/10.png',
     5: 'assets/images/5.png',
     2: 'assets/images/2.png',
@@ -72,6 +73,7 @@ class _DenominationTallyModalState extends State<DenominationTallyModal> {
             2: 0,
             1: 0,
           };
+    _denominations.remove(2000);
   }
 
   int get _countedTotalPaise {

@@ -107,17 +107,41 @@ class _SaleCompletedModalState extends State<SaleCompletedModal> {
     }
 
     final targetPhone = phone.length == 10 ? '91$phone' : phone;
-    final dateStr = DateFormat('dd MMM yyyy, hh:mm a').format(widget.sale.createdAt);
-    final amountStr = MoneyFormatter.formatINR(widget.sale.totalAmountPaise);
 
-    final itemLines = widget.sale.items.map((it) {
-      final name = it['product_name'] ?? it['name'] ?? 'Item';
-      final qty = it['quantity'] ?? it['qty'] ?? 1;
-      final price = ((it['unit_price_paise'] ?? it['price'] as num?) ?? 0) / 100.0;
-      return '• $name x $qty = ₹${(price * (qty as num)).toStringAsFixed(2)}';
-    }).join('\n');
+    // 1. Generate the exact styled A4 PDF matching Invoice Themes preview
+    final filePath = await InvoicePdfService.generateAndDownloadPdf(
+      sale: widget.sale,
+      storeName: _storeName,
+      storePhone: _profile.phone,
+      storeAddress: _profile.address,
+      gstin: _profile.gstin,
+      logoPath: _profile.logoUrl,
+      customerPhone: targetPhone,
+    );
 
-    final message = '''
+    bool shared = false;
+    if (filePath != null && filePath.isNotEmpty) {
+      // 2. Share directly to customer's WhatsApp with PDF attached!
+      shared = await InvoicePdfService.sharePdf(
+        filePath: filePath,
+        invoiceNumber: widget.sale.invoiceNumber,
+        storeName: _storeName,
+        phone: targetPhone,
+      );
+    }
+
+    // If native attachment channel succeeded or fallback to text message
+    if (!shared) {
+      final dateStr = DateFormat('dd MMM yyyy, hh:mm a').format(widget.sale.createdAt);
+      final amountStr = MoneyFormatter.formatINR(widget.sale.totalAmountPaise);
+      final itemLines = widget.sale.items.map((it) {
+        final name = it['product_name'] ?? it['name'] ?? 'Item';
+        final qty = it['quantity'] ?? it['qty'] ?? 1;
+        final price = ((it['unit_price_paise'] ?? it['price'] as num?) ?? 0) / 100.0;
+        return '• $name x $qty = ₹${(price * (qty as num)).toStringAsFixed(2)}';
+      }).join('\n');
+
+      final message = '''
 Namaste ${widget.sale.customerName ?? 'Valued Customer'}! 🙏
 Thank you for shopping at *$_storeName*. Here is your digital tax invoice:
 
@@ -133,15 +157,9 @@ $itemLines
 Have a wonderful day! Visit us again soon.
 ''';
 
-    final webWaUrl = Uri.parse('https://wa.me/$targetPhone?text=${Uri.encodeComponent(message)}');
-    final directWaUrl = Uri.parse('whatsapp://send?phone=$targetPhone&text=${Uri.encodeComponent(message)}');
-
-    bool launched = false;
-    try {
-      launched = await launchUrl(webWaUrl, mode: LaunchMode.externalApplication);
-    } catch (_) {
+      final webWaUrl = Uri.parse('https://wa.me/$targetPhone?text=${Uri.encodeComponent(message)}');
       try {
-        launched = await launchUrl(directWaUrl, mode: LaunchMode.externalApplication);
+        await launchUrl(webWaUrl, mode: LaunchMode.externalApplication);
       } catch (_) {}
     }
 
@@ -152,9 +170,9 @@ Have a wonderful day! Visit us again soon.
 
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(launched ? '✓ WhatsApp opened with bill receipt!' : 'WhatsApp receipt dispatched!'),
-          backgroundColor: const Color(0xFF059669),
+        const SnackBar(
+          content: Text('✓ A4 Invoice PDF dispatched to WhatsApp with bill attached!'),
+          backgroundColor: Color(0xFF059669),
           behavior: SnackBarBehavior.floating,
         ),
       );

@@ -6,6 +6,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../core/constants/business_vertical_config.dart';
 import '../common/kamai_bottom_nav.dart';
 import '../common/pro_upgrade_modal.dart';
+import '../../models/models.dart';
+import '../../services/invoice_pdf_service.dart';
 
 class InvoiceThemesScreen extends StatefulWidget {
   const InvoiceThemesScreen({super.key});
@@ -62,6 +64,31 @@ class _InvoiceThemesScreenState extends State<InvoiceThemesScreen> {
       if (saved != null && saved.isNotEmpty) {
         _footerCtrl.text = saved;
       }
+      final savedHeading = prefs.getString('invoice_heading');
+      if (savedHeading != null && savedHeading.isNotEmpty) {
+        _selectedHeading = savedHeading;
+      }
+      final savedColorIdx = prefs.getInt('invoice_selected_palette_index');
+      if (savedColorIdx != null && savedColorIdx >= 0 && savedColorIdx < _palette.length) {
+        _selectedColorIndex = savedColorIdx;
+      }
+      final savedTerms = prefs.getString('invoice_terms');
+      if (savedTerms != null && savedTerms.isNotEmpty) {
+        _termsCtrl.text = savedTerms;
+      }
+      if (prefs.containsKey('invoice_show_dynamic_upi_qr')) {
+        _showDynamicUpiQr = prefs.getBool('invoice_show_dynamic_upi_qr') ?? true;
+      }
+      if (prefs.containsKey('invoice_show_logo')) {
+        _showLogo = prefs.getBool('invoice_show_logo') ?? true;
+      }
+      if (prefs.containsKey('invoice_show_tagline')) {
+        _showTagline = prefs.getBool('invoice_show_tagline') ?? true;
+      }
+      if (prefs.containsKey('invoice_show_owner_phone')) {
+        _showOwnerPhone = prefs.getBool('invoice_show_owner_phone') ?? true;
+      }
+      if (mounted) setState(() {});
     } catch (_) {}
   }
 
@@ -77,6 +104,16 @@ class _InvoiceThemesScreenState extends State<InvoiceThemesScreen> {
     try {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString('custom_invoice_footer', _footerCtrl.text.trim());
+      await prefs.setString('invoice_heading', _selectedHeading);
+      await prefs.setInt('invoice_selected_palette_index', _selectedColorIndex);
+      final activeColor = _palette[_selectedColorIndex];
+      final hex = '#${activeColor.toARGB32().toRadixString(16).padLeft(8, '0').substring(2).toUpperCase()}';
+      await prefs.setString('invoice_theme_color_hex', hex);
+      await prefs.setString('invoice_terms', _termsCtrl.text.trim());
+      await prefs.setBool('invoice_show_dynamic_upi_qr', _showDynamicUpiQr);
+      await prefs.setBool('invoice_show_logo', _showLogo);
+      await prefs.setBool('invoice_show_tagline', _showTagline);
+      await prefs.setBool('invoice_show_owner_phone', _showOwnerPhone);
     } catch (_) {}
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
@@ -85,7 +122,7 @@ class _InvoiceThemesScreenState extends State<InvoiceThemesScreen> {
           children: [
             const Icon(Icons.check_circle_rounded, color: Colors.white, size: 18),
             const SizedBox(width: 8),
-            Text('Invoice theme & options saved successfully!'),
+            const Text('Invoice theme & options saved successfully!'),
           ],
         ),
         backgroundColor: const Color(0xFF059669),
@@ -95,22 +132,55 @@ class _InvoiceThemesScreenState extends State<InvoiceThemesScreen> {
     );
   }
 
-  void _generateSamplePdf() {
+  Future<void> _generateSamplePdf() async {
     HapticFeedback.selectionClick();
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Row(
-          children: [
-            const Icon(Icons.picture_as_pdf_rounded, color: Colors.white, size: 18),
-            const SizedBox(width: 8),
-            Text('Generating High-Res A4 Tax Invoice PDF...'),
-          ],
-        ),
-        backgroundColor: const Color(0xFF0F172A),
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-      ),
+    _saveSettings();
+    final sampleSale = SaleModel(
+      id: 'SAMPLE_${DateTime.now().millisecondsSinceEpoch}',
+      businessId: 'sample_store',
+      invoiceNumber: 'INV-SAMPLE-01',
+      totalAmountPaise: 99500,
+      subtotalPaise: 99500,
+      discountPaise: 0,
+      taxAmountPaise: 4975,
+      paymentMethod: 'upi',
+      status: 'completed',
+      customerName: 'Sunil Verma',
+      customerPhone: '9823456789',
+      createdAt: DateTime.now(),
+      items: [
+        {
+          'product_name': 'Aashirvaad Shudh Chakki Atta (5kg)',
+          'quantity': 2,
+          'unit_price_paise': 25500,
+          'gross_total_paise': 51000,
+        },
+        {
+          'product_name': 'Fortune Sunlite Sunflower Oil (1L)',
+          'quantity': 2,
+          'unit_price_paise': 14500,
+          'gross_total_paise': 29000,
+        },
+        {
+          'product_name': 'Loose Basmati Rice Premium (1.5 kg)',
+          'quantity': 1.5,
+          'unit_price_paise': 13000,
+          'gross_total_paise': 19500,
+        },
+      ],
     );
+
+    final path = await InvoicePdfService.generateAndDownloadPdf(
+      sale: sampleSale,
+      storeName: 'Shrama Pharmacy Store',
+      storePhone: '9595997711',
+      storeAddress: 'Shop 4, Market Road, Pune',
+      customerPhone: '9823456789',
+    );
+
+    if (path != null && mounted) {
+      await InvoicePdfService.openPdf(path);
+    }
   }
 
   @override

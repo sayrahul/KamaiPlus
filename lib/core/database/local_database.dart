@@ -140,6 +140,9 @@ class LocalDatabase {
       await db.execute('ALTER TABLE customers ADD COLUMN address TEXT');
     } catch (_) {}
     try {
+      await db.execute('ALTER TABLE customers ADD COLUMN is_vip INTEGER DEFAULT 0');
+    } catch (_) {}
+    try {
       await db.execute('ALTER TABLE sales ADD COLUMN split_cash_paise INTEGER DEFAULT 0');
     } catch (_) {}
     try {
@@ -193,6 +196,7 @@ class LocalDatabase {
         address TEXT,
         current_balance_paise INTEGER NOT NULL,
         credit_limit_paise INTEGER NOT NULL,
+        is_vip INTEGER DEFAULT 0,
         sync_status TEXT NOT NULL
       )
     ''');
@@ -663,6 +667,16 @@ class LocalDatabase {
       'customers',
       customer.toMap(),
       conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  Future<void> toggleCustomerVip(String id, bool isVip) async {
+    final db = await instance.database;
+    await db.update(
+      'customers',
+      {'is_vip': isVip ? 1 : 0},
+      where: 'id = ?',
+      whereArgs: [id],
     );
   }
 

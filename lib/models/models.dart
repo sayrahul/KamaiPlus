@@ -167,6 +167,7 @@ class CustomerModel {
   final int currentBalancePaise; // Positive = customer owes money (Udhar)
   final int creditLimitPaise;
   final String syncStatus;
+  final bool isVip;
 
   CustomerModel({
     required this.id,
@@ -177,6 +178,7 @@ class CustomerModel {
     this.currentBalancePaise = 0,
     this.creditLimitPaise = 500000, // Default ₹5,000 limit
     this.syncStatus = 'synced',
+    this.isVip = false,
   });
 
   Map<String, dynamic> toMap() => {
@@ -188,6 +190,7 @@ class CustomerModel {
     'current_balance_paise': currentBalancePaise,
     'credit_limit_paise': creditLimitPaise,
     'sync_status': syncStatus,
+    'is_vip': isVip ? 1 : 0,
   };
 
   factory CustomerModel.fromMap(Map<String, dynamic> map) => CustomerModel(
@@ -199,6 +202,7 @@ class CustomerModel {
     currentBalancePaise: map['current_balance_paise'] ?? 0,
     creditLimitPaise: map['credit_limit_paise'] ?? 500000,
     syncStatus: map['sync_status'] ?? 'pending',
+    isVip: map['is_vip'] == 1 || map['is_vip'] == true,
   );
 
   CustomerModel copyWith({
@@ -208,6 +212,7 @@ class CustomerModel {
     int? currentBalancePaise,
     int? creditLimitPaise,
     String? syncStatus,
+    bool? isVip,
   }) => CustomerModel(
     id: id,
     businessId: businessId,
@@ -217,6 +222,7 @@ class CustomerModel {
     currentBalancePaise: currentBalancePaise ?? this.currentBalancePaise,
     creditLimitPaise: creditLimitPaise ?? this.creditLimitPaise,
     syncStatus: syncStatus ?? this.syncStatus,
+    isVip: isVip ?? this.isVip,
   );
 }
 
