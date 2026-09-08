@@ -35,9 +35,9 @@ class _LoginScreenState extends State<LoginScreen> {
       // 1. Switch to user-scoped isolated SQLite database
       await LocalDatabase.instance.switchUser(uid);
 
-      // 2. Check if THIS specific user already has a store profile setup
+      // 2. Check if THIS specific user already has a configured store profile setup
+      final bool hasStore = await LocalDatabase.instance.hasConfiguredStoreProfile();
       final profile = await LocalDatabase.instance.getStoreProfile();
-      final bool hasStore = profile.storeName.trim().isNotEmpty && profile.businessType.trim().isNotEmpty;
 
       // 3. Persist session
       final prefs = await SharedPreferences.getInstance();
@@ -56,6 +56,9 @@ class _LoginScreenState extends State<LoginScreen> {
         BusinessVerticals.updateActiveBusinessType(profile.businessType);
       } else {
         await prefs.setBool('is_onboarded', false);
+        await prefs.remove('business_name');
+        await prefs.remove('business_type');
+        BusinessVerticals.updateActiveBusinessType('grocery');
       }
 
       if (!mounted) return;

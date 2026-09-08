@@ -23,8 +23,14 @@ void main() async {
     ),
   );
 
-  // 1. Initialize High-Speed Local SQLite Database
-  await LocalDatabase.instance.database;
+  // 1. Initialize High-Speed Local SQLite Database (User-scoped if logged in)
+  final prefs = await SharedPreferences.getInstance();
+  final cachedUserId = prefs.getString('auth_user_id');
+  if (cachedUserId != null && cachedUserId.isNotEmpty) {
+    await LocalDatabase.instance.switchUser(cachedUserId);
+  } else {
+    await LocalDatabase.instance.database;
+  }
 
   // 2. Initialize Firebase Core Engine
   try {
@@ -43,7 +49,6 @@ void main() async {
   AuthService.instance.initGoogleSignIn().then((_) => AuthService.instance.signInSilently());
 
   // 6. Initialize Cloud Firestore Realtime Sync Engine in Background
-  final prefs = await SharedPreferences.getInstance();
   final savedBizId = prefs.getString('business_id') ?? 'biz_starter_pos';
   FirestoreSyncService.instance.initialize(businessId: savedBizId);
 

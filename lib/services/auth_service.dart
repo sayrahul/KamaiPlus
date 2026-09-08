@@ -4,7 +4,6 @@ import 'package:google_sign_in/google_sign_in.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../core/constants/business_vertical_config.dart';
 import '../core/database/local_database.dart';
-import '../models/models.dart';
 
 class AuthService {
   static final AuthService instance = AuthService._internal();
@@ -59,37 +58,12 @@ class AuthService {
         await prefs.setString('auth_user_email', user.email ?? '');
         await prefs.setString('auth_user_name', user.displayName ?? '');
         await prefs.setBool('is_logged_in', true);
-        await prefs.setBool('is_onboarded', true);
         if (user.photoURL != null) {
           await prefs.setString('auth_user_photo', user.photoURL!);
         }
 
-        // 6. If local store profile has empty owner or email, pre-fill it gracefully
-        final db = LocalDatabase.instance;
-        final currentProfile = await db.getStoreProfile();
-        final updatedProfile = StoreProfileModel(
-          storeName: currentProfile.storeName,
-          tagline: currentProfile.tagline,
-          ownerName: currentProfile.ownerName.isEmpty
-              ? (user.displayName ?? '')
-              : currentProfile.ownerName,
-          phone: currentProfile.phone,
-          email: currentProfile.email.isEmpty
-              ? (user.email ?? '')
-              : currentProfile.email,
-          upiVpa: currentProfile.upiVpa,
-          category: currentProfile.category,
-          businessType: currentProfile.businessType,
-          address: currentProfile.address,
-          pincode: currentProfile.pincode,
-          gstin: currentProfile.gstin,
-          fssai: currentProfile.fssai,
-          logoUrl: (currentProfile.logoUrl.isEmpty && user.photoURL != null)
-              ? user.photoURL!
-              : currentProfile.logoUrl,
-          upiAccountsJson: currentProfile.upiAccountsJson,
-        );
-        await db.saveStoreProfile(updatedProfile);
+        // 6. Switch to user-scoped database immediately
+        await LocalDatabase.instance.switchUser(user.uid);
       }
 
       return userCredential;

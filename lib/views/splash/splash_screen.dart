@@ -58,12 +58,14 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
         if (hasActiveSession) {
           try {
             await LocalDatabase.instance.switchUser(authUserId);
-            final profile = await LocalDatabase.instance.getStoreProfile();
-            if (profile.storeName.trim().isNotEmpty && profile.businessType.trim().isNotEmpty) {
-              hasStore = true;
+            hasStore = await LocalDatabase.instance.hasConfiguredStoreProfile();
+            if (hasStore) {
+              final profile = await LocalDatabase.instance.getStoreProfile();
               BusinessVerticals.updateActiveBusinessType(profile.businessType);
               await prefs.setBool('is_logged_in', true);
               await prefs.setBool('is_onboarded', true);
+            } else {
+              await prefs.setBool('is_onboarded', false);
             }
           } catch (_) {}
         }

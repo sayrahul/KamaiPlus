@@ -559,15 +559,15 @@ class StoreProfileModel {
   final String razorpayPaymentId;
 
   StoreProfileModel({
-    this.storeName = 'KamaiPlus Store',
-    this.tagline = 'Always Fresh, Best Wholesale Rates',
-    this.ownerName = 'Store Owner',
+    this.storeName = '',
+    this.tagline = '',
+    this.ownerName = '',
     this.phone = '',
     this.email = '',
     this.upiVpa = '',
-    this.category = 'Retail Store',
-    this.businessType = 'grocery',
-    this.address = 'Main Market, Station Road',
+    this.category = '',
+    this.businessType = '',
+    this.address = '',
     this.pincode = '',
     this.gstin = '',
     this.fssai = '',
@@ -578,6 +578,12 @@ class StoreProfileModel {
     this.proExpiry = '',
     this.razorpayPaymentId = '',
   });
+
+  /// True only when user has actively completed store setup
+  bool get isConfigured =>
+      storeName.trim().isNotEmpty &&
+      businessType.trim().isNotEmpty &&
+      storeName.trim() != 'KamaiPlus Store';
 
   Map<String, dynamic> toMap() => {
     'store_name': storeName,

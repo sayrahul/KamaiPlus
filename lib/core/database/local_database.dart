@@ -307,8 +307,10 @@ class LocalDatabase {
       )
     ''');
 
-    // Pre-populate starter retail items & customers
-    await _seedStarterData(db);
+    // Pre-populate starter retail items & customers ONLY for default demo db
+    if (_activeDbName == 'kamaiplus_local.db') {
+      await _seedStarterData(db);
+    }
   }
 
   Future<void> _seedStarterData(Database db) async {
@@ -761,6 +763,7 @@ class LocalDatabase {
   }
 
   Future<void> seedStarterSalesIfNeeded() async {
+    if (_activeDbName != 'kamaiplus_local.db') return;
     final db = await instance.database;
     final count = Sqflite.firstIntValue(await db.rawQuery('SELECT COUNT(*) FROM sales')) ?? 0;
     if (count > 0) return;
@@ -977,7 +980,7 @@ class LocalDatabase {
   Future<List<ExpenseModel>> getAllExpenses() async {
     final db = await instance.database;
     final result = await db.query('expenses', orderBy: 'created_at DESC');
-    if (result.isEmpty) {
+    if (result.isEmpty && _activeDbName == 'kamaiplus_local.db') {
       final now = DateTime.now();
       final demo1 = ExpenseModel(
         id: 'exp_demo_1',
@@ -1061,6 +1064,12 @@ class LocalDatabase {
       }
     } catch (_) {}
     return StoreProfileModel();
+  }
+
+  /// Checks whether the active database has a user-configured store profile
+  Future<bool> hasConfiguredStoreProfile() async {
+    final profile = await getStoreProfile();
+    return profile.isConfigured;
   }
 
   Future<void> saveStoreProfile(StoreProfileModel profile) async {
