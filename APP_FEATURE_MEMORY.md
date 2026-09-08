@@ -603,3 +603,15 @@ Comprehensive enterprise-grade retail UX upgrade suite aligned with PhonePe Busi
     - **Unified Inward Entry:**
       - `PurchasesScreen` (`ai_inward_sheet.dart`) and `ProductsScreen` (`ai_inward_modal.dart`) both use the exact same genuine, non-simulated inward pipeline.
 
+35. **Web Admin Dashboard & Multi-Platform Firestore Control Suite (LOCKED):**
+    - **SuperAdmin Dashboard Architecture (`Billing WebApp/src/app/admin`):**
+      - Next.js Web Admin Portal connected to the shared Firebase Firestore project (`kamaiplus`).
+      - Local URL: `http://localhost:3000/admin`, Network URL: `http://192.168.1.35:3000/admin`.
+      - Authenticated via SHA-256 constant-time hash comparison using master key (`ADMIN_PASSWORD`).
+    - **Master Control Capabilities:**
+      - **Merchants Management:** Direct real-time lookup across Firestore `businesses` collection. 1-click Pro license grant, expiration extension, and contact auditing.
+      - **Remote Config Control:** Push real-time maintenance mode alerts, force minimum app versions, customize Pro subscription pricing, and update helpline numbers.
+      - **Broadcast Announcements:** Send system-wide announcements to all store devices.
+      - **Discount Coupons & Subscriptions:** Manage promo coupon codes and audit subscription transactions.
+
+
