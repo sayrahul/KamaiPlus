@@ -1,4 +1,4 @@
-﻿import 'package:flutter/services.dart';
+import 'package:flutter/services.dart';
 
 class SoundboxService {
   static final SoundboxService instance = SoundboxService._init();
@@ -23,6 +23,12 @@ class SoundboxService {
       final int rupees = paise ~/ 100;
       final String text = "Received $rupees Rupees on Kamai Plus via $paymentMethod";
       await _channel.invokeMethod('speak', {'text': text, 'lang': 'en'});
+    } catch (_) {}
+  }
+
+  Future<void> speakCustom(String text, {String lang = 'hi'}) async {
+    try {
+      await _channel.invokeMethod('speak', {'text': text, 'lang': lang});
     } catch (_) {}
   }
 }

@@ -509,6 +509,10 @@ class StoreProfileModel {
   final String fssai;
   final String logoUrl;
   final String upiAccountsJson;
+  final bool isPro;
+  final String proPlan; // 'free' | 'monthly' | 'annual'
+  final String proExpiry; // ISO date string
+  final String razorpayPaymentId;
 
   StoreProfileModel({
     this.storeName = 'KamaiPlus Store',
@@ -525,6 +529,10 @@ class StoreProfileModel {
     this.fssai = '',
     this.logoUrl = '',
     this.upiAccountsJson = '[]',
+    this.isPro = false,
+    this.proPlan = 'free',
+    this.proExpiry = '',
+    this.razorpayPaymentId = '',
   });
 
   Map<String, dynamic> toMap() => {
@@ -542,6 +550,10 @@ class StoreProfileModel {
     'fssai': fssai,
     'logo_url': logoUrl,
     'upi_accounts_json': upiAccountsJson,
+    'is_pro': isPro ? 1 : 0,
+    'pro_plan': proPlan,
+    'pro_expiry': proExpiry,
+    'razorpay_payment_id': razorpayPaymentId,
   };
 
   factory StoreProfileModel.fromMap(Map<String, dynamic> map) => StoreProfileModel(
@@ -559,6 +571,10 @@ class StoreProfileModel {
     fssai: map['fssai'] ?? '',
     logoUrl: map['logo_url'] ?? '',
     upiAccountsJson: map['upi_accounts_json'] ?? '[]',
+    isPro: (map['is_pro'] is int ? map['is_pro'] == 1 : (map['is_pro'] as bool? ?? false)),
+    proPlan: (map['pro_plan'] as String?)?.isNotEmpty == true ? map['pro_plan'] : 'free',
+    proExpiry: map['pro_expiry'] ?? '',
+    razorpayPaymentId: map['razorpay_payment_id'] ?? '',
   );
 }
 

@@ -159,7 +159,7 @@ class _CustomersScreenState extends State<CustomersScreen> {
                     ),
                     Switch(
                       value: isVip,
-                      activeColor: const Color(0xFFF59E0B),
+                      activeThumbColor: const Color(0xFFF59E0B),
                       onChanged: (v) => setModalState(() => isVip = v),
                     ),
                   ],
@@ -384,7 +384,7 @@ class _CustomersScreenState extends State<CustomersScreen> {
                     ),
                     Switch(
                       value: customer.isVip,
-                      activeColor: const Color(0xFFF59E0B),
+                      activeThumbColor: const Color(0xFFF59E0B),
                       onChanged: (val) async {
                         HapticFeedback.lightImpact();
                         await LocalDatabase.instance.toggleCustomerVip(customer.id, val);

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../../core/database/local_database.dart';
 import '../../services/auth_service.dart';
 import '../dashboard/home_dashboard_screen.dart';
 import 'signup_store_screen.dart';
@@ -28,7 +29,18 @@ class _LoginScreenState extends State<LoginScreen> {
       }
 
       final prefs = await SharedPreferences.getInstance();
-      final isOnboarded = prefs.getBool('is_onboarded') ?? false;
+      var isOnboarded = prefs.getBool('is_onboarded') ?? false;
+      if (!isOnboarded) {
+        try {
+          final profile = await LocalDatabase.instance.getStoreProfile();
+          if (profile.storeName.isNotEmpty) {
+            isOnboarded = true;
+          }
+        } catch (_) {}
+      }
+
+      await prefs.setBool('is_logged_in', true);
+      await prefs.setBool('is_onboarded', true);
 
       if (!mounted) return;
       setState(() => _isLoading = false);
@@ -52,7 +64,6 @@ class _LoginScreenState extends State<LoginScreen> {
           ),
         );
       } else {
-        await prefs.setBool('is_logged_in', true);
         if (!mounted) return;
         Navigator.pushReplacement(
           context,

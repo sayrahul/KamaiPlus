@@ -57,6 +57,8 @@ class AuthService {
         await prefs.setString('auth_user_id', user.uid);
         await prefs.setString('auth_user_email', user.email ?? '');
         await prefs.setString('auth_user_name', user.displayName ?? '');
+        await prefs.setBool('is_logged_in', true);
+        await prefs.setBool('is_onboarded', true);
         if (user.photoURL != null) {
           await prefs.setString('auth_user_photo', user.photoURL!);
         }

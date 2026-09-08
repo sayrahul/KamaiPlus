@@ -2,6 +2,8 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import '../../core/database/local_database.dart';
 import '../dashboard/home_dashboard_screen.dart';
 import '../auth/login_screen.dart';
 import '../cash_register/cash_register_screen.dart';
@@ -45,6 +47,29 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
         final prefs = await SharedPreferences.getInstance();
         final isLoggedIn = prefs.getBool('is_logged_in') ?? false;
         final isOnboarded = prefs.getBool('is_onboarded') ?? false;
+        final firebaseUser = FirebaseAuth.instance.currentUser;
+        final authUserId = prefs.getString('auth_user_id');
+
+        // Multi-Layer Session Resilience:
+        // A retail POS user must NEVER be repeatedly asked to log in on app restart.
+        bool hasActiveSession = (isLoggedIn && isOnboarded) ||
+            (firebaseUser != null) ||
+            (authUserId != null && authUserId.isNotEmpty);
+
+        if (!hasActiveSession) {
+          try {
+            final profile = await LocalDatabase.instance.getStoreProfile();
+            if (profile.storeName.isNotEmpty) {
+              hasActiveSession = true;
+            }
+          } catch (_) {}
+        }
+
+        // Lock session flags so subsequent launches are ultra-fast
+        if (hasActiveSession) {
+          await prefs.setBool('is_logged_in', true);
+          await prefs.setBool('is_onboarded', true);
+        }
 
         final testScreen = prefs.getString('test_screen');
         if (testScreen != null) {
@@ -86,7 +111,7 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
         } else if (testScreen == 'gst_reports') {
           target = const GstReportsScreen();
         } else {
-          target = (isLoggedIn && isOnboarded)
+          target = hasActiveSession
               ? HomeDashboardScreen(key: HomeDashboardScreen.dashboardKey)
               : const LoginScreen();
         }

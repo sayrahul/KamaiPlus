@@ -476,3 +476,34 @@ Comprehensive enterprise-grade retail UX upgrade suite aligned with PhonePe Busi
       - Theme settings (`invoice_theme_color_hex`, `invoice_heading`, `invoice_terms`, `custom_invoice_footer`, `invoice_show_dynamic_upi_qr`) persisted in `SharedPreferences`.
       - Native `MainActivity.java` A4 PDF generator renders theme-colored header banner, table header bar, dynamic UPI payment QR box, and grand total pill matching `InvoiceThemesScreen` preview.
       - "Send Bill to WhatsApp" in `SaleCompletedModal` generates the styled A4 PDF and attaches it directly via WhatsApp.
+
+29. **Persistent Login Session, Android Background Task Minimization & Razorpay LIVE Integration (LOCKED):**
+    - **Multi-Layer Session Persistence (`SplashScreen` & `LoginScreen`):**
+      - Fixed repeated Google login prompt when minimizing or exiting app.
+      - Implemented 4-tier authentication recovery check:
+        1. `FirebaseAuth.instance.currentUser`
+        2. Cached `auth_user_id` in SharedPreferences
+        3. Flag `is_logged_in == true`
+        4. Existing store profile in local SQLite database (`LocalDatabase.instance.getStoreProfile()`).
+      - If any session indicator exists, immediately establishes `is_logged_in = true` and `is_onboarded = true` and launches directly into `HomeDashboardScreen` within milliseconds. Cashier never gets forced into Google login repeatedly.
+    - **Android Native Background Task Minimization (`MainActivity.java` & `AppControlService`):**
+      - Integrated native Android platform channel `com.kamaiplus.pos/app_control` calling Android's `activity.moveTaskToBack(true)`.
+      - `HomeDashboardScreen` wrapped in `PopScope(canPop: false)`:
+        - When on sub-tabs (Product, Billing, Khata), pressing Android system back button smoothly switches back to Tab 0 (Home).
+        - When on Tab 0 (Home), pressing back button invokes `AppControlService.minimizeToBackground()` to push the task behind without killing the process or clearing RAM state (cart, cashier shift, draft bills remain active).
+    - **Razorpay Payment Gateway LIVE Integration (`RazorpayService`):**
+      - Dependency `razorpay_flutter: ^1.4.6` configured.
+      - Live Razorpay credentials connected from `env.local`: `RAZORPAY_KEY_ID=rzp_live_TSJvcf9JnWpMMm`.
+      - Strict Integer Paise Math invariant respected:
+        - Annual Pro: `149900` paise (₹1,499.00 / year)
+        - Monthly Pro: `19900` paise (₹199.00 / month)
+      - Integrated complete checkout workflow with options payload (key, amount in paise, currency INR, store name, description, user mobile & email, emerald theme `#059669`).
+      - On payment success:
+        1. Activates Pro status in local SQLite database via `LocalDatabase.instance.activateProMembership(...)` storing `is_pro = 1`, plan name, expiry date, and `razorpay_payment_id`.
+        2. Writes `is_pro: true`, `pro_plan`, `pro_expiry`, and `razorpay_payment_id` into SharedPreferences for zero-latency UI rendering.
+        3. Triggers Hindi voice announcement via `SoundboxService.instance.speakCustom()` and dispatches system notification via `NativeNotificationService`.
+    - **Pro vs Free Workflows Across the App:**
+      - `ProMembershipScreen`: Live Razorpay subscription triggering with celebration modal upon payment success, showing active plan status and renewal dates.
+      - `ProUpgradeModal`: Reusable modal bottom sheet equipped with 1-tap Razorpay checkout for Pro feature gates.
+      - `MenuScreen`: Top dynamic Pro/Free status banner displaying active badge or "Upgrade to Pro" button, plus dedicated "Pro Membership & Plans" entry in Section 4.
+      - `PosBillingScreen`: Bottom floating cart bar padding and layout refined with `Expanded` containers to eliminate any layout overflow on compact screens.

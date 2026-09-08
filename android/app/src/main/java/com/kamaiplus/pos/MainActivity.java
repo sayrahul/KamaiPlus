@@ -44,6 +44,7 @@ public class MainActivity extends FlutterActivity implements TextToSpeech.OnInit
     private static final String BT_CHANNEL = "com.kamaiplus.pos/bluetooth_printer";
     private static final String NOTIFICATION_CHANNEL = "com.kamaiplus.pos/notifications";
     private static final String PDF_CHANNEL = "com.kamaiplus.pos/pdf_engine";
+    private static final String APP_CONTROL_CHANNEL = "com.kamaiplus.pos/app_control";
     private static final String CHANNEL_ID = "kamai_pos_channel";
     private static final UUID SPP_UUID = UUID.fromString("00001101-0000-1000-8000-00805F9B34FB");
 
@@ -90,6 +91,20 @@ public class MainActivity extends FlutterActivity implements TextToSpeech.OnInit
         super.configureFlutterEngine(flutterEngine);
 
         createNotificationChannel();
+
+        // App Control Engine (Minimize to background without destroying counter state)
+        new MethodChannel(flutterEngine.getDartExecutor().getBinaryMessenger(), APP_CONTROL_CHANNEL)
+                .setMethodCallHandler(new MethodChannel.MethodCallHandler() {
+                    @Override
+                    public void onMethodCall(@NonNull MethodCall call, @NonNull MethodChannel.Result result) {
+                        if ("moveTaskToBack".equals(call.method)) {
+                            moveTaskToBack(true);
+                            result.success(true);
+                        } else {
+                            result.notImplemented();
+                        }
+                    }
+                });
 
         // 1. TextToSpeech Voice Engine
         tts = new TextToSpeech(this, this);

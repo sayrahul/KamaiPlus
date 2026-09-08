@@ -942,6 +942,18 @@ class LocalDatabase {
     try {
       await db.execute('ALTER TABLE store_profile ADD COLUMN business_type TEXT');
     } catch (_) {}
+    try {
+      await db.execute('ALTER TABLE store_profile ADD COLUMN is_pro INTEGER DEFAULT 0');
+    } catch (_) {}
+    try {
+      await db.execute("ALTER TABLE store_profile ADD COLUMN pro_plan TEXT DEFAULT 'free'");
+    } catch (_) {}
+    try {
+      await db.execute('ALTER TABLE store_profile ADD COLUMN pro_expiry TEXT');
+    } catch (_) {}
+    try {
+      await db.execute('ALTER TABLE store_profile ADD COLUMN razorpay_payment_id TEXT');
+    } catch (_) {}
     await db.execute('''
       CREATE TABLE IF NOT EXISTS store_profile (
         id TEXT PRIMARY KEY,
@@ -958,7 +970,11 @@ class LocalDatabase {
         gstin TEXT,
         fssai TEXT,
         logo_url TEXT,
-        upi_accounts_json TEXT
+        upi_accounts_json TEXT,
+        is_pro INTEGER DEFAULT 0,
+        pro_plan TEXT DEFAULT 'free',
+        pro_expiry TEXT,
+        razorpay_payment_id TEXT
       )
     ''');
   }
@@ -981,6 +997,35 @@ class LocalDatabase {
     final map = profile.toMap();
     map['id'] = 'default_store';
     await db.insert('store_profile', map, conflictAlgorithm: ConflictAlgorithm.replace);
+  }
+
+  Future<void> activateProMembership({
+    required String plan,
+    required String paymentId,
+    required DateTime expiryDate,
+  }) async {
+    final current = await getStoreProfile();
+    final updated = StoreProfileModel(
+      storeName: current.storeName,
+      tagline: current.tagline,
+      ownerName: current.ownerName,
+      phone: current.phone,
+      email: current.email,
+      upiVpa: current.upiVpa,
+      category: current.category,
+      businessType: current.businessType,
+      address: current.address,
+      pincode: current.pincode,
+      gstin: current.gstin,
+      fssai: current.fssai,
+      logoUrl: current.logoUrl,
+      upiAccountsJson: current.upiAccountsJson,
+      isPro: true,
+      proPlan: plan,
+      proExpiry: expiryDate.toIso8601String(),
+      razorpayPaymentId: paymentId,
+    );
+    await saveStoreProfile(updated);
   }
 
   // ==========================================

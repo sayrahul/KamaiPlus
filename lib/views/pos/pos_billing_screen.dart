@@ -778,7 +778,7 @@ class _PosBillingScreenState extends State<PosBillingScreen> {
     final hasItems = count > 0;
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(20),
@@ -795,74 +795,82 @@ class _PosBillingScreenState extends State<PosBillingScreen> {
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           // Left: Yellow Cart Circle with Black Count Badge + Items & Price text
-          Row(
-            children: [
-              Stack(
-                clipBehavior: Clip.none,
-                children: [
-                  Container(
-                    width: 48,
-                    height: 48,
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFFBBF24),
-                      borderRadius: BorderRadius.circular(14),
+          Expanded(
+            child: Row(
+              children: [
+                Stack(
+                  clipBehavior: Clip.none,
+                  children: [
+                    Container(
+                      width: 44,
+                      height: 44,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFFBBF24),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: const Icon(Icons.shopping_cart_rounded, size: 20, color: Color(0xFF0F172A)),
                     ),
-                    child: const Icon(Icons.shopping_cart_rounded, size: 22, color: Color(0xFF0F172A)),
-                  ),
-                  if (hasItems)
-                    Positioned(
-                      top: -4,
-                      right: -4,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
-                        decoration: const BoxDecoration(
-                          color: Color(0xFF0F172A),
-                          shape: BoxShape.circle,
-                        ),
-                        child: Text(
-                          '$count',
-                          style: GoogleFonts.jetBrainsMono(
-                            fontSize: 10,
-                            fontWeight: FontWeight.w800,
-                            color: Colors.white,
+                    if (hasItems)
+                      Positioned(
+                        top: -4,
+                        right: -4,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                          decoration: const BoxDecoration(
+                            color: Color(0xFF0F172A),
+                            shape: BoxShape.circle,
+                          ),
+                          child: Text(
+                            '$count',
+                            style: GoogleFonts.jetBrainsMono(
+                              fontSize: 10,
+                              fontWeight: FontWeight.w800,
+                              color: Colors.white,
+                            ),
                           ),
                         ),
                       ),
-                    ),
-                ],
-              ),
-              const SizedBox(width: 12),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    '${currentTab.name} • $count items',
-                    style: GoogleFonts.plusJakartaSans(
-                      fontSize: 11.5,
-                      fontWeight: FontWeight.w600,
-                      color: const Color(0xFF64748B),
-                    ),
+                  ],
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        '${currentTab.name} • $count items',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: GoogleFonts.plusJakartaSans(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          color: const Color(0xFF64748B),
+                        ),
+                      ),
+                      Text(
+                        '₹$totalRupees',
+                        maxLines: 1,
+                        style: GoogleFonts.jetBrainsMono(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w800,
+                          color: const Color(0xFF0F172A),
+                        ),
+                      ),
+                    ],
                   ),
-                  Text(
-                    '₹$totalRupees',
-                    style: GoogleFonts.jetBrainsMono(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w800,
-                      color: const Color(0xFF0F172A),
-                    ),
-                  ),
-                ],
-              ),
-            ],
+                ),
+              ],
+            ),
           ),
+          const SizedBox(width: 8),
 
           // Right: View Cart & Pay Button
           InkWell(
             onTap: hasItems ? _openCheckoutModal : null,
-            borderRadius: BorderRadius.circular(14),
+            borderRadius: BorderRadius.circular(12),
             child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
               decoration: BoxDecoration(
                 color: hasItems ? const Color(0xFFFBBF24) : const Color(0xFFFDE68A),
                 borderRadius: BorderRadius.circular(14),

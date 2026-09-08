@@ -5,7 +5,7 @@ import '../pos/pos_billing_screen.dart';
 import '../khata/khata_screen.dart';
 import '../products/products_screen.dart';
 import '../menu/menu_screen.dart';
-
+import '../../services/app_control_service.dart';
 import '../common/kamai_bottom_nav.dart';
 
 class HomeDashboardScreen extends StatefulWidget {
@@ -146,17 +146,28 @@ class HomeDashboardScreenState extends State<HomeDashboardScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFFF8FAFC),
-      body: PageView(
-        controller: _pageController,
-        onPageChanged: _onPageChanged,
-        physics: const NeverScrollableScrollPhysics(),
-        children: _screens,
-      ),
-      bottomNavigationBar: KamaiBottomNav(
-        currentIndex: _currentIndex,
-        onTabTap: _onBottomNavTap,
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, result) {
+        if (didPop) return;
+        if (_currentIndex != 0) {
+          setTab(0);
+        } else {
+          AppControlService.minimizeToBackground();
+        }
+      },
+      child: Scaffold(
+        backgroundColor: const Color(0xFFF8FAFC),
+        body: PageView(
+          controller: _pageController,
+          onPageChanged: _onPageChanged,
+          physics: const NeverScrollableScrollPhysics(),
+          children: _screens,
+        ),
+        bottomNavigationBar: KamaiBottomNav(
+          currentIndex: _currentIndex,
+          onTabTap: _onBottomNavTap,
+        ),
       ),
     );
   }

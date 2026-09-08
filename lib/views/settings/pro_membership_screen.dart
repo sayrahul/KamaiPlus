@@ -3,7 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../core/database/local_database.dart';
 import '../../models/models.dart';
-import '../../services/native_notification_service.dart';
+import '../../services/razorpay_service.dart';
 
 class ProMembershipScreen extends StatefulWidget {
   const ProMembershipScreen({super.key});
@@ -104,37 +104,171 @@ class _ProMembershipScreenState extends State<ProMembershipScreen> {
 
   void _handleSubscribe() {
     HapticFeedback.mediumImpact();
+    final plan = _isAnnual ? 'annual' : 'monthly';
     setState(() => _isLoading = true);
 
-    Future.delayed(const Duration(milliseconds: 700), () {
-      if (!mounted) return;
-      setState(() => _isLoading = false);
+    RazorpayService.instance.openCheckout(
+      plan: plan,
+      profile: _profile,
+      onSuccess: (response) async {
+        if (!mounted) return;
+        setState(() => _isLoading = false);
+        await _loadStoreProfile();
 
-      NativeNotificationService.showNotification(
-        title: '🎉 Kamai+ Pro License Activated',
-        body: 'Welcome to Kamai+ Pro! Unlimited billing, cloud backup, and WhatsApp CRM are now live for ${_profile.storeName.isNotEmpty ? _profile.storeName : "your store"}.',
-      );
+        _showSuccessCelebrationDialog(response.paymentId ?? 'pay_success');
+      },
+      onError: (response) {
+        if (!mounted) return;
+        setState(() => _isLoading = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                const Icon(Icons.info_outline_rounded, color: Colors.white, size: 18),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Payment cancelled or incomplete: ${response.message ?? "Try again"}',
+                    style: GoogleFonts.plusJakartaSans(fontSize: 12),
+                  ),
+                ),
+              ],
+            ),
+            backgroundColor: const Color(0xFFDC2626),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      },
+    );
+  }
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Row(
-            children: [
-              const Icon(Icons.stars_rounded, color: Color(0xFFFBBF24), size: 24),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Text(
-                  '🎉 Kamai+ Pro Activated! All VIP Features Unlocked.',
-                  style: GoogleFonts.plusJakartaSans(fontSize: 13, fontWeight: FontWeight.w700, color: Colors.white),
+  void _showSuccessCelebrationDialog(String paymentId) {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: Colors.white,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        contentPadding: const EdgeInsets.fromLTRB(24, 24, 24, 16),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 70,
+              height: 70,
+              decoration: const BoxDecoration(
+                shape: BoxShape.circle,
+                gradient: LinearGradient(
+                  colors: [Color(0xFFFBBF24), Color(0xFFF59E0B)],
                 ),
               ),
-            ],
-          ),
-          backgroundColor: const Color(0xFF0F172A),
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              child: const Icon(Icons.workspace_premium_rounded, size: 38, color: Color(0xFF0F172A)),
+            ),
+            const SizedBox(height: 16),
+            Text(
+              '🎉 Payment Successful!',
+              style: GoogleFonts.plusJakartaSans(
+                fontSize: 18,
+                fontWeight: FontWeight.w900,
+                color: const Color(0xFF0F172A),
+              ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 6),
+            Text(
+              'Kamai+ Pro Business Plan is now active for ${_profile.storeName}.',
+              style: GoogleFonts.inter(
+                fontSize: 12.5,
+                color: const Color(0xFF64748B),
+              ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 14),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(
+                color: const Color(0xFFF1F5F9),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Icon(Icons.receipt_long_rounded, size: 14, color: Color(0xFF64748B)),
+                  const SizedBox(width: 6),
+                  Text(
+                    'Payment ID: $paymentId',
+                    style: GoogleFonts.jetBrainsMono(fontSize: 11, fontWeight: FontWeight.w600, color: const Color(0xFF334155)),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 16),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: const Color(0xFFECFDF5),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: const Color(0xFFA7F3D0)),
+              ),
+              child: Column(
+                children: [
+                  Row(
+                    children: [
+                      const Icon(Icons.check_circle_rounded, size: 15, color: Color(0xFF059669)),
+                      const SizedBox(width: 6),
+                      Text(
+                        'Unlimited Billing (<10ms)',
+                        style: GoogleFonts.plusJakartaSans(fontSize: 11, fontWeight: FontWeight.w700, color: const Color(0xFF065F46)),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                  Row(
+                    children: [
+                      const Icon(Icons.check_circle_rounded, size: 15, color: Color(0xFF059669)),
+                      const SizedBox(width: 6),
+                      Text(
+                        'All Bluetooth Thermal Printers Supported',
+                        style: GoogleFonts.plusJakartaSans(fontSize: 11, fontWeight: FontWeight.w700, color: const Color(0xFF065F46)),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                  Row(
+                    children: [
+                      const Icon(Icons.check_circle_rounded, size: 15, color: Color(0xFF059669)),
+                      const SizedBox(width: 6),
+                      Text(
+                        'WhatsApp CRM & Real-time Cloud Sync',
+                        style: GoogleFonts.plusJakartaSans(fontSize: 11, fontWeight: FontWeight.w700, color: const Color(0xFF065F46)),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ],
         ),
-      );
-    });
+        actions: [
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton(
+              onPressed: () => Navigator.pop(ctx),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF059669),
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                padding: const EdgeInsets.symmetric(vertical: 12),
+              ),
+              child: Text(
+                'Start Pro Billing 🚀',
+                style: GoogleFonts.plusJakartaSans(fontSize: 14, fontWeight: FontWeight.w800),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -1009,11 +1143,17 @@ class _ProMembershipScreenState extends State<ProMembershipScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  '$price $cycle',
-                  style: GoogleFonts.plusJakartaSans(fontSize: 16.5, fontWeight: FontWeight.w900, color: const Color(0xFF0F172A)),
+                  _profile.isPro ? 'Pro Active' : '$price $cycle',
+                  style: GoogleFonts.plusJakartaSans(
+                    fontSize: 16.5,
+                    fontWeight: FontWeight.w900,
+                    color: _profile.isPro ? const Color(0xFF059669) : const Color(0xFF0F172A),
+                  ),
                 ),
                 Text(
-                  '100% Tax Deductible',
+                  _profile.isPro
+                      ? (_profile.proExpiry.isNotEmpty ? 'Renews: ${_profile.proExpiry.substring(0, 10)}' : 'License Active')
+                      : '100% Tax Deductible (GST)',
                   style: GoogleFonts.inter(fontSize: 10, color: const Color(0xFF059669), fontWeight: FontWeight.w700),
                 ),
               ],
@@ -1023,7 +1163,7 @@ class _ProMembershipScreenState extends State<ProMembershipScreen> {
               child: ElevatedButton(
                 onPressed: _isLoading ? null : _handleSubscribe,
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF0F172A),
+                  backgroundColor: _profile.isPro ? const Color(0xFF059669) : const Color(0xFF0F172A),
                   foregroundColor: Colors.white,
                   elevation: 0,
                   minimumSize: const Size.fromHeight(48),
@@ -1038,10 +1178,14 @@ class _ProMembershipScreenState extends State<ProMembershipScreen> {
                     : Row(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          const Icon(Icons.stars_rounded, color: Color(0xFFFBBF24), size: 18),
+                          Icon(
+                            _profile.isPro ? Icons.verified_rounded : Icons.stars_rounded,
+                            color: const Color(0xFFFBBF24),
+                            size: 18,
+                          ),
                           const SizedBox(width: 6),
                           Text(
-                            'Activate Pro Access',
+                            _profile.isPro ? 'Extend Pro via Razorpay' : 'Upgrade via Razorpay',
                             style: GoogleFonts.plusJakartaSans(fontSize: 13.5, fontWeight: FontWeight.w800),
                           ),
                         ],

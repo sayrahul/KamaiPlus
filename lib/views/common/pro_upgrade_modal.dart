@@ -3,6 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../../core/database/local_database.dart';
 import '../../models/models.dart';
 import '../settings/pro_membership_screen.dart';
+import '../../services/razorpay_service.dart';
 
 class ProUpgradeModal extends StatefulWidget {
   const ProUpgradeModal({super.key});
@@ -40,30 +41,47 @@ class _ProUpgradeModalState extends State<ProUpgradeModal> {
 
   void _handleUpgrade() {
     setState(() => _isLoading = true);
-    Future.delayed(const Duration(milliseconds: 600), () {
-      if (!mounted) return;
-      setState(() => _isLoading = false);
-      Navigator.of(context).pop();
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Row(
-            children: [
-              const Icon(Icons.stars_rounded, color: Color(0xFFFBBF24), size: 20),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  'Kamai+ Pro Activated! All VIP Features Unlocked.',
-                  style: GoogleFonts.inter(fontWeight: FontWeight.w700),
+    final plan = _isAnnual ? 'annual' : 'monthly';
+
+    RazorpayService.instance.openCheckout(
+      plan: plan,
+      profile: _profile,
+      onSuccess: (response) {
+        if (!mounted) return;
+        setState(() => _isLoading = false);
+        Navigator.of(context).pop();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                const Icon(Icons.stars_rounded, color: Color(0xFFFBBF24), size: 20),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    '🎉 Kamai+ Pro Activated! Payment ID: ${response.paymentId ?? ""}',
+                    style: GoogleFonts.inter(fontWeight: FontWeight.w700),
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
+            backgroundColor: const Color(0xFF059669),
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
           ),
-          backgroundColor: const Color(0xFF0F172A),
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        ),
-      );
-    });
+        );
+      },
+      onError: (response) {
+        if (!mounted) return;
+        setState(() => _isLoading = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Payment cancelled or failed: ${response.message ?? "Try again"}'),
+            backgroundColor: const Color(0xFFDC2626),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      },
+    );
   }
 
   @override
