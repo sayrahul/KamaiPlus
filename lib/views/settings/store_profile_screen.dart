@@ -1,8 +1,10 @@
 import 'dart:convert';
+import 'dart:io';
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../core/constants/business_vertical_config.dart';
@@ -12,6 +14,7 @@ import '../../models/models.dart';
 import '../common/pro_upgrade_modal.dart';
 import '../common/upi_standee_modal.dart';
 import '../common/kamai_bottom_nav.dart';
+import '../common/store_logo_avatar.dart';
 import '../growth/growth_campaigns_screen.dart';
 import '../auth/login_screen.dart';
 import '../../services/auth_service.dart';
@@ -42,6 +45,7 @@ class _StoreProfileScreenState extends State<StoreProfileScreen> {
 
   String _selectedCategory = 'Grocery / Kirana';
   String _selectedBusinessType = 'grocery';
+  String _logoUrl = '';
 
   // UPI Accounts
   final _addUpiLabelCtrl = TextEditingController();
@@ -107,6 +111,7 @@ class _StoreProfileScreenState extends State<StoreProfileScreen> {
       _fssaiCtrl.text = profile.fssai;
       _selectedBusinessType = profile.businessType.isNotEmpty ? profile.businessType : 'grocery';
       _selectedCategory = profile.category;
+      _logoUrl = profile.logoUrl;
 
       try {
         final List decoded = jsonDecode(profile.upiAccountsJson);
@@ -130,6 +135,206 @@ class _StoreProfileScreenState extends State<StoreProfileScreen> {
     } catch (_) {
       if (mounted) setState(() => _isLoading = false);
     }
+  }
+
+  Future<void> _pickLogo(ImageSource source) async {
+    try {
+      final picker = ImagePicker();
+      final picked = await picker.pickImage(
+        source: source,
+        maxWidth: 600,
+        maxHeight: 600,
+        imageQuality: 85,
+      );
+      if (picked == null) return;
+
+      setState(() => _logoUrl = picked.path);
+
+      // Save instantly to database so it updates across the app (top bar, invoice, etc.)
+      final current = await LocalDatabase.instance.getStoreProfile();
+      final updated = StoreProfileModel(
+        storeName: _storeNameCtrl.text.trim().isNotEmpty ? _storeNameCtrl.text.trim() : current.storeName,
+        tagline: _taglineCtrl.text.trim(),
+        ownerName: _ownerNameCtrl.text.trim().isNotEmpty ? _ownerNameCtrl.text.trim() : current.ownerName,
+        phone: _phoneCtrl.text.trim(),
+        email: _emailCtrl.text.trim(),
+        upiVpa: current.upiVpa,
+        category: _selectedCategory,
+        businessType: _selectedBusinessType,
+        address: _addressCtrl.text.trim(),
+        pincode: _pincodeCtrl.text.trim(),
+        gstin: _gstinCtrl.text.trim(),
+        fssai: _fssaiCtrl.text.trim(),
+        logoUrl: picked.path,
+        upiAccountsJson: current.upiAccountsJson,
+      );
+      await LocalDatabase.instance.saveStoreProfile(updated);
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                const Icon(Icons.check_circle_rounded, color: Colors.white, size: 18),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    '✓ Store Logo updated! It will appear on Top Bar & Invoices.',
+                    style: GoogleFonts.outfit(fontWeight: FontWeight.w600),
+                  ),
+                ),
+              ],
+            ),
+            backgroundColor: const Color(0xFF059669),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to pick logo: $e'),
+            backgroundColor: const Color(0xFFDC2626),
+          ),
+        );
+      }
+    }
+  }
+
+  void _showLogoOptions() {
+    HapticFeedback.selectionClick();
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (ctx) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 44,
+                height: 4,
+                margin: const EdgeInsets.only(bottom: 18),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFE2E8F0),
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF1F5F9),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: const Icon(Icons.storefront_rounded, size: 20, color: Color(0xFF0F172A)),
+                  ),
+                  const SizedBox(width: 10),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Store Brand Logo',
+                        style: GoogleFonts.outfit(
+                          fontSize: 17,
+                          fontWeight: FontWeight.w800,
+                          color: const Color(0xFF0F172A),
+                        ),
+                      ),
+                      Text(
+                        'Prints on invoices & displays in top bar',
+                        style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF64748B)),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+              const SizedBox(height: 18),
+              ListTile(
+                contentPadding: const EdgeInsets.symmetric(horizontal: 8),
+                leading: Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFE0F2FE),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: const Icon(Icons.photo_library_rounded, color: Color(0xFF0284C7), size: 20),
+                ),
+                title: Text('Choose from Gallery', style: GoogleFonts.outfit(fontWeight: FontWeight.w700, fontSize: 14.5)),
+                subtitle: Text('Select PNG, JPG, or JPEG file', style: GoogleFonts.inter(fontSize: 11.5, color: const Color(0xFF64748B))),
+                trailing: const Icon(Icons.chevron_right_rounded, color: Color(0xFF94A3B8)),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  _pickLogo(ImageSource.gallery);
+                },
+              ),
+              ListTile(
+                contentPadding: const EdgeInsets.symmetric(horizontal: 8),
+                leading: Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFDCFCE7),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: const Icon(Icons.camera_alt_rounded, color: Color(0xFF16A34A), size: 20),
+                ),
+                title: Text('Take Photo with Camera', style: GoogleFonts.outfit(fontWeight: FontWeight.w700, fontSize: 14.5)),
+                subtitle: Text('Capture your store signboard or logo', style: GoogleFonts.inter(fontSize: 11.5, color: const Color(0xFF64748B))),
+                trailing: const Icon(Icons.chevron_right_rounded, color: Color(0xFF94A3B8)),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  _pickLogo(ImageSource.camera);
+                },
+              ),
+              if (_logoUrl.isNotEmpty) ...[
+                const Divider(height: 20, color: Color(0xFFF1F5F9)),
+                ListTile(
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 8),
+                  leading: Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFFEE2E2),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: const Icon(Icons.delete_outline_rounded, color: Color(0xFFDC2626), size: 20),
+                  ),
+                  title: Text('Remove Store Logo', style: GoogleFonts.outfit(fontWeight: FontWeight.w700, fontSize: 14.5, color: const Color(0xFFDC2626))),
+                  subtitle: Text('Revert back to default shop icon', style: GoogleFonts.inter(fontSize: 11.5, color: const Color(0xFF94A3B8))),
+                  onTap: () async {
+                    Navigator.pop(ctx);
+                    setState(() => _logoUrl = '');
+                    final current = await LocalDatabase.instance.getStoreProfile();
+                    final updated = StoreProfileModel(
+                      storeName: current.storeName,
+                      tagline: current.tagline,
+                      ownerName: current.ownerName,
+                      phone: current.phone,
+                      email: current.email,
+                      upiVpa: current.upiVpa,
+                      category: current.category,
+                      businessType: current.businessType,
+                      address: current.address,
+                      pincode: current.pincode,
+                      gstin: current.gstin,
+                      fssai: current.fssai,
+                      logoUrl: '',
+                      upiAccountsJson: current.upiAccountsJson,
+                    );
+                    await LocalDatabase.instance.saveStoreProfile(updated);
+                  },
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   String get _defaultUpiVpa {
@@ -157,6 +362,7 @@ class _StoreProfileScreenState extends State<StoreProfileScreen> {
       pincode: _pincodeCtrl.text.trim(),
       gstin: _gstinCtrl.text.trim(),
       fssai: _fssaiCtrl.text.trim(),
+      logoUrl: _logoUrl,
       upiAccountsJson: upiJson,
     );
 
@@ -498,19 +704,10 @@ class _StoreProfileScreenState extends State<StoreProfileScreen> {
                         ),
                       ),
                       const SizedBox(width: 8),
-                      Container(
-                        width: 36,
-                        height: 36,
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF0B1528),
-                          borderRadius: BorderRadius.circular(10),
-                          border: Border.all(color: const Color(0xFF1E293B)),
-                        ),
-                        child: const Icon(
-                          Icons.storefront_rounded,
-                          size: 20,
-                          color: Color(0xFFF59E0B),
-                        ),
+                      StoreLogoAvatar(
+                        logoUrl: _logoUrl,
+                        size: 36,
+                        radius: 10,
                       ),
                     ],
                   ),
@@ -629,96 +826,155 @@ class _StoreProfileScreenState extends State<StoreProfileScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               // Dashed Logo Upload Box
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 16),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFF8FAFC),
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: const Color(0xFFE2E8F0), width: 1.2),
-                ),
-                child: Column(
-                  children: [
-                    // Dashed Camera Box
-                    CustomPaint(
-                      painter: DashedRectPainter(
-                        color: const Color(0xFF94A3B8),
-                        strokeWidth: 1.5,
-                        gap: 5.0,
-                      ),
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(12),
-                        child: Container(
-                          width: 76,
-                          height: 76,
-                          color: const Color(0xFFFFFBEB),
-                          child: Stack(
-                            alignment: Alignment.bottomRight,
-                            children: [
-                              Image.asset(
-                                'assets/images/app_icon.png',
-                                width: 76,
-                                height: 76,
-                                fit: BoxFit.cover,
-                              ),
-                              Container(
-                                padding: const EdgeInsets.all(4),
-                                decoration: const BoxDecoration(
-                                  color: Color(0xFF0F172A),
-                                  borderRadius: BorderRadius.only(
-                                    topLeft: Radius.circular(8),
+              GestureDetector(
+                onTap: _showLogoOptions,
+                child: Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 16),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF8FAFC),
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: const Color(0xFFE2E8F0), width: 1.2),
+                  ),
+                  child: Column(
+                    children: [
+                      // Dashed Logo Container
+                      CustomPaint(
+                        painter: DashedRectPainter(
+                          color: const Color(0xFF94A3B8),
+                          strokeWidth: 1.5,
+                          gap: 5.0,
+                        ),
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(12),
+                          child: Container(
+                            width: 80,
+                            height: 80,
+                            color: const Color(0xFFFFFBEB),
+                            child: Stack(
+                              alignment: Alignment.bottomRight,
+                              children: [
+                                _logoUrl.isNotEmpty && File(_logoUrl).existsSync()
+                                    ? Image.file(
+                                        File(_logoUrl),
+                                        width: 80,
+                                        height: 80,
+                                        fit: BoxFit.cover,
+                                      )
+                                    : (_logoUrl.isNotEmpty && _logoUrl.startsWith('http')
+                                        ? Image.network(
+                                            _logoUrl,
+                                            width: 80,
+                                            height: 80,
+                                            fit: BoxFit.cover,
+                                            errorBuilder: (ctx, error, stack) => Image.asset('assets/images/app_icon.png', fit: BoxFit.cover),
+                                          )
+                                        : Image.asset(
+                                            'assets/images/app_icon.png',
+                                            width: 80,
+                                            height: 80,
+                                            fit: BoxFit.cover,
+                                          )),
+                                Container(
+                                  padding: const EdgeInsets.all(5),
+                                  decoration: const BoxDecoration(
+                                    color: Color(0xFF0F172A),
+                                    borderRadius: BorderRadius.only(
+                                      topLeft: Radius.circular(8),
+                                    ),
+                                  ),
+                                  child: const Icon(
+                                    Icons.camera_alt_rounded,
+                                    size: 14,
+                                    color: Colors.white,
                                   ),
                                 ),
-                                child: const Icon(
-                                  Icons.edit_rounded,
-                                  size: 14,
-                                  color: Colors.white,
-                                ),
-                              ),
-                            ],
+                              ],
+                            ),
                           ),
                         ),
                       ),
-                    ),
-                    const SizedBox(height: 14),
-                    Text(
-                      'Store Brand Logo (Printable on Tax Invoices)',
-                      style: GoogleFonts.outfit(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w700,
-                        color: const Color(0xFF0F172A),
+                      const SizedBox(height: 12),
+                      Text(
+                        'Store Brand Logo (Prints on Invoices & Top Bar)',
+                        style: GoogleFonts.outfit(
+                          fontSize: 13.5,
+                          fontWeight: FontWeight.w700,
+                          color: const Color(0xFF0F172A),
+                        ),
+                        textAlign: TextAlign.center,
                       ),
-                      textAlign: TextAlign.center,
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      'Recommended size: 250x250 PNG/JPG. Automatically compressed for thermal printing.',
-                      style: GoogleFonts.inter(
-                        fontSize: 11,
-                        color: const Color(0xFF64748B),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Tap here to upload from Gallery or Camera. PNG/JPG auto-scaled.',
+                        style: GoogleFonts.inter(
+                          fontSize: 11,
+                          color: const Color(0xFF64748B),
+                        ),
+                        textAlign: TextAlign.center,
                       ),
-                      textAlign: TextAlign.center,
-                    ),
-                    const SizedBox(height: 14),
-                    ElevatedButton(
-                      onPressed: () {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('Logo uploaded! It will print on all thermal and PDF bills.')),
-                        );
-                      },
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF0F172A),
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 10),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                        elevation: 0,
+                      const SizedBox(height: 14),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          ElevatedButton.icon(
+                            onPressed: _showLogoOptions,
+                            icon: Icon(
+                              _logoUrl.isNotEmpty ? Icons.edit_rounded : Icons.upload_rounded,
+                              size: 15,
+                            ),
+                            label: Text(
+                              _logoUrl.isNotEmpty ? 'Change Logo' : 'Upload Logo',
+                              style: GoogleFonts.outfit(fontSize: 12.5, fontWeight: FontWeight.w700),
+                            ),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: const Color(0xFF0F172A),
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 9),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                              elevation: 0,
+                            ),
+                          ),
+                          if (_logoUrl.isNotEmpty) ...[
+                            const SizedBox(width: 8),
+                            OutlinedButton.icon(
+                              onPressed: () async {
+                                setState(() => _logoUrl = '');
+                                final current = await LocalDatabase.instance.getStoreProfile();
+                                final updated = StoreProfileModel(
+                                  storeName: current.storeName,
+                                  tagline: current.tagline,
+                                  ownerName: current.ownerName,
+                                  phone: current.phone,
+                                  email: current.email,
+                                  upiVpa: current.upiVpa,
+                                  category: current.category,
+                                  businessType: current.businessType,
+                                  address: current.address,
+                                  pincode: current.pincode,
+                                  gstin: current.gstin,
+                                  fssai: current.fssai,
+                                  logoUrl: '',
+                                  upiAccountsJson: current.upiAccountsJson,
+                                );
+                                await LocalDatabase.instance.saveStoreProfile(updated);
+                              },
+                              icon: const Icon(Icons.delete_outline_rounded, size: 15, color: Color(0xFFDC2626)),
+                              label: Text(
+                                'Remove',
+                                style: GoogleFonts.outfit(fontSize: 12.5, fontWeight: FontWeight.w700, color: const Color(0xFFDC2626)),
+                              ),
+                              style: OutlinedButton.styleFrom(
+                                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                side: const BorderSide(color: Color(0xFFFCA5A5)),
+                              ),
+                            ),
+                          ],
+                        ],
                       ),
-                      child: Text(
-                        'Upload Logo',
-                        style: GoogleFonts.outfit(fontSize: 13, fontWeight: FontWeight.w700),
-                      ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
               const SizedBox(height: 18),

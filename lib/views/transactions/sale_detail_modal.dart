@@ -10,6 +10,7 @@ import '../../models/models.dart';
 import '../../services/invoice_pdf_service.dart';
 import '../../services/native_notification_service.dart';
 import '../../services/thermal_printer_service.dart';
+import '../common/store_logo_avatar.dart';
 
 class SaleDetailModal extends StatelessWidget {
   final SaleModel sale;
@@ -392,45 +393,53 @@ class SaleDetailModal extends StatelessWidget {
             ),
           ),
 
-          // Header
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Row(
+          // Header with Store Logo
+          FutureBuilder<StoreProfileModel>(
+            future: LocalDatabase.instance.getStoreProfile(),
+            builder: (ctx, snap) {
+              final logoUrl = snap.data?.logoUrl ?? '';
+              final storeName = (snap.data?.storeName.isNotEmpty == true) ? snap.data!.storeName : 'KamaiPlus Store';
+
+              return Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Container(
-                    padding: const EdgeInsets.all(7),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFF1F5F9),
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: const Icon(Icons.receipt_long_rounded, color: Color(0xFF0F172A), size: 20),
-                  ),
-                  const SizedBox(width: 8),
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+                  Row(
                     children: [
-                      Text(
-                        'Invoice #${sale.invoiceNumber}',
-                        style: GoogleFonts.plusJakartaSans(
-                          fontSize: 16.5,
-                          fontWeight: FontWeight.w800,
-                          color: const Color(0xFF0F172A),
-                        ),
+                      StoreLogoAvatar(
+                        logoUrl: logoUrl,
+                        size: 42,
+                        radius: 10,
+                        fallbackIcon: Icons.receipt_long_rounded,
+                        fallbackBgColor: const Color(0xFFF1F5F9),
+                        fallbackIconColor: const Color(0xFF0F172A),
                       ),
-                      Text(
-                        dateStr,
-                        style: GoogleFonts.inter(fontSize: 11, color: const Color(0xFF64748B)),
+                      const SizedBox(width: 10),
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Invoice #${sale.invoiceNumber}',
+                            style: GoogleFonts.plusJakartaSans(
+                              fontSize: 16.5,
+                              fontWeight: FontWeight.w800,
+                              color: const Color(0xFF0F172A),
+                            ),
+                          ),
+                          Text(
+                            '$storeName • $dateStr',
+                            style: GoogleFonts.inter(fontSize: 11, color: const Color(0xFF64748B)),
+                          ),
+                        ],
                       ),
                     ],
                   ),
+                  IconButton(
+                    icon: const Icon(Icons.close_rounded, size: 20, color: Color(0xFF64748B)),
+                    onPressed: () => Navigator.pop(context),
+                  ),
                 ],
-              ),
-              IconButton(
-                icon: const Icon(Icons.close_rounded, size: 20, color: Color(0xFF64748B)),
-                onPressed: () => Navigator.pop(context),
-              ),
-            ],
+              );
+            },
           ),
           const SizedBox(height: 12),
 

@@ -1,5 +1,6 @@
 import 'upi_standee_modal.dart';
 import 'pro_upgrade_modal.dart';
+import 'store_logo_avatar.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../core/database/local_database.dart';
@@ -185,26 +186,10 @@ class _PwaTopBarState extends State<PwaTopBar> {
                         ),
                       ),
                       const SizedBox(width: 6),
-                      Container(
-                        width: 34,
-                        height: 34,
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF0B1528),
-                          borderRadius: BorderRadius.circular(10),
-                          border: Border.all(color: const Color(0xFF1E293B)),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.black.withValues(alpha: 0.08),
-                              blurRadius: 4,
-                              offset: const Offset(0, 1),
-                            ),
-                          ],
-                        ),
-                        child: const Icon(
-                          Icons.storefront_rounded,
-                          size: 18,
-                          color: Color(0xFFF59E0B),
-                        ),
+                      StoreLogoAvatar(
+                        logoUrl: _profile.logoUrl,
+                        size: 34,
+                        radius: 10,
                       ),
                     ],
                   ),

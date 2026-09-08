@@ -378,3 +378,19 @@ Comprehensive enterprise-grade retail UX upgrade suite aligned with PhonePe Busi
       - If returning onboarded user: Sets `is_logged_in = true` and opens `HomeDashboardScreen`.
     - **Reset Guard:** "Reset Device Data (Start Fresh)" allows clearing onboarding state for fresh setup.
     - **Verified:** `flutter analyze` — 0 issues.
+
+24. **Store Profile Logo Upload & Dynamic Top-Bar / Invoice Rendering:**
+    - **Upload Architecture (`lib/views/settings/store_profile_screen.dart`):**
+      - Real image picking enabled using `image_picker: ^1.2.3` (Gallery picker + Camera capture modal).
+      - Selected logo path saved directly to `store_profile` table (`logo_url` column) in local SQLite database via `LocalDatabase.instance.saveStoreProfile`.
+      - Supports "Change Logo" and "Remove Logo" actions.
+    - **Universal Dynamic Avatar Component (`lib/views/common/store_logo_avatar.dart`):**
+      - `StoreLogoAvatar` widget gracefully renders local `File` image, network URL, or default storefront icon fallback.
+    - **Top-Right Screen Display (`lib/views/common/pwa_top_bar.dart` & `store_profile_screen.dart`):**
+      - Top right header avatar dynamically renders the uploaded store logo immediately across all main tabs (`HomePulseTab`, `PosBillingScreen`, etc.).
+    - **Invoice & Bill Display:**
+      - **Sale Detail Modal (`lib/views/transactions/sale_detail_modal.dart`):** Header displays uploaded store brand logo next to Invoice # and date.
+      - **Sale Completed Modal (`lib/views/pos/sale_completed_modal.dart`):** Displays store logo in modal header and itemized receipt breakdown.
+      - **Invoice PDF Service (`lib/services/invoice_pdf_service.dart`):** Passes `logoPath` to native PDF generator for printable tax invoices.
+    - **Verified:** `flutter analyze` — 0 issues.
+

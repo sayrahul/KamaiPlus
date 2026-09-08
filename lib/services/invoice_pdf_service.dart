@@ -11,6 +11,7 @@ class InvoicePdfService {
     required SaleModel sale,
     required String storeName,
     String? storePhone,
+    String? logoPath,
   }) async {
     try {
       final dateStr = DateFormat('dd MMM yyyy, hh:mm a').format(sale.createdAt);
@@ -34,6 +35,8 @@ class InvoicePdfService {
       final String? filePath = await _channel.invokeMethod<String>('generateAndSaveInvoicePdf', {
         'invoiceNumber': sale.invoiceNumber,
         'storeName': storeName,
+        'storePhone': storePhone ?? '',
+        'logoPath': logoPath ?? '',
         'customerName': sale.customerName?.isNotEmpty == true ? sale.customerName : 'Walk-in Customer',
         'dateStr': dateStr,
         'paymentMode': sale.paymentMethod,

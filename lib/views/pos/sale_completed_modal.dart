@@ -4,6 +4,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
+import '../../core/database/local_database.dart';
 import '../../core/utils/money_formatter.dart';
 import '../../models/models.dart';
 import '../../services/thermal_printer_service.dart';
@@ -11,6 +12,7 @@ import '../../services/native_notification_service.dart';
 import '../../services/notification_service.dart';
 import '../../services/invoice_pdf_service.dart';
 import '../settings/bluetooth_printer_dialog.dart';
+import '../common/store_logo_avatar.dart';
 
 class SaleCompletedModal extends StatefulWidget {
   final SaleModel sale;
@@ -49,6 +51,7 @@ class _SaleCompletedModalState extends State<SaleCompletedModal> {
   bool _isPrinting = false;
   bool _showPdfPreview = false;
   String _storeName = 'KamaiPlus Store';
+  StoreProfileModel _profile = StoreProfileModel();
 
   @override
   void initState() {
@@ -75,9 +78,19 @@ class _SaleCompletedModalState extends State<SaleCompletedModal> {
   }
 
   Future<void> _loadStoreName() async {
-    final prefs = await SharedPreferences.getInstance();
-    final name = prefs.getString('business_name') ?? 'KamaiPlus Store';
-    if (mounted) setState(() => _storeName = name);
+    try {
+      final p = await LocalDatabase.instance.getStoreProfile();
+      if (mounted) {
+        setState(() {
+          _profile = p;
+          _storeName = p.storeName.isNotEmpty ? p.storeName : 'KamaiPlus Store';
+        });
+      }
+    } catch (_) {
+      final prefs = await SharedPreferences.getInstance();
+      final name = prefs.getString('business_name') ?? 'KamaiPlus Store';
+      if (mounted) setState(() => _storeName = name);
+    }
   }
 
   Future<void> _sendWhatsAppBill() async {
@@ -221,6 +234,8 @@ Have a wonderful day! Visit us again soon.
     final filePath = await InvoicePdfService.generateAndDownloadPdf(
       sale: widget.sale,
       storeName: _storeName,
+      storePhone: _profile.phone,
+      logoPath: _profile.logoUrl,
     );
 
     if (!mounted) return;
@@ -290,13 +305,13 @@ Have a wonderful day! Visit us again soon.
                   Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Container(
-                        padding: const EdgeInsets.all(6),
-                        decoration: const BoxDecoration(
-                          color: Color(0xFFDCFCE7),
-                          shape: BoxShape.circle,
-                        ),
-                        child: const Icon(Icons.check_circle_rounded, size: 22, color: Color(0xFF16A34A)),
+                      StoreLogoAvatar(
+                        logoUrl: _profile.logoUrl,
+                        size: 36,
+                        radius: 10,
+                        fallbackIcon: Icons.check_circle_rounded,
+                        fallbackBgColor: const Color(0xFFDCFCE7),
+                        fallbackIconColor: const Color(0xFF16A34A),
                       ),
                       const SizedBox(width: 10),
                       Expanded(
@@ -669,6 +684,31 @@ Have a wonderful day! Visit us again soon.
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
+                          Row(
+                            children: [
+                              StoreLogoAvatar(
+                                logoUrl: _profile.logoUrl,
+                                size: 26,
+                                radius: 6,
+                                fallbackIcon: Icons.receipt_long_rounded,
+                                fallbackBgColor: const Color(0xFFE2E8F0),
+                                fallbackIconColor: const Color(0xFF0F172A),
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  _storeName,
+                                  style: GoogleFonts.plusJakartaSans(
+                                    fontSize: 12.5,
+                                    fontWeight: FontWeight.w800,
+                                    color: const Color(0xFF0F172A),
+                                  ),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 8),
                           Row(
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
