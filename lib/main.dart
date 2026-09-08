@@ -49,7 +49,8 @@ void main() async {
   AuthService.instance.initGoogleSignIn().then((_) => AuthService.instance.signInSilently());
 
   // 6. Initialize Cloud Firestore Realtime Sync Engine in Background
-  final savedBizId = prefs.getString('business_id') ?? 'biz_starter_pos';
+  final savedBizId = prefs.getString('business_id') ??
+      (cachedUserId != null && cachedUserId.isNotEmpty ? 'biz_$cachedUserId' : 'biz_starter_pos');
   FirestoreSyncService.instance.initialize(businessId: savedBizId);
 
   runApp(const KamaiPlusApp());

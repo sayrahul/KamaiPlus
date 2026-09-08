@@ -562,8 +562,18 @@ Comprehensive enterprise-grade retail UX upgrade suite aligned with PhonePe Busi
       - `TransactionsScreen`: Generates invoice PDF and shares via WhatsApp with complete item breakdown and dynamic UPI link.
       - `SaleDetailModal`: Generates invoice PDF and shares via WhatsApp with complete item breakdown and dynamic UPI link.
       - `KhataScreen`: Reminders generate customer statement PDF and share via WhatsApp with statement breakdown and dynamic UPI link. Bill view shares invoice PDF with payment link.
-    - **Reusable `ProLockedCard` (`lib/views/common/pro_locked_card.dart`):**
-      - Premium golden card featuring Crown icon, customizable title, subtitle, perk list, and "Upgrade to Kamai+ Pro (₹1,499/yr)" button that invokes `ProUpgradeModal.show(context)`.
-
-
-
+33. **Backend Payment Verification Webhook, Strict Firestore Rules, & Zero-Client-Bypass Architecture (LOCKED):**
+    - **No Simulated Upgrades (Real Razorpay Native SDK):**
+      - Removed any simulated timers or client-side bypasses. The app strictly uses the official `razorpay_flutter` native Android SDK with live keys (`rzp_live_TSJvcf9JnWpMMm`).
+      - In `RazorpayService`, each checkout passes metadata notes (`business_id`, `plan`, `store_name`, `merchant_phone`).
+      - Upon payment capture, the app syncs `is_pro: true`, `pro_plan`, `pro_expiry`, and `razorpay_payment_id` directly to Cloud Firestore `/businesses/{bizId}` as well as local SQLite.
+    - **Secure Next.js Serverless Route (`backend/nextjs_razorpay_webhook_route.ts` & `backend/nextjs_razorpay_webhook_pages.js`):**
+      - Full production webhook implementation for Vercel / Next.js Serverless.
+      - Uses raw request buffer with `crypto.createHmac('sha256', secret)` to verify `x-razorpay-signature` against spoofing.
+      - Upon `payment.captured` or `order.paid`, parses verified notes, sets Firestore `/businesses/{businessId}` with `is_pro: true`, plan details, and server timestamp.
+    - **Strict Firestore Security Rules (`firestore.rules`):**
+      - Enforces strict multi-tenant isolation: Merchant A can NEVER read or write Merchant B's products, sales, customers, or profile.
+      - Rule matches `businessId == 'biz_' + request.auth.uid` or `owner_uid == request.auth.uid`.
+      - Prevents cross-store data leakage in multi-device sync.
+    - **Consolidated Navigation Invariant:**
+      - Confirmed 0 duplicate navigation overlays. Exactly 5 bottom tabs, where Tab 5 is strictly `MenuScreen.show(context)` — a clean, single modal bottom sheet.

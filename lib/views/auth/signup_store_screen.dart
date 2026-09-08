@@ -11,6 +11,7 @@ import '../../core/utils/app_validators.dart';
 import '../../models/models.dart';
 import '../dashboard/home_dashboard_screen.dart';
 import '../purchases/purchases_screen.dart';
+import '../../services/firestore_sync_service.dart';
 
 class SignupStoreScreen extends StatefulWidget {
   final String? initialPhone;
@@ -147,11 +148,15 @@ class _SignupStoreScreenState extends State<SignupStoreScreen> {
 
       // Save login & onboarding status
       final prefs = await SharedPreferences.getInstance();
+      final currentUserId = prefs.getString('auth_user_id') ?? 'starter';
+      final businessId = 'biz_$currentUserId';
       await prefs.setBool('is_logged_in', true);
       await prefs.setBool('is_onboarded', true);
       await prefs.setString('business_name', storeName);
       await prefs.setString('merchant_phone', phone);
       await prefs.setString('business_type', businessTypeId);
+      await prefs.setString('business_id', businessId);
+      FirestoreSyncService.instance.initialize(businessId: businessId);
 
       if (!mounted) return;
 

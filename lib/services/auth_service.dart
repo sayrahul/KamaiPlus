@@ -4,6 +4,7 @@ import 'package:google_sign_in/google_sign_in.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../core/constants/business_vertical_config.dart';
 import '../core/database/local_database.dart';
+import 'firestore_sync_service.dart';
 
 class AuthService {
   static final AuthService instance = AuthService._internal();
@@ -57,6 +58,7 @@ class AuthService {
         await prefs.setString('auth_user_id', user.uid);
         await prefs.setString('auth_user_email', user.email ?? '');
         await prefs.setString('auth_user_name', user.displayName ?? '');
+        await prefs.setString('business_id', 'biz_${user.uid}');
         await prefs.setBool('is_logged_in', true);
         if (user.photoURL != null) {
           await prefs.setString('auth_user_photo', user.photoURL!);
@@ -64,6 +66,7 @@ class AuthService {
 
         // 6. Switch to user-scoped database immediately
         await LocalDatabase.instance.switchUser(user.uid);
+        FirestoreSyncService.instance.initialize(businessId: 'biz_${user.uid}');
       }
 
       return userCredential;

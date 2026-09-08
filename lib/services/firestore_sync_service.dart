@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/models.dart';
@@ -39,11 +40,13 @@ class FirestoreSyncService {
       final profile = await LocalDatabase.instance.getStoreProfile();
       final prefs = await SharedPreferences.getInstance();
       final fcmToken = prefs.getString('fcm_token');
+      final currentUid = FirebaseAuth.instance.currentUser?.uid ?? '';
 
       await firestore.collection('businesses').doc(bizId).set({
         'store_name': profile.storeName,
         'tagline': profile.tagline,
         'owner_name': profile.ownerName,
+        'owner_uid': currentUid,
         'phone': profile.phone,
         'email': profile.email,
         'upi_vpa': profile.upiVpa,
@@ -53,6 +56,10 @@ class FirestoreSyncService {
         'pincode': profile.pincode,
         'gstin': profile.gstin,
         'fssai': profile.fssai,
+        'is_pro': profile.isPro,
+        'pro_plan': profile.proPlan,
+        'pro_expiry': profile.proExpiry,
+        'razorpay_payment_id': profile.razorpayPaymentId,
         'fcm_token': fcmToken,
         'last_synced_at': FieldValue.serverTimestamp(),
         'platform': 'android_native',
@@ -187,6 +194,30 @@ class FirestoreSyncService {
     try {
       syncState.value = SyncState.syncing;
       final firestore = FirebaseFirestore.instance;
+
+      // 0. Fetch Business Profile & Verified Pro Status
+      try {
+        final bizDoc = await firestore.collection('businesses').doc(_activeBusinessId).get();
+        if (bizDoc.exists) {
+          final d = bizDoc.data();
+          if (d != null && (d['is_pro'] == true || d['is_pro'] == 1)) {
+            final plan = d['pro_plan']?.toString() ?? 'annual';
+            final paymentId = d['razorpay_payment_id']?.toString() ?? 'cloud_verified';
+            final expiryStr = d['pro_expiry']?.toString();
+            final expiry = expiryStr != null ? DateTime.tryParse(expiryStr) : null;
+            await LocalDatabase.instance.activateProMembership(
+              plan: plan,
+              paymentId: paymentId,
+              expiryDate: expiry ?? DateTime.now().add(const Duration(days: 365)),
+            );
+            final prefs = await SharedPreferences.getInstance();
+            await prefs.setBool('is_pro', true);
+            await prefs.setString('pro_plan', plan);
+          }
+        }
+      } catch (e) {
+        debugPrint('Cloud pro status check notice: $e');
+      }
 
       // Fetch Categories
       final catSnap = await firestore

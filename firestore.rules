@@ -1,0 +1,74 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // =========================================================================
+    // HELPER FUNCTIONS FOR STRICT MERCHANT DATA ISOLATION
+    // =========================================================================
+
+    // 1. Ensure the user is authenticated with Firebase Auth
+    function isAuthenticated() {
+      return request.auth != null && request.auth.uid != null;
+    }
+
+    // 2. Strict Business Ownership Match:
+    // User can ONLY access their own business if:
+    // a) The businessId matches their auth UID ('biz_' + uid) OR
+    // b) The existing document's owner_uid matches their auth UID OR
+    // c) The new write document sets owner_uid to their auth UID
+    function isBusinessOwner(businessId) {
+      return isAuthenticated() && (
+        businessId == 'biz_' + request.auth.uid ||
+        businessId == request.auth.uid ||
+        (resource != null && resource.data.owner_uid == request.auth.uid) ||
+        (request.resource != null && request.resource.data.owner_uid == request.auth.uid)
+      );
+    }
+
+    // =========================================================================
+    // BUSINESS PROFILES & SUBCOLLECTIONS (STRICT MULTI-COUNTER ISOLATION)
+    // =========================================================================
+
+    // Root Business Document (Store profile, settings, Pro status)
+    match /businesses/{businessId} {
+      allow read, write: if isBusinessOwner(businessId);
+
+      // Products Catalog (SKUs, Barcodes, Pricing, Stock)
+      match /products/{productId} {
+        allow read, write: if isBusinessOwner(businessId);
+      }
+
+      // Categories (Product classification)
+      match /categories/{categoryId} {
+        allow read, write: if isBusinessOwner(businessId);
+      }
+
+      // Customer Khata Ledger (Udhar balances, profiles)
+      match /customers/{customerId} {
+        allow read, write: if isBusinessOwner(businessId);
+      }
+
+      // Sales & Counter Invoices (Completed bills, return receipts)
+      match /sales/{saleId} {
+        allow read, write: if isBusinessOwner(businessId);
+      }
+
+      // Supplier Inward Restock Orders
+      match /inward_orders/{orderId} {
+        allow read, write: if isBusinessOwner(businessId);
+      }
+
+      // Any nested subcollections under business
+      match /{allChildren=**} {
+        allow read, write: if isBusinessOwner(businessId);
+      }
+    }
+
+    // =========================================================================
+    // DEFAULT DENY: BLOCK ALL OTHER ROOT ACCESS
+    // =========================================================================
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

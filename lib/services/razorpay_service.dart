@@ -1,8 +1,10 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
 import 'package:razorpay_flutter/razorpay_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../core/database/local_database.dart';
 import '../models/models.dart';
+import 'firestore_sync_service.dart';
 import 'native_notification_service.dart';
 import 'soundbox_service.dart';
 
@@ -64,6 +66,12 @@ class RazorpayService {
         'contact': profile.phone.isNotEmpty ? profile.phone : '',
         'email': profile.email.isNotEmpty ? profile.email : 'billing@kamaiplus.com',
       },
+      'notes': {
+        'business_id': FirestoreSyncService.instance.activeBusinessId,
+        'plan': plan,
+        'store_name': profile.storeName,
+        'merchant_phone': profile.phone,
+      },
       'theme': {
         'color': '#059669', // Emerald brand theme
       },
@@ -99,7 +107,21 @@ class RazorpayService {
     await prefs.setString('pro_expiry', expiryDate.toIso8601String());
     await prefs.setString('razorpay_payment_id', paymentId);
 
-    // 3. Audio & push celebration
+    // 3. Sync Pro activation to Cloud Firestore backend
+    try {
+      final bizId = FirestoreSyncService.instance.activeBusinessId;
+      await FirebaseFirestore.instance.collection('businesses').doc(bizId).set({
+        'is_pro': true,
+        'pro_plan': _pendingPlan,
+        'pro_expiry': expiryDate.toIso8601String(),
+        'razorpay_payment_id': paymentId,
+        'pro_activated_at': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
+    } catch (e) {
+      debugPrint('Cloud pro status update notice: $e');
+    }
+
+    // 4. Audio & push celebration
     SoundboxService.instance.speakCustom(
       'Badhaai ho! Kamai Plus Pro membership activate ho gayi hai.',
       lang: 'hi',
