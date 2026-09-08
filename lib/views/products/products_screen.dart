@@ -9,6 +9,7 @@ import '../common/owner_privacy_modal.dart';
 import 'ai_inward_modal.dart';
 import 'add_product_modal.dart';
 import '../pos/barcode_scanner_view.dart';
+import '../../services/firestore_sync_service.dart';
 
 class ProductsScreen extends StatefulWidget {
   final bool autoOpenFirstEdit;
@@ -105,6 +106,7 @@ class _ProductsScreenState extends State<ProductsScreen> {
     );
 
     await LocalDatabase.instance.upsertProduct(updated);
+    FirestoreSyncService.instance.pushProductToCloud(updated).catchError((_) {});
     _loadData();
   }
 
@@ -244,8 +246,96 @@ class _ProductsScreenState extends State<ProductsScreen> {
     );
   }
 
+  void _confirmDeleteProduct(ProductModel product) {
+    HapticFeedback.mediumImpact();
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: Colors.white,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: const Color(0xFFFEE2E2),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: const Icon(Icons.delete_forever_rounded, color: Color(0xFFDC2626), size: 22),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                'Delete Product?',
+                style: GoogleFonts.outfit(fontSize: 16, fontWeight: FontWeight.w800),
+              ),
+            ),
+          ],
+        ),
+        content: Text(
+          'Kya aap sach me "${product.name}" ko product catalog se delete karna chahte hain?',
+          style: GoogleFonts.inter(fontSize: 13, color: const Color(0xFF475569)),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text('Cancel', style: GoogleFonts.inter(fontWeight: FontWeight.w600, color: const Color(0xFF64748B))),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              Navigator.pop(ctx);
+              await LocalDatabase.instance.deleteProduct(product.id);
+              FirestoreSyncService.instance.deleteProductFromCloud(product.id).catchError((_) {});
+              _loadData();
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text('✓ "${product.name}" deleted from catalog'),
+                    backgroundColor: const Color(0xFF0F172A),
+                    behavior: SnackBarBehavior.floating,
+                  ),
+                );
+              }
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFFDC2626),
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            ),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+  }
 
-  Widget _buildStockTrafficBadge(double qty, String unit) {
+  Widget _buildStockTrafficBadge(double qty, String unit, {bool isLooseOrInfinite = false}) {
+    if (isLooseOrInfinite || qty >= 99999) {
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2.5),
+        decoration: BoxDecoration(
+          color: const Color(0xFFF0FDF4),
+          borderRadius: BorderRadius.circular(6),
+          border: Border.all(color: const Color(0xFFBBF7D0), width: 1),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.all_inclusive_rounded, size: 11, color: Color(0xFF16A34A)),
+            const SizedBox(width: 3),
+            Text(
+              'Unlimited',
+              style: GoogleFonts.inter(
+                fontSize: 9.5,
+                fontWeight: FontWeight.w700,
+                color: const Color(0xFF16A34A),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
     final Color bg;
     final Color text;
     final String label;
@@ -872,6 +962,7 @@ class _ProductsScreenState extends State<ProductsScreen> {
     final isFav = _favoriteProductIds.contains(product.id);
     final categoryName = _getCategoryName(product.categoryId);
     final isLowStock = product.stockQuantity <= 15;
+    final isInfinite = product.isLooseItem || product.stockQuantity >= 99999;
 
     return Container(
       margin: const EdgeInsets.only(bottom: 9),
@@ -891,7 +982,7 @@ class _ProductsScreenState extends State<ProductsScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Title, Star, Fast Bolt Update & Edit Pencil
+          // Title, Star, Fast Bolt Update, Edit Pencil & Delete Trash
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -967,11 +1058,33 @@ class _ProductsScreenState extends State<ProductsScreen> {
                   ),
                 ),
               ),
+              const SizedBox(width: 6),
+              // Dedicated Delete Button
+              InkWell(
+                onTap: () {
+                  HapticFeedback.selectionClick();
+                  _confirmDeleteProduct(product);
+                },
+                borderRadius: BorderRadius.circular(8),
+                child: Container(
+                  padding: const EdgeInsets.all(5),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFFEF2F2),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: const Color(0xFFFECACA)),
+                  ),
+                  child: const Icon(
+                    Icons.delete_outline_rounded,
+                    size: 16,
+                    color: Color(0xFFDC2626),
+                  ),
+                ),
+              ),
             ],
           ),
           const SizedBox(height: 6),
 
-          // Category Badge + Traffic Light Stock Badge + Barcode Strip
+          // Category Badge + Traffic Light Stock Badge (Clean listing: barcode digits removed per request)
           Wrap(
             spacing: 6,
             runSpacing: 4,
@@ -992,24 +1105,7 @@ class _ProductsScreenState extends State<ProductsScreen> {
                   ),
                 ),
               ),
-              _buildStockTrafficBadge(product.stockQuantity, product.unit),
-              if (product.barcode != null && product.barcode!.isNotEmpty)
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFF8FAFC),
-                    borderRadius: BorderRadius.circular(6),
-                    border: Border.all(color: const Color(0xFFE2E8F0)),
-                  ),
-                  child: Text(
-                    product.barcode!,
-                    style: GoogleFonts.robotoMono(
-                      fontSize: 9.5,
-                      fontWeight: FontWeight.w600,
-                      color: const Color(0xFF64748B),
-                    ),
-                  ),
-                ),
+              _buildStockTrafficBadge(product.stockQuantity, product.unit, isLooseOrInfinite: isInfinite),
             ],
           ),
           const SizedBox(height: 10),
@@ -1079,47 +1175,73 @@ class _ProductsScreenState extends State<ProductsScreen> {
                 ],
               ),
 
-              // Stock Stepper (+ / -)
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-                decoration: BoxDecoration(
-                  color: isLowStock ? const Color(0xFFFFF1F2) : const Color(0xFFF8FAFC),
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(
-                    color: isLowStock ? const Color(0xFFFECDD3) : const Color(0xFFE2E8F0),
+              // Stock Counter: Hide Stepper (+/-) for Infinite/Loose Stock items
+              if (isInfinite)
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF0FDF4),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: const Color(0xFFBBF7D0)),
                   ),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    GestureDetector(
-                      onTap: () => _adjustStock(product, -1),
-                      child: Container(
-                        padding: const EdgeInsets.all(4),
-                        child: const Icon(Icons.remove_rounded, size: 14, color: Color(0xFF475569)),
-                      ),
-                    ),
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 6),
-                      child: Text(
-                        '${product.stockQuantity.toInt()} ${product.unit}',
-                        style: GoogleFonts.robotoMono(
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.all_inclusive_rounded, size: 13, color: Color(0xFF16A34A)),
+                      const SizedBox(width: 4),
+                      Text(
+                        'Unlimited',
+                        style: GoogleFonts.inter(
                           fontSize: 11,
-                          fontWeight: FontWeight.w800,
-                          color: isLowStock ? const Color(0xFFE11D48) : const Color(0xFF0F172A),
+                          fontWeight: FontWeight.w700,
+                          color: const Color(0xFF16A34A),
                         ),
                       ),
+                    ],
+                  ),
+                )
+              else
+                // Stock Stepper (+ / -)
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: isLowStock ? const Color(0xFFFFF1F2) : const Color(0xFFF8FAFC),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(
+                      color: isLowStock ? const Color(0xFFFECDD3) : const Color(0xFFE2E8F0),
                     ),
-                    GestureDetector(
-                      onTap: () => _adjustStock(product, 1),
-                      child: Container(
-                        padding: const EdgeInsets.all(4),
-                        child: const Icon(Icons.add_rounded, size: 14, color: Color(0xFF475569)),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      GestureDetector(
+                        onTap: () => _adjustStock(product, -1),
+                        child: Container(
+                          padding: const EdgeInsets.all(4),
+                          child: const Icon(Icons.remove_rounded, size: 14, color: Color(0xFF475569)),
+                        ),
                       ),
-                    ),
-                  ],
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 6),
+                        child: Text(
+                          '${product.stockQuantity.toInt()} ${product.unit}',
+                          style: GoogleFonts.robotoMono(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w800,
+                            color: isLowStock ? const Color(0xFFE11D48) : const Color(0xFF0F172A),
+                          ),
+                        ),
+                      ),
+                      GestureDetector(
+                        onTap: () => _adjustStock(product, 1),
+                        child: Container(
+                          padding: const EdgeInsets.all(4),
+                          child: const Icon(Icons.add_rounded, size: 14, color: Color(0xFF475569)),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
-              ),
             ],
           ),
         ],
@@ -1129,6 +1251,7 @@ class _ProductsScreenState extends State<ProductsScreen> {
 
   Widget _buildProductGridCard(ProductModel product) {
     final categoryName = _getCategoryName(product.categoryId);
+    final isInfinite = product.isLooseItem || product.stockQuantity >= 99999;
 
     return Container(
       padding: const EdgeInsets.all(10),
@@ -1147,7 +1270,7 @@ class _ProductsScreenState extends State<ProductsScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Top Row: Category + Pencil Edit
+          // Top Row: Category + Pencil Edit + Delete Trash
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
@@ -1162,9 +1285,19 @@ class _ProductsScreenState extends State<ProductsScreen> {
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
-              InkWell(
-                onTap: () => _openAddProductSheet(existingProduct: product),
-                child: const Icon(Icons.edit_outlined, size: 15, color: Color(0xFF475569)),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  InkWell(
+                    onTap: () => _openAddProductSheet(existingProduct: product),
+                    child: const Icon(Icons.edit_outlined, size: 15, color: Color(0xFF475569)),
+                  ),
+                  const SizedBox(width: 8),
+                  InkWell(
+                    onTap: () => _confirmDeleteProduct(product),
+                    child: const Icon(Icons.delete_outline_rounded, size: 15, color: Color(0xFFDC2626)),
+                  ),
+                ],
               ),
             ],
           ),
@@ -1183,13 +1316,12 @@ class _ProductsScreenState extends State<ProductsScreen> {
           ),
           const SizedBox(height: 4),
 
-
           // Stock Traffic Badge
-          _buildStockTrafficBadge(product.stockQuantity, product.unit),
+          _buildStockTrafficBadge(product.stockQuantity, product.unit, isLooseOrInfinite: isInfinite),
 
           const Spacer(),
 
-          // Selling Price & Quick Update
+          // Selling Price & Stock Counter
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             crossAxisAlignment: CrossAxisAlignment.center,
@@ -1205,41 +1337,56 @@ class _ProductsScreenState extends State<ProductsScreen> {
                   ),
                 ),
               ),
-              // Stock Stepper (+ / -)
-              Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  GestureDetector(
-                    onTap: () => _adjustStock(product, -1),
-                    child: Container(
-                      padding: const EdgeInsets.all(2),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFF1F5F9),
-                        borderRadius: BorderRadius.circular(4),
+              // If infinite, show badge with no +/- stepper
+              if (isInfinite)
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF0FDF4),
+                    borderRadius: BorderRadius.circular(6),
+                    border: Border.all(color: const Color(0xFFBBF7D0)),
+                  ),
+                  child: Text(
+                    '∞ Unlimited',
+                    style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.w700, color: const Color(0xFF16A34A)),
+                  ),
+                )
+              else
+                // Stock Stepper (+ / -)
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    GestureDetector(
+                      onTap: () => _adjustStock(product, -1),
+                      child: Container(
+                        padding: const EdgeInsets.all(2),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFF1F5F9),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: const Icon(Icons.remove_rounded, size: 13, color: Color(0xFF475569)),
                       ),
-                      child: const Icon(Icons.remove_rounded, size: 13, color: Color(0xFF475569)),
                     ),
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 4),
-                    child: Text(
-                      '${product.stockQuantity.toInt()}',
-                      style: GoogleFonts.robotoMono(fontSize: 11, fontWeight: FontWeight.bold),
-                    ),
-                  ),
-                  GestureDetector(
-                    onTap: () => _adjustStock(product, 1),
-                    child: Container(
-                      padding: const EdgeInsets.all(2),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFF1F5F9),
-                        borderRadius: BorderRadius.circular(4),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 4),
+                      child: Text(
+                        '${product.stockQuantity.toInt()}',
+                        style: GoogleFonts.robotoMono(fontSize: 11, fontWeight: FontWeight.bold),
                       ),
-                      child: const Icon(Icons.add_rounded, size: 13, color: Color(0xFF475569)),
                     ),
-                  ),
-                ],
-              ),
+                    GestureDetector(
+                      onTap: () => _adjustStock(product, 1),
+                      child: Container(
+                        padding: const EdgeInsets.all(2),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFF1F5F9),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: const Icon(Icons.add_rounded, size: 13, color: Color(0xFF475569)),
+                      ),
+                    ),
+                  ],
+                ),
             ],
           ),
         ],

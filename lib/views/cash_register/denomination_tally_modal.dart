@@ -43,6 +43,17 @@ class DenominationTallyModal extends StatefulWidget {
 }
 
 class _DenominationTallyModalState extends State<DenominationTallyModal> {
+  static const Map<int, String> _denomAssets = {
+    500: 'assets/images/500.png',
+    200: 'assets/images/200.png',
+    100: 'assets/images/100.png',
+    50: 'assets/images/50.png',
+    10: 'assets/images/10.png',
+    5: 'assets/images/5.png',
+    2: 'assets/images/2.png',
+    1: 'assets/images/1.png',
+  };
+
   late final Map<int, int> _denominations;
 
   @override
@@ -111,24 +122,24 @@ class _DenominationTallyModalState extends State<DenominationTallyModal> {
     }
     buffer.writeln('\n_Report generated via KamaiPlus POS_');
 
-    final url = Uri.parse('whatsapp://send?text=${Uri.encodeComponent(buffer.toString())}');
+    final textEncoded = Uri.encodeComponent(buffer.toString());
+    final url = Uri.parse('https://wa.me/?text=$textEncoded');
+    final directWa = Uri.parse('whatsapp://send?text=$textEncoded');
     try {
-      if (await canLaunchUrl(url)) {
-        await launchUrl(url, mode: LaunchMode.externalApplication);
-      } else {
+      final launched = await launchUrl(url, mode: LaunchMode.externalApplication);
+      if (!launched) {
+        await launchUrl(directWa, mode: LaunchMode.externalApplication);
+      }
+    } catch (_) {
+      try {
+        await launchUrl(directWa, mode: LaunchMode.externalApplication);
+      } catch (_) {
         await Clipboard.setData(ClipboardData(text: buffer.toString()));
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(content: Text('✓ Cash tally breakdown copied to clipboard!')),
           );
         }
-      }
-    } catch (_) {
-      await Clipboard.setData(ClipboardData(text: buffer.toString()));
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('✓ Cash tally breakdown copied to clipboard!')),
-        );
       }
     }
   }
@@ -277,6 +288,7 @@ class _DenominationTallyModalState extends State<DenominationTallyModal> {
                 final count = _denominations[denom]!;
                 final totalVal = denom * count;
                 final label = denom <= 5 ? '₹$denom Coin' : '₹$denom Note';
+                final assetPath = _denomAssets[denom];
 
                 return Container(
                   margin: const EdgeInsets.only(bottom: 6),
@@ -288,24 +300,56 @@ class _DenominationTallyModalState extends State<DenominationTallyModal> {
                   ),
                   child: Row(
                     children: [
+                      // 1. Note / Coin Image
                       Container(
-                        width: 70,
-                        padding: const EdgeInsets.symmetric(vertical: 4),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFF1F5F9),
-                          borderRadius: BorderRadius.circular(6),
-                        ),
+                        width: 48,
+                        height: 28,
                         alignment: Alignment.center,
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFF8FAFC),
+                          borderRadius: BorderRadius.circular(6),
+                          border: Border.all(color: const Color(0xFFE2E8F0)),
+                        ),
+                        child: assetPath != null
+                            ? ClipRRect(
+                                borderRadius: BorderRadius.circular(4),
+                                child: Image.asset(
+                                  assetPath,
+                                  fit: BoxFit.contain,
+                                  width: denom <= 5 ? 24 : 44,
+                                  height: 24,
+                                  errorBuilder: (c, e, s) => Icon(
+                                    denom <= 5 ? Icons.monetization_on_outlined : Icons.money_rounded,
+                                    size: 18,
+                                    color: const Color(0xFF059669),
+                                  ),
+                                ),
+                              )
+                            : Icon(
+                                denom <= 5 ? Icons.monetization_on_outlined : Icons.money_rounded,
+                                size: 18,
+                                color: const Color(0xFF059669),
+                              ),
+                      ),
+                      const SizedBox(width: 8),
+
+                      // 2. Note Name
+                      SizedBox(
+                        width: 70,
                         child: Text(
                           label,
                           style: GoogleFonts.plusJakartaSans(
-                            fontSize: 12.5,
+                            fontSize: 12,
                             fontWeight: FontWeight.w800,
                             color: const Color(0xFF0F172A),
                           ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                         ),
                       ),
-                      const SizedBox(width: 8),
+                      const SizedBox(width: 4),
+
+                      // 3. Minus Button
                       IconButton(
                         onPressed: count > 0
                             ? () {
@@ -317,17 +361,21 @@ class _DenominationTallyModalState extends State<DenominationTallyModal> {
                         color: const Color(0xFF64748B),
                         visualDensity: VisualDensity.compact,
                       ),
+
+                      // Count
                       Container(
-                        width: 34,
+                        width: 30,
                         alignment: Alignment.center,
                         child: Text(
                           '$count',
                           style: GoogleFonts.plusJakartaSans(
-                            fontSize: 15,
+                            fontSize: 14.5,
                             fontWeight: FontWeight.w800,
                           ),
                         ),
                       ),
+
+                      // 4. Plus Button
                       IconButton(
                         onPressed: () {
                           HapticFeedback.selectionClick();
@@ -338,10 +386,12 @@ class _DenominationTallyModalState extends State<DenominationTallyModal> {
                         visualDensity: VisualDensity.compact,
                       ),
                       const Spacer(),
+
+                      // 5. Total
                       Text(
                         '₹$totalVal',
                         style: GoogleFonts.plusJakartaSans(
-                          fontSize: 13.5,
+                          fontSize: 13,
                           fontWeight: FontWeight.w700,
                           color: const Color(0xFF334155),
                         ),

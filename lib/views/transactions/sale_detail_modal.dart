@@ -123,20 +123,18 @@ class SaleDetailModal extends StatelessWidget {
     buffer.writeln('\nDhanyawad! Phir Padhaarein 🙏');
 
     final phone = sale.customerPhone ?? '';
-    final url = phone.isNotEmpty
-        ? Uri.parse('https://wa.me/91$phone?text=${Uri.encodeComponent(buffer.toString())}')
-        : Uri.parse('whatsapp://send?text=${Uri.encodeComponent(buffer.toString())}');
+    final cleanPhone = phone.replaceAll(RegExp(r'[^0-9]'), '');
+    final targetPhone = cleanPhone.length == 10 ? '91$cleanPhone' : cleanPhone;
+
+    final url = targetPhone.isNotEmpty
+        ? Uri.parse('https://wa.me/$targetPhone?text=${Uri.encodeComponent(buffer.toString())}')
+        : Uri.parse('https://wa.me/?text=${Uri.encodeComponent(buffer.toString())}');
 
     try {
-      if (await canLaunchUrl(url)) {
-        await launchUrl(url, mode: LaunchMode.externalApplication);
-      } else {
-        await Clipboard.setData(ClipboardData(text: buffer.toString()));
-        if (context.mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('✓ Bill details copied to clipboard!')),
-          );
-        }
+      final launched = await launchUrl(url, mode: LaunchMode.externalApplication);
+      if (!launched) {
+        final directWa = Uri.parse('whatsapp://send?text=${Uri.encodeComponent(buffer.toString())}');
+        await launchUrl(directWa, mode: LaunchMode.externalApplication);
       }
     } catch (_) {
       await Clipboard.setData(ClipboardData(text: buffer.toString()));
@@ -151,13 +149,21 @@ class SaleDetailModal extends StatelessWidget {
   void _downloadPdf(BuildContext context) async {
     HapticFeedback.selectionClick();
     try {
-      final prefs = await SharedPreferences.getInstance();
-      final storeName = prefs.getString('business_name') ?? 'KamaiPlus Store';
-      final path = await InvoicePdfService.generateAndDownloadPdf(sale: sale, storeName: storeName);
+      final profile = await LocalDatabase.instance.getStoreProfile();
+      final storeName = profile.storeName.isNotEmpty ? profile.storeName : 'KamaiPlus Store';
+      final path = await InvoicePdfService.generateAndDownloadPdf(
+        sale: sale,
+        storeName: storeName,
+        storePhone: profile.phone,
+        storeAddress: profile.address,
+        gstin: profile.gstin,
+        logoPath: profile.logoUrl,
+        customerPhone: sale.customerPhone,
+      );
       if (path != null && context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: const Text('✓ Tax Invoice PDF downloaded to Downloads!'),
+            content: Text('✓ Tax Invoice #${sale.invoiceNumber} PDF saved to Downloads!'),
             backgroundColor: const Color(0xFF059669),
             behavior: SnackBarBehavior.floating,
             action: SnackBarAction(
@@ -166,6 +172,28 @@ class SaleDetailModal extends StatelessWidget {
               onPressed: () => InvoicePdfService.openPdf(path),
             ),
           ),
+        );
+      }
+    } catch (_) {}
+  }
+
+  void _sharePdf(BuildContext context) async {
+    HapticFeedback.selectionClick();
+    try {
+      final profile = await LocalDatabase.instance.getStoreProfile();
+      final storeName = profile.storeName.isNotEmpty ? profile.storeName : 'KamaiPlus Store';
+      final ok = await InvoicePdfService.generateAndSharePdf(
+        sale: sale,
+        storeName: storeName,
+        storePhone: profile.phone,
+        storeAddress: profile.address,
+        gstin: profile.gstin,
+        logoPath: profile.logoUrl,
+        customerPhone: sale.customerPhone,
+      );
+      if (!ok && context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Could not open share dialog')),
         );
       }
     } catch (_) {}
@@ -568,7 +596,7 @@ class SaleDetailModal extends StatelessWidget {
           ),
           const SizedBox(height: 16),
 
-          // Actions: Print Thermal + WhatsApp Bill + A4 PDF
+          // Actions: Print Thermal + Download PDF + Share PDF
           Row(
             children: [
               Expanded(
@@ -594,7 +622,7 @@ class SaleDetailModal extends StatelessWidget {
               Expanded(
                 child: OutlinedButton.icon(
                   onPressed: () => _downloadPdf(context),
-                  icon: const Icon(Icons.picture_as_pdf_rounded, size: 15, color: Color(0xFF0284C7)),
+                  icon: const Icon(Icons.download_rounded, size: 15, color: Color(0xFF0284C7)),
                   label: Text(
                     'A4 PDF',
                     style: GoogleFonts.plusJakartaSans(
@@ -612,27 +640,47 @@ class SaleDetailModal extends StatelessWidget {
               ),
               const SizedBox(width: 8),
               Expanded(
-                flex: 1,
-                child: ElevatedButton.icon(
-                  onPressed: () => _shareWhatsApp(context),
-                  icon: Image.asset('assets/images/whatsapp_logo.png', width: 15, height: 15),
+                child: OutlinedButton.icon(
+                  onPressed: () => _sharePdf(context),
+                  icon: const Icon(Icons.share_rounded, size: 15, color: Color(0xFF4F46E5)),
                   label: Text(
-                    'WhatsApp',
+                    'Share PDF',
                     style: GoogleFonts.plusJakartaSans(
                       fontSize: 12,
                       fontWeight: FontWeight.w700,
-                      color: Colors.white,
+                      color: const Color(0xFF4F46E5),
                     ),
                   ),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF059669),
+                  style: OutlinedButton.styleFrom(
                     padding: const EdgeInsets.symmetric(vertical: 11),
-                    elevation: 0,
+                    side: const BorderSide(color: Color(0xFFC7D2FE)),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                   ),
                 ),
               ),
             ],
+          ),
+          const SizedBox(height: 8),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton.icon(
+              onPressed: () => _shareWhatsApp(context),
+              icon: Image.asset('assets/images/whatsapp_logo.png', width: 16, height: 16),
+              label: Text(
+                'Send Bill via WhatsApp',
+                style: GoogleFonts.plusJakartaSans(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                  color: Colors.white,
+                ),
+              ),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF059669),
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                elevation: 0,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              ),
+            ),
           ),
           const SizedBox(height: 10),
 

@@ -612,12 +612,12 @@ class _PosBillingScreenState extends State<PosBillingScreen> {
     }
 
     return GridView.builder(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
       gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
         crossAxisCount: 2,
-        crossAxisSpacing: 10,
-        mainAxisSpacing: 10,
-        childAspectRatio: 1.18,
+        crossAxisSpacing: 8,
+        mainAxisSpacing: 8,
+        childAspectRatio: 1.48,
       ),
       itemCount: prods.length,
       itemBuilder: (context, index) {
@@ -807,23 +807,23 @@ class _PosProductGridItemState extends State<_PosProductGridItem> {
         duration: const Duration(milliseconds: 100),
         curve: Curves.easeOutCubic,
         child: Container(
-          padding: const EdgeInsets.all(12),
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
           decoration: BoxDecoration(
             color: isStockDepleted ? const Color(0xFFFFF1F2) : Colors.white,
-            borderRadius: BorderRadius.circular(16),
+            borderRadius: BorderRadius.circular(12),
             border: Border.all(
               color: isStockDepleted
                   ? const Color(0xFFEF4444)
                   : (isInCart ? const Color(0xFFFBBF24) : const Color(0xFFEEF2F6)),
-              width: (isStockDepleted || isInCart) ? 1.6 : 1.0,
+              width: (isStockDepleted || isInCart) ? 1.5 : 1.0,
             ),
             boxShadow: [
               BoxShadow(
                 color: isStockDepleted
-                    ? const Color(0xFFEF4444).withValues(alpha: 0.12)
-                    : (isInCart ? const Color(0xFFFBBF24).withValues(alpha: 0.18) : Colors.black.withValues(alpha: 0.03)),
-                blurRadius: 6,
-                offset: const Offset(0, 2),
+                    ? const Color(0xFFEF4444).withValues(alpha: 0.10)
+                    : (isInCart ? const Color(0xFFFBBF24).withValues(alpha: 0.15) : Colors.black.withValues(alpha: 0.02)),
+                blurRadius: 4,
+                offset: const Offset(0, 1.5),
               ),
             ],
           ),
@@ -841,9 +841,9 @@ class _PosProductGridItemState extends State<_PosProductGridItem> {
                       child: Text(
                         widget.categoryDisplay,
                         style: GoogleFonts.plusJakartaSans(
-                          fontSize: 9.5,
+                          fontSize: 9,
                           fontWeight: FontWeight.w700,
-                          letterSpacing: 0.4,
+                          letterSpacing: 0.3,
                           color: const Color(0xFF94A3B8),
                         ),
                         maxLines: 1,
@@ -852,16 +852,16 @@ class _PosProductGridItemState extends State<_PosProductGridItem> {
                     ),
                     if (isStockDepleted)
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
                         decoration: BoxDecoration(
                           color: const Color(0xFFFEE2E2),
-                          borderRadius: BorderRadius.circular(6),
+                          borderRadius: BorderRadius.circular(5),
                           border: Border.all(color: const Color(0xFFFCA5A5)),
                         ),
                         child: Text(
                           'OUT OF STOCK',
                           style: GoogleFonts.plusJakartaSans(
-                            fontSize: 8.5,
+                            fontSize: 8,
                             fontWeight: FontWeight.w900,
                             color: const Color(0xFFDC2626),
                           ),
@@ -869,16 +869,16 @@ class _PosProductGridItemState extends State<_PosProductGridItem> {
                       )
                     else if (isInCart)
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
                         decoration: BoxDecoration(
                           color: const Color(0xFFFEF3C7),
-                          borderRadius: BorderRadius.circular(6),
+                          borderRadius: BorderRadius.circular(5),
                           border: Border.all(color: const Color(0xFFFDE68A)),
                         ),
                         child: Text(
                           '${widget.inCartQty} in cart',
                           style: GoogleFonts.plusJakartaSans(
-                            fontSize: 9.5,
+                            fontSize: 9,
                             fontWeight: FontWeight.w800,
                             color: const Color(0xFF92400E),
                           ),
@@ -890,12 +890,12 @@ class _PosProductGridItemState extends State<_PosProductGridItem> {
                 Text(
                   widget.product.name,
                   style: GoogleFonts.plusJakartaSans(
-                    fontSize: 13.5,
+                    fontSize: 12.5,
                     fontWeight: FontWeight.w700,
                     color: isStockDepleted ? const Color(0xFF475569) : const Color(0xFF0F172A),
-                    height: 1.25,
+                    height: 1.2,
                   ),
-                  maxLines: 2,
+                  maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
                 // Bottom Row: Price / unit and Stock left
@@ -911,7 +911,7 @@ class _PosProductGridItemState extends State<_PosProductGridItem> {
                             TextSpan(
                               text: '₹$priceRupees ',
                               style: GoogleFonts.jetBrainsMono(
-                                fontSize: 12.5,
+                                fontSize: 12,
                                 fontWeight: FontWeight.w800,
                                 color: isStockDepleted ? const Color(0xFF64748B) : const Color(0xFF0F172A),
                               ),
@@ -919,7 +919,7 @@ class _PosProductGridItemState extends State<_PosProductGridItem> {
                             TextSpan(
                               text: '/$unitDisplay',
                               style: GoogleFonts.plusJakartaSans(
-                                fontSize: 10.5,
+                                fontSize: 10,
                                 fontWeight: FontWeight.w500,
                                 color: const Color(0xFF64748B),
                               ),
@@ -934,7 +934,7 @@ class _PosProductGridItemState extends State<_PosProductGridItem> {
                     Text(
                       isStockDepleted ? 'Out of Stock' : stockLeftStr,
                       style: GoogleFonts.plusJakartaSans(
-                        fontSize: 10.5,
+                        fontSize: 10,
                         fontWeight: FontWeight.w700,
                         color: isStockDepleted ? const Color(0xFFDC2626) : const Color(0xFF64748B),
                       ),

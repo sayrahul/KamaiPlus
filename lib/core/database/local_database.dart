@@ -643,6 +643,11 @@ class LocalDatabase {
     );
   }
 
+  Future<void> deleteProduct(String id) async {
+    final db = await instance.database;
+    await db.delete('products', where: 'id = ?', whereArgs: [id]);
+  }
+
   Future<void> upsertCategory(CategoryModel category) async {
     final db = await instance.database;
     await db.insert(
@@ -659,6 +664,14 @@ class LocalDatabase {
       customer.toMap(),
       conflictAlgorithm: ConflictAlgorithm.replace,
     );
+  }
+
+  Future<void> deleteCustomer(String id) async {
+    final db = await instance.database;
+    await db.transaction((txn) async {
+      await txn.delete('ledger_transactions', where: 'customer_id = ?', whereArgs: [id]);
+      await txn.delete('customers', where: 'id = ?', whereArgs: [id]);
+    });
   }
 
   Future<void> seedStarterSalesIfNeeded() async {
@@ -1019,6 +1032,11 @@ class LocalDatabase {
   Future<void> upsertSupplier(SupplierModel supplier) async {
     final db = await instance.database;
     await db.insert('suppliers', supplier.toMap(), conflictAlgorithm: ConflictAlgorithm.replace);
+  }
+
+  Future<void> deleteSupplier(String id) async {
+    final db = await instance.database;
+    await db.delete('suppliers', where: 'id = ?', whereArgs: [id]);
   }
 
   // ==========================================

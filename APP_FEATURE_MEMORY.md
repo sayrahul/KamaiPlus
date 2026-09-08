@@ -4,8 +4,8 @@
 > Koi bhi naya feature ya screen banane se pehle is file ko check karna **COMPULSORY** hai. 
 > Yaha likhe kisi bhi solved feature ya user preference ko dubara todna ya revert karna **STRICTLY FORBIDDEN** hai.
 >
-> 🔒 **PERMANENT GOLD BASELINE LOCKED:** Version 4.17.0 (Commit `e7d4079` / Tag `v4.17.0-locked-gold`).
-> Is version ke sabhi features device par verified hain. Kisi bhi halat me is version ka koi bhi UI element, navigation structure, ya feature revert nahi kiya jayega.
+> 🔒 **PERMANENT GOLD BASELINE LOCKED:** Version 4.18.0 (Tag `v4.18.0-locked-gold`).
+> Is version ke sabhi features physical device par tested aur verified hain. Kisi bhi halat me is version ka koi bhi UI element, navigation structure, ya feature revert nahi kiya jayega.
 
 ---
 
@@ -393,4 +393,63 @@ Comprehensive enterprise-grade retail UX upgrade suite aligned with PhonePe Busi
       - **Sale Completed Modal (`lib/views/pos/sale_completed_modal.dart`):** Displays store logo in modal header and itemized receipt breakdown.
       - **Invoice PDF Service (`lib/services/invoice_pdf_service.dart`):** Passes `logoPath` to native PDF generator for printable tax invoices.
     - **Verified:** `flutter analyze` — 0 issues.
+
+25. **Production Launch-Readiness & Multi-Page A4 Invoice Architecture (LOCKED):**
+    - **Multi-Page Native A4 PDF Engine (`MainActivity.java` + `InvoicePdfService.dart`):**
+      - Built using Android native `PdfDocument` (595 x 842 points standard A4).
+      - **Page 1:** Store Logo bitmap decode, store details (name, tagline, address, GSTIN, phone), Tax Invoice badge, Billed To card (customer name, phone, payment method pill), and dark slate table header (`S.NO`, `ITEM DESCRIPTION`, `QTY`, `UNIT RATE`, `AMOUNT (₹)`).
+      - **Dynamic Pagination:** If product items exceed Page 1 capacity (~12 items), the engine seamlessly creates Page 2+ with identical compact header and column formatting.
+      - **Last Page:** Renders summary block (Subtotal, Tax, Discount, Grand Total green pill, Terms & Conditions note, and Authorized Signatory box).
+      - **Footer:** Bottom hairline divider with `"Page X of Y"` and `"Kamai+ POS • Retail & Inventory Software"`.
+    - **Native Real-Device PDF Sharing (`MainActivity.java` & `InvoicePdfService.dart`):**
+      - Implemented `sharePdf` channel invoking `Intent.ACTION_SEND` and `FileProvider.getUriForFile`.
+      - Provides 1-tap sharing to WhatsApp, Gmail, Drive, Nearby Share, etc.
+      - Integrated "Share PDF" button across both `SaleCompletedModal` and `SaleDetailModal`.
+    - **1-Click Fresh Start (Wipe All Data):**
+      - In `StoreProfileScreen` & `BackupRestoreScreen`: 1-click confirmation dialog triggers `LocalDatabase.instance.completeFactoryReset(resetStoreProfile: false)` and `FirestoreSyncService.instance.wipeCloudData()`.
+      - Wipes test sales, products, khata ledgers, customers, and cash shifts without wiping store profile and UPI configuration.
+    - **Product Catalog UX Polish (`ProductsScreen`):**
+      - **Delete Action:** Trash can icon on product cards with direct confirmation dialog deleting from SQLite and cloud Firestore.
+      - **Raw Barcode Digits Removed:** Clean product title and category view without raw numeric strings like `8904043901007`.
+      - **Infinite / Loose Items:** For items where `isLooseItem || stockQuantity >= 99999`, the `+`/`-` stepper is replaced with an `∞ Unlimited` badge.
+    - **Universal WhatsApp (`wa.me`):**
+      - `AndroidManifest.xml` updated with `<queries>` for `com.whatsapp`, `com.whatsapp.w4b`, and HTTPS schemes for Android 11-14 compatibility.
+      - All WhatsApp shares use `https://wa.me/91<phone>?text=...` with `LaunchMode.externalApplication` and automatic clipboard fallback.
+    - **Google Cloud Firestore Sync (`FirestoreSyncService`):**
+      - Full background CRUD sync (`pushProductToCloud`, `deleteProductFromCloud`, `pushCustomerToCloud`, `wipeCloudData`).
+    - **Verified:** `flutter analyze` — 0 issues found.
+ 
+26. **Retail Productivity & UX Enhancements (LOCKED):**
+    - **Physical Cash Tally Denominations with Assets (`DenominationTallyModal`):**
+      - Displays real rupee and coin assets (`assets/images/1.png`, `2.png`, `5.png`, `10.png`, `50.png`, `100.png`, `200.png`, `500.png`).
+      - Clean row layout: `[Note/Coin Image] [Note Name] [-] [Count] [+] [Total]`.
+    - **POS Product Cards Space-Saving (`PosBillingScreen`):**
+      - Grid item aspect ratio adjusted to `1.48` with streamlined vertical padding, saving ~30% height so significantly more products fit on screen for fast counter billing.
+    - **Universal Delete Actions with Confirmations:**
+      - Customers: Delete customer (and associated khata ledger entries) from customer details sheet with alert dialog.
+      - Purchases: Delete purchase order from order details sheet with alert dialog.
+      - Expenses: 1-tap delete confirmation in Cash Register petty outflows list.
+    - **AI Inward Modals Simplification:**
+      - Removed redundant "Add single item Manually" option from both `ai_inward_sheet.dart` and `ai_inward_modal.dart`.
+    - **Standardized Data Reset & Start Fresh:**
+      - Unified `StoreProfileScreen` and `BackupRestoreScreen` with identical title, subtitle, confirmation dialog, and execution logic (`completeFactoryReset(resetStoreProfile: false)` + cloud wipe).
+    - **Profile & Store Settings Clean-up:**
+      - Removed "Invoice & Bill Rules" tab from `StoreProfileScreen` to prevent duplicate navigation (dedicated `InvoiceThemesScreen` handles it).
+      - Removed "Store Type / Business Vertical" dropdown and helper text from `StoreProfileScreen` since business category is fixed at onboarding.
+    - **WhatsApp Growth Hub Horizontally Paged Templates (`GrowthCampaignsScreen`):**
+      - Expanded campaign library to 24 diverse retail templates across festival, weekend, clearance, VIP, birthday, and khata recovery goals.
+      - Arranged in horizontal `PageView` (4 cards per page in a 2x2 grid, 6 pages total) with animated dot indicators.
+    - **Verified:** `flutter analyze` — 0 issues.
+
+27. **Target Platform 64-bit arm64-v8a Architecture & Physical Device Verification (LOCKED):**
+    - **64-bit ABI Fix (`android/app/build.gradle.kts`):**
+      - Explicitly configured `ndk.abiFilters.addAll(listOf("armeabi-v7a", "arm64-v8a", "x86_64"))` to resolve the Android 15/16 64-bit `MissingLibraryException: Could not find 'libflutter.so' Looked for: [arm64-v8a]` crash.
+    - **Gradle Heap & Metaspace Optimization (`android/gradle.properties`):**
+      - Configured `-Xmx4096m -XX:MaxMetaspaceSize=1024m -XX:+HeapDumpOnOutOfMemoryError` and disabled redundant release build lint checking for fast, deterministic compilation.
+    - **Live Device Testing on OPPO CPH2691 (Android 16):**
+      - Installed and verified live on physical device (`88e61059`). Zero runtime exceptions.
+      - Tested POS billing, Cash Register with real ₹ note/coin PNG counter, modal bottom sheets, and multi-page A4 PDF invoicing.
+    - **Locked Version:** `v4.18.0` (`pubspec.yaml: 4.18.0+41801`).
+
+
 

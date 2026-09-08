@@ -226,6 +226,11 @@ class _CustomersScreenState extends State<CustomersScreen> {
                     ),
                   ),
                   IconButton(
+                    icon: const Icon(Icons.delete_outline_rounded, color: Color(0xFFEF4444)),
+                    tooltip: 'Delete Customer',
+                    onPressed: () => _confirmDeleteCustomer(ctx, customer),
+                  ),
+                  IconButton(
                     icon: const Icon(Icons.close_rounded),
                     onPressed: () => Navigator.pop(ctx),
                   ),
@@ -325,6 +330,46 @@ class _CustomersScreenState extends State<CustomersScreen> {
           ),
         );
       },
+    );
+  }
+
+  void _confirmDeleteCustomer(BuildContext modalContext, CustomerModel customer) {
+    showDialog(
+      context: context,
+      builder: (dialogCtx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Text('Delete Customer?', style: GoogleFonts.outfit(fontSize: 16, fontWeight: FontWeight.w700)),
+        content: Text('Kya aap ${customer.name} ko delete karna chahte hain? Inka khata ledger bhi permanently delete ho jayega.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogCtx),
+            child: Text('Cancel', style: GoogleFonts.inter(fontWeight: FontWeight.w600, color: const Color(0xFF64748B))),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              HapticFeedback.mediumImpact();
+              Navigator.pop(dialogCtx);
+              Navigator.pop(modalContext);
+              await LocalDatabase.instance.deleteCustomer(customer.id);
+              if (!mounted) return;
+              await _loadCustomers();
+              if (!mounted) return;
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text('✓ Customer ${customer.name} deleted'),
+                  backgroundColor: const Color(0xFF0F172A),
+                ),
+              );
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFFEF4444),
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            ),
+            child: Text('Delete', style: GoogleFonts.inter(fontWeight: FontWeight.w700)),
+          ),
+        ],
+      ),
     );
   }
 

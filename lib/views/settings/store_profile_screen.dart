@@ -18,6 +18,7 @@ import '../common/store_logo_avatar.dart';
 import '../growth/growth_campaigns_screen.dart';
 import '../auth/login_screen.dart';
 import '../../services/auth_service.dart';
+import '../../services/firestore_sync_service.dart';
 
 class StoreProfileScreen extends StatefulWidget {
   final int initialTab;
@@ -29,7 +30,7 @@ class StoreProfileScreen extends StatefulWidget {
 }
 
 class _StoreProfileScreenState extends State<StoreProfileScreen> {
-  late int _currentTab; // 0: Store & GST Profile, 1: UPI QR & Banking, 2: Invoice & Bill Rules
+  late int _currentTab; // 0: Store & GST Profile, 1: UPI QR & Banking
 
   // Store Profile Controllers
   final _formKey = GlobalKey<FormState>();
@@ -51,26 +52,6 @@ class _StoreProfileScreenState extends State<StoreProfileScreen> {
   final _addUpiLabelCtrl = TextEditingController();
   final _addUpiVpaCtrl = TextEditingController();
   List<UpiAccountModel> _upiAccounts = [];
-
-  // Invoice Theme Settings
-  int _selectedColorIndex = 0;
-  final List<Color> _palette = [
-    const Color(0xFF10B981), // Emerald
-    const Color(0xFF0284C7), // Blue
-    const Color(0xFFD97706), // Amber
-    const Color(0xFF7C3AED), // Purple
-    const Color(0xFF06B6D4), // Cyan
-    const Color(0xFF0F172A), // Slate Dark
-  ];
-  String _selectedHeading = 'TAX INVOICE';
-  final List<String> _headings = ['TAX INVOICE', 'RETAIL INVOICE', 'CASH MEMO', 'ESTIMATE / BILL'];
-  bool _showLogo = true;
-  bool _showTagline = true;
-  bool _showPhone = true;
-  bool _showUpiQr = true;
-  bool _showSignatory = true;
-  bool _showGstBreakup = true;
-  bool _showMrpSavings = true;
 
   bool _isLoading = true;
 
@@ -553,7 +534,6 @@ class _StoreProfileScreenState extends State<StoreProfileScreen> {
                       children: [
                         _buildStoreProfileTab(),
                         _buildUpiBankingTab(),
-                        _buildInvoiceRulesTab(),
                       ],
                     ),
                   ),
@@ -747,19 +727,13 @@ class _StoreProfileScreenState extends State<StoreProfileScreen> {
   Widget _buildSegmentedTabs() {
     return Container(
       color: Colors.white,
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-      child: SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        physics: const BouncingScrollPhysics(),
-        child: Row(
-          children: [
-            _buildTabItem(0, Icons.storefront_rounded, 'Store & GST Profile'),
-            const SizedBox(width: 8),
-            _buildTabItem(1, Icons.qr_code_2_rounded, 'UPI QR & Banking'),
-            const SizedBox(width: 8),
-            _buildTabItem(2, Icons.receipt_long_rounded, 'Invoice & Bill Rules'),
-          ],
-        ),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      child: Row(
+        children: [
+          Expanded(child: _buildTabItem(0, Icons.storefront_rounded, 'Store & GST Profile')),
+          const SizedBox(width: 8),
+          Expanded(child: _buildTabItem(1, Icons.qr_code_2_rounded, 'UPI QR & Banking')),
+        ],
       ),
     );
   }
@@ -998,62 +972,6 @@ class _StoreProfileScreenState extends State<StoreProfileScreen> {
                 style: GoogleFonts.inter(fontSize: 14),
                 decoration: _fieldInputDecoration(hint: 'e.g. Always Fresh, Best Wholesale Rates'),
               ),
-              const SizedBox(height: 16),
-
-              // Store Type / Retail Vertical
-              _buildFieldLabel('Store Type / Business Vertical *'),
-              const SizedBox(height: 6),
-              Container(
-                decoration: BoxDecoration(
-                  color: const Color(0xFFF8FAFC),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: const Color(0xFFCBD5E1), width: 1.2),
-                ),
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
-                child: DropdownButtonHideUnderline(
-                  child: DropdownButton<String>(
-                    value: _selectedBusinessType,
-                    isExpanded: true,
-                    icon: const Icon(Icons.keyboard_arrow_down_rounded, color: Color(0xFF0F172A)),
-                    borderRadius: BorderRadius.circular(12),
-                    items: BusinessVerticals.all.values.map((v) {
-                      return DropdownMenuItem<String>(
-                        value: v.id,
-                        child: Row(
-                          children: [
-                            Text(v.emoji, style: const TextStyle(fontSize: 18)),
-                            const SizedBox(width: 10),
-                            Expanded(
-                              child: Text(
-                                v.name,
-                                style: GoogleFonts.outfit(
-                                  fontSize: 13.5,
-                                  fontWeight: FontWeight.w600,
-                                  color: const Color(0xFF0F172A),
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      );
-                    }).toList(),
-                    onChanged: (val) {
-                      if (val != null) {
-                        setState(() {
-                          _selectedBusinessType = val;
-                          final vert = BusinessVerticals.resolve(val);
-                          _selectedCategory = vert.name;
-                        });
-                      }
-                    },
-                  ),
-                ),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                'Adapts unit dropdowns, search hints, expiry/size fields, and menu tiles automatically.',
-                style: GoogleFonts.inter(fontSize: 11, color: const Color(0xFF64748B)),
-              ),
             ],
           ),
         ),
@@ -1191,24 +1109,134 @@ class _StoreProfileScreenState extends State<StoreProfileScreen> {
                 ),
               ),
               const SizedBox(height: 14),
-              OutlinedButton.icon(
-                onPressed: _showLogoutDialog,
-                icon: const Icon(Icons.logout_rounded, size: 16, color: Color(0xFFE11D48)),
+              Row(
+                children: [
+                  OutlinedButton.icon(
+                    onPressed: _showLogoutDialog,
+                    icon: const Icon(Icons.logout_rounded, size: 16, color: Color(0xFFE11D48)),
+                    label: Text(
+                      'Logout Account',
+                      style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w700, color: const Color(0xFFBE123C)),
+                    ),
+                    style: OutlinedButton.styleFrom(
+                      backgroundColor: const Color(0xFFFFF1F2),
+                      side: const BorderSide(color: Color(0xFFFECDD3), width: 1.1),
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 16),
+
+        // CARD: FRESH START (1-CLICK DELETE ALL DATA)
+        _buildSectionCard(
+          icon: Icons.cleaning_services_rounded,
+          iconColor: const Color(0xFFDC2626),
+          title: 'Data Reset and Start Fresh',
+          trailing: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+            decoration: BoxDecoration(
+              color: const Color(0xFFFEF2F2),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: const Color(0xFFFECACA)),
+            ),
+            child: Text(
+              '1-Click Reset',
+              style: GoogleFonts.inter(fontSize: 10.5, fontWeight: FontWeight.w800, color: const Color(0xFFDC2626)),
+            ),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Purana sabhi test data (products, sales bills, customers, khata ledger, expenses) 1-click me delete karein taaki aap dukan me fresh real start kar sakein.',
+                style: GoogleFonts.inter(fontSize: 11.5, color: const Color(0xFF64748B)),
+              ),
+              const SizedBox(height: 14),
+              ElevatedButton.icon(
+                onPressed: _confirmFreshStart,
+                icon: const Icon(Icons.delete_sweep_rounded, size: 18),
                 label: Text(
-                  'Logout Account',
-                  style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w700, color: const Color(0xFFBE123C)),
+                  'Data Reset & Start Fresh',
+                  style: GoogleFonts.outfit(fontSize: 13, fontWeight: FontWeight.w700),
                 ),
-                style: OutlinedButton.styleFrom(
-                  backgroundColor: const Color(0xFFFFF1F2),
-                  side: const BorderSide(color: Color(0xFFFECDD3), width: 1.1),
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFFDC2626),
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 11),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  elevation: 0,
                 ),
               ),
             ],
           ),
         ),
       ],
+    );
+  }
+
+  void _confirmFreshStart() {
+    HapticFeedback.heavyImpact();
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: Colors.white,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: const Color(0xFFFEE2E2),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: const Icon(Icons.delete_forever_rounded, color: Color(0xFFDC2626), size: 24),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                'Data Reset & Start Fresh?',
+                style: GoogleFonts.outfit(fontSize: 16, fontWeight: FontWeight.w800, color: const Color(0xFFDC2626)),
+              ),
+            ),
+          ],
+        ),
+        content: Text(
+          'Kya aap sach me apna sabhi test data (products, sales bills, customers, khata ledger, expenses) delete karna chahte hain?\n\nDukan ki profile aur UPI details surakshit rahengi taaki aap turant fresh start kar sakein.',
+          style: GoogleFonts.inter(fontSize: 13, color: const Color(0xFF475569)),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text('Cancel', style: GoogleFonts.inter(fontWeight: FontWeight.w600, color: const Color(0xFF64748B))),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              Navigator.pop(ctx);
+              await LocalDatabase.instance.completeFactoryReset(resetStoreProfile: false);
+              FirestoreSyncService.instance.wipeCloudData().catchError((_) {});
+              if (!mounted) return;
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('✓ Sabhi data safalta-purvak delete ho gaya. Fresh start ready!'),
+                  backgroundColor: Color(0xFF059669),
+                  behavior: SnackBarBehavior.floating,
+                ),
+              );
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFFDC2626),
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            ),
+            child: const Text('Yes, Reset & Start Fresh'),
+          ),
+        ],
+      ),
     );
   }
 
@@ -1523,144 +1551,8 @@ class _StoreProfileScreenState extends State<StoreProfileScreen> {
   }
 
   // ==========================================
-  // TAB 2: INVOICE & BILL RULES
-  // ==========================================
-  Widget _buildInvoiceRulesTab() {
-    final activeColor = _palette[_selectedColorIndex];
-
-    return ListView(
-      physics: const BouncingScrollPhysics(parent: AlwaysScrollableScrollPhysics()),
-      padding: const EdgeInsets.fromLTRB(14, 14, 14, 40),
-      children: [
-        // Color Theme Card
-        _buildSectionCard(
-          icon: Icons.palette_rounded,
-          iconColor: activeColor,
-          title: 'Invoice Brand Color',
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceAround,
-            children: List.generate(_palette.length, (idx) {
-              final color = _palette[idx];
-              final isSel = _selectedColorIndex == idx;
-              return GestureDetector(
-                onTap: () {
-                  HapticFeedback.selectionClick();
-                  setState(() => _selectedColorIndex = idx);
-                },
-                child: Container(
-                  width: 38,
-                  height: 38,
-                  decoration: BoxDecoration(
-                    color: color,
-                    shape: BoxShape.circle,
-                    border: Border.all(
-                      color: isSel ? const Color(0xFF0F172A) : Colors.transparent,
-                      width: 3,
-                    ),
-                    boxShadow: [
-                      BoxShadow(
-                        color: color.withValues(alpha: 0.35),
-                        blurRadius: 6,
-                        offset: const Offset(0, 2),
-                      ),
-                    ],
-                  ),
-                  child: isSel ? const Icon(Icons.check_rounded, color: Colors.white, size: 18) : null,
-                ),
-              );
-            }),
-          ),
-        ),
-        const SizedBox(height: 14),
-
-        // Bill Heading Card
-        _buildSectionCard(
-          icon: Icons.title_rounded,
-          iconColor: const Color(0xFF0284C7),
-          title: 'Invoice Title Header',
-          child: Column(
-            children: _headings.map((heading) {
-              final isSel = _selectedHeading == heading;
-              return GestureDetector(
-                onTap: () => setState(() => _selectedHeading = heading),
-                child: Container(
-                  margin: const EdgeInsets.only(bottom: 8),
-                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                  decoration: BoxDecoration(
-                    color: isSel ? const Color(0xFFECFDF5) : const Color(0xFFF8FAFC),
-                    borderRadius: BorderRadius.circular(10),
-                    border: Border.all(
-                      color: isSel ? const Color(0xFF10B981) : const Color(0xFFE2E8F0),
-                      width: isSel ? 1.5 : 1,
-                    ),
-                  ),
-                  child: Row(
-                    children: [
-                      Text(
-                        heading,
-                        style: GoogleFonts.outfit(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w700,
-                          color: const Color(0xFF0F172A),
-                        ),
-                      ),
-                      const Spacer(),
-                      if (isSel) const Icon(Icons.check_circle_rounded, color: Color(0xFF10B981), size: 18),
-                    ],
-                  ),
-                ),
-              );
-            }).toList(),
-          ),
-        ),
-        const SizedBox(height: 14),
-
-        // Print Toggles Card
-        _buildSectionCard(
-          icon: Icons.tune_rounded,
-          iconColor: const Color(0xFF8B5CF6),
-          title: 'Print Elements & Toggles',
-          child: Column(
-            children: [
-              _buildToggleRow('Show Store Brand Logo', _showLogo, (v) => setState(() => _showLogo = v)),
-              _buildToggleRow('Show Store Tagline / Slogan', _showTagline, (v) => setState(() => _showTagline = v)),
-              _buildToggleRow('Show Store Contact Number', _showPhone, (v) => setState(() => _showPhone = v)),
-              _buildToggleRow('Show Dynamic NPCI UPI QR', _showUpiQr, (v) => setState(() => _showUpiQr = v)),
-              _buildToggleRow('Show Authorized Signatory', _showSignatory, (v) => setState(() => _showSignatory = v)),
-              _buildToggleRow('Show GST & Tax Breakdown', _showGstBreakup, (v) => setState(() => _showGstBreakup = v)),
-              _buildToggleRow('Show Total MRP Savings', _showMrpSavings, (v) => setState(() => _showMrpSavings = v)),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildToggleRow(String title, bool val, Function(bool) onChanged) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Expanded(
-            child: Text(
-              title,
-              style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w600, color: const Color(0xFF1E293B)),
-            ),
-          ),
-          Switch.adaptive(
-            value: val,
-            onChanged: onChanged,
-            activeTrackColor: const Color(0xFF059669),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // ==========================================
   // SHARED UI HELPERS
-  // ==========================================
+  // ====================================================
   Widget _buildSectionCard({
     required IconData icon,
     required Color iconColor,

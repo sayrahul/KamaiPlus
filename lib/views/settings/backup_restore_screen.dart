@@ -272,115 +272,53 @@ class _BackupRestoreScreenState extends State<BackupRestoreScreen> {
   void _confirmFactoryReset() {
     HapticFeedback.heavyImpact();
     final messenger = ScaffoldMessenger.of(context);
-    final pinController = TextEditingController();
-    bool resetProfile = false;
-    String? errorMessage;
 
     showDialog(
       context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (modalCtx, setModalState) => AlertDialog(
-          backgroundColor: Colors.white,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-          title: Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(color: const Color(0xFFFEE2E2), borderRadius: BorderRadius.circular(10)),
-                child: const Icon(Icons.warning_amber_rounded, color: Color(0xFFDC2626), size: 24),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Text('Factory Reset & Start Fresh', style: GoogleFonts.outfit(fontSize: 17, fontWeight: FontWeight.w800, color: const Color(0xFFDC2626))),
-              ),
-            ],
-          ),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Yeh action permanent hai! Aapke sabhi test bills, products catalog, khata hisab, expenses, aur cash shifts completely saaf ho jayenge.',
-                  style: GoogleFonts.inter(fontSize: 13, color: const Color(0xFF475569)),
-                ),
-                const SizedBox(height: 14),
-                Container(
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(color: const Color(0xFFFFF1F2), borderRadius: BorderRadius.circular(10), border: Border.all(color: const Color(0xFFFECDD3))),
-                  child: Row(
-                    children: [
-                      const Icon(Icons.security_rounded, color: Color(0xFFDC2626), size: 18),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          'Security Guard: Owner PIN enter karein (Default: 1234)',
-                          style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w600, color: const Color(0xFF991B1B)),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: pinController,
-                  keyboardType: TextInputType.number,
-                  obscureText: true,
-                  maxLength: 4,
-                  decoration: InputDecoration(
-                    labelText: 'Enter 4-Digit Owner PIN',
-                    hintText: '1234',
-                    errorText: errorMessage,
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-                    counterText: '',
-                  ),
-                ),
-                const SizedBox(height: 10),
-                CheckboxListTile(
-                  contentPadding: EdgeInsets.zero,
-                  value: resetProfile,
-                  onChanged: (val) => setModalState(() => resetProfile = val ?? false),
-                  title: Text(
-                    'Dukan ki basic profile (Name, Address, UPI) bhi reset karein?',
-                    style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF334155)),
-                  ),
-                  controlAffinity: ListTileControlAffinity.leading,
-                ),
-              ],
+      builder: (ctx) => AlertDialog(
+        backgroundColor: Colors.white,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(color: const Color(0xFFFEE2E2), borderRadius: BorderRadius.circular(10)),
+              child: const Icon(Icons.warning_amber_rounded, color: Color(0xFFDC2626), size: 24),
             ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: Text('Cancel', style: GoogleFonts.inter(fontWeight: FontWeight.w600, color: const Color(0xFF64748B))),
-            ),
-            ElevatedButton(
-              onPressed: () async {
-                final enteredPin = pinController.text.trim();
-                if (enteredPin != '1234') {
-                  setModalState(() => errorMessage = 'Incorrect PIN! Default PIN is 1234');
-                  return;
-                }
-                Navigator.pop(ctx);
-                await LocalDatabase.instance.completeFactoryReset(resetStoreProfile: resetProfile);
-                await _loadStats();
-                if (!mounted) return;
-                messenger.showSnackBar(
-                  const SnackBar(
-                    content: Text('✓ Store database reset complete! You are ready to start fresh.'),
-                    backgroundColor: Color(0xFF059669),
-                  ),
-                );
-              },
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFFDC2626),
-                foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-              ),
-              child: const Text('CONFIRM RESET'),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text('Data Reset & Start Fresh?', style: GoogleFonts.outfit(fontSize: 16, fontWeight: FontWeight.w800, color: const Color(0xFFDC2626))),
             ),
           ],
         ),
+        content: Text(
+          'Kya aap sach me apna sabhi test data (products, sales bills, customers, khata ledger, expenses) delete karna chahte hain?\n\nDukan ki profile aur UPI details surakshit rahengi taaki aap turant fresh start kar sakein.',
+          style: GoogleFonts.inter(fontSize: 13, color: const Color(0xFF475569)),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text('Cancel', style: GoogleFonts.inter(fontWeight: FontWeight.w600, color: const Color(0xFF64748B))),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              Navigator.pop(ctx);
+              await LocalDatabase.instance.completeFactoryReset(resetStoreProfile: false);
+              FirestoreSyncService.instance.wipeCloudData().catchError((_) {});
+              await _loadStats();
+              if (!mounted) return;
+              messenger.showSnackBar(
+                const SnackBar(
+                  content: Text('✓ Sabhi data safalta-purvak delete ho gaya. Fresh start ready!'),
+                  backgroundColor: Color(0xFF059669),
+                  behavior: SnackBarBehavior.floating,
+                ),
+              );
+            },
+            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFDC2626), foregroundColor: Colors.white),
+            child: const Text('Yes, Reset & Start Fresh'),
+          ),
+        ],
       ),
     );
   }
@@ -622,8 +560,8 @@ class _BackupRestoreScreenState extends State<BackupRestoreScreen> {
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Text('Complete Factory Reset', style: GoogleFonts.outfit(fontSize: 15, fontWeight: FontWeight.w800, color: const Color(0xFF991B1B))),
-                                Text('Purana sabhi data saaf karke Start Fresh karein', style: GoogleFonts.inter(fontSize: 11, color: const Color(0xFFB91C1C))),
+                                Text('Data Reset and Start Fresh', style: GoogleFonts.outfit(fontSize: 15, fontWeight: FontWeight.w800, color: const Color(0xFF991B1B))),
+                                Text('Purana sabhi test data 1-click me delete karein taaki aap dukan me fresh real start kar sakein.', style: GoogleFonts.inter(fontSize: 11, color: const Color(0xFFB91C1C))),
                               ],
                             ),
                           ),
@@ -631,7 +569,7 @@ class _BackupRestoreScreenState extends State<BackupRestoreScreen> {
                       ),
                       const SizedBox(height: 12),
                       Text(
-                        'Bills, Products, Customers, Expenses aur Shifts saaf ho jayenge. Yeh action irreversible hai aur PIN protected hai.',
+                        'Bills, Products, Customers, Expenses aur Shifts saaf ho jayenge. Dukan ki profile aur UPI details surakshit rahengi.',
                         style: GoogleFonts.inter(fontSize: 11, color: const Color(0xFF7F1D1D)),
                       ),
                       const SizedBox(height: 12),
@@ -639,8 +577,8 @@ class _BackupRestoreScreenState extends State<BackupRestoreScreen> {
                         width: double.infinity,
                         child: ElevatedButton.icon(
                           onPressed: _confirmFactoryReset,
-                          icon: const Icon(Icons.restore_rounded, size: 18),
-                          label: Text('START FRESH (FACTORY RESET)', style: GoogleFonts.outfit(fontSize: 13, fontWeight: FontWeight.w800, letterSpacing: 0.5)),
+                          icon: const Icon(Icons.delete_sweep_rounded, size: 18),
+                          label: Text('DATA RESET & START FRESH', style: GoogleFonts.outfit(fontSize: 13, fontWeight: FontWeight.w800, letterSpacing: 0.5)),
                           style: ElevatedButton.styleFrom(
                             backgroundColor: const Color(0xFFDC2626),
                             foregroundColor: Colors.white,

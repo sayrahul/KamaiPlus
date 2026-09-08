@@ -19,6 +19,8 @@ class _GrowthCampaignsScreenState extends State<GrowthCampaignsScreen> {
   List<CustomerModel> _customers = [];
   String _selectedAudience = 'All';
   int _selectedCampaignIndex = 0;
+  int _campaignPageIndex = 0;
+  final PageController _campaignPageController = PageController();
 
   // Voucher Customizer State
   final _discountController = TextEditingController(text: '10%');
@@ -34,6 +36,7 @@ class _GrowthCampaignsScreenState extends State<GrowthCampaignsScreen> {
 
   @override
   void dispose() {
+    _campaignPageController.dispose();
     _discountController.dispose();
     _minOrderController.dispose();
     _couponCodeController.dispose();
@@ -54,6 +57,7 @@ class _GrowthCampaignsScreenState extends State<GrowthCampaignsScreen> {
   }
 
   List<Map<String, dynamic>> get _campaignTemplates => [
+    // Set 1 (1 to 4): Core Retail
     {
       'title': 'Weekend Dhamaka',
       'icon': Icons.shopping_bag_outlined,
@@ -63,7 +67,7 @@ class _GrowthCampaignsScreenState extends State<GrowthCampaignsScreen> {
       'headline': 'Weekend Special Savings 🛒',
       'defaultDiscount': '10%',
       'defaultCode': 'WEEKEND10',
-      'body': 'Aapke parivar ke liye grocey, dry fruits aur daily essentials par best rate! Visit counter today or order on WhatsApp.',
+      'body': 'Aapke parivar ke liye grocery, dry fruits aur daily essentials par best rate! Visit counter today or order on WhatsApp.',
     },
     {
       'title': 'Festival Special',
@@ -97,6 +101,236 @@ class _GrowthCampaignsScreenState extends State<GrowthCampaignsScreen> {
       'defaultDiscount': '15% OFF',
       'defaultCode': 'WELCOMEBACK',
       'body': 'Kafi dino se aap store par nahi aaye! Aapke liye humne special VIP discount ready rakha hai.',
+    },
+
+    // Set 2 (5 to 8): Daily & Fresh Essentials
+    {
+      'title': 'Fresh Stock Inward',
+      'icon': Icons.inventory_2_outlined,
+      'color': const Color(0xFF0284C7),
+      'bg': const Color(0xFFE0F2FE),
+      'tag': 'NEW ARRIVALS',
+      'headline': 'Naya Taaza Stock Aagaya! 📦',
+      'defaultDiscount': 'Flat ₹50',
+      'defaultCode': 'FRESH50',
+      'body': 'Brand new branded stock store par deliver ho chuka hai. Best quality aur guaranteed freshness.',
+    },
+    {
+      'title': 'Daily Dairy & Bakery',
+      'icon': Icons.bakery_dining_outlined,
+      'color': const Color(0xFF059669),
+      'bg': const Color(0xFFD1FAE5),
+      'tag': 'DAILY FRESH',
+      'headline': 'Rozana Milk & Bakery 🥛',
+      'defaultDiscount': '5% OFF',
+      'defaultCode': 'DAILY5',
+      'body': 'Subah taaza doodh, dahi, paneer aur bread har din fresh available. Daily booking open hai.',
+    },
+    {
+      'title': 'Rainy Day / Monsoon',
+      'icon': Icons.thunderstorm_outlined,
+      'color': const Color(0xFF0891B2),
+      'bg': const Color(0xFFCFFAFE),
+      'tag': 'MONSOON',
+      'headline': 'Chai-Pakoda Weather ☔',
+      'defaultDiscount': '10% OFF',
+      'defaultCode': 'RAIN10',
+      'body': 'Barsaat ke mausam me garma-garam chai patti, snacks aur dry snacks par special monsoon discount!',
+    },
+    {
+      'title': 'Summer Coolers',
+      'icon': Icons.ac_unit_rounded,
+      'color': const Color(0xFFEA580C),
+      'bg': const Color(0xFFFFEDD5),
+      'tag': 'SUMMER BEATS',
+      'headline': 'Thanda-Thanda Cool Offer 🥤',
+      'defaultDiscount': 'Buy 2 Get 10%',
+      'defaultCode': 'COOL10',
+      'body': 'Cold drinks, juices, ice creams aur lassi par beat-the-heat cooling discount!',
+    },
+
+    // Set 3 (9 to 12): Savings & Loyalty
+    {
+      'title': 'Flat Cash Discount',
+      'icon': Icons.payments_outlined,
+      'color': const Color(0xFF16A34A),
+      'bg': const Color(0xFFDCFCE7),
+      'tag': 'CASH SAVER',
+      'headline': 'Instant Cash Savings 💰',
+      'defaultDiscount': '₹50 Cashback',
+      'defaultCode': 'CASH50',
+      'body': '₹500 ya usse jyada ki purchase par turant counter discount payein.',
+    },
+    {
+      'title': 'Bulk Ration Saver',
+      'icon': Icons.shopping_basket_outlined,
+      'color': const Color(0xFFB45309),
+      'bg': const Color(0xFFFEF3C7),
+      'tag': 'BULK BUY',
+      'headline': 'Mahine Ka Ration Sasta! 🧺',
+      'defaultDiscount': 'Extra 5% Bulk',
+      'defaultCode': 'RATION5',
+      'body': 'Aata, Chawal, Daal aur Tel ke 5kg/10kg/15L packs par wholesale rate se bhi sasta!',
+    },
+    {
+      'title': 'VIP Customer Club',
+      'icon': Icons.military_tech_outlined,
+      'color': const Color(0xFF7C3AED),
+      'bg': const Color(0xFFEDE9FE),
+      'tag': 'VIP CLUB',
+      'headline': 'Exclusive VIP Member Deal 👑',
+      'defaultDiscount': 'VIP 12%',
+      'defaultCode': 'VIPCLUB',
+      'body': 'Aap humare premium regular customer hain. Sirf aapke liye exclusive flat rate discount.',
+    },
+    {
+      'title': 'Birthday Celebration',
+      'icon': Icons.cake_outlined,
+      'color': const Color(0xFFE11D48),
+      'bg': const Color(0xFFFFF1F2),
+      'tag': 'BIRTHDAY',
+      'headline': 'Janamdin Ki Shubhkamnayein! 🎂',
+      'defaultDiscount': 'Gift ₹150',
+      'defaultCode': 'BDAYGIFT',
+      'body': 'Aapke special day par hamari dukan ki taraf se free birthday gift voucher!',
+    },
+
+    // Set 4 (13 to 16): Speed & Digital Offers
+    {
+      'title': 'Anniversary Special',
+      'icon': Icons.volunteer_activism_outlined,
+      'color': const Color(0xFFDB2777),
+      'bg': const Color(0xFFFCE7F3),
+      'tag': 'ANNIVERSARY',
+      'headline': 'Happy Anniversary! 💐',
+      'defaultDiscount': 'Special 10%',
+      'defaultCode': 'LOVE10',
+      'body': 'Aapke rishte ki khushi me poore parivar ke liye special gift voucher.',
+    },
+    {
+      'title': 'Flash Sale (3 Hours)',
+      'icon': Icons.bolt_rounded,
+      'color': const Color(0xFFD97706),
+      'bg': const Color(0xFFFEF3C7),
+      'tag': 'FLASH OFFER',
+      'headline': 'Dhamaka Flash Sale (Limited Time) ⚡',
+      'defaultDiscount': 'Flat 20%',
+      'defaultCode': 'FLASH20',
+      'body': 'Sirf agle 3 ghante tak valid! Stock khatam hone se pehle turant order karein.',
+    },
+    {
+      'title': 'UPI Digital Cashback',
+      'icon': Icons.qr_code_scanner_rounded,
+      'color': const Color(0xFF2563EB),
+      'bg': const Color(0xFFEFF6FF),
+      'tag': 'UPI CASHBACK',
+      'headline': 'Pay via UPI & Save Extra 📱',
+      'defaultDiscount': 'Extra ₹25',
+      'defaultCode': 'UPI25',
+      'body': 'Galla par cash ki jagah QR code scan karke pay karein aur payein instant ₹25 bachat.',
+    },
+    {
+      'title': 'Sunday Morning Special',
+      'icon': Icons.wb_sunny_outlined,
+      'color': const Color(0xFFCA8A04),
+      'bg': const Color(0xFFFEF9C3),
+      'tag': 'SUNDAY OFFER',
+      'headline': 'Sunday Super Morning ☀️',
+      'defaultDiscount': 'Morning 8%',
+      'defaultCode': 'SUNDAY8',
+      'body': 'Ravivar subah 8 AM se 12 PM tak counter billing par flat 8% ki vishesh chhoot.',
+    },
+
+    // Set 5 (17 to 20): Stock Clearance & Delivery
+    {
+      'title': 'Clearance Stock-Out',
+      'icon': Icons.trending_down_rounded,
+      'color': const Color(0xFFDC2626),
+      'bg': const Color(0xFFFEF2F2),
+      'tag': 'CLEARANCE',
+      'headline': 'Maha Stock Clearance Sale 📉',
+      'defaultDiscount': 'Up to 30%',
+      'defaultCode': 'CLEAR30',
+      'body': 'Godown clear karne ke liye selected brands par cost-to-cost rate discount!',
+    },
+    {
+      'title': 'Free Home Delivery',
+      'icon': Icons.moped_rounded,
+      'color': const Color(0xFF059669),
+      'bg': const Color(0xFFD1FAE5),
+      'tag': 'FREE DELIVERY',
+      'headline': 'Ghar Baithe Free Delivery 🛵',
+      'defaultDiscount': 'Free Delivery',
+      'defaultCode': 'FREEDEL',
+      'body': 'Dukan aane ki zaroorat nahi! WhatsApp par list bhejo, 30 minute me samaan ghar par.',
+    },
+    {
+      'title': 'Loyalty Stamp Reward',
+      'icon': Icons.confirmation_number_outlined,
+      'color': const Color(0xFF4F46E5),
+      'bg': const Color(0xFFEEF2FF),
+      'tag': 'LOYALTY REWARD',
+      'headline': 'Aapka Wafadari Reward 🎟️',
+      'defaultDiscount': 'Free Gift Box',
+      'defaultCode': 'STAMP5',
+      'body': 'Pichhle 5 bills poore hone par aapka bonus gift pack store par claim karne ke liye ready hai.',
+    },
+    {
+      'title': 'Personal Care & Hygiene',
+      'icon': Icons.clean_hands_outlined,
+      'color': const Color(0xFF0D9488),
+      'bg': const Color(0xFFCCFBF1),
+      'tag': 'HYGIENE CARE',
+      'headline': 'Health & Hygiene Pack 🧼',
+      'defaultDiscount': 'Combo 10%',
+      'defaultCode': 'HYGIENE10',
+      'body': 'Soaps, detergents, shampoos aur cleaners ke combos par extra bachhat pack.',
+    },
+
+    // Set 6 (21 to 24): Community & Combos
+    {
+      'title': 'Evening Chai & Snacks',
+      'icon': Icons.coffee_outlined,
+      'color': const Color(0xFF92400E),
+      'bg': const Color(0xFFFEF3C7),
+      'tag': 'EVENING COMBO',
+      'headline': 'Shaam Ki Chai & Namkeen ☕',
+      'defaultDiscount': 'Buy 2 Get ₹20',
+      'defaultCode': 'SNACKS20',
+      'body': 'Biscuits, namkeens, chips aur toast ke sath premium tea leaf combo discount.',
+    },
+    {
+      'title': 'Seasonal Harvest',
+      'icon': Icons.grass_rounded,
+      'color': const Color(0xFF15803D),
+      'bg': const Color(0xFFDCFCE7),
+      'tag': 'SEASON SPECIAL',
+      'headline': 'Mandi Se Seedha Khet Taaza 🌾',
+      'defaultDiscount': 'Direct Price',
+      'defaultCode': 'FARM50',
+      'body': 'Sidhe kisan aur mandi se aayi shuddh, anadulterated daal, masale aur anaj.',
+    },
+    {
+      'title': 'Refer a Neighbor',
+      'icon': Icons.group_add_outlined,
+      'color': const Color(0xFF6366F1),
+      'bg': const Color(0xFFEEF2FF),
+      'tag': 'REFERRAL',
+      'headline': 'Padosi Ko Bhejo, Dono Bachao 🤝',
+      'defaultDiscount': 'Dono ko ₹50',
+      'defaultCode': 'FRIEND50',
+      'body': 'Apne kisi padosi ya rishtedaar ko dukan recommend karein aur dono payein agle bill par ₹50 off.',
+    },
+    {
+      'title': 'Emergency Store Open',
+      'icon': Icons.notifications_active_outlined,
+      'color': const Color(0xFFBE123C),
+      'bg': const Color(0xFFFFF1F2),
+      'tag': 'STORE OPEN',
+      'headline': 'Hum Aapke Liye Khule Hain! 🏪',
+      'defaultDiscount': 'Counter Ready',
+      'defaultCode': 'OPENNOW',
+      'body': 'Late night ya early morning emergency ration / medicine ke liye dukan open hai. WhatsApp karein.',
     },
   ];
 
@@ -305,110 +539,148 @@ Aapka Swagat Hai! Visit store today.
           ),
           const SizedBox(height: 14),
 
-          // 2. 2x2 CAMPAIGN SELECTION CARDS
-          Text(
-            'CHOOSE CAMPAIGN GOAL',
-            style: GoogleFonts.inter(
-              fontSize: 10.5,
-              fontWeight: FontWeight.w800,
-              color: const Color(0xFF64748B),
-              letterSpacing: 0.6,
-            ),
+          // 2. 2x2 HORIZONTALLY SCROLLABLE CAMPAIGN SELECTION (4 CARDS PER PAGE)
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'CHOOSE CAMPAIGN GOAL (24 TEMPLATES)',
+                style: GoogleFonts.inter(
+                  fontSize: 10.5,
+                  fontWeight: FontWeight.w800,
+                  color: const Color(0xFF64748B),
+                  letterSpacing: 0.6,
+                ),
+              ),
+              Row(
+                children: List.generate((_campaignTemplates.length / 4).ceil(), (dotIdx) {
+                  final isCur = _campaignPageIndex == dotIdx;
+                  return AnimatedContainer(
+                    duration: const Duration(milliseconds: 200),
+                    margin: const EdgeInsets.only(left: 4),
+                    width: isCur ? 14 : 5,
+                    height: 5,
+                    decoration: BoxDecoration(
+                      color: isCur ? const Color(0xFF0F172A) : const Color(0xFFCBD5E1),
+                      borderRadius: BorderRadius.circular(3),
+                    ),
+                  );
+                }),
+              ),
+            ],
           ),
           const SizedBox(height: 8),
-          GridView.builder(
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: 2,
-              crossAxisSpacing: 8,
-              mainAxisSpacing: 8,
-              childAspectRatio: 1.5,
-            ),
-            itemCount: _campaignTemplates.length,
-            itemBuilder: (context, i) {
-              final c = _campaignTemplates[i];
-              final isSel = _selectedCampaignIndex == i;
+          SizedBox(
+            height: 188,
+            child: PageView.builder(
+              controller: _campaignPageController,
+              onPageChanged: (p) => setState(() => _campaignPageIndex = p),
+              itemCount: (_campaignTemplates.length / 4).ceil(),
+              itemBuilder: (context, page) {
+                final startIndex = page * 4;
+                final pageItems = _campaignTemplates.sublist(
+                  startIndex,
+                  (startIndex + 4 > _campaignTemplates.length)
+                      ? _campaignTemplates.length
+                      : startIndex + 4,
+                );
 
-              return InkWell(
-                onTap: () {
-                  HapticFeedback.selectionClick();
-                  setState(() {
-                    _selectedCampaignIndex = i;
-                    _discountController.text = c['defaultDiscount'];
-                    _couponCodeController.text = c['defaultCode'];
-                    if (c['tag'] == 'KHATA DUE') {
-                      _selectedAudience = 'Udhar Due';
-                    }
-                  });
-                },
-                borderRadius: BorderRadius.circular(14),
-                child: Container(
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(
-                    color: isSel ? Colors.white : const Color(0xFFFAFAFA),
-                    borderRadius: BorderRadius.circular(14),
-                    border: Border.all(
-                      color: isSel ? const Color(0xFF0F172A) : const Color(0xFFEEF2F6),
-                      width: isSel ? 1.6 : 1.0,
-                    ),
-                    boxShadow: isSel
-                        ? [
-                            BoxShadow(
-                              color: const Color(0xFF0F172A).withValues(alpha: 0.08),
-                              blurRadius: 8,
-                              offset: const Offset(0, 2),
-                            ),
-                          ]
-                        : null,
+                return GridView.builder(
+                  physics: const NeverScrollableScrollPhysics(),
+                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: 2,
+                    crossAxisSpacing: 8,
+                    mainAxisSpacing: 8,
+                    childAspectRatio: 1.85,
                   ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.all(6),
-                            decoration: BoxDecoration(
-                              color: c['bg'],
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: Icon(c['icon'], color: c['color'], size: 16),
+                  itemCount: pageItems.length,
+                  itemBuilder: (context, idx) {
+                    final globalIndex = startIndex + idx;
+                    final c = pageItems[idx];
+                    final isSel = _selectedCampaignIndex == globalIndex;
+
+                    return InkWell(
+                      onTap: () {
+                        HapticFeedback.selectionClick();
+                        setState(() {
+                          _selectedCampaignIndex = globalIndex;
+                          _discountController.text = c['defaultDiscount'] ?? '10%';
+                          _couponCodeController.text = c['defaultCode'] ?? 'OFFER10';
+                          if (c['tag'] == 'KHATA DUE') {
+                            _selectedAudience = 'Udhar Due';
+                          }
+                        });
+                      },
+                      borderRadius: BorderRadius.circular(14),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                        decoration: BoxDecoration(
+                          color: isSel ? Colors.white : const Color(0xFFFAFAFA),
+                          borderRadius: BorderRadius.circular(14),
+                          border: Border.all(
+                            color: isSel ? const Color(0xFF0F172A) : const Color(0xFFEEF2F6),
+                            width: isSel ? 1.6 : 1.0,
                           ),
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
-                            decoration: BoxDecoration(
-                              color: c['bg'],
-                              borderRadius: BorderRadius.circular(5),
-                            ),
-                            child: Text(
-                              c['tag'],
-                              style: GoogleFonts.inter(
-                                fontSize: 8.5,
-                                fontWeight: FontWeight.w800,
-                                color: c['color'],
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                      Text(
-                        c['title'],
-                        style: GoogleFonts.plusJakartaSans(
-                          fontSize: 12.5,
-                          fontWeight: FontWeight.w800,
-                          color: const Color(0xFF0F172A),
+                          boxShadow: isSel
+                              ? [
+                                  BoxShadow(
+                                    color: const Color(0xFF0F172A).withValues(alpha: 0.08),
+                                    blurRadius: 8,
+                                    offset: const Offset(0, 2),
+                                  ),
+                                ]
+                              : null,
                         ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Container(
+                                  padding: const EdgeInsets.all(5),
+                                  decoration: BoxDecoration(
+                                    color: c['bg'],
+                                    borderRadius: BorderRadius.circular(7),
+                                  ),
+                                  child: Icon(c['icon'], color: c['color'], size: 15),
+                                ),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
+                                  decoration: BoxDecoration(
+                                    color: c['bg'],
+                                    borderRadius: BorderRadius.circular(5),
+                                  ),
+                                  child: Text(
+                                    c['tag'],
+                                    style: GoogleFonts.inter(
+                                      fontSize: 8.0,
+                                      fontWeight: FontWeight.w800,
+                                      color: c['color'],
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            Text(
+                              c['title'],
+                              style: GoogleFonts.plusJakartaSans(
+                                fontSize: 12.0,
+                                fontWeight: FontWeight.w800,
+                                color: const Color(0xFF0F172A),
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ],
+                        ),
                       ),
-                    ],
-                  ),
-                ),
-              );
-            },
+                    );
+                  },
+                );
+              },
+            ),
           ),
           const SizedBox(height: 14),
 

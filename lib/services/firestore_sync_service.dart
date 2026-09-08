@@ -297,6 +297,113 @@ class FirestoreSyncService {
     }
   }
 
+  /// Push a single product to Cloud Firestore
+  Future<void> pushProductToCloud(ProductModel product) async {
+    if (!_isInitialized) return;
+    try {
+      final firestore = FirebaseFirestore.instance;
+      await firestore
+          .collection('businesses')
+          .doc(_activeBusinessId)
+          .collection('products')
+          .doc(product.id)
+          .set({
+        'id': product.id,
+        'business_id': _activeBusinessId,
+        'name': product.name,
+        'barcode': product.barcode,
+        'category_id': product.categoryId,
+        'selling_price_paise': product.sellingPricePaise,
+        'mrp_paise': product.mrpPaise,
+        'purchase_price_paise': product.purchasePricePaise,
+        'stock_quantity': product.stockQuantity,
+        'tax_rate': product.taxRate,
+        'is_tax_inclusive': product.isTaxInclusive,
+        'unit': product.unit,
+        'is_loose_item': product.isLooseItem,
+        'batch_number': product.batchNumber,
+        'expiry_date': product.expiryDate,
+        'size': product.size,
+        'color': product.color,
+        'imei_serial': product.imeiSerial,
+        'hsn_code': product.hsnCode,
+        'updated_at': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
+    } catch (e) {
+      debugPrint('Cloud product push notice: $e');
+    }
+  }
+
+  /// Delete a product from Cloud Firestore
+  Future<void> deleteProductFromCloud(String productId) async {
+    if (!_isInitialized) return;
+    try {
+      final firestore = FirebaseFirestore.instance;
+      await firestore
+          .collection('businesses')
+          .doc(_activeBusinessId)
+          .collection('products')
+          .doc(productId)
+          .delete();
+    } catch (e) {
+      debugPrint('Cloud product delete notice: $e');
+    }
+  }
+
+  /// Push customer to Cloud Firestore
+  Future<void> pushCustomerToCloud(CustomerModel customer) async {
+    if (!_isInitialized) return;
+    try {
+      final firestore = FirebaseFirestore.instance;
+      await firestore
+          .collection('businesses')
+          .doc(_activeBusinessId)
+          .collection('customers')
+          .doc(customer.id)
+          .set({
+        'id': customer.id,
+        'business_id': _activeBusinessId,
+        'name': customer.name,
+        'phone': customer.phone,
+        'current_balance_paise': customer.currentBalancePaise,
+        'credit_limit_paise': customer.creditLimitPaise,
+        'updated_at': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
+    } catch (e) {
+      debugPrint('Cloud customer push notice: $e');
+    }
+  }
+
+  /// Wipe cloud catalog on Fresh Start / Factory Reset
+  Future<void> wipeCloudData() async {
+    if (!_isInitialized) return;
+    try {
+      syncState.value = SyncState.syncing;
+      final firestore = FirebaseFirestore.instance;
+      final bizRef = firestore.collection('businesses').doc(_activeBusinessId);
+
+      final prods = await bizRef.collection('products').get();
+      for (final doc in prods.docs) {
+        await doc.reference.delete().catchError((_) {});
+      }
+
+      final sales = await bizRef.collection('sales').get();
+      for (final doc in sales.docs) {
+        await doc.reference.delete().catchError((_) {});
+      }
+
+      final custs = await bizRef.collection('customers').get();
+      for (final doc in custs.docs) {
+        await doc.reference.delete().catchError((_) {});
+      }
+
+      syncState.value = SyncState.synced;
+      liveSyncCounter.value++;
+    } catch (e) {
+      debugPrint('Cloud wipe error: $e');
+    }
+  }
+
   void dispose() {
     _productsSub?.cancel();
     _customersSub?.cancel();

@@ -295,25 +295,6 @@ class AiInwardModal extends StatelessWidget {
               subtitle: 'Spreadsheet with item names, prices & stock',
               onTap: () => _simulateAiScan(context, 'CSV / Excel Spreadsheet'),
             ),
-            const SizedBox(height: 10),
-
-            // Option 4: Add Single Item Manually (MANUAL FORM)
-            _buildOptionCard(
-              context: context,
-              icon: Icons.inventory_2_outlined,
-              iconColor: const Color(0xFF7C3AED),
-              iconBgColor: const Color(0xFFF5F3FF),
-              borderColor: const Color(0xFFDDD6FE),
-              title: 'Add Single Item Manually',
-              badgeLabel: 'MANUAL FORM',
-              badgeBg: const Color(0xFFF5F3FF),
-              badgeColor: const Color(0xFF6D28D9),
-              subtitle: 'Fill in product name, rate, category and stock individually',
-              onTap: () {
-                Navigator.of(context).pop();
-                onSelectManual();
-              },
-            ),
           ],
         ),
       ),

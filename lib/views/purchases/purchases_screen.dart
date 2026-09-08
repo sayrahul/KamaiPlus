@@ -233,28 +233,64 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
     }
 
     final encoded = Uri.encodeComponent(msg);
-    final uri = Uri.parse('whatsapp://send?phone=$cleanPhone&text=$encoded');
     final webUri = Uri.parse('https://wa.me/$cleanPhone?text=$encoded');
+    final uri = Uri.parse('whatsapp://send?phone=$cleanPhone&text=$encoded');
 
     try {
-      if (await canLaunchUrl(uri)) {
-        await launchUrl(uri);
-      } else if (await canLaunchUrl(webUri)) {
-        await launchUrl(webUri, mode: LaunchMode.externalApplication);
-      } else {
+      final launched = await launchUrl(webUri, mode: LaunchMode.externalApplication);
+      if (!launched) {
+        await launchUrl(uri, mode: LaunchMode.externalApplication);
+      }
+    } catch (_) {
+      try {
+        await launchUrl(uri, mode: LaunchMode.externalApplication);
+      } catch (_) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Could not launch WhatsApp')),
+            const SnackBar(content: Text('WhatsApp application not found')),
           );
         }
       }
-    } catch (_) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('WhatsApp application not found')),
-        );
-      }
     }
+  }
+
+  void _confirmDeletePurchase(BuildContext sheetCtx, Map<String, dynamic> purchase) {
+    showDialog(
+      context: context,
+      builder: (dialogCtx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Text('Delete Purchase Order?', style: GoogleFonts.outfit(fontSize: 16, fontWeight: FontWeight.w700)),
+        content: Text('Kya aap purchase order ${purchase['id']} (${purchase['supplier']}) ko delete karna chahte hain?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogCtx),
+            child: Text('Cancel', style: GoogleFonts.inter(fontWeight: FontWeight.w600, color: const Color(0xFF64748B))),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              HapticFeedback.mediumImpact();
+              Navigator.pop(dialogCtx);
+              Navigator.pop(sheetCtx);
+              setState(() {
+                _purchases.removeWhere((p) => p['id'] == purchase['id']);
+              });
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text('✓ Purchase order ${purchase['id']} deleted'),
+                  backgroundColor: const Color(0xFF0F172A),
+                ),
+              );
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFFEF4444),
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            ),
+            child: Text('Delete', style: GoogleFonts.inter(fontWeight: FontWeight.w700)),
+          ),
+        ],
+      ),
+    );
   }
 
   void _showOrderDetailsSheet(Map<String, dynamic> purchase) {
@@ -309,6 +345,11 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
                             Text('${purchase['supplier']} • Inv #${purchase['invoice_no']}', style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF64748B))),
                           ],
                         ),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.delete_outline_rounded, size: 20, color: Color(0xFFEF4444)),
+                        tooltip: 'Delete Purchase Order',
+                        onPressed: () => _confirmDeletePurchase(ctx, purchase),
                       ),
                       IconButton(
                         icon: const Icon(Icons.close_rounded, size: 20, color: Color(0xFF94A3B8)),

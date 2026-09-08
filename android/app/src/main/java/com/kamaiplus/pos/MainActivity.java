@@ -8,9 +8,13 @@ import android.bluetooth.BluetoothDevice;
 import android.bluetooth.BluetoothSocket;
 import android.content.Context;
 import android.content.Intent;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Paint;
+import android.graphics.Rect;
+import android.graphics.RectF;
 import android.graphics.pdf.PdfDocument;
 import android.net.Uri;
 import android.os.Build;
@@ -227,7 +231,7 @@ public class MainActivity extends FlutterActivity implements TextToSpeech.OnInit
                     }
                 });
 
-        // 4. Native PDF Generation & Download Engine
+        // 4. Native PDF Generation, Download & Native Sharing Engine
         new MethodChannel(flutterEngine.getDartExecutor().getBinaryMessenger(), PDF_CHANNEL)
                 .setMethodCallHandler(new MethodChannel.MethodCallHandler() {
                     @Override
@@ -236,109 +240,284 @@ public class MainActivity extends FlutterActivity implements TextToSpeech.OnInit
                             try {
                                 String invoiceNumber = call.argument("invoiceNumber");
                                 String storeName = call.argument("storeName");
+                                String storePhone = call.argument("storePhone");
+                                String storeAddress = call.argument("storeAddress");
+                                String gstin = call.argument("gstin");
+                                String logoPath = call.argument("logoPath");
                                 String customerName = call.argument("customerName");
+                                String customerPhone = call.argument("customerPhone");
                                 String dateStr = call.argument("dateStr");
                                 String paymentMode = call.argument("paymentMode");
+                                String subtotalAmount = call.argument("subtotalAmount");
+                                String discountAmount = call.argument("discountAmount");
+                                String taxAmount = call.argument("taxAmount");
                                 String totalAmount = call.argument("totalAmount");
                                 List<Map<String, Object>> items = call.argument("items");
 
-                                if (invoiceNumber == null) invoiceNumber = "INV_" + System.currentTimeMillis();
-                                if (storeName == null) storeName = "KamaiPlus Store";
-                                if (customerName == null) customerName = "Walk-in Customer";
+                                if (invoiceNumber == null) invoiceNumber = "INV-" + System.currentTimeMillis();
+                                if (storeName == null || storeName.trim().isEmpty()) storeName = "KamaiPlus Store";
+                                if (customerName == null || customerName.trim().isEmpty()) customerName = "Cash Customer";
                                 if (dateStr == null) dateStr = "";
                                 if (paymentMode == null) paymentMode = "CASH";
                                 if (totalAmount == null) totalAmount = "₹0.00";
+                                if (subtotalAmount == null) subtotalAmount = totalAmount;
                                 if (items == null) items = new ArrayList<>();
 
-                                // Generate standard A4 (595 x 842 points)
-                                PdfDocument document = new PdfDocument();
-                                PdfDocument.PageInfo pageInfo = new PdfDocument.PageInfo.Builder(595, 842, 1).create();
-                                PdfDocument.Page page = document.startPage(pageInfo);
-                                Canvas canvas = page.getCanvas();
-
-                                Paint titlePaint = new Paint();
-                                titlePaint.setColor(Color.rgb(15, 23, 42)); // Slate 900
-                                titlePaint.setTextSize(20);
-                                titlePaint.setFakeBoldText(true);
+                                // Paints
+                                Paint darkPaint = new Paint();
+                                darkPaint.setColor(Color.rgb(15, 23, 42)); // Slate 900
+                                darkPaint.setTextSize(16);
+                                darkPaint.setFakeBoldText(true);
+                                darkPaint.setAntiAlias(true);
 
                                 Paint subPaint = new Paint();
                                 subPaint.setColor(Color.rgb(100, 116, 139)); // Slate 500
-                                subPaint.setTextSize(11);
+                                subPaint.setTextSize(9);
+                                subPaint.setAntiAlias(true);
 
-                                Paint boldPaint = new Paint();
-                                boldPaint.setColor(Color.rgb(15, 23, 42));
-                                boldPaint.setTextSize(11);
-                                boldPaint.setFakeBoldText(true);
+                                Paint bodyPaint = new Paint();
+                                bodyPaint.setColor(Color.rgb(30, 41, 59)); // Slate 800
+                                bodyPaint.setTextSize(9.5f);
+                                bodyPaint.setAntiAlias(true);
+
+                                Paint boldTextPaint = new Paint();
+                                boldTextPaint.setColor(Color.rgb(15, 23, 42));
+                                boldTextPaint.setTextSize(9.5f);
+                                boldTextPaint.setFakeBoldText(true);
+                                boldTextPaint.setAntiAlias(true);
 
                                 Paint linePaint = new Paint();
-                                linePaint.setColor(Color.rgb(226, 232, 240));
-                                linePaint.setStrokeWidth(1f);
+                                linePaint.setColor(Color.rgb(226, 232, 240)); // Slate 200
+                                linePaint.setStrokeWidth(0.8f);
 
-                                // Header
-                                canvas.drawText(storeName.toUpperCase(), 40, 50, titlePaint);
-                                canvas.drawText("TAX INVOICE / CASH MEMO", 40, 68, subPaint);
-                                canvas.drawText("Original for Recipient", 400, 50, subPaint);
-                                canvas.drawText("Invoice #: " + invoiceNumber, 400, 68, boldPaint);
+                                Paint rowLinePaint = new Paint();
+                                rowLinePaint.setColor(Color.rgb(241, 245, 249)); // Slate 100
+                                rowLinePaint.setStrokeWidth(0.6f);
 
-                                canvas.drawLine(40, 80, 555, 80, linePaint);
+                                Paint thBgPaint = new Paint();
+                                thBgPaint.setColor(Color.rgb(15, 23, 42)); // Dark Slate Header
 
-                                // Customer & Bill Meta
-                                canvas.drawText("Billed To: " + customerName, 40, 100, boldPaint);
-                                canvas.drawText("Date: " + dateStr, 400, 100, subPaint);
-                                canvas.drawText("Payment Mode: " + paymentMode.toUpperCase(), 400, 116, boldPaint);
+                                Paint thTextPaint = new Paint();
+                                thTextPaint.setColor(Color.WHITE);
+                                thTextPaint.setTextSize(9f);
+                                thTextPaint.setFakeBoldText(true);
+                                thTextPaint.setAntiAlias(true);
 
-                                canvas.drawLine(40, 128, 555, 128, linePaint);
+                                Paint badgeBg = new Paint();
+                                badgeBg.setColor(Color.rgb(241, 245, 249));
 
-                                // Table Header
-                                Paint thBg = new Paint();
-                                thBg.setColor(Color.rgb(241, 245, 249));
-                                canvas.drawRect(40, 134, 555, 154, thBg);
+                                Paint grandTotalBg = new Paint();
+                                grandTotalBg.setColor(Color.rgb(15, 23, 42));
 
-                                canvas.drawText("S.NO", 48, 148, boldPaint);
-                                canvas.drawText("ITEM DESCRIPTION", 100, 148, boldPaint);
-                                canvas.drawText("QTY", 370, 148, boldPaint);
-                                canvas.drawText("RATE", 430, 148, boldPaint);
-                                canvas.drawText("AMOUNT", 495, 148, boldPaint);
-
-                                int y = 174;
-                                int sNo = 1;
-                                for (Map<String, Object> item : items) {
-                                    if (y > 760) break; // stay within page
-                                    String name = String.valueOf(item.get("name"));
-                                    String qty = String.valueOf(item.get("qty"));
-                                    String rate = String.valueOf(item.get("rate"));
-                                    String amt = String.valueOf(item.get("amount"));
-
-                                    canvas.drawText(String.valueOf(sNo++), 48, y, subPaint);
-                                    if (name.length() > 32) name = name.substring(0, 32) + "...";
-                                    canvas.drawText(name, 100, y, boldPaint);
-                                    canvas.drawText(qty, 375, y, subPaint);
-                                    canvas.drawText(rate, 430, y, subPaint);
-                                    canvas.drawText(amt, 495, y, boldPaint);
-
-                                    y += 20;
+                                // Load Store Logo Bitmap if present
+                                Bitmap logoBmp = null;
+                                if (logoPath != null && !logoPath.trim().isEmpty()) {
+                                    try {
+                                        File lf = new File(logoPath);
+                                        if (lf.exists() && lf.length() > 0) {
+                                            BitmapFactory.Options opts = new BitmapFactory.Options();
+                                            opts.inPreferredConfig = Bitmap.Config.RGB_565;
+                                            logoBmp = BitmapFactory.decodeFile(logoPath, opts);
+                                        }
+                                    } catch (Exception ignored) {}
                                 }
 
-                                canvas.drawLine(40, y + 5, 555, y + 5, linePaint);
-                                y += 26;
+                                // Multi-page Calculation
+                                // Page 1 items capacity: y from 172 to 740 is 568pt.
+                                // With totals (90pt space), capacity is (568 - 90)/20 = 23 items.
+                                // Subsequent pages capacity: y from 104 to 740 is 636pt.
+                                // Capacity with totals is (636 - 90)/20 = 27 items. Without totals = 31 items.
+                                List<List<Map<String, Object>>> pagesItems = new ArrayList<>();
+                                int itemIndex = 0;
+                                int totalItems = items.size();
 
-                                // Grand Total
-                                Paint totalBg = new Paint();
-                                totalBg.setColor(Color.rgb(254, 243, 199)); // Light Amber
-                                canvas.drawRect(350, y - 16, 555, y + 16, totalBg);
+                                // Page 1 items
+                                List<Map<String, Object>> p1Items = new ArrayList<>();
+                                int p1Limit = (totalItems <= 23) ? totalItems : 27;
+                                for (int i = 0; i < p1Limit && itemIndex < totalItems; i++) {
+                                    p1Items.add(items.get(itemIndex++));
+                                }
+                                pagesItems.add(p1Items);
 
-                                canvas.drawText("GRAND TOTAL:", 360, y + 4, boldPaint);
-                                Paint amtPaint = new Paint();
-                                amtPaint.setColor(Color.rgb(15, 23, 42));
-                                amtPaint.setTextSize(14);
-                                amtPaint.setFakeBoldText(true);
-                                canvas.drawText(totalAmount, 460, y + 4, amtPaint);
+                                // Subsequent pages
+                                while (itemIndex < totalItems) {
+                                    List<Map<String, Object>> nextP = new ArrayList<>();
+                                    int remaining = totalItems - itemIndex;
+                                    int nextLimit = (remaining <= 27) ? remaining : 31;
+                                    for (int i = 0; i < nextLimit && itemIndex < totalItems; i++) {
+                                        nextP.add(items.get(itemIndex++));
+                                    }
+                                    pagesItems.add(nextP);
+                                }
 
-                                // Footer
-                                canvas.drawText("Thank you for your business! Terms: Goods once sold cannot be taken back.", 40, 800, subPaint);
-                                canvas.drawText("Generated electronically via Kamai+ POS", 380, 800, subPaint);
+                                int totalPages = pagesItems.size();
+                                PdfDocument document = new PdfDocument();
 
-                                document.finishPage(page);
+                                int globalSNo = 1;
+                                for (int pageIdx = 1; pageIdx <= totalPages; pageIdx++) {
+                                    PdfDocument.PageInfo pageInfo = new PdfDocument.PageInfo.Builder(595, 842, pageIdx).create();
+                                    PdfDocument.Page page = document.startPage(pageInfo);
+                                    Canvas canvas = page.getCanvas();
+
+                                    int currentY;
+
+                                    if (pageIdx == 1) {
+                                        // --- PAGE 1 FULL HEADER ---
+                                        float textLeft = 36;
+                                        if (logoBmp != null) {
+                                            RectF logoRect = new RectF(36, 36, 86, 86);
+                                            Paint bmpPaint = new Paint(Paint.FILTER_BITMAP_FLAG);
+                                            canvas.drawBitmap(logoBmp, null, logoRect, bmpPaint);
+                                            textLeft = 96;
+                                        }
+
+                                        // Store Details
+                                        canvas.drawText(storeName.toUpperCase(), textLeft, 52, darkPaint);
+                                        float storeSubY = 66;
+                                        if (storeAddress != null && !storeAddress.trim().isEmpty()) {
+                                            String addr = storeAddress.length() > 40 ? storeAddress.substring(0, 40) + "..." : storeAddress;
+                                            canvas.drawText(addr, textLeft, storeSubY, subPaint);
+                                            storeSubY += 12;
+                                        }
+                                        String contactInfo = "";
+                                        if (storePhone != null && !storePhone.trim().isEmpty()) contactInfo += "Ph: " + storePhone + "  ";
+                                        if (gstin != null && !gstin.trim().isEmpty()) contactInfo += "GSTIN: " + gstin;
+                                        if (!contactInfo.isEmpty()) {
+                                            canvas.drawText(contactInfo, textLeft, storeSubY, subPaint);
+                                        }
+
+                                        // Top Right Header Card
+                                        RectF invBadge = new RectF(405, 36, 559, 56);
+                                        canvas.drawRoundRect(invBadge, 4, 4, thBgPaint);
+                                        Paint invBadgeText = new Paint(thTextPaint);
+                                        invBadgeText.setTextSize(10f);
+                                        canvas.drawText("TAX INVOICE", 448, 50, invBadgeText);
+
+                                        canvas.drawText("Invoice #: " + invoiceNumber, 410, 70, boldTextPaint);
+                                        canvas.drawText("Date: " + dateStr, 410, 83, subPaint);
+                                        canvas.drawText("Payment: " + paymentMode.toUpperCase(), 410, 96, boldTextPaint);
+
+                                        // Divider
+                                        canvas.drawLine(36, 104, 559, 104, linePaint);
+
+                                        // Customer Banner
+                                        RectF custBanner = new RectF(36, 110, 559, 134);
+                                        canvas.drawRoundRect(custBanner, 4, 4, badgeBg);
+                                        canvas.drawRoundRect(custBanner, 4, 4, linePaint);
+
+                                        String custStr = "Billed To: " + customerName;
+                                        if (customerPhone != null && !customerPhone.trim().isEmpty()) {
+                                            custStr += "  •  Mobile: " + customerPhone;
+                                        }
+                                        canvas.drawText(custStr, 46, 126, boldTextPaint);
+                                        canvas.drawText("Supply: Local State (Intrastate)", 405, 126, subPaint);
+
+                                        // Table Header
+                                        RectF thRect = new RectF(36, 142, 559, 164);
+                                        canvas.drawRoundRect(thRect, 4, 4, thBgPaint);
+                                        canvas.drawText("S.NO", 44, 156, thTextPaint);
+                                        canvas.drawText("ITEM DESCRIPTION", 80, 156, thTextPaint);
+                                        canvas.drawText("QTY", 370, 156, thTextPaint);
+                                        canvas.drawText("UNIT RATE", 435, 156, thTextPaint);
+                                        canvas.drawText("AMOUNT (₹)", 495, 156, thTextPaint);
+
+                                        currentY = 184;
+                                    } else {
+                                        // --- CONTINUATION PAGES (PAGE 2+) ---
+                                        canvas.drawText(storeName.toUpperCase(), 36, 48, darkPaint);
+                                        canvas.drawText("TAX INVOICE (Continued - Page " + pageIdx + " of " + totalPages + ")", 230, 48, subPaint);
+                                        canvas.drawText("Invoice #: " + invoiceNumber, 430, 48, boldTextPaint);
+
+                                        canvas.drawLine(36, 56, 559, 56, linePaint);
+
+                                        // Table Header identical to page 1
+                                        RectF thRect = new RectF(36, 64, 559, 86);
+                                        canvas.drawRoundRect(thRect, 4, 4, thBgPaint);
+                                        canvas.drawText("S.NO", 44, 78, thTextPaint);
+                                        canvas.drawText("ITEM DESCRIPTION", 80, 78, thTextPaint);
+                                        canvas.drawText("QTY", 370, 78, thTextPaint);
+                                        canvas.drawText("UNIT RATE", 435, 78, thTextPaint);
+                                        canvas.drawText("AMOUNT (₹)", 495, 78, thTextPaint);
+
+                                        currentY = 106;
+                                    }
+
+                                    // Render Items for this page
+                                    List<Map<String, Object>> pageItems = pagesItems.get(pageIdx - 1);
+                                    for (Map<String, Object> item : pageItems) {
+                                        String name = String.valueOf(item.get("name"));
+                                        String qty = String.valueOf(item.get("qty"));
+                                        String rate = String.valueOf(item.get("rate"));
+                                        String amt = String.valueOf(item.get("amount"));
+
+                                        canvas.drawText(String.valueOf(globalSNo++), 48, currentY, subPaint);
+                                        if (name.length() > 36) name = name.substring(0, 36) + "...";
+                                        canvas.drawText(name, 80, currentY, boldTextPaint);
+                                        canvas.drawText(qty, 375, currentY, bodyPaint);
+                                        canvas.drawText(rate, 440, currentY, bodyPaint);
+                                        canvas.drawText(amt, 500, currentY, boldTextPaint);
+
+                                        canvas.drawLine(36, currentY + 4, 559, currentY + 4, rowLinePaint);
+                                        currentY += 19;
+                                    }
+
+                                    // If last page, render Summary and Signatory Block
+                                    if (pageIdx == totalPages) {
+                                        canvas.drawLine(36, currentY + 2, 559, currentY + 2, linePaint);
+                                        currentY += 14;
+
+                                        // Left: Terms & Signatory
+                                        canvas.drawText("Terms & Conditions:", 36, currentY, boldTextPaint);
+                                        canvas.drawText("1. Goods once sold cannot be taken back or exchanged.", 36, currentY + 12, subPaint);
+                                        canvas.drawText("2. Electronic invoice generated via Kamai+ POS System.", 36, currentY + 24, subPaint);
+
+                                        // Signatory Box
+                                        RectF signBox = new RectF(220, currentY + 2, 335, currentY + 54);
+                                        canvas.drawRoundRect(signBox, 4, 4, badgeBg);
+                                        canvas.drawRoundRect(signBox, 4, 4, linePaint);
+                                        canvas.drawText("For " + (storeName.length() > 18 ? storeName.substring(0, 18) : storeName), 226, currentY + 14, subPaint);
+                                        canvas.drawText("Authorized Signatory", 226, currentY + 46, boldTextPaint);
+
+                                        // Right: Totals Box
+                                        int totalsX = 380;
+                                        int totalsY = currentY;
+                                        if (discountAmount != null && !discountAmount.isEmpty() && !discountAmount.equals("₹0.00") && !discountAmount.equals("0")) {
+                                            canvas.drawText("Subtotal:", totalsX, totalsY, subPaint);
+                                            canvas.drawText(subtotalAmount, 490, totalsY, bodyPaint);
+                                            totalsY += 12;
+                                            canvas.drawText("Discount:", totalsX, totalsY, subPaint);
+                                            canvas.drawText("-" + discountAmount, 490, totalsY, bodyPaint);
+                                            totalsY += 12;
+                                        }
+                                        if (taxAmount != null && !taxAmount.isEmpty() && !taxAmount.equals("₹0.00") && !taxAmount.equals("0")) {
+                                            canvas.drawText("GST Tax:", totalsX, totalsY, subPaint);
+                                            canvas.drawText(taxAmount, 490, totalsY, bodyPaint);
+                                            totalsY += 12;
+                                        }
+
+                                        // Grand Total Pill
+                                        RectF gtBox = new RectF(370, totalsY + 4, 559, totalsY + 36);
+                                        canvas.drawRoundRect(gtBox, 6, 6, grandTotalBg);
+
+                                        Paint gtLabel = new Paint(thTextPaint);
+                                        gtLabel.setTextSize(10f);
+                                        canvas.drawText("TOTAL DUE", 382, totalsY + 24, gtLabel);
+
+                                        Paint gtVal = new Paint();
+                                        gtVal.setColor(Color.WHITE);
+                                        gtVal.setTextSize(14f);
+                                        gtVal.setFakeBoldText(true);
+                                        gtVal.setAntiAlias(true);
+                                        canvas.drawText(totalAmount, 480, totalsY + 24, gtVal);
+                                    }
+
+                                    // --- FOOTER ON EVERY PAGE ---
+                                    canvas.drawLine(36, 810, 559, 810, linePaint);
+                                    canvas.drawText("Kamai+ POS • Retail & Inventory Software", 36, 822, subPaint);
+                                    canvas.drawText("Page " + pageIdx + " of " + totalPages, 505, 822, boldTextPaint);
+
+                                    document.finishPage(page);
+                                }
 
                                 // Save PDF to Downloads directory
                                 File downloadsDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS);
@@ -366,7 +545,7 @@ public class MainActivity extends FlutterActivity implements TextToSpeech.OnInit
 
                                 NotificationCompat.Builder notif = new NotificationCompat.Builder(MainActivity.this, CHANNEL_ID)
                                         .setSmallIcon(R.mipmap.ic_launcher)
-                                        .setContentTitle("Invoice PDF Downloaded 📥")
+                                        .setContentTitle("Tax Invoice Downloaded 📥")
                                         .setContentText("Invoice #" + invoiceNumber + " (" + totalAmount + ") saved to Downloads.")
                                         .setStyle(new NotificationCompat.BigTextStyle().bigText("Invoice #" + invoiceNumber + " (" + totalAmount + ") saved to Downloads. Tap to view."))
                                         .setPriority(NotificationCompat.PRIORITY_HIGH)
@@ -400,6 +579,36 @@ public class MainActivity extends FlutterActivity implements TextToSpeech.OnInit
                                 result.success(false);
                             } catch (Exception e) {
                                 result.error("OPEN_ERROR", e.getMessage(), null);
+                            }
+                        } else if ("sharePdf".equals(call.method)) {
+                            try {
+                                String path = call.argument("path");
+                                String invNum = call.argument("invoiceNumber");
+                                String sName = call.argument("storeName");
+                                if (invNum == null) invNum = "BILL";
+                                if (sName == null) sName = "KamaiPlus";
+
+                                if (path != null) {
+                                    File file = new File(path);
+                                    if (file.exists()) {
+                                        Uri uri = FileProvider.getUriForFile(MainActivity.this, getPackageName() + ".fileprovider", file);
+                                        Intent shareIntent = new Intent(Intent.ACTION_SEND);
+                                        shareIntent.setType("application/pdf");
+                                        shareIntent.putExtra(Intent.EXTRA_STREAM, uri);
+                                        shareIntent.putExtra(Intent.EXTRA_SUBJECT, "Tax Invoice #" + invNum + " - " + sName);
+                                        shareIntent.putExtra(Intent.EXTRA_TEXT, "Namaste! Here is your Tax Invoice #" + invNum + " from " + sName + ".");
+                                        shareIntent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+
+                                        Intent chooser = Intent.createChooser(shareIntent, "Share Tax Invoice PDF via...");
+                                        chooser.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                                        startActivity(chooser);
+                                        result.success(true);
+                                        return;
+                                    }
+                                }
+                                result.success(false);
+                            } catch (Exception e) {
+                                result.error("SHARE_ERROR", e.getMessage(), null);
                             }
                         } else {
                             result.notImplemented();

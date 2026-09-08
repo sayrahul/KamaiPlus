@@ -483,26 +483,6 @@ class AiInwardSheet extends StatelessWidget {
               _simulateAiScan(context, 'excel');
             },
           ),
-          const SizedBox(height: 10),
-
-          // Option 4: Add Single Item Manually
-          _buildOptionCard(
-            context: context,
-            icon: Icons.post_add_rounded,
-            iconBg: const Color(0xFFF5F3FF),
-            iconColor: const Color(0xFF7C3AED),
-            borderColor: const Color(0xFFDDD6FE),
-            title: 'Add Single Item Manually',
-            badge: 'MANUAL FORM',
-            badgeColor: const Color(0xFF7C3AED),
-            subtitle: 'Fill in product name, rate, category and stock individually',
-            onTap: () {
-              Navigator.pop(context);
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Open Add Product in Products tab to add single item manually.')),
-              );
-            },
-          ),
         ],
       ),
     );

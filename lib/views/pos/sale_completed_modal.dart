@@ -111,9 +111,9 @@ class _SaleCompletedModalState extends State<SaleCompletedModal> {
     final amountStr = MoneyFormatter.formatINR(widget.sale.totalAmountPaise);
 
     final itemLines = widget.sale.items.map((it) {
-      final name = it['product_name'] ?? 'Item';
-      final qty = it['quantity'] ?? 1;
-      final price = (it['unit_price_paise'] as num? ?? 0) / 100.0;
+      final name = it['product_name'] ?? it['name'] ?? 'Item';
+      final qty = it['quantity'] ?? it['qty'] ?? 1;
+      final price = ((it['unit_price_paise'] ?? it['price'] as num?) ?? 0) / 100.0;
       return '• $name x $qty = ₹${(price * (qty as num)).toStringAsFixed(2)}';
     }).join('\n');
 
@@ -133,21 +133,15 @@ $itemLines
 Have a wonderful day! Visit us again soon.
 ''';
 
-    final directWaUrl = Uri.parse('whatsapp://send?phone=$targetPhone&text=${Uri.encodeComponent(message)}');
     final webWaUrl = Uri.parse('https://wa.me/$targetPhone?text=${Uri.encodeComponent(message)}');
+    final directWaUrl = Uri.parse('whatsapp://send?phone=$targetPhone&text=${Uri.encodeComponent(message)}');
 
     bool launched = false;
     try {
-      if (await canLaunchUrl(directWaUrl)) {
-        launched = await launchUrl(directWaUrl, mode: LaunchMode.externalApplication);
-      }
-    } catch (_) {}
-
-    if (!launched) {
+      launched = await launchUrl(webWaUrl, mode: LaunchMode.externalApplication);
+    } catch (_) {
       try {
-        if (await canLaunchUrl(webWaUrl)) {
-          launched = await launchUrl(webWaUrl, mode: LaunchMode.externalApplication);
-        }
+        launched = await launchUrl(directWaUrl, mode: LaunchMode.externalApplication);
       } catch (_) {}
     }
 
@@ -156,9 +150,13 @@ Have a wonderful day! Visit us again soon.
       phone: phone,
     );
 
-    if (!launched && mounted) {
+    if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('WhatsApp receipt dispatched!')),
+        SnackBar(
+          content: Text(launched ? '✓ WhatsApp opened with bill receipt!' : 'WhatsApp receipt dispatched!'),
+          backgroundColor: const Color(0xFF059669),
+          behavior: SnackBarBehavior.floating,
+        ),
       );
     }
   }
@@ -235,7 +233,10 @@ Have a wonderful day! Visit us again soon.
       sale: widget.sale,
       storeName: _storeName,
       storePhone: _profile.phone,
+      storeAddress: _profile.address,
+      gstin: _profile.gstin,
       logoPath: _profile.logoUrl,
+      customerPhone: _phoneCtrl.text.trim(),
     );
 
     if (!mounted) return;
@@ -266,6 +267,24 @@ Have a wonderful day! Visit us again soon.
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('PDF generated and notification dispatched!')),
+      );
+    }
+  }
+
+  Future<void> _sharePdf() async {
+    HapticFeedback.selectionClick();
+    final ok = await InvoicePdfService.generateAndSharePdf(
+      sale: widget.sale,
+      storeName: _storeName,
+      storePhone: _profile.phone,
+      storeAddress: _profile.address,
+      gstin: _profile.gstin,
+      logoPath: _profile.logoUrl,
+      customerPhone: _phoneCtrl.text.trim(),
+    );
+    if (!ok && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Could not open system share dialog.')),
       );
     }
   }
@@ -619,11 +638,31 @@ Have a wonderful day! Visit us again soon.
                         Row(
                           children: [
                             Expanded(
-                              child: ElevatedButton.icon(
+                              child: OutlinedButton.icon(
                                 onPressed: _downloadPdf,
-                                icon: const Icon(Icons.download_rounded, size: 15, color: Colors.white),
+                                icon: const Icon(Icons.download_rounded, size: 15, color: Color(0xFF0F172A)),
                                 label: Text(
                                   'Download PDF',
+                                  style: GoogleFonts.plusJakartaSans(
+                                    fontSize: 11.5,
+                                    fontWeight: FontWeight.w700,
+                                    color: const Color(0xFF0F172A),
+                                  ),
+                                ),
+                                style: OutlinedButton.styleFrom(
+                                  padding: const EdgeInsets.symmetric(vertical: 10),
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                  side: const BorderSide(color: Color(0xFFCBD5E1)),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: ElevatedButton.icon(
+                                onPressed: _sharePdf,
+                                icon: const Icon(Icons.share_rounded, size: 15, color: Colors.white),
+                                label: Text(
+                                  'Share PDF',
                                   style: GoogleFonts.plusJakartaSans(
                                     fontSize: 11.5,
                                     fontWeight: FontWeight.w700,
@@ -631,14 +670,19 @@ Have a wonderful day! Visit us again soon.
                                   ),
                                 ),
                                 style: ElevatedButton.styleFrom(
-                                  backgroundColor: const Color(0xFF0F172A),
+                                  backgroundColor: const Color(0xFF059669),
+                                  foregroundColor: Colors.white,
                                   padding: const EdgeInsets.symmetric(vertical: 10),
                                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                                   elevation: 0,
                                 ),
                               ),
                             ),
-                            const SizedBox(width: 8),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        Row(
+                          children: [
                             Expanded(
                               child: OutlinedButton.icon(
                                 onPressed: () {
