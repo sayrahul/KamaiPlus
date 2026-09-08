@@ -361,3 +361,12 @@ Comprehensive enterprise-grade retail UX upgrade suite aligned with PhonePe Busi
     - **Seeding happens only once:** At onboarding. If user opts out (unchecks checkbox), no products are seeded.
     - **Implemented & Verified:** `flutter analyze` — No issues found. Committed as `feat: category-specific onboarding default product seeding`.
 
+22. **Universal Multi-Architecture (arm64-v8a + armeabi-v7a) Device Compatibility:**
+    - **Issue:** OPPO CPH2691 and modern 64-bit Android devices crashed on launch with `MissingLibraryException: Could not find 'libflutter.so'. Looked for: [arm64-v8a], but only found: [armeabi-v7a]` when built with `--target-platform android-arm`.
+    - **Resolution:** Default debug build command is `flutter build apk --debug` (omitting `--target-platform`) so Flutter compiles both 64-bit (`arm64-v8a`) and 32-bit (`armeabi-v7a`) native libraries into a universal APK (~225 MB).
+    - **ADB Installation Protocol on ColorOS / Modern Devices:**
+      - If `INSTALL_FAILED_VERIFICATION_FAILURE` occurs:
+        1. `adb shell settings put global verifier_verify_adb_installs 0`
+        2. `adb shell settings put global package_verifier_enable 0`
+        3. `adb install -t -g <apk-path>` (with `-t` for test package and `-g` for auto-granting permissions).
+    - **Verified:** Tested live on OPPO CPH2691 (`88e61059`) running Android 14 (ColorOS) — app boots cleanly, Firebase Auth connects, SQLite loads, UI interactive.
