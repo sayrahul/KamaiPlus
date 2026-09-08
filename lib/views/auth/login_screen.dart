@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import '../../core/utils/app_validators.dart';
 import '../../services/auth_service.dart';
 import '../dashboard/home_dashboard_screen.dart';
 import 'signup_store_screen.dart';
@@ -15,51 +14,7 @@ class LoginScreen extends StatefulWidget {
 }
 
 class _LoginScreenState extends State<LoginScreen> {
-  bool _isOtpExpanded = false;
-  bool _otpSent = false;
   bool _isLoading = false;
-
-  final _phoneController = TextEditingController(text: '9876543210');
-  final _otpController = TextEditingController(text: '1234');
-
-  @override
-  void dispose() {
-    _phoneController.dispose();
-    _otpController.dispose();
-    super.dispose();
-  }
-
-  Future<void> _proceedLogin({String? phone, bool isFresh = false}) async {
-    HapticFeedback.mediumImpact();
-    setState(() => _isLoading = true);
-
-    final prefs = await SharedPreferences.getInstance();
-    final isOnboarded = prefs.getBool('is_onboarded') ?? false;
-
-    await Future.delayed(const Duration(milliseconds: 400));
-    if (!mounted) return;
-
-    setState(() => _isLoading = false);
-
-    if (!isOnboarded || isFresh) {
-      if (!mounted) return;
-      // First-time user -> Open Signup / Store Profile Setup Screen
-      Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (_) => SignupStoreScreen(initialPhone: phone ?? _phoneController.text.trim()),
-        ),
-      );
-    } else {
-      // Existing user -> Mark logged in and launch POS Dashboard
-      await prefs.setBool('is_logged_in', true);
-      if (!mounted) return;
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (_) => HomeDashboardScreen(key: HomeDashboardScreen.dashboardKey)),
-      );
-    }
-  }
 
   Future<void> _handleGoogleSignIn() async {
     HapticFeedback.mediumImpact();
@@ -117,47 +72,6 @@ class _LoginScreenState extends State<LoginScreen> {
     }
   }
 
-  void _sendOtp() {
-    final phone = _phoneController.text.trim();
-    final error = AppValidators.validatePhone(phone);
-    if (error != null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(error),
-          backgroundColor: const Color(0xFFDC2626),
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
-      return;
-    }
-    final cleanPhone = AppValidators.cleanPhone(phone);
-    HapticFeedback.lightImpact();
-    setState(() => _otpSent = true);
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('✓ WhatsApp OTP sent to +91 $cleanPhone (Demo OTP: 1234)'),
-        backgroundColor: const Color(0xFF059669),
-        behavior: SnackBarBehavior.floating,
-      ),
-    );
-  }
-
-  void _verifyOtp() {
-    final otp = _otpController.text.trim();
-    final error = AppValidators.validateOtp(otp, length: 4);
-    if (error != null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(error),
-          backgroundColor: const Color(0xFFDC2626),
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
-      return;
-    }
-    _proceedLogin(phone: AppValidators.cleanPhone(_phoneController.text.trim()));
-  }
-
   void _showResetConfirmDialog() {
     showDialog(
       context: context,
@@ -172,13 +86,13 @@ class _LoginScreenState extends State<LoginScreen> {
             const Icon(Icons.cleaning_services_rounded, color: Color(0xFFF59E0B), size: 22),
             const SizedBox(width: 10),
             Text(
-              'Start Fresh Signup?',
+              'Start Fresh Onboarding?',
               style: GoogleFonts.outfit(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 18),
             ),
           ],
         ),
         content: Text(
-          'Is option se aapka device onboarding reset ho jayega aur aap ek naya store profile create kar sakenge.',
+          'Is option se device ka onboarding status reset ho jayega aur aap ek naya store profile setup kar sakenge.',
           style: GoogleFonts.inter(color: const Color(0xFF94A3B8), fontSize: 13),
         ),
         actions: [
@@ -191,7 +105,14 @@ class _LoginScreenState extends State<LoginScreen> {
               Navigator.pop(ctx);
               final prefs = await SharedPreferences.getInstance();
               await prefs.setBool('is_onboarded', false);
-              _proceedLogin(isFresh: true);
+              await prefs.setBool('is_logged_in', false);
+              if (!mounted) return;
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => const SignupStoreScreen(),
+                ),
+              );
             },
             style: ElevatedButton.styleFrom(
               backgroundColor: const Color(0xFFF59E0B),
@@ -219,11 +140,11 @@ class _LoginScreenState extends State<LoginScreen> {
               children: [
                 // 1. BRANDING HEADER (Logo + Title + Subtitle)
                 _buildBrandingHeader(),
-                const SizedBox(height: 24),
+                const SizedBox(height: 28),
 
-                // 2. MAIN LOGIN CARD (Matching Screenshot 1)
+                // 2. MAIN LOGIN CARD (Dedicated Google Auth)
                 _buildLoginCard(),
-                const SizedBox(height: 24),
+                const SizedBox(height: 28),
 
                 // 3. FOOTER LINKS (Terms • Privacy • Support)
                 _buildFooterLinks(),
@@ -349,248 +270,132 @@ class _LoginScreenState extends State<LoginScreen> {
           ),
 
           Padding(
-            padding: const EdgeInsets.fromLTRB(20, 20, 20, 20),
+            padding: const EdgeInsets.fromLTRB(22, 24, 22, 24),
             child: Column(
               children: [
                 // Title
                 Text(
                   'Welcome to KamaiPlus',
                   style: GoogleFonts.outfit(
-                    fontSize: 20,
+                    fontSize: 21,
                     fontWeight: FontWeight.w800,
                     color: Colors.white,
                   ),
                 ),
-                const SizedBox(height: 4),
+                const SizedBox(height: 5),
                 // Subtitle
                 Text(
                   'Offline-First Billing POS & Digital Khata Platform',
                   textAlign: TextAlign.center,
                   style: GoogleFonts.inter(
-                    fontSize: 12,
+                    fontSize: 12.5,
                     color: const Color(0xFF94A3B8),
                   ),
                 ),
-                const SizedBox(height: 20),
+                const SizedBox(height: 28),
 
-                // Button 1: Continue with WhatsApp (Solid Emerald Green)
+                // Button: Continue with Google (Crisp White Premium Button)
                 SizedBox(
                   width: double.infinity,
-                  height: 48,
-                  child: ElevatedButton(
-                    onPressed: _isLoading ? null : () => _proceedLogin(),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF10B981),
-                      foregroundColor: const Color(0xFF022C22),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                      elevation: 0,
-                    ),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Image.asset('assets/images/whatsapp_logo.png', width: 22, height: 22),
-                        const SizedBox(width: 8),
-                        Text(
-                          'Continue with WhatsApp',
-                          style: GoogleFonts.outfit(
-                            fontSize: 15,
-                            fontWeight: FontWeight.w800,
-                            color: const Color(0xFF022C22),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 12),
-
-                // Accordion: "or get WhatsApp OTP v"
-                GestureDetector(
-                  onTap: () {
-                    HapticFeedback.selectionClick();
-                    setState(() => _isOtpExpanded = !_isOtpExpanded);
-                  },
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 4),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Text(
-                          'or get WhatsApp OTP',
-                          style: GoogleFonts.inter(
-                            fontSize: 12.5,
-                            fontWeight: FontWeight.w600,
-                            color: const Color(0xFF94A3B8),
-                          ),
-                        ),
-                        const SizedBox(width: 4),
-                        Icon(
-                          _isOtpExpanded ? Icons.keyboard_arrow_up_rounded : Icons.keyboard_arrow_down_rounded,
-                          size: 18,
-                          color: const Color(0xFF94A3B8),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-
-                // Expandable OTP Drawer
-                if (_isOtpExpanded) ...[
-                  const SizedBox(height: 10),
-                  Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF070B19),
-                      borderRadius: BorderRadius.circular(14),
-                      border: Border.all(color: const Color(0xFF1E293B)),
-                    ),
-                    child: Column(
-                      children: [
-                        TextFormField(
-                          controller: _phoneController,
-                          keyboardType: TextInputType.phone,
-                          style: GoogleFonts.inter(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w600),
-                          decoration: InputDecoration(
-                            prefixIcon: Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
-                              child: Text(
-                                '🇮🇳 +91',
-                                style: GoogleFonts.inter(color: const Color(0xFFF59E0B), fontWeight: FontWeight.w700),
-                              ),
-                            ),
-                            hintText: 'Enter 10-digit mobile number',
-                            hintStyle: GoogleFonts.inter(color: const Color(0xFF64748B), fontSize: 12),
-                            filled: true,
-                            fillColor: const Color(0xFF0E1628),
-                            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none),
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        if (!_otpSent)
-                          SizedBox(
-                            width: double.infinity,
-                            height: 38,
-                            child: ElevatedButton(
-                              onPressed: _sendOtp,
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: const Color(0xFF1E293B),
-                                foregroundColor: Colors.white,
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                                elevation: 0,
-                              ),
-                              child: Text('Send OTP', style: GoogleFonts.outfit(fontSize: 13, fontWeight: FontWeight.w700)),
-                            ),
-                          )
-                        else ...[
-                          TextFormField(
-                            controller: _otpController,
-                            keyboardType: TextInputType.number,
-                            style: GoogleFonts.inter(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w700, letterSpacing: 4),
-                            textAlign: TextAlign.center,
-                            decoration: InputDecoration(
-                              hintText: '• • • •',
-                              hintStyle: GoogleFonts.inter(color: const Color(0xFF64748B), letterSpacing: 4),
-                              filled: true,
-                              fillColor: const Color(0xFF0E1628),
-                              contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none),
-                            ),
-                          ),
-                          const SizedBox(height: 8),
-                          SizedBox(
-                            width: double.infinity,
-                            height: 38,
-                            child: ElevatedButton(
-                              onPressed: _verifyOtp,
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: const Color(0xFF10B981),
-                                foregroundColor: Colors.white,
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                                elevation: 0,
-                              ),
-                              child: Text('Verify & Continue', style: GoogleFonts.outfit(fontSize: 13, fontWeight: FontWeight.w700)),
-                            ),
-                          ),
-                        ],
-                      ],
-                    ),
-                  ),
-                ],
-
-                const SizedBox(height: 14),
-
-                // Divider with OR
-                Row(
-                  children: [
-                    Expanded(child: Divider(color: const Color(0xFF1E293B), thickness: 1.1)),
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 12),
-                      child: Text(
-                        'OR',
-                        style: GoogleFonts.inter(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w700,
-                          color: const Color(0xFF64748B),
-                        ),
-                      ),
-                    ),
-                    Expanded(child: Divider(color: const Color(0xFF1E293B), thickness: 1.1)),
-                  ],
-                ),
-                const SizedBox(height: 16),
-
-                // Button 2: Continue with Google (Crisp White Button)
-                SizedBox(
-                  width: double.infinity,
-                  height: 48,
+                  height: 52,
                   child: ElevatedButton(
                     onPressed: _isLoading ? null : _handleGoogleSignIn,
                     style: ElevatedButton.styleFrom(
                       backgroundColor: Colors.white,
                       foregroundColor: const Color(0xFF0F172A),
+                      disabledBackgroundColor: Colors.white.withValues(alpha: 0.7),
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                      elevation: 0,
+                      elevation: 2,
+                      shadowColor: Colors.black.withValues(alpha: 0.3),
+                    ),
+                    child: _isLoading
+                        ? Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              const SizedBox(
+                                width: 20,
+                                height: 20,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2.2,
+                                  valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF0F172A)),
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              Text(
+                                'Signing in with Google...',
+                                style: GoogleFonts.outfit(
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.w700,
+                                  color: const Color(0xFF0F172A),
+                                ),
+                              ),
+                            ],
+                          )
+                        : Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              _buildGoogleIcon(),
+                              const SizedBox(width: 12),
+                              Text(
+                                'Continue with Google',
+                                style: GoogleFonts.outfit(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w700,
+                                  color: const Color(0xFF0F172A),
+                                ),
+                              ),
+                            ],
+                          ),
+                  ),
+                ),
+                const SizedBox(height: 14),
+
+                // Subtle Trust Info
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Icon(Icons.lock_outline_rounded, size: 13, color: Color(0xFF64748B)),
+                    const SizedBox(width: 5),
+                    Text(
+                      'Fast & secure 1-tap Google Authentication',
+                      style: GoogleFonts.inter(
+                        fontSize: 11.5,
+                        color: const Color(0xFF64748B),
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 24),
+
+                // Reset Device Data Link (Start Fresh Signup)
+                GestureDetector(
+                  onTap: _showResetConfirmDialog,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF1E293B).withValues(alpha: 0.6),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: const Color(0xFF334155), width: 0.9),
                     ),
                     child: Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
+                      mainAxisSize: MainAxisSize.min,
                       children: [
-                        _buildGoogleIcon(),
-                        const SizedBox(width: 10),
+                        const Icon(Icons.cleaning_services_rounded, size: 14, color: Color(0xFFF59E0B)),
+                        const SizedBox(width: 7),
                         Text(
-                          'Continue with Google',
-                          style: GoogleFonts.outfit(
-                            fontSize: 15,
-                            fontWeight: FontWeight.w700,
-                            color: const Color(0xFF0F172A),
+                          'Reset Device Data (Start Fresh)',
+                          style: GoogleFonts.inter(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: const Color(0xFFCBD5E1),
                           ),
                         ),
                       ],
                     ),
                   ),
                 ),
-                const SizedBox(height: 18),
-
-                // Reset Device Data Link (Start Fresh Signup)
-                GestureDetector(
-                  onTap: _showResetConfirmDialog,
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      const Icon(Icons.cleaning_services_rounded, size: 14, color: Color(0xFFF59E0B)),
-                      const SizedBox(width: 6),
-                      Text(
-                        'Reset Device Data (Start Fresh Signup)',
-                        style: GoogleFonts.inter(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                          color: const Color(0xFFCBD5E1),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 20),
+                const SizedBox(height: 24),
 
                 // Feature Badges: 100% Offline POS & Cloud Sync & Backup
                 Row(
@@ -622,12 +427,23 @@ class _LoginScreenState extends State<LoginScreen> {
 
   Widget _buildGoogleIcon() {
     return Container(
-      width: 20,
-      height: 20,
+      width: 24,
+      height: 24,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        color: Colors.white,
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.08),
+            blurRadius: 3,
+            offset: const Offset(0, 1),
+          ),
+        ],
+      ),
       alignment: Alignment.center,
       child: Text(
         'G',
-        style: GoogleFonts.poppins(
+        style: GoogleFonts.outfit(
           fontSize: 18,
           fontWeight: FontWeight.w900,
           color: const Color(0xFF4285F4),

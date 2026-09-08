@@ -368,5 +368,13 @@ Comprehensive enterprise-grade retail UX upgrade suite aligned with PhonePe Busi
       - If `INSTALL_FAILED_VERIFICATION_FAILURE` occurs:
         1. `adb shell settings put global verifier_verify_adb_installs 0`
         2. `adb shell settings put global package_verifier_enable 0`
-        3. `adb install -t -g <apk-path>` (with `-t` for test package and `-g` for auto-granting permissions).
     - **Verified:** Tested live on OPPO CPH2691 (`88e61059`) running Android 14 (ColorOS) — app boots cleanly, Firebase Auth connects, SQLite loads, UI interactive.
+
+23. **Exclusive Google OAuth Authentication (WhatsApp Auth Removed):**
+    - **Decision:** WhatsApp login button and WhatsApp OTP drawer completely removed from `LoginScreen`.
+    - **Primary Auth:** 1-tap "Continue with Google" via `AuthService.instance.signInWithGoogle()`.
+    - **Flow:**
+      - If first-time user (`!is_onboarded`): Opens `SignupStoreScreen` with Google display name and account details auto-populated.
+      - If returning onboarded user: Sets `is_logged_in = true` and opens `HomeDashboardScreen`.
+    - **Reset Guard:** "Reset Device Data (Start Fresh)" allows clearing onboarding state for fresh setup.
+    - **Verified:** `flutter analyze` — 0 issues.
