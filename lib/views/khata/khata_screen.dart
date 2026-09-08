@@ -10,6 +10,7 @@ import '../../core/utils/app_validators.dart';
 import '../../core/utils/money_formatter.dart';
 import '../../models/models.dart';
 import '../../services/firestore_sync_service.dart';
+import '../../services/invoice_pdf_service.dart';
 import '../customers/customers_screen.dart';
 import '../common/empty_state_card.dart';
 
@@ -111,21 +112,44 @@ class _KhataScreenState extends State<KhataScreen> {
   void _sendWhatsAppReminder(CustomerModel customer) async {
     HapticFeedback.lightImpact();
     final int rupees = customer.currentBalancePaise ~/ 100;
+    final totalRupeesStr = (customer.currentBalancePaise / 100.0).toStringAsFixed(2);
     final storeName = _storeProfile.storeName.isNotEmpty ? _storeProfile.storeName : 'KamaiPlus Store';
     final upiId = _storeProfile.upiVpa.isNotEmpty ? _storeProfile.upiVpa : 'proventure@icici';
+    final upiPayLink = 'upi://pay?pa=$upiId&pn=${Uri.encodeComponent(storeName)}&am=$totalRupeesStr&cu=INR';
 
     final text = 'Namaste ${customer.name} ji! 🙏\n\n'
         '$storeName par aapka baki hisaab ₹$rupees hai.\n'
         'Kripya samay par chukta karein.\n\n'
-        '📌 Pay via UPI: $upiId\n'
+        '📲 *Instant UPI Pay:* $upiPayLink\n'
+        '📌 UPI ID: $upiId\n\n'
         'Dhanyawad!';
 
-    final url = Uri.parse('https://wa.me/91${customer.phone}?text=${Uri.encodeComponent(text)}');
+    // Generate Statement PDF and share
     try {
-      if (await canLaunchUrl(url)) {
-        await launchUrl(url, mode: LaunchMode.externalApplication);
+      final ledger = await LocalDatabase.instance.getLedgerForCustomer(customer.id);
+      final shared = await InvoicePdfService.generateAndShareKhataStatementPdf(
+        customer: customer,
+        storeName: storeName,
+        storePhone: _storeProfile.phone,
+        upiId: upiId,
+        ledger: ledger,
+        customMessage: text,
+      );
+
+      if (!shared) {
+        final url = Uri.parse('https://wa.me/91${customer.phone}?text=${Uri.encodeComponent(text)}');
+        if (await canLaunchUrl(url)) {
+          await launchUrl(url, mode: LaunchMode.externalApplication);
+        }
       }
-    } catch (_) {}
+    } catch (_) {
+      final url = Uri.parse('https://wa.me/91${customer.phone}?text=${Uri.encodeComponent(text)}');
+      try {
+        if (await canLaunchUrl(url)) {
+          await launchUrl(url, mode: LaunchMode.externalApplication);
+        }
+      } catch (_) {}
+    }
   }
 
   void _makePhoneCall(String phone) async {
@@ -144,6 +168,8 @@ class _KhataScreenState extends State<KhataScreen> {
     final amtRupees = tx.amountPaise ~/ 100;
     final balRupees = tx.balanceAfterPaise ~/ 100;
     final storeName = _storeProfile.storeName.isNotEmpty ? _storeProfile.storeName : 'KamaiPlus Store';
+    final upiId = _storeProfile.upiVpa.isNotEmpty ? _storeProfile.upiVpa : 'proventure@icici';
+    final upiPayLink = 'upi://pay?pa=$upiId&pn=${Uri.encodeComponent(storeName)}&am=$balRupees&cu=INR';
     final dateStr = DateFormat('d MMM yyyy, hh:mm a').format(tx.createdAt);
 
     final text = '🧾 *HISAB PARCHA / HISAAB SLIP*\n'
@@ -154,7 +180,8 @@ class _KhataScreenState extends State<KhataScreen> {
         '${isUdhar ? "🔴 Udhar Diya (Given)" : "🟢 Jama Mila (Received)"}: ₹$amtRupees\n'
         '📝 Note: ${tx.description.isNotEmpty ? tx.description : "Khata Transaction"}\n'
         '--------------------------\n'
-        '💰 *Kul Baki (Balance): ₹$balRupees*\n\n'
+        '💰 *Kul Baki (Balance): ₹$balRupees*\n'
+        '📲 *UPI Pay:* $upiPayLink\n\n'
         'Dhanyawad!';
 
     final url = Uri.parse('https://wa.me/91${customer.phone}?text=${Uri.encodeComponent(text)}');
@@ -168,7 +195,10 @@ class _KhataScreenState extends State<KhataScreen> {
   void _shareBillViaWhatsApp(SaleModel bill, CustomerModel customer) async {
     HapticFeedback.lightImpact();
     final amtRupees = bill.totalAmountPaise ~/ 100;
+    final totalRupees = (bill.totalAmountPaise / 100.0).toStringAsFixed(2);
     final storeName = _storeProfile.storeName.isNotEmpty ? _storeProfile.storeName : 'KamaiPlus Store';
+    final upiId = _storeProfile.upiVpa.isNotEmpty ? _storeProfile.upiVpa : 'proventure@icici';
+    final upiPayLink = 'upi://pay?pa=$upiId&pn=${Uri.encodeComponent(storeName)}&am=$totalRupees&cu=INR&tn=Bill_${bill.invoiceNumber}';
     final dateStr = DateFormat('d MMM yyyy, hh:mm a').format(bill.createdAt);
 
     final buffer = StringBuffer();
@@ -178,20 +208,52 @@ class _KhataScreenState extends State<KhataScreen> {
     buffer.writeln('📅 Date: $dateStr');
     buffer.writeln('--------------------------');
     for (final it in bill.items) {
-      final itemPrice = ((it['price'] as int? ?? 0) * (it['qty'] as num? ?? 1).toInt()) ~/ 100;
-      buffer.writeln('• ${it['qty']}x ${it['name']} = ₹$itemPrice');
+      final name = it['product_name'] ?? it['name'] ?? 'Item';
+      final qty = it['quantity'] ?? it['qty'] ?? 1;
+      final pricePaise = it['gross_total_paise'] ?? ((it['price'] as int? ?? 0) * (qty as num).toInt());
+      final priceRupees = (pricePaise as int) ~/ 100;
+      buffer.writeln('• ${qty}x $name = ₹$priceRupees');
     }
     buffer.writeln('--------------------------');
     buffer.writeln('💰 *Total Amount: ₹$amtRupees*');
     buffer.writeln('📌 Status: ${bill.status.toUpperCase()}');
+    buffer.writeln('📲 *Instant UPI Pay / Receipt:* $upiPayLink');
     buffer.writeln('\nDhanyawad!');
 
-    final url = Uri.parse('https://wa.me/91${customer.phone}?text=${Uri.encodeComponent(buffer.toString())}');
-    try {
-      if (await canLaunchUrl(url)) {
-        await launchUrl(url, mode: LaunchMode.externalApplication);
-      }
-    } catch (_) {}
+    final cleanPhone = customer.phone.replaceAll(RegExp(r'[^0-9]'), '');
+    final fullPhone = cleanPhone.length == 10 ? '91$cleanPhone' : cleanPhone;
+
+    // 1. Generate & Share PDF
+    final filePath = await InvoicePdfService.generateAndDownloadPdf(
+      sale: bill,
+      storeName: storeName,
+      storePhone: _storeProfile.phone,
+      storeAddress: _storeProfile.address,
+      gstin: _storeProfile.gstin,
+      logoPath: _storeProfile.logoUrl,
+      customerPhone: fullPhone,
+    );
+
+    bool shared = false;
+    if (filePath != null && filePath.isNotEmpty) {
+      shared = await InvoicePdfService.sharePdf(
+        filePath: filePath,
+        invoiceNumber: bill.invoiceNumber,
+        storeName: storeName,
+        phone: fullPhone,
+        message: buffer.toString(),
+        subject: 'Tax Invoice #${bill.invoiceNumber} - $storeName',
+      );
+    }
+
+    if (!shared) {
+      final url = Uri.parse('https://wa.me/$fullPhone?text=${Uri.encodeComponent(buffer.toString())}');
+      try {
+        if (await canLaunchUrl(url)) {
+          await launchUrl(url, mode: LaunchMode.externalApplication);
+        }
+      } catch (_) {}
+    }
   }
 
   // =========================================================================

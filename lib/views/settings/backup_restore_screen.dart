@@ -5,6 +5,8 @@ import 'package:google_fonts/google_fonts.dart';
 import '../../core/database/local_database.dart';
 import '../../services/firestore_sync_service.dart';
 import '../common/kamai_bottom_nav.dart';
+import '../common/pro_upgrade_modal.dart';
+import '../common/pro_locked_card.dart';
 
 class BackupRestoreScreen extends StatefulWidget {
   const BackupRestoreScreen({super.key});
@@ -19,6 +21,7 @@ class _BackupRestoreScreenState extends State<BackupRestoreScreen> {
   int _customerCount = 0;
   bool _isLoading = true;
   bool _isSyncing = false;
+  bool _isPro = false;
 
   @override
   void initState() {
@@ -31,11 +34,13 @@ class _BackupRestoreScreenState extends State<BackupRestoreScreen> {
       final products = await LocalDatabase.instance.getAllProducts();
       final sales = await LocalDatabase.instance.getAllSales(limit: 500);
       final customers = await LocalDatabase.instance.getAllCustomers();
+      final profile = await LocalDatabase.instance.getStoreProfile();
       if (mounted) {
         setState(() {
           _itemCount = products.length;
           _saleCount = sales.length;
           _customerCount = customers.length;
+          _isPro = profile.isPro;
           _isLoading = false;
         });
       }
@@ -98,6 +103,11 @@ class _BackupRestoreScreenState extends State<BackupRestoreScreen> {
   }
 
   Future<void> _triggerCloudSync() async {
+    if (!_isPro) {
+      HapticFeedback.mediumImpact();
+      ProUpgradeModal.show(context).then((_) => _loadStats());
+      return;
+    }
     setState(() => _isSyncing = true);
     final messenger = ScaffoldMessenger.of(context);
     try {
@@ -435,9 +445,21 @@ class _BackupRestoreScreenState extends State<BackupRestoreScreen> {
                   title: 'Cloud Backup & Multi-Counter',
                   subtitle: 'Real-time cloud sync across counters & mobile',
                   badge: 'PRO',
-                  buttonLabel: _isSyncing ? 'Syncing...' : 'Backup to Cloud',
+                  buttonLabel: _isSyncing ? 'Syncing...' : (_isPro ? 'Backup to Cloud' : '🔒 Upgrade'),
                   onTap: _triggerCloudSync,
                 ),
+                if (!_isPro) ...[
+                  const SizedBox(height: 10),
+                  const ProLockedCard(
+                    title: 'Cloud Backup & Multi-Counter Sync',
+                    subtitle: 'Real-time Google Cloud Firestore backup across all store devices.',
+                    perks: [
+                      'Continuous Zero-Lag Background Sync',
+                      'Multi-Counter Staff Live Billing',
+                      '1-Click Cloud Restore on New Phones',
+                    ],
+                  ),
+                ],
                 const SizedBox(height: 24),
 
                 // Section 2: ACCOUNTING SOFTWARE & TAX EXPORTS

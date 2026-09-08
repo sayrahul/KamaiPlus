@@ -99,6 +99,8 @@ class InvoicePdfService {
     required String invoiceNumber,
     required String storeName,
     String? phone,
+    String? message,
+    String? subject,
   }) async {
     try {
       final res = await _channel.invokeMethod<bool>('sharePdf', {
@@ -106,6 +108,8 @@ class InvoicePdfService {
         'invoiceNumber': invoiceNumber,
         'storeName': storeName,
         'phone': phone ?? '',
+        'message': message ?? '',
+        'subject': subject ?? '',
       });
       return res ?? false;
     } catch (_) {
@@ -123,6 +127,7 @@ class InvoicePdfService {
     String? logoPath,
     String? customerPhone,
     String? phone,
+    String? message,
   }) async {
     final path = await generateAndDownloadPdf(
       sale: sale,
@@ -139,6 +144,65 @@ class InvoicePdfService {
       invoiceNumber: sale.invoiceNumber,
       storeName: storeName,
       phone: phone ?? customerPhone ?? sale.customerPhone,
+      message: message,
+      subject: 'Tax Invoice #${sale.invoiceNumber} - $storeName',
     );
   }
+
+  /// Generates a professional Khata Statement PDF and shares via WhatsApp / Share Sheet
+  static Future<bool> generateAndShareKhataStatementPdf({
+    required CustomerModel customer,
+    required String storeName,
+    String? storePhone,
+    String? upiId,
+    required List<LedgerTransactionModel> ledger,
+    String? customMessage,
+  }) async {
+    try {
+      final totalBalance = MoneyFormatter.formatPaise(customer.currentBalancePaise);
+      final dateStr = DateFormat('dd MMM yyyy, hh:mm a').format(DateTime.now());
+
+      final txList = ledger.map((tx) {
+        final amt = MoneyFormatter.formatPaise(tx.amountPaise);
+        final bal = MoneyFormatter.formatPaise(tx.balanceAfterPaise);
+        final dStr = DateFormat('dd MMM, hh:mm a').format(tx.createdAt);
+        return {
+          'date': dStr,
+          'type': tx.type,
+          'note': tx.description.isNotEmpty ? tx.description : 'Khata entry',
+          'amount': amt,
+          'balance': bal,
+        };
+      }).toList();
+
+      final String? path = await _channel.invokeMethod<String>('generateAndSaveKhataStatementPdf', {
+        'storeName': storeName,
+        'storePhone': storePhone ?? '',
+        'customerName': customer.name,
+        'customerPhone': customer.phone,
+        'dateStr': dateStr,
+        'totalBalance': totalBalance,
+        'upiId': upiId ?? 'proventure@icici',
+        'transactions': txList,
+      });
+
+      if (path == null || path.isEmpty) return false;
+
+      final defaultSubject = 'Khata Statement - $storeName';
+      final defaultMsg = customMessage ??
+          'Namaste ${customer.name} ji! 🙏\n\n$storeName par aapka baki hisaab $totalBalance hai. Kripya samay par chukta karein.\n\n📲 *Pay via UPI:* upi://pay?pa=${upiId ?? "proventure@icici"}&pn=${Uri.encodeComponent(storeName)}&am=${(customer.currentBalancePaise / 100).toStringAsFixed(2)}&cu=INR\n\nDhanyawad!';
+
+      return await sharePdf(
+        filePath: path,
+        invoiceNumber: 'KHATA-${customer.phone}',
+        storeName: storeName,
+        phone: customer.phone,
+        message: defaultMsg,
+        subject: defaultSubject,
+      );
+    } catch (_) {
+      return false;
+    }
+  }
 }
+

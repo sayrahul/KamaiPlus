@@ -665,6 +665,188 @@ public class MainActivity extends FlutterActivity implements TextToSpeech.OnInit
                             } catch (Exception e) {
                                 result.error("PDF_ERROR", e.getMessage(), null);
                             }
+                        } else if ("generateAndSaveKhataStatementPdf".equals(call.method)) {
+                            try {
+                                String storeName = call.argument("storeName");
+                                String storePhone = call.argument("storePhone");
+                                String customerName = call.argument("customerName");
+                                String customerPhone = call.argument("customerPhone");
+                                String dateStr = call.argument("dateStr");
+                                String totalBalance = call.argument("totalBalance");
+                                String upiId = call.argument("upiId");
+                                List<Map<String, Object>> transactions = call.argument("transactions");
+
+                                if (storeName == null || storeName.trim().isEmpty()) storeName = "KamaiPlus Store";
+                                if (customerName == null || customerName.trim().isEmpty()) customerName = "Customer";
+                                if (customerPhone == null) customerPhone = "";
+                                if (dateStr == null) dateStr = "";
+                                if (totalBalance == null) totalBalance = "₹0.00";
+                                if (upiId == null || upiId.trim().isEmpty()) upiId = "proventure@icici";
+                                if (transactions == null) transactions = new ArrayList<>();
+
+                                PdfDocument document = new PdfDocument();
+                                PdfDocument.PageInfo pageInfo = new PdfDocument.PageInfo.Builder(595, 842, 1).create(); // A4
+                                PdfDocument.Page page = document.startPage(pageInfo);
+                                Canvas canvas = page.getCanvas();
+
+                                Paint darkPaint = new Paint();
+                                darkPaint.setColor(Color.rgb(15, 23, 42));
+                                darkPaint.setTextSize(16);
+                                darkPaint.setFakeBoldText(true);
+                                darkPaint.setAntiAlias(true);
+
+                                Paint subPaint = new Paint();
+                                subPaint.setColor(Color.rgb(100, 116, 139));
+                                subPaint.setTextSize(9);
+                                subPaint.setAntiAlias(true);
+
+                                Paint boldTextPaint = new Paint();
+                                boldTextPaint.setColor(Color.rgb(15, 23, 42));
+                                boldTextPaint.setTextSize(9.5f);
+                                boldTextPaint.setFakeBoldText(true);
+                                boldTextPaint.setAntiAlias(true);
+
+                                Paint bodyPaint = new Paint();
+                                bodyPaint.setColor(Color.rgb(30, 41, 59));
+                                bodyPaint.setTextSize(9f);
+                                bodyPaint.setAntiAlias(true);
+
+                                Paint linePaint = new Paint();
+                                linePaint.setColor(Color.rgb(226, 232, 240));
+                                linePaint.setStrokeWidth(0.8f);
+
+                                Paint rowLinePaint = new Paint();
+                                rowLinePaint.setColor(Color.rgb(241, 245, 249));
+                                rowLinePaint.setStrokeWidth(0.6f);
+
+                                // Header background band
+                                RectF headerRect = new RectF(36, 36, 559, 90);
+                                Paint headerBg = new Paint();
+                                headerBg.setColor(Color.rgb(238, 242, 255));
+                                canvas.drawRoundRect(headerRect, 8, 8, headerBg);
+
+                                canvas.drawText(storeName, 50, 60, darkPaint);
+                                if (storePhone != null && !storePhone.isEmpty()) {
+                                    canvas.drawText("Tel: " + storePhone, 50, 75, subPaint);
+                                }
+
+                                Paint rightTitle = new Paint(darkPaint);
+                                rightTitle.setTextSize(13);
+                                rightTitle.setColor(Color.rgb(79, 70, 229));
+                                canvas.drawText("KHATA STATEMENT", 390, 60, rightTitle);
+                                canvas.drawText("Date: " + dateStr, 390, 75, subPaint);
+
+                                // Customer info
+                                RectF custBox = new RectF(36, 102, 330, 155);
+                                Paint custBg = new Paint();
+                                custBg.setColor(Color.rgb(248, 250, 252));
+                                canvas.drawRoundRect(custBox, 8, 8, custBg);
+                                canvas.drawRoundRect(custBox, 8, 8, linePaint);
+
+                                canvas.drawText("CUSTOMER DETAILS:", 46, 118, boldTextPaint);
+                                canvas.drawText("Name: " + customerName, 46, 132, bodyPaint);
+                                canvas.drawText("Phone: " + customerPhone, 46, 146, subPaint);
+
+                                // Balance Highlight Pill
+                                RectF balBox = new RectF(345, 102, 559, 155);
+                                Paint balBg = new Paint();
+                                balBg.setColor(Color.rgb(254, 242, 242));
+                                canvas.drawRoundRect(balBox, 8, 8, balBg);
+                                Paint balBorder = new Paint(linePaint);
+                                balBorder.setColor(Color.rgb(254, 202, 202));
+                                canvas.drawRoundRect(balBox, 8, 8, balBorder);
+
+                                Paint balLabel = new Paint(subPaint);
+                                balLabel.setColor(Color.rgb(185, 28, 28));
+                                balLabel.setFakeBoldText(true);
+                                canvas.drawText("NET BALANCE DUE", 360, 118, balLabel);
+
+                                Paint balVal = new Paint();
+                                balVal.setColor(Color.rgb(220, 38, 38));
+                                balVal.setTextSize(16);
+                                balVal.setFakeBoldText(true);
+                                balVal.setAntiAlias(true);
+                                canvas.drawText(totalBalance, 360, 142, balVal);
+
+                                // Table Header
+                                RectF thRect = new RectF(36, 168, 559, 190);
+                                Paint thBg = new Paint();
+                                thBg.setColor(Color.rgb(79, 70, 229));
+                                canvas.drawRoundRect(thRect, 6, 6, thBg);
+
+                                Paint thText = new Paint();
+                                thText.setColor(Color.WHITE);
+                                thText.setTextSize(8.5f);
+                                thText.setFakeBoldText(true);
+                                thText.setAntiAlias(true);
+
+                                canvas.drawText("DATE & TIME", 46, 182, thText);
+                                canvas.drawText("TYPE", 160, 182, thText);
+                                canvas.drawText("NOTE / PARTICULARS", 240, 182, thText);
+                                canvas.drawText("AMOUNT (₹)", 420, 182, thText);
+                                canvas.drawText("BALANCE (₹)", 495, 182, thText);
+
+                                float y = 208;
+                                int count = 0;
+                                for (Map<String, Object> tx : transactions) {
+                                    if (count++ > 24) break;
+                                    String txDate = String.valueOf(tx.get("date"));
+                                    String txType = String.valueOf(tx.get("type"));
+                                    String txNote = String.valueOf(tx.get("note"));
+                                    String txAmt = String.valueOf(tx.get("amount"));
+                                    String txBal = String.valueOf(tx.get("balance"));
+
+                                    if (txDate.length() > 16) txDate = txDate.substring(0, 16);
+                                    if (txNote.length() > 24) txNote = txNote.substring(0, 24) + "...";
+
+                                    canvas.drawText(txDate, 46, y, subPaint);
+
+                                    Paint typePaint = new Paint(bodyPaint);
+                                    if (txType.toLowerCase().contains("credit") || txType.toLowerCase().contains("udhar")) {
+                                        typePaint.setColor(Color.rgb(220, 38, 38));
+                                        typePaint.setFakeBoldText(true);
+                                    } else {
+                                        typePaint.setColor(Color.rgb(22, 163, 74));
+                                        typePaint.setFakeBoldText(true);
+                                    }
+                                    canvas.drawText(txType.toUpperCase(), 160, y, typePaint);
+                                    canvas.drawText(txNote, 240, y, bodyPaint);
+                                    canvas.drawText(txAmt, 420, y, boldTextPaint);
+                                    canvas.drawText(txBal, 495, y, boldTextPaint);
+
+                                    canvas.drawLine(36, y + 4, 559, y + 4, rowLinePaint);
+                                    y += 18;
+                                }
+
+                                // Bottom Payment box
+                                float bY = Math.max(y + 15, 730);
+                                RectF upiBox = new RectF(36, bY, 559, bY + 48);
+                                Paint upiBg = new Paint();
+                                upiBg.setColor(Color.rgb(240, 253, 244));
+                                canvas.drawRoundRect(upiBox, 6, 6, upiBg);
+                                canvas.drawRoundRect(upiBox, 6, 6, linePaint);
+
+                                canvas.drawText("Instant UPI Settlement: " + upiId, 50, bY + 20, boldTextPaint);
+                                canvas.drawText("Pay online directly using PhonePe, GPay, Paytm or BHIM UPI to clear balance.", 50, bY + 34, subPaint);
+
+                                // Footer
+                                canvas.drawText("Generated via KamaiPlus POS System • Single Source of Truth", 160, 810, subPaint);
+
+                                document.finishPage(page);
+
+                                File docsDir = getExternalFilesDir(Environment.DIRECTORY_DOCUMENTS);
+                                if (docsDir == null) docsDir = getFilesDir();
+                                String cleanPhone = customerPhone.replaceAll("[^0-9]", "");
+                                File pdfFile = new File(docsDir, "Khata_Statement_" + (cleanPhone.isEmpty() ? System.currentTimeMillis() : cleanPhone) + ".pdf");
+                                FileOutputStream fos = new FileOutputStream(pdfFile);
+                                document.writeTo(fos);
+                                document.close();
+                                fos.close();
+
+                                result.success(pdfFile.getAbsolutePath());
+                            } catch (Exception e) {
+                                result.error("KHATA_PDF_ERROR", e.getMessage(), null);
+                            }
                         } else if ("openPdf".equals(call.method)) {
                             try {
                                 String path = call.argument("path");
@@ -690,8 +872,13 @@ public class MainActivity extends FlutterActivity implements TextToSpeech.OnInit
                                 String invNum = call.argument("invoiceNumber");
                                 String sName = call.argument("storeName");
                                 String phone = call.argument("phone");
-                                if (invNum == null) invNum = "BILL";
+                                String message = call.argument("message");
+                                String subject = call.argument("subject");
+                                if (invNum == null) invNum = "DOC";
                                 if (sName == null) sName = "KamaiPlus";
+                                if (subject == null || subject.isEmpty()) {
+                                    subject = "Document #" + invNum + " - " + sName;
+                                }
 
                                 if (path != null) {
                                     File file = new File(path);
@@ -700,8 +887,12 @@ public class MainActivity extends FlutterActivity implements TextToSpeech.OnInit
                                         Intent shareIntent = new Intent(Intent.ACTION_SEND);
                                         shareIntent.setType("application/pdf");
                                         shareIntent.putExtra(Intent.EXTRA_STREAM, uri);
-                                        shareIntent.putExtra(Intent.EXTRA_SUBJECT, "Tax Invoice #" + invNum + " - " + sName);
-                                        shareIntent.putExtra(Intent.EXTRA_TEXT, "Namaste! Here is your Tax Invoice #" + invNum + " from " + sName + ".");
+                                        shareIntent.putExtra(Intent.EXTRA_SUBJECT, subject);
+                                        if (message != null && !message.trim().isEmpty()) {
+                                            shareIntent.putExtra(Intent.EXTRA_TEXT, message);
+                                        } else {
+                                            shareIntent.putExtra(Intent.EXTRA_TEXT, "Namaste! Here is your document #" + invNum + " from " + sName + ".");
+                                        }
                                         shareIntent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
 
                                         if (phone != null && !phone.trim().isEmpty()) {
@@ -719,7 +910,7 @@ public class MainActivity extends FlutterActivity implements TextToSpeech.OnInit
                                             }
                                         }
 
-                                        Intent chooser = Intent.createChooser(shareIntent, "Share Tax Invoice PDF via...");
+                                        Intent chooser = Intent.createChooser(shareIntent, "Share Document PDF via...");
                                         chooser.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
                                         startActivity(chooser);
                                         result.success(true);

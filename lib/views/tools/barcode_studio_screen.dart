@@ -4,6 +4,8 @@ import 'package:google_fonts/google_fonts.dart';
 import '../../core/database/local_database.dart';
 import '../../core/utils/money_formatter.dart';
 import '../../models/models.dart';
+import '../common/pro_upgrade_modal.dart';
+import '../common/pro_locked_card.dart';
 
 class BarcodeStudioScreen extends StatefulWidget {
   const BarcodeStudioScreen({super.key});
@@ -17,6 +19,7 @@ class _BarcodeStudioScreenState extends State<BarcodeStudioScreen> {
   ProductModel? _selectedProduct;
   int _copies = 10;
   bool _isLoading = true;
+  bool _isPro = false;
   String _storeName = 'KAMAI STORE';
 
   // Label Layout Option
@@ -50,6 +53,7 @@ class _BarcodeStudioScreenState extends State<BarcodeStudioScreen> {
           _products = products;
           if (products.isNotEmpty) _selectedProduct = products.first;
           if (profile.storeName.isNotEmpty) _storeName = profile.storeName.toUpperCase();
+          _isPro = profile.isPro;
           _isLoading = false;
         });
       }
@@ -60,6 +64,10 @@ class _BarcodeStudioScreenState extends State<BarcodeStudioScreen> {
 
   void _dispatchPrint() {
     HapticFeedback.mediumImpact();
+    if (!_isPro) {
+      ProUpgradeModal.show(context).then((_) => _loadProductsAndStore());
+      return;
+    }
     final name = _selectedProduct?.name ?? 'Item';
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
@@ -138,6 +146,19 @@ class _BarcodeStudioScreenState extends State<BarcodeStudioScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  if (!_isPro) ...[
+                    const ProLockedCard(
+                      title: 'Barcode Label Studio (Pro)',
+                      subtitle: 'Direct Bluetooth thermal printing and sticker sheet maker.',
+                      perks: [
+                        'Thermal 58/80mm Bluetooth Sticker Printing',
+                        'Automatic Barcode Generation for All SKUs',
+                        'Custom Batch Number & Expiry Date Overlays',
+                      ],
+                    ),
+                    const SizedBox(height: 10),
+                  ],
+
                   // 1. SELECT PRODUCT SKU CARD
                   _buildProductSelectorCard(),
                   const SizedBox(height: 14),
@@ -755,13 +776,15 @@ class _BarcodeStudioScreenState extends State<BarcodeStudioScreen> {
             Expanded(
               child: ElevatedButton.icon(
                 onPressed: _dispatchPrint,
-                icon: const Icon(Icons.print_rounded, size: 18),
+                icon: Icon(_isPro ? Icons.print_rounded : Icons.lock_rounded, size: 18),
                 label: Text(
-                  'Print $_copies Sticker(s) via Bluetooth',
+                  _isPro
+                      ? 'Print $_copies Sticker(s) via Bluetooth'
+                      : '🔒 Upgrade to Pro to Print Stickers',
                   style: GoogleFonts.plusJakartaSans(fontSize: 13.5, fontWeight: FontWeight.w800),
                 ),
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF0F172A),
+                  backgroundColor: _isPro ? const Color(0xFF0F172A) : const Color(0xFFD97706),
                   foregroundColor: Colors.white,
                   elevation: 0,
                   minimumSize: const Size.fromHeight(48),

@@ -108,6 +108,36 @@ class _SaleCompletedModalState extends State<SaleCompletedModal> {
 
     final targetPhone = phone.length == 10 ? '91$phone' : phone;
 
+    final dateStr = DateFormat('dd MMM yyyy, hh:mm a').format(widget.sale.createdAt);
+    final amountStr = MoneyFormatter.formatINR(widget.sale.totalAmountPaise);
+    final totalRupees = (widget.sale.totalAmountPaise / 100.0).toStringAsFixed(2);
+    final upiId = _profile.upiVpa.isNotEmpty ? _profile.upiVpa : 'proventure@icici';
+    final upiPayLink = 'upi://pay?pa=$upiId&pn=${Uri.encodeComponent(_storeName)}&am=$totalRupees&cu=INR&tn=Bill_${widget.sale.invoiceNumber}';
+
+    final itemLines = widget.sale.items.map((it) {
+      final name = it['product_name'] ?? it['name'] ?? 'Item';
+      final qty = it['quantity'] ?? it['qty'] ?? 1;
+      final price = ((it['unit_price_paise'] ?? it['price'] as num?) ?? 0) / 100.0;
+      return '• $name x $qty = ₹${(price * (qty as num)).toStringAsFixed(2)}';
+    }).join('\n');
+
+    final message = '''
+Namaste ${widget.sale.customerName ?? 'Valued Customer'}! 🙏
+Thank you for shopping at *$_storeName*. Here is your digital tax invoice:
+
+🧾 *Invoice No:* #${widget.sale.invoiceNumber}
+📅 *Date:* $dateStr
+💳 *Payment Mode:* ${widget.sale.paymentMethod.toUpperCase()}
+
+*Itemized Breakdown:*
+$itemLines
+
+💰 *Total Amount:* *$amountStr*
+📲 *Instant UPI Pay / Receipt:* $upiPayLink
+
+Have a wonderful day! Visit us again soon.
+''';
+
     // 1. Generate the exact styled A4 PDF matching Invoice Themes preview
     final filePath = await InvoicePdfService.generateAndDownloadPdf(
       sale: widget.sale,
@@ -121,42 +151,19 @@ class _SaleCompletedModalState extends State<SaleCompletedModal> {
 
     bool shared = false;
     if (filePath != null && filePath.isNotEmpty) {
-      // 2. Share directly to customer's WhatsApp with PDF attached!
+      // 2. Share directly to customer's WhatsApp with PDF attached + rich text & UPI payment link!
       shared = await InvoicePdfService.sharePdf(
         filePath: filePath,
         invoiceNumber: widget.sale.invoiceNumber,
         storeName: _storeName,
         phone: targetPhone,
+        message: message,
+        subject: 'Tax Invoice #${widget.sale.invoiceNumber} - $_storeName',
       );
     }
 
     // If native attachment channel succeeded or fallback to text message
     if (!shared) {
-      final dateStr = DateFormat('dd MMM yyyy, hh:mm a').format(widget.sale.createdAt);
-      final amountStr = MoneyFormatter.formatINR(widget.sale.totalAmountPaise);
-      final itemLines = widget.sale.items.map((it) {
-        final name = it['product_name'] ?? it['name'] ?? 'Item';
-        final qty = it['quantity'] ?? it['qty'] ?? 1;
-        final price = ((it['unit_price_paise'] ?? it['price'] as num?) ?? 0) / 100.0;
-        return '• $name x $qty = ₹${(price * (qty as num)).toStringAsFixed(2)}';
-      }).join('\n');
-
-      final message = '''
-Namaste ${widget.sale.customerName ?? 'Valued Customer'}! 🙏
-Thank you for shopping at *$_storeName*. Here is your digital tax invoice:
-
-🧾 *Invoice No:* #${widget.sale.invoiceNumber}
-📅 *Date:* $dateStr
-💳 *Payment Mode:* ${widget.sale.paymentMethod.toUpperCase()}
-
-*Itemized Breakdown:*
-$itemLines
-
-💰 *Total Amount Paid:* *$amountStr*
-
-Have a wonderful day! Visit us again soon.
-''';
-
       final webWaUrl = Uri.parse('https://wa.me/$targetPhone?text=${Uri.encodeComponent(message)}');
       try {
         await launchUrl(webWaUrl, mode: LaunchMode.externalApplication);

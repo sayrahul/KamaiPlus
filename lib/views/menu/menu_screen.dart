@@ -13,7 +13,7 @@ import '../settings/backup_restore_screen.dart';
 import '../settings/store_profile_screen.dart';
 import '../tools/barcode_studio_screen.dart';
 import '../growth/growth_campaigns_screen.dart';
-import '../settings/pro_membership_screen.dart';
+import '../common/pro_upgrade_modal.dart';
 import '../auth/login_screen.dart';
 import '../../core/database/local_database.dart';
 import '../../models/models.dart';
@@ -53,6 +53,21 @@ class MenuScreen extends StatefulWidget {
 }
 
 class _MenuScreenState extends State<MenuScreen> {
+  bool _isPro = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _checkPro();
+  }
+
+  Future<void> _checkPro() async {
+    try {
+      final p = await LocalDatabase.instance.getStoreProfile();
+      if (mounted) setState(() => _isPro = p.isPro);
+    } catch (_) {}
+  }
+
   void _closeNavigation() {
     HapticFeedback.lightImpact();
     if (Navigator.canPop(context)) {
@@ -83,13 +98,7 @@ class _MenuScreenState extends State<MenuScreen> {
 
   void _handleProUpgrade() {
     HapticFeedback.selectionClick();
-    if (widget.isModal && Navigator.canPop(context)) {
-      Navigator.pop(context);
-    }
-    Navigator.push(
-      context,
-      MaterialPageRoute(builder: (_) => const ProMembershipScreen()),
-    );
+    ProUpgradeModal.show(context).then((_) => _checkPro());
   }
 
   void _showLogoutDialog() {
@@ -310,6 +319,7 @@ class _MenuScreenState extends State<MenuScreen> {
                             iconBg: const Color(0xFFF5F3FF),
                             borderColor: const Color(0xFFDDD6FE),
                             badgeText: 'PRINT',
+                            isLocked: true,
                             onTap: () => _handleScreenPush(const BarcodeStudioScreen()),
                           ),
                         ),
@@ -365,6 +375,7 @@ class _MenuScreenState extends State<MenuScreen> {
                           iconBg: const Color(0xFFF0FDF4),
                           borderColor: const Color(0xFFBBF7D0),
                           badgeText: 'AUTO',
+                          isLocked: true,
                           onTap: () => _handleScreenPush(const GrowthCampaignsScreen()),
                         ),
                       ),
@@ -403,6 +414,7 @@ class _MenuScreenState extends State<MenuScreen> {
                           badgeText: 'CA READY',
                           badgeBg: const Color(0xFFEEF2FF),
                           badgeColor: const Color(0xFF4338CA),
+                          isLocked: true,
                           onTap: () => _handleScreenPush(const GstReportsScreen()),
                         ),
                       ),
@@ -636,8 +648,10 @@ class _MenuScreenState extends State<MenuScreen> {
     Color? badgeBg,
     Color? badgeColor,
     bool isDark = false,
+    bool isLocked = false,
     required VoidCallback onTap,
   }) {
+    final showLock = isLocked && !_isPro;
     final effectiveBorder = isDark ? const Color(0xFF1E293B) : (borderColor ?? const Color(0xFFE2E8F0));
     return Material(
       color: isDark ? const Color(0xFF0F172A) : Colors.white,
@@ -646,7 +660,11 @@ class _MenuScreenState extends State<MenuScreen> {
       child: InkWell(
         onTap: () {
           HapticFeedback.selectionClick();
-          onTap();
+          if (showLock) {
+            ProUpgradeModal.show(context).then((_) => _checkPro());
+          } else {
+            onTap();
+          }
         },
         borderRadius: BorderRadius.circular(16),
         child: Container(
@@ -708,7 +726,32 @@ class _MenuScreenState extends State<MenuScreen> {
                             overflow: TextOverflow.ellipsis,
                           ),
                         ),
-                        if (badgeText != null) ...[
+                        if (showLock) ...[
+                          const SizedBox(width: 5),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFFEF3C7),
+                              borderRadius: BorderRadius.circular(4),
+                              border: Border.all(color: const Color(0xFFFDE68A), width: 0.8),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(Icons.lock_rounded, size: 9, color: Color(0xFFB45309)),
+                                const SizedBox(width: 2.5),
+                                Text(
+                                  'PRO',
+                                  style: GoogleFonts.inter(
+                                    fontSize: 8,
+                                    fontWeight: FontWeight.w900,
+                                    color: const Color(0xFFB45309),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ] else if (badgeText != null) ...[
                           const SizedBox(width: 5),
                           Container(
                             padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),

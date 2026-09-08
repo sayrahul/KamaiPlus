@@ -4,6 +4,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../core/constants/business_vertical_config.dart';
+import '../../core/database/local_database.dart';
 import '../common/kamai_bottom_nav.dart';
 import '../common/pro_upgrade_modal.dart';
 import '../../models/models.dart';
@@ -17,17 +18,18 @@ class InvoiceThemesScreen extends StatefulWidget {
 }
 
 class _InvoiceThemesScreenState extends State<InvoiceThemesScreen> {
-  int _selectedColorIndex = 1; // Default Blue / Cyan
+  int _selectedColorIndex = 0; // Default Navy Slate
   final List<Color> _palette = [
-    const Color(0xFF0F172A), // Navy Slate
-    const Color(0xFF0284C7), // Sky Blue (Primary in screenshots)
-    const Color(0xFF059669), // Emerald Green
-    const Color(0xFFB45309), // Terracotta Amber
-    const Color(0xFF7E22CE), // Royal Purple
-    const Color(0xFF0D9488), // Teal
-    const Color(0xFF334155), // Charcoal
+    const Color(0xFF0F172A), // Navy Slate (Free)
+    const Color(0xFF0284C7), // Sky Blue (Pro)
+    const Color(0xFF059669), // Emerald Green (Pro)
+    const Color(0xFFB45309), // Terracotta Amber (Pro)
+    const Color(0xFF7E22CE), // Royal Purple (Pro)
+    const Color(0xFF0D9488), // Teal (Pro)
+    const Color(0xFF334155), // Charcoal (Pro)
   ];
 
+  bool _isPro = false;
   String _selectedHeading = 'TAX INVOICE';
 
   // Display Option Checkboxes
@@ -59,6 +61,9 @@ class _InvoiceThemesScreenState extends State<InvoiceThemesScreen> {
 
   Future<void> _loadSavedFooter() async {
     try {
+      final profile = await LocalDatabase.instance.getStoreProfile();
+      _isPro = profile.isPro;
+
       final prefs = await SharedPreferences.getInstance();
       final saved = prefs.getString('custom_invoice_footer');
       if (saved != null && saved.isNotEmpty) {
@@ -70,7 +75,7 @@ class _InvoiceThemesScreenState extends State<InvoiceThemesScreen> {
       }
       final savedColorIdx = prefs.getInt('invoice_selected_palette_index');
       if (savedColorIdx != null && savedColorIdx >= 0 && savedColorIdx < _palette.length) {
-        _selectedColorIndex = savedColorIdx;
+        _selectedColorIndex = (_isPro || savedColorIdx == 0) ? savedColorIdx : 0;
       }
       final savedTerms = prefs.getString('invoice_terms');
       if (savedTerms != null && savedTerms.isNotEmpty) {
@@ -377,6 +382,10 @@ class _InvoiceThemesScreenState extends State<InvoiceThemesScreen> {
               return GestureDetector(
                 onTap: () {
                   HapticFeedback.selectionClick();
+                  if (!_isPro && idx != 0) {
+                    ProUpgradeModal.show(context).then((_) => _loadSavedFooter());
+                    return;
+                  }
                   setState(() => _selectedColorIndex = idx);
                 },
                 child: Container(
@@ -395,7 +404,11 @@ class _InvoiceThemesScreenState extends State<InvoiceThemesScreen> {
                         ),
                     ],
                   ),
-                  child: isSel ? const Icon(Icons.check_rounded, color: Colors.white, size: 18) : null,
+                  child: isSel
+                      ? const Icon(Icons.check_rounded, color: Colors.white, size: 18)
+                      : (!_isPro && idx != 0
+                          ? const Icon(Icons.lock_rounded, color: Colors.white70, size: 13)
+                          : null),
                 ),
               );
             }),
@@ -535,8 +548,8 @@ class _InvoiceThemesScreenState extends State<InvoiceThemesScreen> {
     return InkWell(
       onTap: () {
         HapticFeedback.selectionClick();
-        if (isPro) {
-          ProUpgradeModal.show(context);
+        if (isPro && !_isPro) {
+          ProUpgradeModal.show(context).then((_) => _loadSavedFooter());
         } else {
           onChanged(!value);
         }

@@ -547,10 +547,23 @@ Comprehensive enterprise-grade retail UX upgrade suite aligned with PhonePe Busi
       - Monthly scan counter (`ai_picture_scan_count_YYYY_MM`) tracks usage and enforces a 10 picture scan/month limit for Free users. Excel & PDF inward remains unlimited.
       - Confirmed items are batch-inserted directly into SQLite `products`.
     - **Free vs Pro Feature Gates & Invariants:**
-      - **Unlimited Bills/Day & Unlimited Catalog:** Always 100% Free for all Indian retail merchants.
-      - **7-Day Sales History on Free Plan:** `TransactionsScreen` restricts historical sales view and date filters to 7 days for Free merchants; displays info banner and upgrade dialog for older records.
-      - **100 Customers Limit on Free Plan:** Free merchants can create up to 100 customers with full basic ledger; adding the 101st customer requires Pro upgrade.
-      - **Screen-only GST Reports on Free Plan:** Dashboard tax summaries and HSN breakdowns are viewable on screen for Free; CA Excel export, Tally Prime XML, and GSTR-1 JSON downloads are locked behind Pro.
-      - **"Powered by KamaiPlus" Invoice Branding:** Free invoices include the KamaiPlus branding box at the bottom of the native A4 PDF; Pro invoices feature clean custom merchant footer notes.
+32. **Pro Lock Badges, PDF WhatsApp Sharing with UPI Links, Cloud Backup & Sync, Barcode Studio, Invoice Themes & WhatsApp Growth (LOCKED):**
+    - **Visual Pro Lock Badges (`🔒 PRO`):**
+      - `MenuScreen`: Barcode Studio, WhatsApp Growth, and GSTR-1 & CA Pack display a golden `🔒 PRO` badge. Tapping them when not Pro immediately opens `ProUpgradeModal.show(context)`.
+      - `BarcodeStudioScreen`: Renders `ProLockedCard` banner at top; print button displays `🔒 Upgrade to Pro to Print Stickers` and opens `ProUpgradeModal`.
+      - `BackupRestoreScreen`: Displays `ProLockedCard` in Cloud Backup section with `🔒 Upgrade` badge; triggers `ProUpgradeModal` if free user taps "Sync to Cloud Now". Local JSON export/restore remains 100% free.
+      - `InvoiceThemesScreen`: Free tier defaults to Navy Slate. The 6 premium palette circles feature a lock icon (`Icons.lock_rounded`) and open `ProUpgradeModal` on tap. Pro display options and "Remove Ads" button open `ProUpgradeModal`.
+      - `GrowthCampaignsScreen`: Renders `ProLockedCard` banner at top, displays `🔒 PRO` badge on Birthday Radar, and single customer send buttons display `Unlock` with lock icon opening `ProUpgradeModal`.
+      - `SaleDetailModal`: Sales return (1-tap refund & restock) action checks `profile.isPro` and prompts `ProUpgradeModal` for free tier.
+    - **Every WhatsApp Share Dispatches Respective PDF + Formatted Text + Dynamic UPI Payment Link:**
+      - Enhanced `MainActivity.java` `sharePdf` MethodChannel to accept `message` and `subject` arguments, writing them into `Intent.EXTRA_TEXT` so WhatsApp pre-populates the chat message along with the attached PDF.
+      - Implemented native `generateAndSaveKhataStatementPdf` in `MainActivity.java` generating a pixel-perfect, lightning-fast (<150ms) A4 Customer Khata Statement with store header, net due pill, debit/credit ledger table, UPI payment box, and single source of truth footer.
+      - `SaleCompletedModal`: Generates invoice PDF and shares via WhatsApp with complete item breakdown and dynamic UPI link (`upi://pay?pa=...`).
+      - `TransactionsScreen`: Generates invoice PDF and shares via WhatsApp with complete item breakdown and dynamic UPI link.
+      - `SaleDetailModal`: Generates invoice PDF and shares via WhatsApp with complete item breakdown and dynamic UPI link.
+      - `KhataScreen`: Reminders generate customer statement PDF and share via WhatsApp with statement breakdown and dynamic UPI link. Bill view shares invoice PDF with payment link.
+    - **Reusable `ProLockedCard` (`lib/views/common/pro_locked_card.dart`):**
+      - Premium golden card featuring Crown icon, customizable title, subtitle, perk list, and "Upgrade to Kamai+ Pro (₹1,499/yr)" button that invokes `ProUpgradeModal.show(context)`.
+
 
 

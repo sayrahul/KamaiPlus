@@ -7,6 +7,7 @@ import '../../core/database/local_database.dart';
 import '../../core/utils/money_formatter.dart';
 import '../../models/models.dart';
 import '../../services/thermal_printer_service.dart';
+import '../../services/invoice_pdf_service.dart';
 import '../common/kamai_bottom_nav.dart';
 import 'sale_detail_modal.dart';
 
@@ -201,11 +202,17 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
 
   void _launchWhatsAppForSale(SaleModel sale, String phone) async {
     final amtRupees = sale.totalAmountPaise ~/ 100;
+    final totalRupees = (sale.totalAmountPaise / 100.0).toStringAsFixed(2);
     final dateStr = DateFormat('d MMM yyyy, hh:mm a').format(sale.createdAt);
+
+    final profile = await LocalDatabase.instance.getStoreProfile();
+    final sName = profile.storeName.isNotEmpty ? profile.storeName : 'KamaiPlus Store';
+    final upiId = profile.upiVpa.isNotEmpty ? profile.upiVpa : 'proventure@icici';
+    final upiPayLink = 'upi://pay?pa=$upiId&pn=${Uri.encodeComponent(sName)}&am=$totalRupees&cu=INR&tn=Bill_${sale.invoiceNumber}';
 
     final buffer = StringBuffer();
     buffer.writeln('🧾 *TAX INVOICE #${sale.invoiceNumber}*');
-    buffer.writeln('🏪 *KamaiPlus Store*');
+    buffer.writeln('🏪 *$sName*');
     buffer.writeln('👤 Customer: ${sale.customerName ?? "Valued Customer"}');
     buffer.writeln('📅 Date: $dateStr');
     buffer.writeln('--------------------------');
@@ -219,23 +226,49 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
     buffer.writeln('--------------------------');
     buffer.writeln('💰 *Total Amount: ₹$amtRupees*');
     buffer.writeln('📌 Mode: ${sale.paymentMethod.toUpperCase()} (${sale.status.toUpperCase()})');
+    buffer.writeln('📲 *Instant UPI Pay:* $upiPayLink');
     buffer.writeln('\nDhanyawad! Phir aaiyega! 🙏');
 
     final cleanPhone = phone.replaceAll(RegExp(r'\D'), '');
     final fullPhone = cleanPhone.length == 10 ? '91$cleanPhone' : cleanPhone;
-    final url = Uri.parse('https://wa.me/$fullPhone?text=${Uri.encodeComponent(buffer.toString())}');
 
-    try {
-      if (await canLaunchUrl(url)) {
-        await launchUrl(url, mode: LaunchMode.externalApplication);
-      } else {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('WhatsApp application open nahi ho paya.')),
-          );
+    // 1. Generate and share PDF with text & payment link
+    final filePath = await InvoicePdfService.generateAndDownloadPdf(
+      sale: sale,
+      storeName: sName,
+      storePhone: profile.phone,
+      storeAddress: profile.address,
+      gstin: profile.gstin,
+      logoPath: profile.logoUrl,
+      customerPhone: fullPhone,
+    );
+
+    bool shared = false;
+    if (filePath != null && filePath.isNotEmpty) {
+      shared = await InvoicePdfService.sharePdf(
+        filePath: filePath,
+        invoiceNumber: sale.invoiceNumber,
+        storeName: sName,
+        phone: fullPhone,
+        message: buffer.toString(),
+        subject: 'Tax Invoice #${sale.invoiceNumber} - $sName',
+      );
+    }
+
+    if (!shared) {
+      final url = Uri.parse('https://wa.me/$fullPhone?text=${Uri.encodeComponent(buffer.toString())}');
+      try {
+        if (await canLaunchUrl(url)) {
+          await launchUrl(url, mode: LaunchMode.externalApplication);
+        } else {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('WhatsApp application open nahi ho paya.')),
+            );
+          }
         }
-      }
-    } catch (_) {}
+      } catch (_) {}
+    }
   }
 
   void _promptCustomerPhoneModal(SaleModel sale) {

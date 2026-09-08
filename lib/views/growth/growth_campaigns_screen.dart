@@ -6,6 +6,8 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../core/database/local_database.dart';
 import '../../models/models.dart';
 import '../common/empty_state_card.dart';
+import '../common/pro_locked_card.dart';
+import '../common/pro_upgrade_modal.dart';
 
 class GrowthCampaignsScreen extends StatefulWidget {
   const GrowthCampaignsScreen({super.key});
@@ -21,6 +23,7 @@ class _GrowthCampaignsScreenState extends State<GrowthCampaignsScreen> {
   int _selectedCampaignIndex = 0;
   int _campaignPageIndex = 0;
   final PageController _campaignPageController = PageController();
+  bool _isPro = false;
 
   // Voucher Customizer State
   final _discountController = TextEditingController(text: '10%');
@@ -49,6 +52,7 @@ class _GrowthCampaignsScreenState extends State<GrowthCampaignsScreen> {
       final customers = await LocalDatabase.instance.getAllCustomers();
       if (mounted) {
         setState(() {
+          _isPro = profile.isPro;
           if (profile.storeName.isNotEmpty) _storeName = profile.storeName;
           _customers = customers;
         });
@@ -384,6 +388,10 @@ Aapka Swagat Hai! Visit store today.
 
   void _sendToSingleCustomer(CustomerModel customer) async {
     HapticFeedback.selectionClick();
+    if (!_isPro) {
+      ProUpgradeModal.show(context).then((_) => _loadData());
+      return;
+    }
     final message = _buildFormattedMessage(customer);
     final phone = customer.phone;
     final targetPhone = phone.length == 10 ? '91$phone' : phone;
@@ -451,6 +459,20 @@ Aapka Swagat Hai! Visit store today.
         physics: const BouncingScrollPhysics(parent: AlwaysScrollableScrollPhysics()),
         padding: const EdgeInsets.fromLTRB(14, 12, 14, 40),
         children: [
+          if (!_isPro) ...[
+            ProLockedCard(
+              title: 'WhatsApp Growth Suite is a Pro Feature',
+              subtitle: 'Target customers by birthday, win-back churned buyers, and 1-tap WhatsApp broadcast campaigns with dynamic offer codes.',
+              perks: const [
+                '24 Retail marketing campaign templates',
+                'Personalized birthday radar & celebrations',
+                '1-tap direct WhatsApp campaign dispatch',
+              ],
+              onUnlocked: () => _loadData(),
+            ),
+            const SizedBox(height: 14),
+          ],
+
           // 1. BIRTHDAY RADAR BANNER (SCREENSHOT 2)
           Container(
             padding: const EdgeInsets.all(13),
@@ -494,6 +516,20 @@ Aapka Swagat Hai! Visit store today.
                               color: Colors.white,
                             ),
                           ),
+                          if (!_isPro) ...[
+                            const SizedBox(width: 6),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFFEF3C7),
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              child: Text(
+                                '🔒 PRO',
+                                style: GoogleFonts.inter(fontSize: 8.5, fontWeight: FontWeight.w800, color: const Color(0xFFB45309)),
+                              ),
+                            ),
+                          ],
                         ],
                       ),
                       const SizedBox(height: 2),
@@ -935,13 +971,15 @@ Aapka Swagat Hai! Visit store today.
                     const SizedBox(width: 8),
                     ElevatedButton.icon(
                       onPressed: () => _sendToSingleCustomer(c),
-                      icon: Image.asset('assets/images/whatsapp_logo.png', width: 14, height: 14),
+                      icon: _isPro
+                          ? Image.asset('assets/images/whatsapp_logo.png', width: 14, height: 14)
+                          : const Icon(Icons.lock_rounded, size: 13, color: Colors.white),
                       label: Text(
-                        'Send',
+                        _isPro ? 'Send' : 'Unlock',
                         style: GoogleFonts.plusJakartaSans(fontSize: 11.5, fontWeight: FontWeight.w700),
                       ),
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF10B981),
+                        backgroundColor: _isPro ? const Color(0xFF10B981) : const Color(0xFFD97706),
                         foregroundColor: Colors.white,
                         elevation: 0,
                         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),

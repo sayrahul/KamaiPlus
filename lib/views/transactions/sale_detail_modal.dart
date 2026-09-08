@@ -11,6 +11,7 @@ import '../../services/invoice_pdf_service.dart';
 import '../../services/native_notification_service.dart';
 import '../../services/thermal_printer_service.dart';
 import '../common/store_logo_avatar.dart';
+import '../common/pro_upgrade_modal.dart';
 
 class SaleDetailModal extends StatelessWidget {
   final SaleModel sale;
@@ -102,10 +103,16 @@ class SaleDetailModal extends StatelessWidget {
     HapticFeedback.selectionClick();
     final dateStr = DateFormat('d MMM yyyy, hh:mm a').format(sale.createdAt);
     final amtRupees = sale.totalAmountPaise ~/ 100;
+    final totalRupees = (sale.totalAmountPaise / 100.0).toStringAsFixed(2);
+
+    final profile = await LocalDatabase.instance.getStoreProfile();
+    final sName = profile.storeName.isNotEmpty ? profile.storeName : 'KamaiPlus Store';
+    final upiId = profile.upiVpa.isNotEmpty ? profile.upiVpa : 'proventure@icici';
+    final upiPayLink = 'upi://pay?pa=$upiId&pn=${Uri.encodeComponent(sName)}&am=$totalRupees&cu=INR&tn=Bill_${sale.invoiceNumber}';
 
     final buffer = StringBuffer();
     buffer.writeln('🧾 *INVOICE #${sale.invoiceNumber}*');
-    buffer.writeln('🏪 *KamaiPlus Store*');
+    buffer.writeln('🏪 *$sName*');
     if (sale.customerName != null && sale.customerName!.isNotEmpty) {
       buffer.writeln('👤 Customer: ${sale.customerName}');
     }
@@ -115,33 +122,59 @@ class SaleDetailModal extends StatelessWidget {
       final name = it['product_name'] ?? it['name'] ?? 'Item';
       final qty = it['quantity'] ?? it['qty'] ?? 1;
       final pricePaise = it['gross_total_paise'] ?? ((it['price'] as int? ?? 0) * (qty as num).toInt());
-      buffer.writeln('• ${qty}x $name = ₹${pricePaise ~/ 100}');
+      buffer.writeln('• ${qty}x $name = ₹${(pricePaise as int) ~/ 100}');
     }
     buffer.writeln('--------------------------');
     buffer.writeln('💰 *Total Amount: ₹$amtRupees*');
     buffer.writeln('💳 Paid via: ${sale.paymentMethod.toUpperCase()}');
+    buffer.writeln('📲 *Instant UPI Pay / Receipt:* $upiPayLink');
     buffer.writeln('\nDhanyawad! Phir Padhaarein 🙏');
 
     final phone = sale.customerPhone ?? '';
     final cleanPhone = phone.replaceAll(RegExp(r'[^0-9]'), '');
     final targetPhone = cleanPhone.length == 10 ? '91$cleanPhone' : cleanPhone;
 
-    final url = targetPhone.isNotEmpty
-        ? Uri.parse('https://wa.me/$targetPhone?text=${Uri.encodeComponent(buffer.toString())}')
-        : Uri.parse('https://wa.me/?text=${Uri.encodeComponent(buffer.toString())}');
+    // 1. Generate and share PDF with text & payment link
+    final filePath = await InvoicePdfService.generateAndDownloadPdf(
+      sale: sale,
+      storeName: sName,
+      storePhone: profile.phone,
+      storeAddress: profile.address,
+      gstin: profile.gstin,
+      logoPath: profile.logoUrl,
+      customerPhone: targetPhone,
+    );
 
-    try {
-      final launched = await launchUrl(url, mode: LaunchMode.externalApplication);
-      if (!launched) {
-        final directWa = Uri.parse('whatsapp://send?text=${Uri.encodeComponent(buffer.toString())}');
-        await launchUrl(directWa, mode: LaunchMode.externalApplication);
-      }
-    } catch (_) {
-      await Clipboard.setData(ClipboardData(text: buffer.toString()));
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('✓ Bill details copied to clipboard!')),
-        );
+    bool shared = false;
+    if (filePath != null && filePath.isNotEmpty) {
+      shared = await InvoicePdfService.sharePdf(
+        filePath: filePath,
+        invoiceNumber: sale.invoiceNumber,
+        storeName: sName,
+        phone: targetPhone,
+        message: buffer.toString(),
+        subject: 'Tax Invoice #${sale.invoiceNumber} - $sName',
+      );
+    }
+
+    if (!shared) {
+      final url = targetPhone.isNotEmpty
+          ? Uri.parse('https://wa.me/$targetPhone?text=${Uri.encodeComponent(buffer.toString())}')
+          : Uri.parse('https://wa.me/?text=${Uri.encodeComponent(buffer.toString())}');
+
+      try {
+        final launched = await launchUrl(url, mode: LaunchMode.externalApplication);
+        if (!launched) {
+          final directWa = Uri.parse('whatsapp://send?text=${Uri.encodeComponent(buffer.toString())}');
+          await launchUrl(directWa, mode: LaunchMode.externalApplication);
+        }
+      } catch (_) {
+        await Clipboard.setData(ClipboardData(text: buffer.toString()));
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('✓ Bill details copied to clipboard!')),
+          );
+        }
       }
     }
   }
@@ -199,13 +232,22 @@ class SaleDetailModal extends StatelessWidget {
     } catch (_) {}
   }
 
-  void _confirmSalesReturn(BuildContext context) {
+  void _confirmSalesReturn(BuildContext context) async {
     HapticFeedback.mediumImpact();
+    final profile = await LocalDatabase.instance.getStoreProfile();
+    if (!profile.isPro) {
+      if (context.mounted) {
+        ProUpgradeModal.show(context);
+      }
+      return;
+    }
+
     final creditDue = sale.paymentMethod == 'credit'
         ? sale.totalAmountPaise
         : (sale.paymentMethod == 'split' ? sale.splitCreditPaise : 0);
     final isUdhar = creditDue > 0;
 
+    if (!context.mounted) return;
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
