@@ -156,7 +156,94 @@ class ProductModel {
     isLooseItem: isLooseItem ?? this.isLooseItem,
     syncStatus: syncStatus ?? this.syncStatus,
   );
+
+  /// Returns true if item has uncounted / infinite stock (stock quantity >= 99990).
+  /// This prevents counter billing from being blocked by zero stock.
+  bool get isUnlimitedStock => stockQuantity >= 99990.0;
 }
+
+/// Offline Master SKU catalog item pre-indexed for ultra-fast barcode scan
+/// or 2-letter autocomplete lookups (<2ms query time).
+class MasterProductModel {
+  final String barcode;
+  final String name;
+  final String category;
+  final int mrpPaise;
+  final int sellingPricePaise;
+  final String unit;
+  final double taxRate;
+  final String businessType;
+  final String? brand;
+  final String? hsnCode;
+
+  const MasterProductModel({
+    required this.barcode,
+    required this.name,
+    required this.category,
+    required this.mrpPaise,
+    required this.sellingPricePaise,
+    this.unit = 'pcs',
+    this.taxRate = 0.0,
+    this.businessType = 'grocery',
+    this.brand,
+    this.hsnCode,
+  });
+
+  Map<String, dynamic> toMap() => {
+    'barcode': barcode,
+    'name': name,
+    'category': category,
+    'mrp_paise': mrpPaise,
+    'selling_price_paise': sellingPricePaise,
+    'unit': unit,
+    'tax_rate': taxRate,
+    'business_type': businessType,
+    'brand': brand,
+    'hsn_code': hsnCode,
+  };
+
+  factory MasterProductModel.fromMap(Map<String, dynamic> map) => MasterProductModel(
+    barcode: map['barcode']?.toString() ?? '',
+    name: map['name']?.toString() ?? '',
+    category: map['category']?.toString() ?? 'General',
+    mrpPaise: (map['mrp_paise'] as num?)?.toInt() ?? 0,
+    sellingPricePaise: (map['selling_price_paise'] as num?)?.toInt() ?? 0,
+    unit: map['unit']?.toString() ?? 'pcs',
+    taxRate: (map['tax_rate'] as num?)?.toDouble() ?? 0.0,
+    businessType: map['business_type']?.toString() ?? 'grocery',
+    brand: map['brand'] as String?,
+    hsnCode: map['hsn_code'] as String?,
+  );
+
+  /// 1-Tap converter: transforms master dictionary item into an active store ProductModel
+  /// with optional stock (defaults to 99999.0 = Unlimited).
+  ProductModel toProductModel({
+    required String businessId,
+    String? categoryId,
+    double initialStock = 99999.0,
+    int? customSellingPricePaise,
+  }) {
+    final sPrice = customSellingPricePaise ?? (sellingPricePaise > 0 ? sellingPricePaise : mrpPaise);
+    return ProductModel(
+      id: 'prod_m_${barcode}_${DateTime.now().millisecondsSinceEpoch}',
+      businessId: businessId,
+      name: name,
+      barcode: barcode,
+      categoryId: categoryId,
+      mrpPaise: mrpPaise,
+      sellingPricePaise: sPrice,
+      purchasePricePaise: (mrpPaise * 0.85).round(),
+      stockQuantity: initialStock,
+      taxRate: taxRate,
+      isTaxInclusive: true,
+      unit: unit,
+      hsnCode: hsnCode,
+      isLooseItem: false,
+      syncStatus: 'pending',
+    );
+  }
+}
+
 
 class CustomerModel {
   final String id;

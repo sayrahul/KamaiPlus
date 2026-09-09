@@ -134,10 +134,44 @@ class _ProductsScreenState extends State<ProductsScreen> {
       MaterialPageRoute(builder: (context) => const BarcodeScannerView()),
     );
     if (scanned != null && scanned.isNotEmpty && mounted) {
-      setState(() {
-        _searchCtrl.text = scanned;
-        _searchQuery = scanned;
-      });
+      final existing = await LocalDatabase.instance.findProductByBarcode(scanned);
+      if (existing != null) {
+        setState(() {
+          _searchCtrl.text = scanned;
+          _searchQuery = scanned;
+        });
+      } else {
+        // Fallback: Check Master Catalog (<2ms)
+        final master = await LocalDatabase.instance.findMasterProductByBarcode(scanned);
+        if (master != null && mounted) {
+          final imported = await LocalDatabase.instance.importMasterProductToStore(master);
+          await _loadData();
+          setState(() {
+            _searchCtrl.text = imported.name;
+            _searchQuery = imported.name;
+          });
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Row(
+                  children: [
+                    const Icon(Icons.auto_awesome, color: Colors.amber, size: 20),
+                    const SizedBox(width: 8),
+                    Expanded(child: Text('Imported from Master Catalog: ${imported.name}')),
+                  ],
+                ),
+                backgroundColor: const Color(0xFF1E293B),
+                duration: const Duration(seconds: 3),
+              ),
+            );
+          }
+        } else {
+          setState(() {
+            _searchCtrl.text = scanned;
+            _searchQuery = scanned;
+          });
+        }
+      }
     }
   }
 

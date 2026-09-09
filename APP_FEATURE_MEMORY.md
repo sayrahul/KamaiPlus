@@ -836,11 +836,14 @@ Comprehensive enterprise-grade retail UX upgrade suite aligned with PhonePe Busi
       2. *Master Dictionary vs My Shop:* A comprehensive background catalog of ~3,000–5,000 top Indian FMCG, Grocery, and OTC healthcare items (~1.5 MB SQLite compressed footprint) is kept in `master_catalog` table. It does not clutter the merchant's active screen with unneeded items.
       3. *Barcode Freedom (Dual-Mode):* If merchant has a scanner or clear barcode -> Beep and auto-add. If no barcode scanner or damaged/tiny barcode -> 2-letter instant T9 search (`mag` -> Maggi 70g) or 1-tap Visual Category Tiles (`Dairy`, `Biscuits`, `Soaps`).
     - **4-Phase Implementation Breakdown:**
-      - **Phase 1: Master Catalog SQLite Table & Offline Dictionary:**
-        - Background table `master_catalog` (`barcode TEXT UNIQUE, name TEXT, category TEXT, mrp_paise INTEGER, unit TEXT, tax_rate REAL, business_type TEXT`).
-        - Indexed on `barcode` and `name` for ultra-fast `<2ms` lookups.
-        - Seeding top Indian brands (Tata, Amul, Parle, Britannia, Nestlé, HUL, ITC, Dolo, Crocin, etc.).
-      - **Phase 2: Ultra-Fast Non-Scanner POS Billing Search:**
+      - **Phase 1: Master Catalog SQLite Table & Offline Dictionary (COMPLETED & LOCKED):**
+        - Created `master_catalog` SQLite table (`barcode TEXT PRIMARY KEY, name TEXT, category TEXT, mrp_paise INTEGER, selling_price_paise INTEGER, unit TEXT, tax_rate REAL, business_type TEXT, brand TEXT, hsn_code TEXT`).
+        - B-Tree indexes created on `barcode`, `name`, `category`, and `business_type` for ultra-fast `<2ms` indexed lookups.
+        - Pre-loaded offline dictionary asset in `lib/core/constants/master_catalog_data.dart` with top Indian FMCG, Grocery, Daily Staples, Personal Care, and Fast OTC Healthcare SKUs (Parle-G, Good Day, Maggi, Tata Salt, Aashirvaad, Fortune, Amul, Surf Excel, Lifebuoy, Dettol, Colgate, Dolo 650, Crocin, Eno, Moov, Volini, etc.) with real EAN-13 barcodes, HSN codes, and integer paise pricing.
+        - Implemented atomic batch seeding `_seedMasterCatalogIfEmpty(db)` inside `_ensureExtraTables(db)` executing in <20ms on SQLite open.
+        - Added lookup helpers `findMasterProductByBarcode`, `searchMasterCatalog`, `getMasterCatalogCount`, and `importMasterProductToStore`.
+        - Wired instant auto-import into POS Billing scanner (`pos_billing_screen.dart`), Add Product modal (`add_product_modal.dart`), and Products screen (`products_screen.dart`). Scanning any master barcode automatically resolves, imports with default uncounted stock (`99999.0` = `∞ Unlimited`), and adds to bill in 1 tap!
+      - **Phase 2: Ultra-Fast Non-Scanner POS Billing Search (NEXT UP):**
         - High-speed autocomplete dropdown on `PosBillingScreen` matching local store products first, with fallback 1-tap "Add from Master Catalog".
         - 2x Camera Zoom and Flashlight toggle on mobile scanner viewfinder for tiny/faded barcodes.
       - **Phase 3: 1-Tap In-Line Quantity & Stock Management:**

@@ -3,6 +3,7 @@ import 'package:path/path.dart' as p;
 import 'package:uuid/uuid.dart';
 import '../../models/models.dart';
 import '../utils/money_formatter.dart';
+import '../constants/master_catalog_data.dart';
 
 class LocalDatabase {
   static final LocalDatabase instance = LocalDatabase._init();
@@ -211,6 +212,46 @@ class LocalDatabase {
     } catch (_) {}
     try {
       await db.execute('ALTER TABLE sales ADD COLUMN table_number TEXT');
+    } catch (_) {}
+
+    // Master Catalog Table for Instant Offline SKUs (<2ms lookups)
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS master_catalog (
+        barcode TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        category TEXT NOT NULL,
+        mrp_paise INTEGER NOT NULL,
+        selling_price_paise INTEGER NOT NULL,
+        unit TEXT DEFAULT 'pcs',
+        tax_rate REAL DEFAULT 0.0,
+        business_type TEXT DEFAULT 'grocery',
+        brand TEXT,
+        hsn_code TEXT
+      )
+    ''');
+    await db.execute('CREATE INDEX IF NOT EXISTS idx_master_barcode ON master_catalog(barcode)');
+    await db.execute('CREATE INDEX IF NOT EXISTS idx_master_name ON master_catalog(name)');
+    await db.execute('CREATE INDEX IF NOT EXISTS idx_master_category ON master_catalog(category)');
+    await db.execute('CREATE INDEX IF NOT EXISTS idx_master_biz_type ON master_catalog(business_type)');
+
+    await _seedMasterCatalogIfEmpty(db);
+  }
+
+  Future<void> _seedMasterCatalogIfEmpty(Database db) async {
+    try {
+      final countResult = await db.rawQuery('SELECT COUNT(*) as count FROM master_catalog');
+      final count = Sqflite.firstIntValue(countResult) ?? 0;
+      if (count == 0) {
+        final batch = db.batch();
+        for (final item in kMasterCatalogSeed) {
+          batch.insert(
+            'master_catalog',
+            item.toMap(),
+            conflictAlgorithm: ConflictAlgorithm.ignore,
+          );
+        }
+        await batch.commit(noResult: true);
+      }
     } catch (_) {}
   }
 
@@ -496,6 +537,91 @@ class LocalDatabase {
       return ProductModel.fromMap(result.first);
     }
     return null;
+  }
+
+  // --- MASTER CATALOG APIS (<2ms indexed offline lookup) ---
+
+  /// Fast indexed barcode lookup in Master Catalog (<2ms)
+  Future<MasterProductModel?> findMasterProductByBarcode(String barcode) async {
+    final cleanBarcode = barcode.trim();
+    if (cleanBarcode.isEmpty) return null;
+    final db = await instance.database;
+    final result = await db.query(
+      'master_catalog',
+      where: 'barcode = ?',
+      whereArgs: [cleanBarcode],
+      limit: 1,
+    );
+    if (result.isNotEmpty) {
+      return MasterProductModel.fromMap(result.first);
+    }
+    return null;
+  }
+
+  /// Fast substring / prefix search in Master Catalog for POS autocomplete
+  Future<List<MasterProductModel>> searchMasterCatalog(
+    String query, {
+    String? businessType,
+    String? category,
+    int limit = 25,
+  }) async {
+    final cleanQuery = query.trim();
+    if (cleanQuery.isEmpty) return [];
+    final db = await instance.database;
+
+    String whereClause = '(name LIKE ? OR barcode LIKE ?)';
+    List<dynamic> whereArgs = ['%$cleanQuery%', '%$cleanQuery%'];
+
+    if (businessType != null && businessType.isNotEmpty) {
+      whereClause += ' AND business_type = ?';
+      whereArgs.add(businessType);
+    }
+
+    if (category != null && category.isNotEmpty) {
+      whereClause += ' AND category = ?';
+      whereArgs.add(category);
+    }
+
+    final result = await db.query(
+      'master_catalog',
+      where: whereClause,
+      whereArgs: whereArgs,
+      orderBy: "CASE WHEN name LIKE '$cleanQuery%' THEN 0 ELSE 1 END, name ASC",
+      limit: limit,
+    );
+
+    return result.map((row) => MasterProductModel.fromMap(row)).toList();
+  }
+
+  /// Total count of items available in the offline master catalog
+  Future<int> getMasterCatalogCount() async {
+    final db = await instance.database;
+    final countResult = await db.rawQuery('SELECT COUNT(*) as count FROM master_catalog');
+    return Sqflite.firstIntValue(countResult) ?? 0;
+  }
+
+  /// 1-Tap import from Master Catalog into the active store inventory.
+  /// If already in store, returns the existing product without creating duplicates.
+  Future<ProductModel> importMasterProductToStore(
+    MasterProductModel masterItem, {
+    String? businessId,
+    double initialStock = 99999.0, // Default: Unlimited / Uncounted
+    int? customSellingPricePaise,
+  }) async {
+    final existing = await findProductByBarcode(masterItem.barcode);
+    if (existing != null) {
+      return existing;
+    }
+
+    final bizId = businessId ?? (await getStoreProfile())?.id ?? 'biz_default_retail';
+    final newProduct = masterItem.toProductModel(
+      businessId: bizId,
+      initialStock: initialStock,
+      customSellingPricePaise: customSellingPricePaise,
+    );
+
+    await upsertProduct(newProduct);
+    return newProduct;
   }
 
   Future<int> getNextInvoiceSequence() async {

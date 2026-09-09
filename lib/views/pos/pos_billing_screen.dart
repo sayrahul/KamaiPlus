@@ -319,14 +319,37 @@ class _PosBillingScreenState extends State<PosBillingScreen> {
           );
         }
       } else {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('No item found with barcode: $barcode'),
-              backgroundColor: const Color(0xFFF59E0B),
-              duration: const Duration(seconds: 2),
-            ),
-          );
+        // Fallback: Check Master Catalog (<2ms)
+        final masterMatch = await LocalDatabase.instance.findMasterProductByBarcode(barcode);
+        if (masterMatch != null && mounted) {
+          final imported = await LocalDatabase.instance.importMasterProductToStore(masterMatch);
+          _addToCart(imported);
+          _loadData(); // Update background products list
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Row(
+                  children: [
+                    const Icon(Icons.auto_awesome, color: Colors.amber, size: 20),
+                    const SizedBox(width: 8),
+                    Expanded(child: Text('Master SKU Added: ${imported.name}')),
+                  ],
+                ),
+                backgroundColor: const Color(0xFF1E293B),
+                duration: const Duration(seconds: 2),
+              ),
+            );
+          }
+        } else {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('No item found with barcode: $barcode'),
+                backgroundColor: const Color(0xFFF59E0B),
+                duration: const Duration(seconds: 2),
+              ),
+            );
+          }
         }
       }
     }

@@ -236,6 +236,37 @@ class _AddProductModalState extends State<AddProductModal> {
       setState(() {
         _barcodeCtrl.text = scanned;
       });
+
+      // Check Master Catalog for instant autofill (<2ms)
+      final master = await LocalDatabase.instance.findMasterProductByBarcode(scanned);
+      if (master != null && mounted) {
+        setState(() {
+          if (_nameCtrl.text.trim().isEmpty) _nameCtrl.text = master.name;
+          if (_mrpCtrl.text.trim().isEmpty) _mrpCtrl.text = (master.mrpPaise / 100).toStringAsFixed(0);
+          if (_sellPriceCtrl.text.trim().isEmpty) {
+            final sPrice = master.sellingPricePaise > 0 ? master.sellingPricePaise : master.mrpPaise;
+            _sellPriceCtrl.text = (sPrice / 100).toStringAsFixed(0);
+          }
+          if (_hsnCtrl.text.trim().isEmpty && master.hsnCode != null) {
+            _hsnCtrl.text = master.hsnCode!;
+          }
+        });
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Row(
+                children: [
+                  const Icon(Icons.bolt_rounded, color: Colors.amber, size: 20),
+                  const SizedBox(width: 8),
+                  Expanded(child: Text('Auto-filled from Master Catalog: ${master.name}')),
+                ],
+              ),
+              backgroundColor: const Color(0xFF1E293B),
+              duration: const Duration(seconds: 2),
+            ),
+          );
+        }
+      }
     }
   }
 
