@@ -706,16 +706,32 @@ Comprehensive enterprise-grade retail UX upgrade suite aligned with PhonePe Busi
     - **Root Cause of Rejection (PWA vs Native Mismatch):**
       - Previous PWA package had an on-device icon / label differing from the Google Play Store Listing Hi-Res 512x512 icon, triggering Google's `Misleading Claims: App store listing mismatch` policy (`LAUNCHER_ICON-8934.png` vs `HI_RES_ICON-8101.png`).
       - On Android 8.0+ through 16, missing Adaptive Icons (`mipmap-anydpi-v26`) caused OS launchers to force a white circle mask around legacy icons, distorting launcher appearance compared to store graphics.
+      - Play Store short description contained promotional ranking keywords violating metadata policies.
     - **Universal Native Android Adaptive Icon System:**
       - Added `android/app/src/main/res/values/colors.xml` specifying `<color name="ic_launcher_background">#FEC703</color>`.
       - Implemented `mipmap-anydpi-v26/ic_launcher.xml` and `mipmap-anydpi-v26/ic_launcher_round.xml` referencing `@color/ic_launcher_background` and `@mipmap/ic_launcher_foreground`.
       - Rendered ultra-crisp transparent foregrounds with centered "क+" logo and soft shadow across all densities (`mdpi` 108px, `hdpi` 162px, `xhdpi` 216px, `xxhdpi` 324px, `xxxhdpi` 432px).
-      - Generated matching legacy square and circular (`ic_launcher_round.png`) icons across all densities.
+      - Generated matching legacy square and circular (`ic_launcher_round.png`) icons across all densities (`48px` to `192px`).
       - Added `android:roundIcon="@mipmap/ic_launcher_round"` in `AndroidManifest.xml`.
     - **100% Identical 512x512 Hi-Res Store Icon:**
       - Generated `play_store_assets/hi_res_icon_512.png` and mirrored to `assets/images/app_icon.png` & `logo.png`.
       - Uses the exact same `#FEC703` brand yellow background and identical centered "क+" scale, guaranteeing a 1:1 visual match with device launcher icons.
-    - **Release Bundle (.AAB) Generation:**
-      - Production Android App Bundle compiled at `play_store_assets/KamaiPlus_v4.20.0_release.aab` (`version: 4.20.0+42001`).
-      - Signed with Google Play release keystore (`android/app/kamai-release-key.jks`, alias: `kamaiplus`).
+      - Replaced on Play Console: Store presence -> Main store listing -> Graphics -> App icon (512x512).
+    - **Store Listing Metadata Policy Compliance:**
+      - Replaced ranking-claim short description with policy-compliant copy: `Smart Retail Billing, GST Invoicing, Khata Ledger & Inventory POS App`.
+      - Verified title begins strictly with `KamaiPlus` matching `android:label="KamaiPlus"`.
+    - **JVM & Gradle Build Memory Optimization:**
+      - Resolved Gradle daemon crash (`hs_err_pid20352.log`, `Out of Memory Error: G1 virtual space native mmap failed`).
+      - Adjusted `android/gradle.properties`: `org.gradle.jvmargs=-Xmx2048m -XX:MaxMetaspaceSize=512m -XX:+HeapDumpOnOutOfMemoryError` so release builds execute reliably on 8GB host machines.
+    - **Release Bundle (.AAB) Generation & Play Console Submission:**
+      - Version bumped to `4.20.0+42001` in `pubspec.yaml` (cleanly superseding previous release `40400 (4.04.0)`).
+      - Signed release AAB generated at `play_store_assets/KamaiPlus_v4.20.0_release.aab` (compiled in 383s, 0 errors, compressed download size: 31.6MB).
+      - Signed with release keystore `android/app/kamai-release-key.jks` (`alias: kamaiplus`).
+      - Successfully uploaded to Google Play Console Production track and submitted for review under Publishing Overview ("Submit 6 changes for review").
+    - **Live Device Verification:**
+      - Generated release APK (`116.7MB`) and installed via ADB to user's connected OnePlus device (`CPH2691`, `88e61059`). Verified launcher icon and seamless app launch.
+    - **Repository Cleanliness:**
+      - Updated `.gitignore` to ignore `*.aab` and `*.apk` binary artifacts to keep GitHub repository lightweight.
+      - All source code, adaptive icon XMLs, mipmaps, and `APP_FEATURE_MEMORY.md` committed and pushed to `origin/main` ([`a930bb7`](https://github.com/sayrahul/KamaiPlus/commit/a930bb7) and [`c1d73ff`](https://github.com/sayrahul/KamaiPlus/commit/c1d73ff)).
+
 
