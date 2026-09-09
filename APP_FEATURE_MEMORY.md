@@ -791,5 +791,27 @@ Comprehensive enterprise-grade retail UX upgrade suite aligned with PhonePe Busi
     - **Soundbox TTS Startup Race Mitigation (`MainActivity.java`):**
       - Added speech announcement queueing in `MainActivity.java` (`pendingSpeakText` / `pendingSpeakLang`). Flushes queued speech immediately once `TextToSpeech.onInit` completes, preventing silent announcements on the merchant's first morning sale.
 
+44. **Deep Architectural & Interconnection Wiring Hardening (LOCKED):**
+    - **Android 11+ Package Visibility for UPI & Calls (`AndroidManifest.xml`):**
+      - Added `<data android:scheme="upi" />` and `<data android:scheme="tel" />` inside `<queries>`. Resolves false negatives where `canLaunchUrl('upi://pay...')` failed on modern Android devices.
+    - **Pro Tier & Preference Sync on Login (`login_screen.dart`):**
+      - Restores complete Pro membership data (`isPro`, `proPlan`, `proExpiry`, `razorpayPaymentId`) when re-hydrating store profile from Firestore on new devices or re-installs.
+      - Aligns `is_pro` and `store_upi_id` into `SharedPreferences` upon login.
+    - **Cold Start Session & Cloud Sync (`splash_screen.dart`):**
+      - Explicitly initializes `FirestoreSyncService.instance.initialize` and updates `is_pro`, `store_upi_id`, and `business_id` in `SharedPreferences` on cold startup.
+    - **Firestore Listener Cancellation on Logout (`auth_service.dart` & `firestore_sync_service.dart`):**
+      - Added full disposal of `_productsSub`, `_customersSub`, and `_businessSub` in `FirestoreSyncService.dispose()` triggered on `AuthService.signOut()`. Prevents background quota burn across multiple store logins.
+    - **Cloud Customer Deletion Sync (`customers_screen.dart` & `firestore_sync_service.dart`):**
+      - Implemented `deleteCustomerFromCloud(customerId)` invoked upon deleting a customer locally, preventing deleted customers from reappearing during cloud sync.
+    - **Exclusive GST Math Invariant (`local_database.dart`):**
+      - Correctly adds item-level exclusive GST (`isTaxInclusive == false`) into `grandTotalPaise` so invoices with exclusive tax charge the accurate final payable amount.
+    - **Cash Register Shift Audit Precision (`cash_register_screen.dart`):**
+      - Replaced hardcoded `'biz_default_retail'` with active business ID and records real shift start timestamp in `cash_register_shift_opened_at`.
+    - **Interactive Notification Tap Handlers (`notification_service.dart`):**
+      - Notification taps now dynamically route merchants to the relevant screen: sales notifications open Home Pulse, low stock radar opens Products inventory tab, and shift close opens Cash Register.
+    - **Non-Disruptive In-App Update Priority (`in_app_update_service.dart`):**
+      - Prioritizes background flexible updates over blocking immediate updates to prevent counter interruptions during billing.
+
+
 
 

@@ -50,6 +50,18 @@ class _LoginScreenState extends State<LoginScreen> {
             final sName = data['store_name']?.toString() ?? data['business_name']?.toString() ?? '';
             final bType = data['business_type']?.toString() ?? 'grocery';
             if (sName.trim().isNotEmpty && sName.trim() != 'KamaiPlus Store') {
+              final isPro = data['is_pro'] == true || data['subscription_tier'] == 'pro';
+              final proPlan = data['pro_plan']?.toString() ?? (isPro ? 'pro' : '');
+              final proExpiry = data['pro_expiry'] != null
+                  ? (data['pro_expiry'] is Timestamp
+                      ? (data['pro_expiry'] as Timestamp).toDate().toIso8601String()
+                      : data['pro_expiry'].toString())
+                  : (data['subscription_expires_at'] != null
+                      ? (data['subscription_expires_at'] is Timestamp
+                          ? (data['subscription_expires_at'] as Timestamp).toDate().toIso8601String()
+                          : data['subscription_expires_at'].toString())
+                      : null);
+
               final restoredProfile = StoreProfileModel(
                 storeName: sName,
                 tagline: data['tagline']?.toString() ?? '',
@@ -62,6 +74,12 @@ class _LoginScreenState extends State<LoginScreen> {
                 address: data['address']?.toString() ?? '',
                 pincode: data['pincode']?.toString() ?? '',
                 gstin: data['gstin']?.toString() ?? '',
+                fssai: data['fssai']?.toString() ?? '',
+                logoUrl: data['logo_url']?.toString() ?? '',
+                isPro: isPro,
+                proPlan: proPlan,
+                proExpiry: proExpiry ?? '',
+                razorpayPaymentId: data['razorpay_payment_id']?.toString() ?? '',
               );
               await LocalDatabase.instance.saveStoreProfile(restoredProfile);
               hasStore = true;
@@ -91,6 +109,10 @@ class _LoginScreenState extends State<LoginScreen> {
         await prefs.setString('business_id', 'biz_$uid');
         await prefs.setString('business_name', profile.storeName);
         await prefs.setString('business_type', profile.businessType);
+        await prefs.setBool('is_pro', profile.isProEffective);
+        if (profile.upiVpa.isNotEmpty) {
+          await prefs.setString('store_upi_id', profile.upiVpa);
+        }
         BusinessVerticals.updateActiveBusinessType(profile.businessType);
         FirestoreSyncService.instance.initialize(businessId: 'biz_$uid');
       } else {

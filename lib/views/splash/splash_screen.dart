@@ -13,6 +13,7 @@ import '../purchases/purchases_screen.dart';
 import '../reports/gst_reports_screen.dart';
 import '../tools/barcode_studio_screen.dart';
 import '../../services/home_widget_service.dart';
+import '../../services/firestore_sync_service.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -66,6 +67,13 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
               BusinessVerticals.updateActiveBusinessType(profile.businessType);
               await prefs.setBool('is_logged_in', true);
               await prefs.setBool('is_onboarded', true);
+              await prefs.setBool('is_pro', profile.isProEffective);
+              if (profile.upiVpa.isNotEmpty) {
+                await prefs.setString('store_upi_id', profile.upiVpa);
+              }
+              await prefs.setString('business_name', profile.storeName);
+              await prefs.setString('business_id', 'biz_${firebaseUser.uid}');
+              FirestoreSyncService.instance.initialize(businessId: 'biz_${firebaseUser.uid}');
               HomeWidgetService.instance.updateTodayMetrics();
             } else {
               await prefs.setBool('is_onboarded', false);

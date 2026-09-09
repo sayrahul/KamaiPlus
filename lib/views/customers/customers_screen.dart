@@ -568,6 +568,7 @@ class _CustomersScreenState extends State<CustomersScreen> {
               Navigator.pop(dialogCtx);
               Navigator.pop(modalContext);
               await LocalDatabase.instance.deleteCustomer(customer.id);
+              FirestoreSyncService.instance.deleteCustomerFromCloud(customer.id).catchError((_) {});
               if (!mounted) return;
               await _loadCustomers();
               if (!mounted) return;

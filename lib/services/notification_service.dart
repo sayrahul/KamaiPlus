@@ -1,10 +1,12 @@
 import 'dart:convert';
-import 'package:flutter/foundation.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:flutter/material.dart';
 import '../core/utils/money_formatter.dart';
 import 'firestore_sync_service.dart';
+import '../views/dashboard/home_dashboard_screen.dart';
+import '../views/cash_register/cash_register_screen.dart';
 
 /// Top-level background FCM message handler (Must be outside of any class)
 @pragma('vm:entry-point')
@@ -46,6 +48,7 @@ class NotificationService {
         settings: initSettings,
         onDidReceiveNotificationResponse: (NotificationResponse response) {
           debugPrint('Notification clicked with payload: ${response.payload}');
+          _handleNotificationPayload(response.payload);
         },
       );
 
@@ -131,10 +134,36 @@ class NotificationService {
       // 8. Handle When User Taps Notification While App in Background
       FirebaseMessaging.onMessageOpenedApp.listen((RemoteMessage message) {
         debugPrint('Notification opened from background: ${message.data}');
+        if (message.data.isNotEmpty) {
+          _handleNotificationPayload(jsonEncode(message.data));
+        }
       });
 
     } catch (e) {
       debugPrint('Error initializing NotificationService: $e');
+    }
+  }
+
+  void _handleNotificationPayload(String? payloadStr) {
+    if (payloadStr == null || payloadStr.isEmpty) return;
+    try {
+      final data = jsonDecode(payloadStr);
+      final type = data['type'];
+      final state = HomeDashboardScreen.dashboardKey.currentState;
+      if (state != null) {
+        if (type == 'sale') {
+          state.setTab(0);
+        } else if (type == 'low_stock') {
+          state.setTab(1);
+        } else if (type == 'shift_close') {
+          Navigator.push(
+            state.context,
+            MaterialPageRoute(builder: (_) => const CashRegisterScreen()),
+          );
+        }
+      }
+    } catch (e) {
+      debugPrint('Error handling notification payload: $e');
     }
   }
 

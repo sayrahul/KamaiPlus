@@ -553,6 +553,7 @@ class LocalDatabase {
 
     int subtotalPaise = 0;
     int totalTaxPaise = 0;
+    int grandTotalPaise = 0;
     List<Map<String, dynamic>> itemsList = [];
 
     for (var item in cartItems) {
@@ -564,11 +565,14 @@ class LocalDatabase {
           isInclusive: item.product.isTaxInclusive,
         );
         totalTaxPaise += gst['totalGst'] ?? 0;
+        grandTotalPaise += gst['grossTotal'] ?? item.grossTotalPaise;
+      } else {
+        grandTotalPaise += item.grossTotalPaise;
       }
       itemsList.add(item.toMap());
     }
 
-    final totalAmountPaise = subtotalPaise - discountPaise;
+    final totalAmountPaise = grandTotalPaise - discountPaise;
 
     final sale = SaleModel(
       id: saleId,

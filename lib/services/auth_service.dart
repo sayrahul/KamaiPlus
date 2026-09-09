@@ -126,5 +126,8 @@ class AuthService {
     try {
       await WorkmanagerSyncService.instance.cancel();
     } catch (_) {}
+    try {
+      FirestoreSyncService.instance.dispose();
+    } catch (_) {}
   }
 }

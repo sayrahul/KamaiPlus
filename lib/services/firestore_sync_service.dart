@@ -513,6 +513,22 @@ class FirestoreSyncService {
     }
   }
 
+  /// Delete customer from Cloud Firestore
+  Future<void> deleteCustomerFromCloud(String customerId) async {
+    if (!_isInitialized) return;
+    try {
+      final firestore = FirebaseFirestore.instance;
+      await firestore
+          .collection('businesses')
+          .doc(_activeBusinessId)
+          .collection('customers')
+          .doc(customerId)
+          .delete();
+    } catch (e) {
+      debugPrint('Cloud customer delete notice: $e');
+    }
+  }
+
   /// Wipe cloud catalog on Fresh Start / Factory Reset
   Future<void> wipeCloudData() async {
     if (!_isInitialized) return;
@@ -546,5 +562,12 @@ class FirestoreSyncService {
   void dispose() {
     _productsSub?.cancel();
     _customersSub?.cancel();
+    _businessSub?.cancel();
+    _productsSub = null;
+    _customersSub = null;
+    _businessSub = null;
+    _isInitialized = false;
+    _activeBusinessId = 'biz_starter_pos';
+    syncState.value = SyncState.offline;
   }
 }

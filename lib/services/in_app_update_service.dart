@@ -11,11 +11,11 @@ class InAppUpdateService {
     try {
       final info = await InAppUpdate.checkForUpdate();
       if (info.updateAvailability == UpdateAvailability.updateAvailable) {
-        if (info.immediateUpdateAllowed) {
-          await InAppUpdate.performImmediateUpdate();
-        } else if (info.flexibleUpdateAllowed) {
+        if (info.flexibleUpdateAllowed) {
           await InAppUpdate.startFlexibleUpdate();
           await InAppUpdate.completeFlexibleUpdate();
+        } else if (info.immediateUpdateAllowed) {
+          await InAppUpdate.performImmediateUpdate();
         }
       }
     } catch (_) {

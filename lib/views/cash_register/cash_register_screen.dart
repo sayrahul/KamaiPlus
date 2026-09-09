@@ -143,6 +143,9 @@ class _CashRegisterScreenState extends State<CashRegisterScreen> {
     setState(() => _isDrawerOpen = !_isDrawerOpen);
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool('cash_register_is_drawer_open', _isDrawerOpen);
+    if (_isDrawerOpen) {
+      await prefs.setString('cash_register_shift_opened_at', DateTime.now().toIso8601String());
+    }
 
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -680,9 +683,16 @@ Generated via KamaiPlus Retail POS
   }
 
   Future<void> _saveCurrentShiftRecord() async {
+    final prefs = await SharedPreferences.getInstance();
+    final bizId = prefs.getString('business_id') ?? 'biz_default_retail';
+    final openedAtStr = prefs.getString('cash_register_shift_opened_at');
+    final openedAt = openedAtStr != null
+        ? (DateTime.tryParse(openedAtStr) ?? DateTime.now().subtract(const Duration(hours: 8)))
+        : DateTime.now().subtract(const Duration(hours: 8));
+
     final shift = CashRegisterShiftModel(
       id: 'shift_${DateTime.now().millisecondsSinceEpoch}',
-      businessId: 'biz_default_retail',
+      businessId: bizId,
       openingCashPaise: _openingFloatPaise,
       cashSalesPaise: _cashInSalesPaise,
       cashExpensesPaise: _cashOutExpensesPaise,
@@ -690,7 +700,7 @@ Generated via KamaiPlus Retail POS
       actualClosingPaise: _countedTotalPaise > 0 ? _countedTotalPaise : _expectedCashPaise,
       differencePaise: _countedTotalPaise > 0 ? (_countedTotalPaise - _expectedCashPaise) : 0,
       status: 'closed',
-      openedAt: DateTime.now().subtract(const Duration(hours: 8)),
+      openedAt: openedAt,
       closedAt: DateTime.now(),
     );
     await LocalDatabase.instance.saveCashRegisterShift(shift);
