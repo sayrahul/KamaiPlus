@@ -247,9 +247,6 @@ class _AddProductModalState extends State<AddProductModal> {
             final sPrice = master.sellingPricePaise > 0 ? master.sellingPricePaise : master.mrpPaise;
             _sellPriceCtrl.text = (sPrice / 100).toStringAsFixed(0);
           }
-          if (_hsnCtrl.text.trim().isEmpty && master.hsnCode != null) {
-            _hsnCtrl.text = master.hsnCode!;
-          }
         });
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(

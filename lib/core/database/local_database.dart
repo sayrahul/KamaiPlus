@@ -613,7 +613,16 @@ class LocalDatabase {
       return existing;
     }
 
-    final bizId = businessId ?? (await getStoreProfile())?.id ?? 'biz_default_retail';
+    String bizId = businessId ?? '';
+    if (bizId.isEmpty) {
+      final db = await instance.database;
+      final existingRows = await db.query('products', columns: ['business_id'], limit: 1);
+      if (existingRows.isNotEmpty && existingRows.first['business_id'] != null) {
+        bizId = existingRows.first['business_id'] as String;
+      } else {
+        bizId = 'biz_default_retail';
+      }
+    }
     final newProduct = masterItem.toProductModel(
       businessId: bizId,
       initialStock: initialStock,
