@@ -1,4 +1,3 @@
-import 'dart:convert';
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart' as p;
 import 'package:uuid/uuid.dart';
@@ -762,86 +761,9 @@ class LocalDatabase {
     });
   }
 
-  Future<void> seedStarterSalesIfNeeded() async {
-    if (_activeDbName != 'kamaiplus_local.db') return;
-    final db = await instance.database;
-    final count = Sqflite.firstIntValue(await db.rawQuery('SELECT COUNT(*) FROM sales')) ?? 0;
-    if (count > 0) return;
-
-    final now = DateTime.now();
-    final starterSales = [
-      {
-        'id': 'sale_init_1',
-        'business_id': 'biz_starter_pos',
-        'invoice_number': 'INV-1001',
-        'customer_id': 'cust_1',
-        'customer_name': 'Ramesh Kumar',
-        'customer_phone': '9820012345',
-        'subtotal_paise': 45000,
-        'tax_amount_paise': 0,
-        'discount_paise': 0,
-        'total_amount_paise': 45000,
-        'payment_method': 'credit',
-        'status': 'completed',
-        'items_json': jsonEncode([
-          {'product_name': 'Aashirvaad Shudh Chakki Atta (5kg)', 'quantity': 1, 'price': 24500, 'gross_total_paise': 24500},
-          {'product_name': 'Amul Butter Pasteurised (500g)', 'quantity': 1, 'price': 20500, 'gross_total_paise': 20500},
-        ]),
-        'created_at': now.subtract(const Duration(minutes: 35)).toIso8601String(),
-        'sync_status': 'synced',
-      },
-      {
-        'id': 'sale_init_2',
-        'business_id': 'biz_starter_pos',
-        'invoice_number': 'INV-1002',
-        'customer_id': 'cust_2',
-        'customer_name': 'Anita Sharma',
-        'customer_phone': '9819098765',
-        'subtotal_paise': 27500,
-        'tax_amount_paise': 0,
-        'discount_paise': 0,
-        'total_amount_paise': 27500,
-        'payment_method': 'upi',
-        'status': 'completed',
-        'items_json': jsonEncode([
-          {'product_name': 'Amul Butter Pasteurised (500g)', 'quantity': 1, 'price': 27500, 'gross_total_paise': 27500},
-        ]),
-        'created_at': now.subtract(const Duration(hours: 2, minutes: 15)).toIso8601String(),
-        'sync_status': 'synced',
-      },
-      {
-        'id': 'sale_init_3',
-        'business_id': 'biz_starter_pos',
-        'invoice_number': 'INV-1003',
-        'customer_id': null,
-        'customer_name': 'Walk-in Customer',
-        'customer_phone': null,
-        'subtotal_paise': 15500,
-        'tax_amount_paise': 0,
-        'discount_paise': 0,
-        'total_amount_paise': 15500,
-        'payment_method': 'cash',
-        'status': 'completed',
-        'items_json': jsonEncode([
-          {'product_name': 'Fortune Sunlite Sunflower Oil (1L)', 'quantity': 1, 'price': 15500, 'gross_total_paise': 15500},
-        ]),
-        'created_at': now.subtract(const Duration(hours: 4, minutes: 5)).toIso8601String(),
-        'sync_status': 'synced',
-      },
-    ];
-
-    for (final s in starterSales) {
-      await db.insert('sales', s);
-    }
-  }
-
   Future<List<SaleModel>> getAllSales({int limit = 100}) async {
     final db = await instance.database;
-    var result = await db.query('sales', orderBy: 'created_at DESC', limit: limit);
-    if (result.isEmpty) {
-      await seedStarterSalesIfNeeded();
-      result = await db.query('sales', orderBy: 'created_at DESC', limit: limit);
-    }
+    final result = await db.query('sales', orderBy: 'created_at DESC', limit: limit);
     return result.map((json) => SaleModel.fromMap(json)).toList();
   }
 
@@ -949,6 +871,47 @@ class LocalDatabase {
         balanceAfterPaise: newBalancePaise,
         description: 'Bill Settlement ($paymentMode)',
         referenceId: saleId,
+        createdAt: DateTime.now(),
+        syncStatus: 'pending',
+      );
+      await txn.insert('ledger_transactions', ledgerEntry.toMap());
+    });
+  }
+
+  Future<void> settleMultipleCustomerSaleBills({
+    required List<String> saleIds,
+    required CustomerModel customer,
+    required int totalAmountPaise,
+    required String paymentMode,
+  }) async {
+    final db = await instance.database;
+    final int newBalancePaise = (customer.currentBalancePaise - totalAmountPaise).clamp(0, 999999999999);
+
+    await db.transaction((txn) async {
+      for (final saleId in saleIds) {
+        await txn.update(
+          'sales',
+          {'status': 'settled', 'sync_status': 'pending'},
+          where: 'id = ?',
+          whereArgs: [saleId],
+        );
+      }
+
+      await txn.rawUpdate('''
+        UPDATE customers
+        SET current_balance_paise = ?
+        WHERE id = ?
+      ''', [newBalancePaise, customer.id]);
+
+      final ledgerEntry = LedgerTransactionModel(
+        id: _uuid.v4(),
+        businessId: customer.businessId,
+        customerId: customer.id,
+        type: 'debit',
+        amountPaise: totalAmountPaise,
+        balanceAfterPaise: newBalancePaise,
+        description: 'Selective Settle (${saleIds.length} Bills • $paymentMode)',
+        referenceId: saleIds.join(','),
         createdAt: DateTime.now(),
         syncStatus: 'pending',
       );
@@ -1105,6 +1068,31 @@ class LocalDatabase {
       proPlan: plan,
       proExpiry: expiryDate.toIso8601String(),
       razorpayPaymentId: paymentId,
+    );
+    await saveStoreProfile(updated);
+  }
+
+  Future<void> deactivateProMembership() async {
+    final current = await getStoreProfile();
+    final updated = StoreProfileModel(
+      storeName: current.storeName,
+      tagline: current.tagline,
+      ownerName: current.ownerName,
+      phone: current.phone,
+      email: current.email,
+      upiVpa: current.upiVpa,
+      category: current.category,
+      businessType: current.businessType,
+      address: current.address,
+      pincode: current.pincode,
+      gstin: current.gstin,
+      fssai: current.fssai,
+      logoUrl: current.logoUrl,
+      upiAccountsJson: current.upiAccountsJson,
+      isPro: false,
+      proPlan: '',
+      proExpiry: '',
+      razorpayPaymentId: '',
     );
     await saveStoreProfile(updated);
   }

@@ -9,6 +9,8 @@ import '../../models/models.dart';
 import '../../services/thermal_printer_service.dart';
 import '../../services/invoice_pdf_service.dart';
 import '../common/kamai_bottom_nav.dart';
+import '../common/in_app_notification.dart';
+import '../../core/utils/app_validators.dart';
 import 'sale_detail_modal.dart';
 
 class TransactionsScreen extends StatefulWidget {
@@ -252,6 +254,7 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
         phone: fullPhone,
         message: buffer.toString(),
         subject: 'Tax Invoice #${sale.invoiceNumber} - $sName',
+        forceChooser: false,
       );
     }
 
@@ -262,9 +265,7 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
           await launchUrl(url, mode: LaunchMode.externalApplication);
         } else {
           if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('WhatsApp application open nahi ho paya.')),
-            );
+            InAppNotification.error('WhatsApp application open nahi ho paya.', context: context);
           }
         }
       } catch (_) {}
@@ -314,14 +315,13 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
           ElevatedButton.icon(
             onPressed: () {
               final ph = phoneCtrl.text.trim();
-              if (ph.length < 10) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Kripya 10 digit mobile number dalein.')),
-                );
+              final err = AppValidators.validatePhone(ph);
+              if (err != null) {
+                InAppNotification.error(err, context: context);
                 return;
               }
               Navigator.pop(ctx);
-              _launchWhatsAppForSale(sale, ph);
+              _launchWhatsAppForSale(sale, AppValidators.cleanPhone(ph));
             },
             icon: Image.asset('assets/images/whatsapp_logo.png', width: 16, height: 16),
             label: Text('Send Now', style: GoogleFonts.outfit(fontWeight: FontWeight.w700, color: Colors.white)),

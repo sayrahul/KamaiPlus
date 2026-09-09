@@ -11,6 +11,8 @@ import '../dashboard/home_dashboard_screen.dart';
 import '../cash_register/cash_register_screen.dart';
 import '../purchases/purchases_screen.dart';
 import '../reports/gst_reports_screen.dart';
+import '../tools/barcode_studio_screen.dart';
+import '../../services/home_widget_service.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -64,6 +66,7 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
               BusinessVerticals.updateActiveBusinessType(profile.businessType);
               await prefs.setBool('is_logged_in', true);
               await prefs.setBool('is_onboarded', true);
+              HomeWidgetService.instance.updateTodayMetrics();
             } else {
               await prefs.setBool('is_onboarded', false);
             }
@@ -111,7 +114,9 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
           target = const CashRegisterScreen();
         } else if (testScreen == 'purchases') {
           target = const PurchasesScreen();
-        } else if (testScreen == 'gst_reports') {
+        } else if (testScreen == 'barcode' || testScreen == 'scan_barcode') {
+          target = const BarcodeStudioScreen();
+        } else if (testScreen == 'reports' || testScreen == 'today_report' || testScreen == 'gst_reports') {
           target = const GstReportsScreen();
         } else {
           if (hasActiveSession) {

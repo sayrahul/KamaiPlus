@@ -193,4 +193,38 @@ class CsvInwardService {
 
     return items;
   }
+
+  /// Generates a standard sample inward CSV template with realistic items for Indian retail
+  static String generateSampleInwardCsv({String businessType = 'grocery'}) {
+    final buffer = StringBuffer();
+    buffer.writeln('Item Name,Quantity,Unit,Purchase Price,MRP,Selling Price,Category,Barcode,Expiry Date');
+
+    if (businessType == 'pharmacy') {
+      buffer.writeln('Paracetamol 650mg (Strip 10),20,strip,18.50,32.00,30.00,Medicines,8901234567890,2026-12-31');
+      buffer.writeln('Azithromycin 500mg (Strip 3),15,strip,45.00,75.00,70.00,Antibiotics,8901234567891,2026-10-31');
+      buffer.writeln('Cetirizine 10mg (Strip 10),30,strip,8.00,18.00,16.00,Antiallergic,8901234567892,2027-05-31');
+      buffer.writeln('Volini Spray 100g,10,pcs,120.00,170.00,160.00,Pain Relief,8901234567893,2026-08-31');
+      buffer.writeln('Dettol Antiseptic Liquid 250ml,12,btl,110.00,145.00,140.00,First Aid,8901234567894,2027-03-31');
+    } else if (businessType == 'restaurant') {
+      buffer.writeln('Basmati Rice Premium (5kg),10,bag,350.00,450.00,450.00,Grains,8901234567880,2026-11-30');
+      buffer.writeln('Fortune Sunflower Oil (1L),24,pkt,105.00,135.00,135.00,Oils,8901234567881,2026-09-30');
+      buffer.writeln('Amul Fresh Cream 250ml,15,pkt,55.00,70.00,70.00,Dairy,8901234567882,2026-06-30');
+      buffer.writeln('Paneer Fresh 1kg,8,kg,280.00,350.00,350.00,Dairy,8901234567883,2026-04-15');
+      buffer.writeln('Everest Garam Masala 100g,20,box,62.00,82.00,82.00,Spices,8901234567884,2027-01-31');
+    } else if (businessType == 'apparel') {
+      buffer.writeln('Men Cotton T-Shirt Round Neck,50,pcs,180.00,499.00,399.00,Men,8901234567870,');
+      buffer.writeln('Men Slim Fit Denim Jeans 32,25,pcs,450.00,1299.00,999.00,Men,8901234567871,');
+      buffer.writeln('Women Cotton Kurti M,30,pcs,250.00,799.00,599.00,Women,8901234567872,');
+      buffer.writeln('Boys Casual Shorts,20,pcs,120.00,349.00,249.00,Kids,8901234567873,');
+    } else {
+      // Default: Grocery / FMCG
+      buffer.writeln('Aashirvaad Shudh Chakki Atta 5kg,10,bag,210.00,265.00,250.00,Grocery,8901030012345,2026-11-30');
+      buffer.writeln('Tata Salt Vaccum Evaporated 1kg,50,pkt,21.00,28.00,26.00,Spices,8901030054321,2027-04-30');
+      buffer.writeln('Fortune Sunlite Sunflower Oil 1L,20,pkt,108.00,140.00,132.00,Oils,8901030067890,2026-10-31');
+      buffer.writeln('Surf Excel Easy Wash 1kg,15,pkt,115.00,150.00,142.00,Cleaning,8901030099887,2027-06-30');
+      buffer.writeln('Maggi 2-Minute Noodles 70g,96,pkt,11.50,14.00,14.00,Snacks,8901030077665,2026-12-31');
+    }
+
+    return buffer.toString();
+  }
 }

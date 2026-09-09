@@ -90,6 +90,15 @@ class NotificationService {
           // Trigger background sync to push updated FCM token to cloud
           FirestoreSyncService.syncAllPending();
         }
+
+        // Subscribe to Admin broadcast & announcement topics
+        try {
+          await _fcm.subscribeToTopic('all_merchants');
+          await _fcm.subscribeToTopic('announcements');
+          debugPrint('Subscribed to all_merchants and announcements topics');
+        } catch (topicErr) {
+          debugPrint('Could not subscribe to FCM topics: $topicErr');
+        }
       } catch (tokenErr) {
         debugPrint('Could not fetch FCM token (offline or services unavailable): $tokenErr');
       }

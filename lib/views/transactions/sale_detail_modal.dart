@@ -12,6 +12,7 @@ import '../../services/native_notification_service.dart';
 import '../../services/thermal_printer_service.dart';
 import '../common/store_logo_avatar.dart';
 import '../common/pro_upgrade_modal.dart';
+import '../common/in_app_notification.dart';
 
 class SaleDetailModal extends StatelessWidget {
   final SaleModel sale;
@@ -171,9 +172,7 @@ class SaleDetailModal extends StatelessWidget {
       } catch (_) {
         await Clipboard.setData(ClipboardData(text: buffer.toString()));
         if (context.mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('✓ Bill details copied to clipboard!')),
-          );
+          InAppNotification.success('✓ Bill details copied to clipboard!', context: context);
         }
       }
     }
@@ -194,18 +193,14 @@ class SaleDetailModal extends StatelessWidget {
         customerPhone: sale.customerPhone,
       );
       if (path != null && context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('✓ Tax Invoice #${sale.invoiceNumber} PDF saved to Downloads!'),
-            backgroundColor: const Color(0xFF059669),
-            behavior: SnackBarBehavior.floating,
-            action: SnackBarAction(
-              label: 'OPEN',
-              textColor: Colors.white,
-              onPressed: () => InvoicePdfService.openPdf(path),
-            ),
-          ),
+        InAppNotification.show(
+          context: context,
+          message: '✓ Tax Invoice #${sale.invoiceNumber} PDF saved to Downloads!',
+          actionLabel: 'OPEN',
+          onAction: () => InvoicePdfService.openPdf(path),
         );
+      } else if (context.mounted) {
+        InAppNotification.error('Could not generate PDF invoice.', context: context);
       }
     } catch (_) {}
   }
@@ -223,11 +218,10 @@ class SaleDetailModal extends StatelessWidget {
         gstin: profile.gstin,
         logoPath: profile.logoUrl,
         customerPhone: sale.customerPhone,
+        forceChooser: true,
       );
       if (!ok && context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Could not open share dialog')),
-        );
+        InAppNotification.error('Could not open share dialog', context: context);
       }
     } catch (_) {}
   }

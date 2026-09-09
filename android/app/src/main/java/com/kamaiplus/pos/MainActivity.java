@@ -7,6 +7,10 @@ import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothDevice;
 import android.bluetooth.BluetoothSocket;
 import android.content.Context;
+import android.content.ContentValues;
+import android.content.ClipData;
+import android.content.pm.PackageManager;
+import android.content.pm.ResolveInfo;
 import android.content.Intent;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
@@ -15,21 +19,27 @@ import android.graphics.Color;
 import android.graphics.Paint;
 import android.graphics.Rect;
 import android.graphics.RectF;
+import android.graphics.Typeface;
 import android.graphics.pdf.PdfDocument;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Environment;
+import android.provider.ContactsContract;
+import android.provider.MediaStore;
+import android.database.Cursor;
 import android.speech.tts.TextToSpeech;
 import androidx.annotation.NonNull;
 import androidx.core.app.NotificationCompat;
 import androidx.core.content.FileProvider;
-import io.flutter.embedding.android.FlutterActivity;
+import io.flutter.embedding.android.FlutterFragmentActivity;
 import io.flutter.embedding.engine.FlutterEngine;
 import io.flutter.plugin.common.MethodCall;
 import io.flutter.plugin.common.MethodChannel;
 
 import java.io.File;
+import java.io.FileInputStream;
 import java.io.FileOutputStream;
+import java.io.InputStream;
 import java.io.OutputStream;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -39,35 +49,151 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
-public class MainActivity extends FlutterActivity implements TextToSpeech.OnInitListener {
+public class MainActivity extends FlutterFragmentActivity implements TextToSpeech.OnInitListener {
     private static final String SOUNDBOX_CHANNEL = "com.kamaiplus.pos/soundbox";
     private static final String BT_CHANNEL = "com.kamaiplus.pos/bluetooth_printer";
     private static final String NOTIFICATION_CHANNEL = "com.kamaiplus.pos/notifications";
     private static final String PDF_CHANNEL = "com.kamaiplus.pos/pdf_engine";
     private static final String APP_CONTROL_CHANNEL = "com.kamaiplus.pos/app_control";
+    private static final String CONTACTS_CHANNEL = "com.kamaiplus.pos/contacts";
+    private static final String SHORTCUT_CHANNEL = "com.kamaiplus.pos/shortcuts";
+    private static final String SHARE_CHANNEL = "com.kamaiplus.pos/share_target";
     private static final String CHANNEL_ID = "kamai_pos_channel";
     private static final UUID SPP_UUID = UUID.fromString("00001101-0000-1000-8000-00805F9B34FB");
+    private static final int REQUEST_CODE_PICK_CONTACT = 5001;
 
     private TextToSpeech tts;
     private boolean isTtsReady = false;
+    private MethodChannel.Result pendingContactResult;
+    private String pendingShortcut = null;
+    private String pendingSharedFile = null;
+    private MethodChannel shortcutMethodChannel;
+    private MethodChannel shareMethodChannel;
 
     @Override
     protected void onResume() {
         super.onResume();
-        handleTestIntent(getIntent());
+        handleIntent(getIntent());
     }
 
     @Override
     protected void onNewIntent(android.content.Intent intent) {
         super.onNewIntent(intent);
-        handleTestIntent(intent);
+        setIntent(intent);
+        handleIntent(intent);
     }
 
-    private void handleTestIntent(android.content.Intent intent) {
-        if (intent != null && intent.hasExtra("test_screen")) {
+    private void handleIntent(android.content.Intent intent) {
+        if (intent == null) return;
+
+        // 1. Check legacy test_screen extra
+        if (intent.hasExtra("test_screen")) {
             String testScreen = intent.getStringExtra("test_screen");
-            android.content.SharedPreferences sp = getSharedPreferences("FlutterSharedPreferences", android.content.Context.MODE_PRIVATE);
+            android.content.SharedPreferences sp = getSharedPreferences("FlutterSharedPreferences", Context.MODE_PRIVATE);
             sp.edit().putString("flutter.test_screen", testScreen).commit();
+        }
+
+        // 2. Check Shortcut from extras or deep link
+        String shortcutTarget = null;
+        if (intent.hasExtra("shortcut")) {
+            shortcutTarget = intent.getStringExtra("shortcut");
+        } else if (intent.getData() != null) {
+            Uri data = intent.getData();
+            if ("kamaiplus".equalsIgnoreCase(data.getScheme())) {
+                if ("shortcut".equalsIgnoreCase(data.getHost()) || (data.getPath() != null && data.getPath().contains("shortcut"))) {
+                    shortcutTarget = data.getLastPathSegment();
+                }
+            }
+        }
+
+        if (shortcutTarget != null && !shortcutTarget.isEmpty()) {
+            if (shortcutMethodChannel != null) {
+                final String target = shortcutTarget;
+                runOnUiThread(new Runnable() {
+                    @Override
+                    public void run() {
+                        shortcutMethodChannel.invokeMethod("onShortcutReceived", target);
+                    }
+                });
+            } else {
+                pendingShortcut = shortcutTarget;
+            }
+        }
+
+        // 3. Check Share-To Intent (ACTION_SEND with EXTRA_STREAM)
+        if (Intent.ACTION_SEND.equals(intent.getAction())) {
+            Uri streamUri = intent.getParcelableExtra(Intent.EXTRA_STREAM);
+            if (streamUri != null) {
+                handleSharedStream(streamUri, intent.getType());
+            }
+        }
+    }
+
+    private void handleSharedStream(Uri uri, String mimeType) {
+        try {
+            File cacheDir = new File(getCacheDir(), "shared_bills");
+            if (!cacheDir.exists()) cacheDir.mkdirs();
+            String ext = (mimeType != null && mimeType.contains("pdf")) ? ".pdf" : ".jpg";
+            File dest = new File(cacheDir, "shared_bill_" + System.currentTimeMillis() + ext);
+            try (InputStream in = getContentResolver().openInputStream(uri);
+                 FileOutputStream out = new FileOutputStream(dest)) {
+                if (in != null) {
+                    byte[] buffer = new byte[8192];
+                    int len;
+                    while ((len = in.read(buffer)) != -1) {
+                        out.write(buffer, 0, len);
+                    }
+                    final String path = dest.getAbsolutePath();
+                    if (shareMethodChannel != null) {
+                        runOnUiThread(new Runnable() {
+                            @Override
+                            public void run() {
+                                shareMethodChannel.invokeMethod("onFileShared", path);
+                            }
+                        });
+                    } else {
+                        pendingSharedFile = path;
+                    }
+                }
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+        if (requestCode == REQUEST_CODE_PICK_CONTACT) {
+            if (pendingContactResult != null) {
+                if (resultCode == RESULT_OK && data != null && data.getData() != null) {
+                    Uri contactUri = data.getData();
+                    String[] projection = new String[]{
+                        ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME,
+                        ContactsContract.CommonDataKinds.Phone.NUMBER
+                    };
+                    try (Cursor cursor = getContentResolver().query(contactUri, projection, null, null, null)) {
+                        if (cursor != null && cursor.moveToFirst()) {
+                            int nameIdx = cursor.getColumnIndex(ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME);
+                            int phoneIdx = cursor.getColumnIndex(ContactsContract.CommonDataKinds.Phone.NUMBER);
+                            String name = nameIdx != -1 ? cursor.getString(nameIdx) : "";
+                            String phone = phoneIdx != -1 ? cursor.getString(phoneIdx) : "";
+                            Map<String, String> res = new HashMap<>();
+                            res.put("name", name != null ? name : "");
+                            res.put("phone", phone != null ? phone : "");
+                            pendingContactResult.success(res);
+                            pendingContactResult = null;
+                            return;
+                        }
+                    } catch (Exception e) {
+                        pendingContactResult.error("CONTACT_QUERY_ERROR", e.getMessage(), null);
+                        pendingContactResult = null;
+                        return;
+                    }
+                }
+                pendingContactResult.success(null);
+                pendingContactResult = null;
+            }
         }
     }
 
@@ -105,6 +231,51 @@ public class MainActivity extends FlutterActivity implements TextToSpeech.OnInit
                         }
                     }
                 });
+
+        // Contacts Picker Channel (Zero-Permission Native Phonebook Selection)
+        new MethodChannel(flutterEngine.getDartExecutor().getBinaryMessenger(), CONTACTS_CHANNEL)
+                .setMethodCallHandler(new MethodChannel.MethodCallHandler() {
+                    @Override
+                    public void onMethodCall(@NonNull MethodCall call, @NonNull MethodChannel.Result result) {
+                        if ("pickContact".equals(call.method)) {
+                            pendingContactResult = result;
+                            Intent pickIntent = new Intent(Intent.ACTION_PICK, ContactsContract.CommonDataKinds.Phone.CONTENT_URI);
+                            startActivityForResult(pickIntent, REQUEST_CODE_PICK_CONTACT);
+                        } else {
+                            result.notImplemented();
+                        }
+                    }
+                });
+
+        // App Shortcuts Channel (Launcher Icon Long-Press & Widgets)
+        shortcutMethodChannel = new MethodChannel(flutterEngine.getDartExecutor().getBinaryMessenger(), SHORTCUT_CHANNEL);
+        shortcutMethodChannel.setMethodCallHandler(new MethodChannel.MethodCallHandler() {
+            @Override
+            public void onMethodCall(@NonNull MethodCall call, @NonNull MethodChannel.Result result) {
+                if ("getInitialShortcut".equals(call.method)) {
+                    String s = pendingShortcut;
+                    pendingShortcut = null;
+                    result.success(s);
+                } else {
+                    result.notImplemented();
+                }
+            }
+        });
+
+        // Share Target Channel ("Send to KamaiPlus" from WhatsApp / Gallery)
+        shareMethodChannel = new MethodChannel(flutterEngine.getDartExecutor().getBinaryMessenger(), SHARE_CHANNEL);
+        shareMethodChannel.setMethodCallHandler(new MethodChannel.MethodCallHandler() {
+            @Override
+            public void onMethodCall(@NonNull MethodCall call, @NonNull MethodChannel.Result result) {
+                if ("getInitialSharedFile".equals(call.method)) {
+                    String f = pendingSharedFile;
+                    pendingSharedFile = null;
+                    result.success(f);
+                } else {
+                    result.notImplemented();
+                }
+            }
+        });
 
         // 1. TextToSpeech Voice Engine
         tts = new TextToSpeech(this, this);
@@ -319,8 +490,17 @@ public class MainActivity extends FlutterActivity implements TextToSpeech.OnInit
                                 Paint boldTextPaint = new Paint();
                                 boldTextPaint.setColor(Color.rgb(15, 23, 42));
                                 boldTextPaint.setTextSize(9.5f);
-                                boldTextPaint.setFakeBoldText(true);
+                                boldTextPaint.setTypeface(Typeface.create(Typeface.DEFAULT, Typeface.BOLD));
                                 boldTextPaint.setAntiAlias(true);
+
+                                Paint itemNamePaint = new Paint();
+                                itemNamePaint.setColor(Color.rgb(15, 23, 42));
+                                itemNamePaint.setTextSize(9.5f);
+                                itemNamePaint.setTypeface(Typeface.create(Typeface.DEFAULT, Typeface.BOLD));
+                                itemNamePaint.setAntiAlias(true);
+                                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+                                    itemNamePaint.setLetterSpacing(0.012f);
+                                }
 
                                 Paint linePaint = new Paint();
                                 linePaint.setColor(Color.rgb(226, 232, 240)); // Slate 200
@@ -521,14 +701,14 @@ public class MainActivity extends FlutterActivity implements TextToSpeech.OnInit
                                         String amt = String.valueOf(item.get("amount"));
 
                                         canvas.drawText(String.valueOf(globalSNo++), 48, currentY, subPaint);
-                                        if (name.length() > 36) name = name.substring(0, 36) + "...";
-                                        canvas.drawText(name, 80, currentY, boldTextPaint);
+                                        if (name.length() > 44) name = name.substring(0, 42) + "...";
+                                        canvas.drawText(name, 80, currentY, itemNamePaint);
                                         canvas.drawText(qty, 375, currentY, bodyPaint);
                                         canvas.drawText(rate, 440, currentY, bodyPaint);
-                                        canvas.drawText(amt, 500, currentY, boldTextPaint);
+                                        canvas.drawText(amt, 498, currentY, boldTextPaint);
 
-                                        canvas.drawLine(36, currentY + 4, 559, currentY + 4, rowLinePaint);
-                                        currentY += 19;
+                                        canvas.drawLine(36, currentY + 6, 559, currentY + 6, rowLinePaint);
+                                        currentY += 24;
                                     }
 
                                     // If last page, render Summary, Terms & Signatory Block
@@ -601,38 +781,103 @@ public class MainActivity extends FlutterActivity implements TextToSpeech.OnInit
                                         gtVal.setAntiAlias(true);
                                         canvas.drawText(totalAmount, 475, totalsY + 24, gtVal);
 
-                                        // Promotion / Thank You Footer Strip (Matching preview)
-                                        float promoY = totalsY + 46;
-                                        RectF promoStrip = new RectF(36, promoY, 559, promoY + 22);
-                                        canvas.drawRoundRect(promoStrip, 5, 5, thBgPaint);
-                                        Paint promoText = new Paint();
-                                        promoText.setColor(Color.WHITE);
-                                        promoText.setTextSize(8.5f);
-                                        promoText.setFakeBoldText(true);
-                                        promoText.setAntiAlias(true);
-                                        String promoLabel = isPro ? ("⚡ " + storeName + " • " + footerNote) : ("⚡ Powered by KamaiPlus • " + footerNote);
-                                        canvas.drawText(promoLabel, 46, promoY + 14, promoText);
+                                        // Branding / Thank You Footer Strip
+                                        if (!isPro) {
+                                            // Free Tier: Professional KamaiPlus Branding Card with increased height (34pt)
+                                            float promoY = totalsY + 44;
+                                            RectF promoStrip = new RectF(36, promoY, 559, promoY + 34);
+                                            canvas.drawRoundRect(promoStrip, 8, 8, thBgPaint);
+
+                                            Paint promoTextTitle = new Paint();
+                                            promoTextTitle.setColor(Color.WHITE);
+                                            promoTextTitle.setTextSize(9.5f);
+                                            promoTextTitle.setTypeface(Typeface.create(Typeface.DEFAULT, Typeface.BOLD));
+                                            promoTextTitle.setAntiAlias(true);
+
+                                            Paint promoTextSub = new Paint();
+                                            promoTextSub.setColor(Color.argb(230, 255, 255, 255));
+                                            promoTextSub.setTextSize(7.5f);
+                                            promoTextSub.setAntiAlias(true);
+
+                                            canvas.drawText("⚡ POWERED BY KAMAIPLUS  •  INDIA'S #1 RETAIL POS & BILLING APP", 48, promoY + 14, promoTextTitle);
+                                            canvas.drawText("Billing, GST Invoicing, Khata Ledger & Inventory Management  •  www.kamaiplus.com", 48, promoY + 26, promoTextSub);
+                                        } else {
+                                            // Pro Tier: 100% White-Label (No marketing promo banner!)
+                                            if (footerNote != null && !footerNote.trim().isEmpty()) {
+                                                float noteY = totalsY + 44;
+                                                Paint proFooterNote = new Paint(subPaint);
+                                                proFooterNote.setTextSize(8.5f);
+                                                proFooterNote.setColor(Color.rgb(71, 85, 105));
+                                                canvas.drawText(footerNote, 36, noteY + 14, proFooterNote);
+                                            }
+                                        }
                                     }
 
                                     // --- FOOTER ON EVERY PAGE ---
                                     canvas.drawLine(36, 810, 559, 810, linePaint);
-                                    String footerBranding = isPro ? (storeName + " • Certified GST/Retail Invoice") : "Powered by KamaiPlus • Retail & Inventory Software";
+                                    String footerBranding = isPro ? "Printed via KamaiPlus" : "Powered by KamaiPlus • Retail & Inventory Software";
                                     canvas.drawText(footerBranding, 36, 822, subPaint);
                                     canvas.drawText("Page " + pageIdx + " of " + totalPages, 505, 822, boldTextPaint);
 
                                     document.finishPage(page);
                                 }
 
-                                // Save PDF to Downloads directory
-                                File downloadsDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS);
-                                if (!downloadsDir.exists()) downloadsDir.mkdirs();
+                                // 1. Save PDF to App Documents directory (Guaranteed 100% writable on all Android versions)
+                                File docsDir = getExternalFilesDir(Environment.DIRECTORY_DOCUMENTS);
+                                if (docsDir == null) docsDir = getFilesDir();
+                                if (!docsDir.exists()) docsDir.mkdirs();
 
                                 String cleanInv = invoiceNumber.replaceAll("[^a-zA-Z0-9_-]", "_");
-                                File pdfFile = new File(downloadsDir, "Kamai_Invoice_" + cleanInv + ".pdf");
+                                String fileName = "Kamai_Invoice_" + cleanInv + ".pdf";
+                                File pdfFile = new File(docsDir, fileName);
                                 FileOutputStream fos = new FileOutputStream(pdfFile);
                                 document.writeTo(fos);
+                                fos.flush();
                                 fos.close();
                                 document.close();
+
+                                // 2. Also copy to public Downloads for user visibility across Files app
+                                try {
+                                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                                        ContentValues values = new ContentValues();
+                                        values.put(MediaStore.MediaColumns.DISPLAY_NAME, fileName);
+                                        values.put(MediaStore.MediaColumns.MIME_TYPE, "application/pdf");
+                                        values.put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS + "/KamaiPlus");
+                                        Uri downloadUri = getContentResolver().insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values);
+                                        if (downloadUri != null) {
+                                            OutputStream os = getContentResolver().openOutputStream(downloadUri);
+                                            if (os != null) {
+                                                FileInputStream fis = new FileInputStream(pdfFile);
+                                                byte[] buf = new byte[8192];
+                                                int len;
+                                                while ((len = fis.read(buf)) > 0) {
+                                                    os.write(buf, 0, len);
+                                                }
+                                                fis.close();
+                                                os.flush();
+                                                os.close();
+                                            }
+                                        }
+                                    } else {
+                                        File pubDownloads = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS);
+                                        if (pubDownloads != null) {
+                                            if (!pubDownloads.exists()) pubDownloads.mkdirs();
+                                            File pubFile = new File(pubDownloads, fileName);
+                                            FileInputStream fis = new FileInputStream(pdfFile);
+                                            FileOutputStream pubFos = new FileOutputStream(pubFile);
+                                            byte[] buf = new byte[8192];
+                                            int len;
+                                            while ((len = fis.read(buf)) > 0) {
+                                                pubFos.write(buf, 0, len);
+                                            }
+                                            fis.close();
+                                            pubFos.flush();
+                                            pubFos.close();
+                                        }
+                                    }
+                                } catch (Exception ignored) {
+                                    // Primary file in docsDir is guaranteed saved
+                                }
 
                                 // Trigger Native Download Notification with Tap-to-Open
                                 Intent viewIntent = new Intent(Intent.ACTION_VIEW);
@@ -856,7 +1101,14 @@ public class MainActivity extends FlutterActivity implements TextToSpeech.OnInit
                                         Intent intent = new Intent(Intent.ACTION_VIEW);
                                         Uri uri = FileProvider.getUriForFile(MainActivity.this, getPackageName() + ".fileprovider", file);
                                         intent.setDataAndType(uri, "application/pdf");
+                                        intent.setClipData(ClipData.newRawUri("Invoice PDF", uri));
                                         intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_ACTIVITY_NEW_TASK);
+                                        try {
+                                            List<ResolveInfo> resInfoList = getPackageManager().queryIntentActivities(intent, PackageManager.MATCH_DEFAULT_ONLY);
+                                            for (ResolveInfo resolveInfo : resInfoList) {
+                                                grantUriPermission(resolveInfo.activityInfo.packageName, uri, Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                                            }
+                                        } catch (Exception ignored) {}
                                         startActivity(intent);
                                         result.success(true);
                                         return;
@@ -874,6 +1126,9 @@ public class MainActivity extends FlutterActivity implements TextToSpeech.OnInit
                                 String phone = call.argument("phone");
                                 String message = call.argument("message");
                                 String subject = call.argument("subject");
+                                Boolean forceChooser = call.argument("forceChooser");
+                                if (forceChooser == null) forceChooser = false;
+
                                 if (invNum == null) invNum = "DOC";
                                 if (sName == null) sName = "KamaiPlus";
                                 if (subject == null || subject.isEmpty()) {
@@ -887,31 +1142,65 @@ public class MainActivity extends FlutterActivity implements TextToSpeech.OnInit
                                         Intent shareIntent = new Intent(Intent.ACTION_SEND);
                                         shareIntent.setType("application/pdf");
                                         shareIntent.putExtra(Intent.EXTRA_STREAM, uri);
+                                        shareIntent.setClipData(ClipData.newRawUri("Invoice PDF", uri));
                                         shareIntent.putExtra(Intent.EXTRA_SUBJECT, subject);
                                         if (message != null && !message.trim().isEmpty()) {
                                             shareIntent.putExtra(Intent.EXTRA_TEXT, message);
                                         } else {
                                             shareIntent.putExtra(Intent.EXTRA_TEXT, "Namaste! Here is your document #" + invNum + " from " + sName + ".");
                                         }
-                                        shareIntent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                                        shareIntent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_ACTIVITY_NEW_TASK);
 
-                                        if (phone != null && !phone.trim().isEmpty()) {
+                                        // Direct WhatsApp share only if explicitly requested without forceChooser
+                                        if (!forceChooser && phone != null && !phone.trim().isEmpty()) {
                                             String cleanPhone = phone.replaceAll("[^0-9]", "");
-                                            if (cleanPhone.length() == 10) cleanPhone = "91" + cleanPhone;
+                                            if (cleanPhone.startsWith("9191") && cleanPhone.length() == 14) {
+                                                cleanPhone = cleanPhone.substring(2);
+                                            } else if (cleanPhone.startsWith("0") && cleanPhone.length() == 11) {
+                                                cleanPhone = "91" + cleanPhone.substring(1);
+                                            } else if (cleanPhone.length() == 10) {
+                                                cleanPhone = "91" + cleanPhone;
+                                            }
+                                            boolean hasValidJid = cleanPhone.length() == 12;
+                                            
+                                            // 1. Try standard WhatsApp
                                             try {
-                                                shareIntent.setPackage("com.whatsapp");
-                                                shareIntent.putExtra("jid", cleanPhone + "@s.whatsapp.net");
-                                                startActivity(shareIntent);
+                                                grantUriPermission("com.whatsapp", uri, Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                                                Intent waIntent = new Intent(shareIntent);
+                                                waIntent.setPackage("com.whatsapp");
+                                                if (hasValidJid) {
+                                                    waIntent.putExtra("jid", cleanPhone + "@s.whatsapp.net");
+                                                }
+                                                startActivity(waIntent);
                                                 result.success(true);
                                                 return;
                                             } catch (Exception waEx) {
-                                                // Fallback to chooser if direct WhatsApp package fails
-                                                shareIntent.setPackage(null);
+                                                // 2. Try WhatsApp Business
+                                                try {
+                                                    grantUriPermission("com.whatsapp.w4b", uri, Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                                                    Intent wabIntent = new Intent(shareIntent);
+                                                    wabIntent.setPackage("com.whatsapp.w4b");
+                                                    if (hasValidJid) {
+                                                        wabIntent.putExtra("jid", cleanPhone + "@s.whatsapp.net");
+                                                    }
+                                                    startActivity(wabIntent);
+                                                    result.success(true);
+                                                    return;
+                                                } catch (Exception wabEx) {
+                                                    // Fallback to chooser below
+                                                }
                                             }
                                         }
 
+                                        // System Share Dialog
                                         Intent chooser = Intent.createChooser(shareIntent, "Share Document PDF via...");
-                                        chooser.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                                        chooser.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_ACTIVITY_NEW_TASK);
+                                        try {
+                                            List<ResolveInfo> resInfoList = getPackageManager().queryIntentActivities(chooser, PackageManager.MATCH_DEFAULT_ONLY);
+                                            for (ResolveInfo resolveInfo : resInfoList) {
+                                                grantUriPermission(resolveInfo.activityInfo.packageName, uri, Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                                            }
+                                        } catch (Exception ignored) {}
                                         startActivity(chooser);
                                         result.success(true);
                                         return;

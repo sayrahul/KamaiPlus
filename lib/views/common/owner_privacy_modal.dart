@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../../services/biometric_service.dart';
 
 class OwnerPrivacyModal extends StatefulWidget {
   final VoidCallback onUnlocked;
@@ -25,6 +26,54 @@ class _OwnerPrivacyModalState extends State<OwnerPrivacyModal> {
   String _errorMessage = '';
   String _successMessage = '';
   bool _isChangingPin = false;
+  bool _isBiometricSupported = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _initBiometric();
+  }
+
+  Future<void> _initBiometric() async {
+    final available = await BiometricService.instance.isBiometricAvailable();
+    if (mounted) {
+      setState(() => _isBiometricSupported = available);
+      if (available) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) _triggerBiometric();
+        });
+      }
+    }
+  }
+
+  Future<void> _triggerBiometric() async {
+    final success = await BiometricService.instance.authenticateOwner(
+      reason: 'KamaiPlus Owner Verification: Touch fingerprint sensor to unlock',
+    );
+    if (success && mounted) {
+      Navigator.of(context).pop();
+      widget.onUnlocked();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Row(
+            children: [
+              const Icon(Icons.fingerprint_rounded, color: Color(0xFF10B981), size: 20),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'Biometric verified: Margins & Reports unlocked!',
+                  style: GoogleFonts.inter(fontWeight: FontWeight.w700),
+                ),
+              ),
+            ],
+          ),
+          backgroundColor: const Color(0xFF0F172A),
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        ),
+      );
+    }
+  }
 
   String _currentPinInput = '';
   String _newPinInput = '';
@@ -338,6 +387,37 @@ class _OwnerPrivacyModalState extends State<OwnerPrivacyModal> {
         ),
         const SizedBox(height: 14),
 
+        if (_isBiometricSupported) ...[
+          InkWell(
+            onTap: _triggerBiometric,
+            borderRadius: BorderRadius.circular(12),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 9),
+              decoration: BoxDecoration(
+                color: const Color(0xFFEFF6FF),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: const Color(0xFFBFDBFE)),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.fingerprint_rounded, size: 20, color: Color(0xFF2563EB)),
+                  const SizedBox(width: 8),
+                  Text(
+                    'Touch Fingerprint to Unlock',
+                    style: GoogleFonts.plusJakartaSans(
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.w800,
+                      color: const Color(0xFF2563EB),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 10),
+        ],
+
         // Keypad Grid for Fast Mobile Entry
         Container(
           padding: const EdgeInsets.symmetric(vertical: 4),
@@ -351,7 +431,28 @@ class _OwnerPrivacyModalState extends State<OwnerPrivacyModal> {
               const SizedBox(height: 8),
               Row(
                 children: [
-                  const Expanded(child: SizedBox()),
+                  Expanded(
+                    child: Material(
+                      color: Colors.transparent,
+                      child: InkWell(
+                        onTap: _triggerBiometric,
+                        borderRadius: BorderRadius.circular(12),
+                        child: Container(
+                          height: 42,
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFEFF6FF),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: const Color(0xFFBFDBFE)),
+                          ),
+                          child: const Icon(
+                            Icons.fingerprint_rounded,
+                            size: 22,
+                            color: Color(0xFF2563EB),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
                   const SizedBox(width: 8),
                   Expanded(child: _buildKeypadBtn('0')),
                   const SizedBox(width: 8),

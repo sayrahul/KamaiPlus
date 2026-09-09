@@ -6,6 +6,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../services/csv_inward_service.dart';
 import '../../services/gemini_ai_service.dart';
+import '../../services/mlkit_ocr_service.dart';
 import 'bill_scan_review_sheet.dart';
 
 class AiInwardSheet extends StatelessWidget {
@@ -84,6 +85,23 @@ class AiInwardSheet extends StatelessWidget {
 
       if (file == null) return;
 
+      // 1. Instant On-Device ML Kit OCR (Free, Offline, <200ms)
+      final mlResult = await MlKitOcrService.instance.scanBillImage(file.path);
+      if (mlResult.items.isNotEmpty) {
+        if (!context.mounted) return;
+        Navigator.pop(context); // close sheet
+        BillScanReviewSheet.show(
+          context,
+          items: mlResult.items,
+          supplierName: mlResult.supplierName,
+          billNumber: mlResult.billNumber,
+          billDate: mlResult.billDate,
+          onInwardComplete: onInwardComplete,
+        );
+        return;
+      }
+
+      // 2. Fallback to Gemini Deep AI Vision for complex handwritten parcha
       final bytes = await file.readAsBytes();
       if (!context.mounted) return;
 

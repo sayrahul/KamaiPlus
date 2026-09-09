@@ -9,8 +9,10 @@ import '../../core/utils/app_validators.dart';
 import '../../core/utils/money_formatter.dart';
 import '../../models/models.dart';
 import '../../services/firestore_sync_service.dart';
+import '../../services/contacts_service.dart';
 import '../common/kamai_bottom_nav.dart';
 import '../common/empty_state_card.dart';
+import '../common/in_app_notification.dart';
 
 class CustomersScreen extends StatefulWidget {
   const CustomersScreen({super.key});
@@ -146,7 +148,47 @@ class _CustomersScreenState extends State<CustomersScreen> {
                   IconButton(icon: const Icon(Icons.close_rounded), onPressed: () => Navigator.pop(modalCtx)),
                 ],
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: 12),
+              InkWell(
+                onTap: () async {
+                  final contact = await ContactsService.instance.pickContact();
+                  if (contact != null) {
+                    setModalState(() {
+                      if (contact['name']?.isNotEmpty == true) {
+                        nameCtrl.text = contact['name']!;
+                      }
+                      if (contact['phone']?.isNotEmpty == true) {
+                        phoneCtrl.text = contact['phone']!;
+                      }
+                    });
+                  }
+                },
+                borderRadius: BorderRadius.circular(10),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFEFF6FF),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: const Color(0xFFBFDBFE)),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.contacts_rounded, size: 16, color: Color(0xFF2563EB)),
+                      const SizedBox(width: 8),
+                      Text(
+                        '📱 Phone Contacts se Chunein',
+                        style: GoogleFonts.plusJakartaSans(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                          color: const Color(0xFF2563EB),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 14),
               TextField(
                 controller: nameCtrl,
                 decoration: InputDecoration(
@@ -163,6 +205,23 @@ class _CustomersScreenState extends State<CustomersScreen> {
                   labelText: 'WhatsApp Mobile Number *',
                   hintText: 'e.g. 9876543210',
                   prefixText: '+91 ',
+                  suffixIcon: IconButton(
+                    tooltip: 'Pick Contact',
+                    icon: const Icon(Icons.contacts_rounded, color: Color(0xFF2563EB)),
+                    onPressed: () async {
+                      final contact = await ContactsService.instance.pickContact();
+                      if (contact != null) {
+                        setModalState(() {
+                          if (contact['name']?.isNotEmpty == true) {
+                            nameCtrl.text = contact['name']!;
+                          }
+                          if (contact['phone']?.isNotEmpty == true) {
+                            phoneCtrl.text = contact['phone']!;
+                          }
+                        });
+                      }
+                    },
+                  ),
                   border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
                 ),
               ),
@@ -226,22 +285,12 @@ class _CustomersScreenState extends State<CustomersScreen> {
                   onPressed: () async {
                     final name = nameCtrl.text.trim();
                     if (name.isEmpty) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text('Please enter customer full name'),
-                          backgroundColor: Color(0xFFDC2626),
-                        ),
-                      );
+                      InAppNotification.error('Please enter customer full name', context: context);
                       return;
                     }
                     final phoneErr = AppValidators.validatePhone(phoneCtrl.text.trim());
                     if (phoneErr != null) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text(phoneErr),
-                          backgroundColor: const Color(0xFFDC2626),
-                        ),
-                      );
+                      InAppNotification.error(phoneErr, context: context);
                       return;
                     }
                     final cleanPhone = AppValidators.cleanPhone(phoneCtrl.text.trim());
@@ -460,7 +509,8 @@ class _CustomersScreenState extends State<CustomersScreen> {
                         final text = hasDue
                             ? 'Namaste%20${customer.name}%20Ji,%20Aapke%20KamaiPlus%20store%20ka%20Udhar%20balance%20${MoneyFormatter.formatPaise(customer.currentBalancePaise)}%20pending%20hai.%20Kripya%20UPI%20ya%20counter%20par%20clear%20karein.'
                             : 'Namaste%20${customer.name}%20Ji,%20Greetings%20from%20KamaiPlus%20Store!%20Aapka%20khata%20bilkul%20clear%20hai.';
-                        final uri = Uri.parse('https://wa.me/91${customer.phone}?text=$text');
+                        final waPhone = AppValidators.formatWhatsAppPhone(customer.phone);
+                        final uri = Uri.parse('https://wa.me/$waPhone?text=$text');
                         if (await canLaunchUrl(uri)) launchUrl(uri, mode: LaunchMode.externalApplication);
                       },
                       icon: Image.asset('assets/images/whatsapp_logo.png', width: 20, height: 20),
@@ -926,7 +976,8 @@ class _CustomersScreenState extends State<CustomersScreen> {
                 IconButton(
                   icon: Image.asset('assets/images/whatsapp_logo.png', width: 22, height: 22),
                   onPressed: () async {
-                    final uri = Uri.parse('https://wa.me/91${customer.phone}?text=Namaste%20${customer.name},%20Greetings%20from%20KamaiPlus%20Store!');
+                    final waPhone = AppValidators.formatWhatsAppPhone(customer.phone);
+                    final uri = Uri.parse('https://wa.me/$waPhone?text=Namaste%20${customer.name},%20Greetings%20from%20KamaiPlus%20Store!');
                     if (await canLaunchUrl(uri)) launchUrl(uri, mode: LaunchMode.externalApplication);
                   },
                 ),

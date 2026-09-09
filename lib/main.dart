@@ -8,7 +8,14 @@ import 'services/soundbox_service.dart';
 import 'services/firestore_sync_service.dart';
 import 'services/notification_service.dart';
 import 'services/auth_service.dart';
+import 'services/shortcuts_service.dart';
+import 'services/share_target_service.dart';
+import 'services/home_widget_service.dart';
+import 'services/workmanager_sync_service.dart';
+import 'services/in_app_update_service.dart';
 import 'views/splash/splash_screen.dart';
+
+final GlobalKey<NavigatorState> rootNavigatorKey = GlobalKey<NavigatorState>();
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -45,7 +52,7 @@ void main() async {
   // 4. Initialize Local Notifications & FCM Push Engine
   await NotificationService.instance.init();
 
-  // 5. Initialize GoogleSignIn singleton (Non-blocking) — do not auto-prompt Credential Manager on app open
+  // 5. Initialize GoogleSignIn singleton (Non-blocking) — no unprompted dialog
   AuthService.instance.initGoogleSignIn();
 
   // 6. Initialize Cloud Firestore Realtime Sync Engine if already authenticated
@@ -54,6 +61,19 @@ void main() async {
     final savedBizId = prefs.getString('business_id') ?? 'biz_$cachedUserId';
     FirestoreSyncService.instance.initialize(businessId: savedBizId);
   }
+
+  // 7. Initialize Native App Shortcuts & Share-To Receiver
+  ShortcutsService.instance.init(rootNavigatorKey);
+  ShareTargetService.instance.init(rootNavigatorKey);
+
+  // 8. Update Home Screen Widgets with today's real-time metrics
+  HomeWidgetService.instance.updateTodayMetrics();
+
+  // 9. Initialize Android WorkManager for battery-friendly Doze-mode sync
+  WorkmanagerSyncService.instance.initialize();
+
+  // 10. Check for Google Play Store In-App Updates
+  InAppUpdateService.instance.checkForUpdates();
 
   runApp(const KamaiPlusApp());
 }
@@ -64,6 +84,7 @@ class KamaiPlusApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
+      navigatorKey: rootNavigatorKey,
       title: 'KamaiPlus POS',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.lightTheme,

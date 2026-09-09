@@ -15,6 +15,7 @@ import '../../core/utils/money_formatter.dart';
 import '../../core/constants/business_vertical_config.dart';
 import 'pos_item_edit_modal.dart';
 import 'sale_completed_modal.dart';
+import '../common/in_app_notification.dart';
 
 class PosCheckoutModal extends StatefulWidget {
   final List<CartItemModel> cartItems;
@@ -408,13 +409,7 @@ class _PosCheckoutModalState extends State<PosCheckoutModal> {
             onPressed: () async {
               final name = nameCtrl.text.trim();
               if (name.isEmpty) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('Customer name is required'),
-                    backgroundColor: Color(0xFFDC2626),
-                    behavior: SnackBarBehavior.floating,
-                  ),
-                );
+                InAppNotification.error('Customer name is required', context: context);
                 return;
               }
 
@@ -432,13 +427,7 @@ class _PosCheckoutModalState extends State<PosCheckoutModal> {
               if (rawPhone.isNotEmpty) {
                 final phoneErr = AppValidators.validatePhone(rawPhone);
                 if (phoneErr != null) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text(phoneErr),
-                      backgroundColor: const Color(0xFFDC2626),
-                      behavior: SnackBarBehavior.floating,
-                    ),
-                  );
+                  InAppNotification.error(phoneErr, context: context);
                   return;
                 }
                 cleanPhone = AppValidators.cleanPhone(rawPhone);
@@ -879,10 +868,13 @@ class _PosCheckoutModalState extends State<PosCheckoutModal> {
     if (currentCartItems.isEmpty) return;
 
     if (_paymentMode == 'credit' && _currentCustomer == null) {
+      setState(() {
+        _isSearchingCustomer = true;
+      });
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Please select or add a Customer above to record Credit (Udhar)'),
-          backgroundColor: Color(0xFFEF4444),
+          content: Text('Please select or add a Customer for Credit (Udhar) billing'),
+          backgroundColor: Color(0xFFD97706),
           behavior: SnackBarBehavior.floating,
         ),
       );
@@ -1412,24 +1404,46 @@ class _PosCheckoutModalState extends State<PosCheckoutModal> {
                                 ),
                                 if (isCustomerCompulsoryMissing)
                                   Container(
-                                    margin: const EdgeInsets.only(top: 6),
-                                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                    margin: const EdgeInsets.only(top: 8),
+                                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                                     decoration: BoxDecoration(
-                                      color: const Color(0xFFFEE2E2),
-                                      borderRadius: BorderRadius.circular(8),
-                                      border: Border.all(color: const Color(0xFFFCA5A5)),
+                                      color: const Color(0xFFFFFBEB),
+                                      borderRadius: BorderRadius.circular(10),
+                                      border: Border.all(color: const Color(0xFFFDE68A)),
                                     ),
                                     child: Row(
                                       children: [
-                                        const Icon(Icons.error_outline_rounded, size: 16, color: Color(0xFFDC2626)),
-                                        const SizedBox(width: 6),
+                                        const Icon(Icons.info_outline_rounded, size: 16, color: Color(0xFFD97706)),
+                                        const SizedBox(width: 8),
                                         Expanded(
                                           child: Text(
-                                            '⚠️ Udhar / Khata sale ke liye Customer select karna anivarya (compulsory) hai!',
+                                            'Udhar / Credit bill ke liye Customer select karein',
                                             style: GoogleFonts.plusJakartaSans(
-                                              fontSize: 11,
+                                              fontSize: 11.5,
                                               fontWeight: FontWeight.w700,
-                                              color: const Color(0xFFDC2626),
+                                              color: const Color(0xFF92400E),
+                                            ),
+                                          ),
+                                        ),
+                                        InkWell(
+                                          onTap: () {
+                                            setState(() {
+                                              _isSearchingCustomer = true;
+                                            });
+                                          },
+                                          child: Container(
+                                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                            decoration: BoxDecoration(
+                                              color: const Color(0xFFD97706),
+                                              borderRadius: BorderRadius.circular(6),
+                                            ),
+                                            child: Text(
+                                              'Select',
+                                              style: GoogleFonts.plusJakartaSans(
+                                                fontSize: 10.5,
+                                                fontWeight: FontWeight.w800,
+                                                color: Colors.white,
+                                              ),
                                             ),
                                           ),
                                         ),
@@ -2512,6 +2526,9 @@ class _PosCheckoutModalState extends State<PosCheckoutModal> {
         onTap: () {
           setState(() {
             _paymentMode = mode;
+            if (mode == 'credit' && _currentCustomer == null) {
+              _isSearchingCustomer = true;
+            }
             if (mode == 'split' && !isSplitBalanced) {
               final half = (grandTotalPaise / 200.0).floor();
               final other = (grandTotalPaise / 100.0) - half;

@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">KamaiPlus</string>
+    <string name="shortcut_new_sale_short">New Sale</string>
+    <string name="shortcut_new_sale_long">New POS Counter Sale</string>
+    <string name="shortcut_add_khata_short">Add Khata</string>
+    <string name="shortcut_add_khata_long">Customer Udhar / Khata</string>
+    <string name="shortcut_scan_barcode_short">Scan Barcode</string>
+    <string name="shortcut_scan_barcode_long">Barcode Studio &amp; Scanner</string>
+    <string name="shortcut_reports_short">Today\'s Report</string>
+    <string name="shortcut_reports_long">Daily Sales &amp; GST Report</string>
+</resources>

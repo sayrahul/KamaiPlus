@@ -6,6 +6,7 @@ import '../../core/constants/business_vertical_config.dart';
 import '../../models/models.dart';
 import '../../core/database/local_database.dart';
 import '../../services/firestore_sync_service.dart';
+import '../../services/home_widget_service.dart';
 import 'pos_checkout_modal.dart';
 import 'barcode_scanner_view.dart';
 
@@ -285,6 +286,7 @@ class _PosBillingScreenState extends State<PosBillingScreen> {
           }
         });
         _loadData(); // refresh stock numbers
+        HomeWidgetService.instance.updateTodayMetrics();
       },
       autoOpenCustomerDropdown: widget.autoOpenCustomerDropdown,
       autoOpenSplit: widget.autoOpenSplit,

@@ -20,6 +20,7 @@ class FirestoreSyncService {
   String _activeBusinessId = 'biz_starter_pos';
   StreamSubscription? _productsSub;
   StreamSubscription? _customersSub;
+  StreamSubscription? _businessSub;
 
   String get activeBusinessId => _activeBusinessId;
 
@@ -210,6 +211,52 @@ class FirestoreSyncService {
       }
       liveSyncCounter.value++;
     }, onError: (_) {});
+
+    // 3. Live Business Profile Stream (Immediate Pro Upgrade / Downgrade sync from Admin Portal)
+    _businessSub?.cancel();
+    _businessSub = firestore
+        .collection('businesses')
+        .doc(_activeBusinessId)
+        .snapshots()
+        .listen((docSnap) async {
+      if (docSnap.exists) {
+        final d = docSnap.data();
+        if (d != null) {
+          final isProCloud = (d['is_pro'] == true ||
+              d['is_pro'] == 1 ||
+              d['subscription_tier'] == 'pro' ||
+              d['subscription_tier'] == 'annual' ||
+              d['subscription_tier'] == 'monthly');
+
+          final prefs = await SharedPreferences.getInstance();
+          final currentIsPro = prefs.getBool('is_pro') ?? false;
+
+          if (isProCloud) {
+            final plan = d['pro_plan']?.toString() ?? d['subscription_tier']?.toString() ?? 'annual';
+            final paymentId = d['razorpay_payment_id']?.toString() ?? 'admin_granted';
+            final expiryStr = (d['pro_expiry'] ?? d['subscription_expires_at'] ?? d['subscription_valid_until'])?.toString();
+            final expiry = expiryStr != null ? DateTime.tryParse(expiryStr) : null;
+
+            await LocalDatabase.instance.activateProMembership(
+              plan: plan,
+              paymentId: paymentId,
+              expiryDate: expiry ?? DateTime.now().add(const Duration(days: 365)),
+            );
+            await prefs.setBool('is_pro', true);
+            await prefs.setString('pro_plan', plan);
+            debugPrint('Live sync: Pro membership active ($plan)');
+          } else if (currentIsPro && (d['subscription_tier'] == 'free' || d['is_pro'] == false)) {
+            // Revert / Downgrade to Free tier if revoked by Super Admin
+            await LocalDatabase.instance.deactivateProMembership();
+            await prefs.setBool('is_pro', false);
+            await prefs.remove('pro_plan');
+            debugPrint('Live sync: Subscription downgraded to Free by Admin');
+          }
+        }
+      }
+    }, onError: (e) {
+      debugPrint('Live business stream error: $e');
+    });
   }
 
   /// Initial Cloud Catalog download
@@ -224,19 +271,31 @@ class FirestoreSyncService {
         final bizDoc = await firestore.collection('businesses').doc(_activeBusinessId).get();
         if (bizDoc.exists) {
           final d = bizDoc.data();
-          if (d != null && (d['is_pro'] == true || d['is_pro'] == 1 || d['subscription_tier'] == 'pro' || d['subscription_tier'] == 'annual' || d['subscription_tier'] == 'monthly')) {
-            final plan = d['pro_plan']?.toString() ?? d['subscription_tier']?.toString() ?? 'annual';
-            final paymentId = d['razorpay_payment_id']?.toString() ?? 'cloud_verified';
-            final expiryStr = (d['pro_expiry'] ?? d['subscription_expires_at'] ?? d['subscription_valid_until'])?.toString();
-            final expiry = expiryStr != null ? DateTime.tryParse(expiryStr) : null;
-            await LocalDatabase.instance.activateProMembership(
-              plan: plan,
-              paymentId: paymentId,
-              expiryDate: expiry ?? DateTime.now().add(const Duration(days: 365)),
-            );
+          if (d != null) {
+            final isProCloud = (d['is_pro'] == true ||
+                d['is_pro'] == 1 ||
+                d['subscription_tier'] == 'pro' ||
+                d['subscription_tier'] == 'annual' ||
+                d['subscription_tier'] == 'monthly');
             final prefs = await SharedPreferences.getInstance();
-            await prefs.setBool('is_pro', true);
-            await prefs.setString('pro_plan', plan);
+
+            if (isProCloud) {
+              final plan = d['pro_plan']?.toString() ?? d['subscription_tier']?.toString() ?? 'annual';
+              final paymentId = d['razorpay_payment_id']?.toString() ?? 'cloud_verified';
+              final expiryStr = (d['pro_expiry'] ?? d['subscription_expires_at'] ?? d['subscription_valid_until'])?.toString();
+              final expiry = expiryStr != null ? DateTime.tryParse(expiryStr) : null;
+              await LocalDatabase.instance.activateProMembership(
+                plan: plan,
+                paymentId: paymentId,
+                expiryDate: expiry ?? DateTime.now().add(const Duration(days: 365)),
+              );
+              await prefs.setBool('is_pro', true);
+              await prefs.setString('pro_plan', plan);
+            } else if (d['subscription_tier'] == 'free' || d['is_pro'] == false) {
+              await LocalDatabase.instance.deactivateProMembership();
+              await prefs.setBool('is_pro', false);
+              await prefs.remove('pro_plan');
+            }
           }
         }
       } catch (e) {

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:uuid/uuid.dart';
 import '../../core/constants/business_vertical_config.dart';
@@ -68,6 +69,7 @@ class _AddProductModalState extends State<AddProductModal> {
   late List<CategoryModel> _localCategories;
   bool _isSaving = false;
   bool _isUnlimitedStock = false;
+  bool _isStockExpanded = false;
 
   late final List<Map<String, String>> _units;
 
@@ -980,140 +982,215 @@ class _AddProductModalState extends State<AddProductModal> {
                         const SizedBox(height: 12),
                       ],
 
-                      // 5. Stock & Inventory Card (With Unlimited Stock Toggle!)
+                      // 5. Stock & Inventory Card (Collapsible Accordion - Solved Issue 10)
                       Container(
-                        padding: const EdgeInsets.all(12),
                         decoration: BoxDecoration(
-                          color: _isUnlimitedStock ? const Color(0xFFF0FDF4) : const Color(0xFFF8FAFC),
+                          color: _isStockExpanded
+                              ? (_isUnlimitedStock ? const Color(0xFFF0FDF4) : const Color(0xFFF8FAFC))
+                              : Colors.white,
                           borderRadius: BorderRadius.circular(16),
                           border: Border.all(
-                            color: _isUnlimitedStock ? const Color(0xFFBBF7D0) : const Color(0xFFE2E8F0),
+                            color: _isStockExpanded
+                                ? (_isUnlimitedStock ? const Color(0xFFBBF7D0) : const Color(0xFFCBD5E1))
+                                : const Color(0xFFE2E8F0),
                             width: 1.2,
                           ),
                         ),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                Row(
-                                  children: [
-                                    Icon(
-                                      _isUnlimitedStock ? Icons.all_inclusive_rounded : Icons.inventory_2_outlined,
-                                      size: 16,
-                                      color: _isUnlimitedStock ? const Color(0xFF16A34A) : const Color(0xFF475569),
-                                    ),
-                                    const SizedBox(width: 6),
-                                    Text(
-                                      'Stock & Inventory',
-                                      style: GoogleFonts.outfit(
-                                        fontSize: 12.5,
-                                        fontWeight: FontWeight.w800,
-                                        color: const Color(0xFF0F172A),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                                // Inline Unlimited Toggle
-                                Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Text(
-                                      'Unlimited Stock ∞',
-                                      style: GoogleFonts.inter(
-                                        fontSize: 10.5,
-                                        fontWeight: FontWeight.w700,
-                                        color: _isUnlimitedStock ? const Color(0xFF16A34A) : const Color(0xFF64748B),
-                                      ),
-                                    ),
-                                    const SizedBox(width: 4),
-                                    Transform.scale(
-                                      scale: 0.75,
-                                      child: Switch(
-                                        value: _isUnlimitedStock,
-                                        activeThumbColor: const Color(0xFF16A34A),
-                                        onChanged: (val) {
-                                          setState(() {
-                                            _isUnlimitedStock = val;
-                                            if (val) {
-                                              _stockCtrl.text = '';
-                                            } else {
-                                              _stockCtrl.text = '10';
-                                            }
-                                          });
-                                        },
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 8),
-
-                            if (_isUnlimitedStock)
-                              Container(
-                                width: double.infinity,
-                                padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 10),
-                                decoration: BoxDecoration(
-                                  color: Colors.white,
-                                  borderRadius: BorderRadius.circular(10),
-                                  border: Border.all(color: const Color(0xFFDCFCE7)),
-                                ),
+                            // Accordion Header (Tappable)
+                            InkWell(
+                              onTap: () {
+                                HapticFeedback.selectionClick();
+                                setState(() => _isStockExpanded = !_isStockExpanded);
+                              },
+                              borderRadius: BorderRadius.circular(16),
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
                                 child: Row(
+                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                   children: [
-                                    const Icon(Icons.check_circle_rounded, size: 14, color: Color(0xFF16A34A)),
-                                    const SizedBox(width: 6),
-                                    Expanded(
-                                      child: Text(
-                                        'Unlimited stock enabled — No inventory warnings or count tracking needed.',
-                                        style: GoogleFonts.inter(fontSize: 10.5, color: const Color(0xFF15803D), fontWeight: FontWeight.w600),
-                                      ),
+                                    Row(
+                                      children: [
+                                        Container(
+                                          padding: const EdgeInsets.all(6),
+                                          decoration: BoxDecoration(
+                                            color: _isUnlimitedStock ? const Color(0xFFDCFCE7) : const Color(0xFFF1F5F9),
+                                            borderRadius: BorderRadius.circular(8),
+                                          ),
+                                          child: Icon(
+                                            _isUnlimitedStock ? Icons.all_inclusive_rounded : Icons.inventory_2_outlined,
+                                            size: 16,
+                                            color: _isUnlimitedStock ? const Color(0xFF16A34A) : const Color(0xFF0F172A),
+                                          ),
+                                        ),
+                                        const SizedBox(width: 8),
+                                        Column(
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          children: [
+                                            Text(
+                                              'Stock & Inventory',
+                                              style: GoogleFonts.outfit(
+                                                fontSize: 13,
+                                                fontWeight: FontWeight.w800,
+                                                color: const Color(0xFF0F172A),
+                                              ),
+                                            ),
+                                            Text(
+                                              _isUnlimitedStock
+                                                  ? 'Unlimited (No tracking)'
+                                                  : 'Available: ${_stockCtrl.text.isEmpty ? "0" : _stockCtrl.text} • Alert: ${_thresholdCtrl.text}',
+                                              style: GoogleFonts.inter(
+                                                fontSize: 10.5,
+                                                fontWeight: FontWeight.w500,
+                                                color: _isUnlimitedStock ? const Color(0xFF16A34A) : const Color(0xFF64748B),
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ],
+                                    ),
+                                    Row(
+                                      children: [
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                          decoration: BoxDecoration(
+                                            color: const Color(0xFFF1F5F9),
+                                            borderRadius: BorderRadius.circular(6),
+                                          ),
+                                          child: Text(
+                                            _isStockExpanded ? 'Collapse' : 'Expand',
+                                            style: GoogleFonts.inter(
+                                              fontSize: 10,
+                                              fontWeight: FontWeight.w700,
+                                              color: const Color(0xFF475569),
+                                            ),
+                                          ),
+                                        ),
+                                        const SizedBox(width: 4),
+                                        Icon(
+                                          _isStockExpanded ? Icons.keyboard_arrow_up_rounded : Icons.keyboard_arrow_down_rounded,
+                                          color: const Color(0xFF64748B),
+                                          size: 20,
+                                        ),
+                                      ],
                                     ),
                                   ],
                                 ),
-                              )
-                            else
-                              Row(
-                                children: [
-                                  Expanded(
-                                    child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      children: [
-                                        _buildLabel('Current Available Stock *'),
-                                        const SizedBox(height: 4),
-                                        TextFormField(
-                                          controller: _stockCtrl,
-                                          keyboardType: TextInputType.number,
-                                          style: GoogleFonts.robotoMono(fontSize: 13, fontWeight: FontWeight.w700),
-                                          decoration: _buildInputDecoration('e.g. 25'),
-                                          validator: (v) {
-                                            if (_isUnlimitedStock) return null;
-                                            if (v == null || v.trim().isEmpty) return 'Stock required';
-                                            return null;
-                                          },
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                  const SizedBox(width: 10),
-                                  Expanded(
-                                    child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      children: [
-                                        _buildLabel('Low Alert Threshold'),
-                                        const SizedBox(height: 4),
-                                        TextFormField(
-                                          controller: _thresholdCtrl,
-                                          keyboardType: TextInputType.number,
-                                          style: GoogleFonts.robotoMono(fontSize: 13, fontWeight: FontWeight.w700),
-                                          decoration: _buildInputDecoration('e.g. 5'),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                ],
                               ),
+                            ),
+
+                            // Accordion Content Body
+                            if (_isStockExpanded) ...[
+                              const Divider(height: 1, color: Color(0xFFE2E8F0)),
+                              Padding(
+                                padding: const EdgeInsets.all(12),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    // Inline Unlimited Toggle
+                                    Row(
+                                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                      children: [
+                                        Text(
+                                          'Unlimited Stock (No Count Limit)',
+                                          style: GoogleFonts.inter(
+                                            fontSize: 11.5,
+                                            fontWeight: FontWeight.w700,
+                                            color: _isUnlimitedStock ? const Color(0xFF16A34A) : const Color(0xFF334155),
+                                          ),
+                                        ),
+                                        Transform.scale(
+                                          scale: 0.8,
+                                          child: Switch(
+                                            value: _isUnlimitedStock,
+                                            activeThumbColor: const Color(0xFF16A34A),
+                                            onChanged: (val) {
+                                              setState(() {
+                                                _isUnlimitedStock = val;
+                                                if (val) {
+                                                  _stockCtrl.text = '';
+                                                } else {
+                                                  _stockCtrl.text = '10';
+                                                }
+                                              });
+                                            },
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 8),
+
+                                    if (_isUnlimitedStock)
+                                      Container(
+                                        width: double.infinity,
+                                        padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 10),
+                                        decoration: BoxDecoration(
+                                          color: Colors.white,
+                                          borderRadius: BorderRadius.circular(10),
+                                          border: Border.all(color: const Color(0xFFDCFCE7)),
+                                        ),
+                                        child: Row(
+                                          children: [
+                                            const Icon(Icons.check_circle_rounded, size: 14, color: Color(0xFF16A34A)),
+                                            const SizedBox(width: 6),
+                                            Expanded(
+                                              child: Text(
+                                                'Unlimited stock enabled — No inventory warnings or count tracking needed.',
+                                                style: GoogleFonts.inter(fontSize: 10.5, color: const Color(0xFF15803D), fontWeight: FontWeight.w600),
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      )
+                                    else
+                                      Row(
+                                        children: [
+                                          Expanded(
+                                            child: Column(
+                                              crossAxisAlignment: CrossAxisAlignment.start,
+                                              children: [
+                                                _buildLabel('Current Available Stock *'),
+                                                const SizedBox(height: 4),
+                                                TextFormField(
+                                                  controller: _stockCtrl,
+                                                  keyboardType: TextInputType.number,
+                                                  style: GoogleFonts.robotoMono(fontSize: 13, fontWeight: FontWeight.w700),
+                                                  decoration: _buildInputDecoration('e.g. 25'),
+                                                  onChanged: (_) => setState(() {}),
+                                                  validator: (v) {
+                                                    if (_isUnlimitedStock) return null;
+                                                    if (v == null || v.trim().isEmpty) return 'Stock required';
+                                                    return null;
+                                                  },
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                          const SizedBox(width: 10),
+                                          Expanded(
+                                            child: Column(
+                                              crossAxisAlignment: CrossAxisAlignment.start,
+                                              children: [
+                                                _buildLabel('Low Alert Threshold'),
+                                                const SizedBox(height: 4),
+                                                TextFormField(
+                                                  controller: _thresholdCtrl,
+                                                  keyboardType: TextInputType.number,
+                                                  style: GoogleFonts.robotoMono(fontSize: 13, fontWeight: FontWeight.w700),
+                                                  decoration: _buildInputDecoration('e.g. 5'),
+                                                  onChanged: (_) => setState(() {}),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                  ],
+                                ),
+                              ),
+                            ],
                           ],
                         ),
                       ),

@@ -48,6 +48,60 @@ class _StoreProfileScreenState extends State<StoreProfileScreen> {
   String _selectedBusinessType = 'grocery';
   String _logoUrl = '';
 
+  final List<Map<String, String>> _businessTypes = [
+    {'type': 'grocery', 'label': 'Grocery / Kirana 🛒'},
+    {'type': 'pharmacy', 'label': 'Pharmacy / Chemist / Medical 💊'},
+    {'type': 'restaurant', 'label': 'Restaurant / Cafe / QSR 🍽️'},
+    {'type': 'apparel', 'label': 'Apparel & Footwear 👕'},
+    {'type': 'electronics', 'label': 'Electronics & Mobile 📱'},
+    {'type': 'general', 'label': 'General Retail Store 🏪'},
+  ];
+
+  String _getStatutoryFieldLabel() {
+    switch (_selectedBusinessType) {
+      case 'pharmacy':
+        return 'Drug License DL-20B / DL-21B (Mandatory for Pharmacy)';
+      case 'restaurant':
+        return 'FSSAI License Number (Mandatory for Food & Restaurant)';
+      case 'grocery':
+        return 'Udyam Registration / Shop Act (Gumasta) License';
+      case 'apparel':
+      case 'electronics':
+      case 'general':
+      default:
+        return 'Trade License / Municipal Registration (Gumasta)';
+    }
+  }
+
+  String _getStatutoryFieldHint() {
+    switch (_selectedBusinessType) {
+      case 'pharmacy':
+        return 'e.g. DL-20B/21B-MH-12345';
+      case 'restaurant':
+        return 'e.g. 10019022009876 (14-digit FSSAI)';
+      case 'grocery':
+        return 'e.g. UDYAM-MH-12-0012345 or Shop Act Reg';
+      case 'apparel':
+      case 'electronics':
+      case 'general':
+      default:
+        return 'e.g. TL-2024-9988 or Gumasta Number';
+    }
+  }
+
+  String? Function(String?)? _getStatutoryValidator() {
+    switch (_selectedBusinessType) {
+      case 'pharmacy':
+        return (v) => AppValidators.validateDrugLicense(v);
+      case 'restaurant':
+        return (v) => AppValidators.validateFssai(v);
+      case 'grocery':
+        return (v) => AppValidators.validateUdyam(v);
+      default:
+        return null;
+    }
+  }
+
   // UPI Accounts
   final _addUpiLabelCtrl = TextEditingController();
   final _addUpiVpaCtrl = TextEditingController();
@@ -972,6 +1026,50 @@ class _StoreProfileScreenState extends State<StoreProfileScreen> {
                 style: GoogleFonts.inter(fontSize: 14),
                 decoration: _fieldInputDecoration(hint: 'e.g. Always Fresh, Best Wholesale Rates'),
               ),
+              const SizedBox(height: 16),
+
+              // Business Category / Vertical *
+              _buildFieldLabel('Store Category & Vertical *'),
+              const SizedBox(height: 6),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 14),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: const Color(0xFFE2E8F0)),
+                ),
+                child: DropdownButtonHideUnderline(
+                  child: DropdownButton<String>(
+                    value: _businessTypes.any((b) => b['type'] == _selectedBusinessType)
+                        ? _selectedBusinessType
+                        : 'grocery',
+                    isExpanded: true,
+                    icon: const Icon(Icons.keyboard_arrow_down_rounded, color: Color(0xFF64748B)),
+                    items: _businessTypes.map((b) {
+                      return DropdownMenuItem<String>(
+                        value: b['type'],
+                        child: Text(
+                          b['label']!,
+                          style: GoogleFonts.outfit(
+                            fontSize: 13.5,
+                            fontWeight: FontWeight.w700,
+                            color: const Color(0xFF0F172A),
+                          ),
+                        ),
+                      );
+                    }).toList(),
+                    onChanged: (val) {
+                      if (val != null) {
+                        setState(() {
+                          _selectedBusinessType = val;
+                          final match = _businessTypes.firstWhere((b) => b['type'] == val);
+                          _selectedCategory = match['label']!;
+                        });
+                      }
+                    },
+                  ),
+                ),
+              ),
             ],
           ),
         ),
@@ -1065,15 +1163,14 @@ class _StoreProfileScreenState extends State<StoreProfileScreen> {
               ),
               const SizedBox(height: 16),
 
-              // FSSAI License Number
-              _buildFieldLabel('FSSAI License Number (Optional - Food & Restaurant)'),
+              // Dynamic Statutory License by Category (Solved Issue 18)
+              _buildFieldLabel(_getStatutoryFieldLabel()),
               const SizedBox(height: 6),
               TextFormField(
                 controller: _fssaiCtrl,
-                keyboardType: TextInputType.number,
-                validator: (v) => AppValidators.validateFssai(v),
-                style: GoogleFonts.inter(fontSize: 14),
-                decoration: _fieldInputDecoration(hint: 'e.g. 10019022009876'),
+                validator: _getStatutoryValidator(),
+                style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.w600),
+                decoration: _fieldInputDecoration(hint: _getStatutoryFieldHint()),
               ),
             ],
           ),

@@ -11,6 +11,7 @@ import '../common/owner_privacy_modal.dart';
 import '../common/empty_state_card.dart';
 import '../dashboard/home_dashboard_screen.dart';
 import '../purchases/ai_inward_sheet.dart';
+import '../../services/csv_inward_service.dart';
 
 class InventoryScreen extends StatefulWidget {
   const InventoryScreen({super.key});
@@ -58,33 +59,58 @@ class _InventoryScreenState extends State<InventoryScreen> {
   List<ProductModel> get _lowStockProducts =>
       _products.where((p) => p.stockQuantity <= 5).toList();
 
-  // Simulated realistic near-expiry batches (for Kirana, Pharmacy & FMCG)
+  // Real SQLite inventory near-expiry calculation (Solved Issue 11)
   List<Map<String, dynamic>> get _nearExpiryBatches {
     final now = DateTime.now();
-    return [
-      {
-        'product_name': 'Amul Butter Pasteurised (100g)',
-        'batch_no': 'AM-2408-B1',
-        'qty': 4,
-        'unit': 'pkt',
-        'expiry_date': now.add(const Duration(days: 18)),
-        'days_left': 18,
-        'cost_paise': 4800,
-        'status': 'Expiring Soon (<30d)',
-        'is_urgent': true,
-      },
-      {
-        'product_name': 'Parle-G Gold Biscuits (1kg)',
-        'batch_no': 'PG-8891-C',
-        'qty': 8,
-        'unit': 'pkt',
-        'expiry_date': now.add(const Duration(days: 42)),
-        'days_left': 42,
-        'cost_paise': 9000,
-        'status': 'Under 60 Days',
-        'is_urgent': false,
-      },
-    ];
+    final List<Map<String, dynamic>> list = [];
+
+    for (final p in _products) {
+      if (p.expiryDate != null && p.expiryDate!.trim().isNotEmpty) {
+        DateTime? expiry;
+        final expStr = p.expiryDate!.trim();
+        expiry = DateTime.tryParse(expStr);
+        if (expiry == null && expStr.contains('/')) {
+          final parts = expStr.split('/');
+          if (parts.length == 2) {
+            final month = int.tryParse(parts[0]);
+            var year = int.tryParse(parts[1]);
+            if (month != null && year != null) {
+              if (year < 100) year += 2000;
+              expiry = DateTime(year, month, 28);
+            }
+          } else if (parts.length == 3) {
+            final day = int.tryParse(parts[0]);
+            final month = int.tryParse(parts[1]);
+            final year = int.tryParse(parts[2]);
+            if (day != null && month != null && year != null) {
+              expiry = DateTime(year, month, day);
+            }
+          }
+        }
+
+        if (expiry != null) {
+          final daysLeft = expiry.difference(now).inDays;
+          if (daysLeft <= 90) {
+            list.add({
+              'product_name': p.name,
+              'batch_no': p.batchNumber?.isNotEmpty == true ? p.batchNumber! : 'DEFAULT',
+              'qty': p.stockQuantity.toInt(),
+              'unit': p.unit,
+              'expiry_date': expiry,
+              'days_left': daysLeft,
+              'cost_paise': p.purchasePricePaise,
+              'status': daysLeft <= 0
+                  ? 'Expired'
+                  : (daysLeft <= 30 ? 'Expiring Soon (<30d)' : 'Under 90 Days'),
+              'is_urgent': daysLeft <= 30,
+            });
+          }
+        }
+      }
+    }
+
+    list.sort((a, b) => (a['days_left'] as int).compareTo(b['days_left'] as int));
+    return list;
   }
 
   String _formatValuation(int paise) {
@@ -145,6 +171,94 @@ class _InventoryScreenState extends State<InventoryScreen> {
     );
   }
 
+  void _downloadSampleCsvTemplate() async {
+    HapticFeedback.lightImpact();
+    final businessType = BusinessVerticals.activeBusinessTypeNotifier.value;
+    final csvContent = CsvInwardService.generateSampleInwardCsv(businessType: businessType);
+
+    await Clipboard.setData(ClipboardData(text: csvContent));
+
+    if (!mounted) return;
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) {
+        return Padding(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFEFF6FF),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: const Icon(Icons.table_chart_rounded, color: Color(0xFF2563EB), size: 22),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('Sample Inward CSV Template', style: GoogleFonts.outfit(fontSize: 16, fontWeight: FontWeight.w800)),
+                        Text('Copied to clipboard! Ready to paste into Excel / Sheets.', style: GoogleFonts.inter(fontSize: 11.5, color: const Color(0xFF64748B))),
+                      ],
+                    ),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.close_rounded),
+                    onPressed: () => Navigator.pop(ctx),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 14),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF8FAFC),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: const Color(0xFFE2E8F0)),
+                ),
+                child: Text(
+                  csvContent,
+                  maxLines: 7,
+                  overflow: TextOverflow.ellipsis,
+                  style: GoogleFonts.jetBrainsMono(fontSize: 11, color: const Color(0xFF334155)),
+                ),
+              ),
+              const SizedBox(height: 16),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  onPressed: () {
+                    Navigator.pop(ctx);
+                    _openInwardSheet();
+                  },
+                  icon: const Icon(Icons.file_upload_outlined, size: 18),
+                  label: Text('Open Inward Sheet to Upload CSV', style: GoogleFonts.outfit(fontSize: 13.5, fontWeight: FontWeight.w800)),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF0F172A),
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final lowStock = _lowStockProducts
@@ -184,6 +298,19 @@ class _InventoryScreenState extends State<InventoryScreen> {
           ],
         ),
         actions: [
+          IconButton(
+            tooltip: 'Sample Inward CSV Template',
+            icon: Container(
+              padding: const EdgeInsets.all(6),
+              decoration: BoxDecoration(
+                color: const Color(0xFFEFF6FF),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: const Color(0xFFBFDBFE)),
+              ),
+              child: const Icon(Icons.table_view_rounded, size: 18, color: Color(0xFF2563EB)),
+            ),
+            onPressed: _downloadSampleCsvTemplate,
+          ),
           IconButton(
             tooltip: 'Export CSV Audit',
             icon: Container(
@@ -801,6 +928,45 @@ class _InventoryScreenState extends State<InventoryScreen> {
   // TAB 1: NEAR EXPIRY CONTENT
   // =========================================================================
   Widget _buildNearExpiryContent() {
+    if (_nearExpiryBatches.isEmpty) {
+      return Container(
+        padding: const EdgeInsets.symmetric(vertical: 36, horizontal: 20),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(color: const Color(0xFFEEF2F6)),
+        ),
+        child: Column(
+          children: [
+            Container(
+              width: 52,
+              height: 52,
+              decoration: BoxDecoration(
+                color: const Color(0xFFECFDF5),
+                borderRadius: BorderRadius.circular(14),
+              ),
+              child: const Icon(Icons.verified_rounded, size: 28, color: Color(0xFF10B981)),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              'No near-expiry products detected!',
+              style: GoogleFonts.outfit(
+                fontSize: 15.5,
+                fontWeight: FontWeight.w800,
+                color: const Color(0xFF0F172A),
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'All inventory batches are fresh and well within shelf-life.',
+              textAlign: TextAlign.center,
+              style: GoogleFonts.inter(fontSize: 11.5, color: const Color(0xFF64748B)),
+            ),
+          ],
+        ),
+      );
+    }
+
     return Column(
       children: _nearExpiryBatches.map((batch) {
         final days = batch['days_left'] as int;

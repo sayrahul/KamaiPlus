@@ -18,6 +18,7 @@ import '../auth/login_screen.dart';
 import '../../core/database/local_database.dart';
 import '../../models/models.dart';
 import '../../services/auth_service.dart';
+import '../../main.dart';
 
 class MenuScreen extends StatefulWidget {
   final bool isModal;
@@ -103,6 +104,7 @@ class _MenuScreenState extends State<MenuScreen> {
   }
 
   void _showLogoutDialog() {
+    HapticFeedback.mediumImpact();
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -134,18 +136,9 @@ class _MenuScreenState extends State<MenuScreen> {
             child: Text('Cancel', style: GoogleFonts.inter(fontWeight: FontWeight.w600, color: const Color(0xFF64748B))),
           ),
           ElevatedButton(
-            onPressed: () async {
+            onPressed: () {
               Navigator.pop(ctx);
-              if (widget.isModal && Navigator.canPop(context)) {
-                Navigator.pop(context);
-              }
-              await AuthService.instance.signOut();
-              if (!mounted) return;
-              Navigator.pushAndRemoveUntil(
-                context,
-                MaterialPageRoute(builder: (_) => const LoginScreen()),
-                (route) => false,
-              );
+              _performLogout();
             },
             style: ElevatedButton.styleFrom(
               backgroundColor: const Color(0xFFDC2626),
@@ -157,6 +150,51 @@ class _MenuScreenState extends State<MenuScreen> {
           ),
         ],
       ),
+    );
+  }
+
+  Future<void> _performLogout() async {
+    HapticFeedback.heavyImpact();
+    final rootCtx = rootNavigatorKey.currentContext ?? context;
+
+    // Show non-dismissible loading indicator
+    showDialog(
+      context: rootCtx,
+      barrierDismissible: false,
+      builder: (_) => PopScope(
+        canPop: false,
+        child: Center(
+          child: Container(
+            padding: const EdgeInsets.all(24),
+            decoration: BoxDecoration(
+              color: const Color(0xFF0F172A),
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const CircularProgressIndicator(color: Color(0xFFF59E0B)),
+                const SizedBox(height: 16),
+                Text(
+                  'Signing out...',
+                  style: GoogleFonts.outfit(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w600),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+
+    try {
+      await AuthService.instance.signOut();
+      await LocalDatabase.instance.closeDatabase();
+    } catch (_) {}
+
+    // Route cleanly to LoginScreen on rootNavigatorKey
+    rootNavigatorKey.currentState?.pushAndRemoveUntil(
+      MaterialPageRoute(builder: (_) => const LoginScreen()),
+      (route) => false,
     );
   }
 
@@ -216,6 +254,22 @@ class _MenuScreenState extends State<MenuScreen> {
                   _buildSectionTitle('DAILY BILLING & COUNTER', subtitle: 'Fast register checkout, day history & cash till'),
                   const SizedBox(height: 10),
 
+                  // Center POS Counter Billing (Navigation Tab 2)
+                  _buildNavCard(
+                    title: 'POS Counter Billing',
+                    subtitle: 'Fast Barcode Billing, Quick Cart & Rapid Checkout',
+                    icon: Icons.point_of_sale_rounded,
+                    iconColor: const Color(0xFF10B981),
+                    iconBg: const Color(0xFFECFDF5),
+                    borderColor: const Color(0xFFA7F3D0),
+                    badgeText: widget.currentTabIndex == 2 ? '● ACTIVE' : 'CENTER POS',
+                    badgeBg: widget.currentTabIndex == 2 ? const Color(0xFF064E3B) : const Color(0xFFECFDF5),
+                    badgeColor: widget.currentTabIndex == 2 ? const Color(0xFF34D399) : const Color(0xFF059669),
+                    isDark: widget.currentTabIndex == 2,
+                    onTap: () => _handleTabTap(2),
+                  ),
+                  const SizedBox(height: 10),
+
                   Row(
                     children: [
                       Expanded(
@@ -226,8 +280,10 @@ class _MenuScreenState extends State<MenuScreen> {
                           iconColor: const Color(0xFF2563EB),
                           iconBg: const Color(0xFFEFF6FF),
                           borderColor: const Color(0xFFDBEAFE),
-                          badgeText: 'PULSE',
-                          isDark: (widget.currentTabIndex ?? 0) == 0,
+                          badgeText: widget.currentTabIndex == 0 ? '● ACTIVE' : 'PULSE',
+                          badgeBg: widget.currentTabIndex == 0 ? const Color(0xFF064E3B) : null,
+                          badgeColor: widget.currentTabIndex == 0 ? const Color(0xFF34D399) : null,
+                          isDark: widget.currentTabIndex == 0,
                           onTap: () => _handleTabTap(0),
                         ),
                       ),
@@ -274,7 +330,9 @@ class _MenuScreenState extends State<MenuScreen> {
                           iconColor: const Color(0xFF3B82F6),
                           iconBg: const Color(0xFFEFF6FF),
                           borderColor: const Color(0xFFDBEAFE),
-                          badgeText: 'CATALOG',
+                          badgeText: widget.currentTabIndex == 1 ? '● ACTIVE' : 'CATALOG',
+                          badgeBg: widget.currentTabIndex == 1 ? const Color(0xFF064E3B) : null,
+                          badgeColor: widget.currentTabIndex == 1 ? const Color(0xFF34D399) : null,
                           isDark: widget.currentTabIndex == 1,
                           onTap: () => _handleTabTap(1),
                         ),
@@ -344,9 +402,9 @@ class _MenuScreenState extends State<MenuScreen> {
                           iconColor: const Color(0xFFEA580C),
                           iconBg: const Color(0xFFFFF7ED),
                           borderColor: const Color(0xFFFFEDD5),
-                          badgeText: 'UDHAR',
-                          badgeBg: const Color(0xFFFEF2F2),
-                          badgeColor: const Color(0xFFDC2626),
+                          badgeText: widget.currentTabIndex == 3 ? '● ACTIVE' : 'UDHAR',
+                          badgeBg: widget.currentTabIndex == 3 ? const Color(0xFF064E3B) : const Color(0xFFFEF2F2),
+                          badgeColor: widget.currentTabIndex == 3 ? const Color(0xFF34D399) : const Color(0xFFDC2626),
                           isDark: widget.currentTabIndex == 3,
                           onTap: () => _handleTabTap(3),
                         ),
@@ -465,19 +523,6 @@ class _MenuScreenState extends State<MenuScreen> {
                         ),
                       ),
                     ],
-                  ),
-                  const SizedBox(height: 10),
-                  _buildNavCard(
-                    title: 'Pro Membership & Plans',
-                    subtitle: 'Razorpay Live Upgrade, Unlimited Invoicing & VIP License',
-                    icon: Icons.workspace_premium_rounded,
-                    iconColor: const Color(0xFFD97706),
-                    iconBg: const Color(0xFFFEF3C7),
-                    borderColor: const Color(0xFFFDE68A),
-                    badgeText: 'PRO LICENSE',
-                    badgeBg: const Color(0xFFFFFBEB),
-                    badgeColor: const Color(0xFFB45309),
-                    onTap: _handleProUpgrade,
                   ),
                   const SizedBox(height: 16),
                 ],
@@ -760,7 +805,7 @@ class _MenuScreenState extends State<MenuScreen> {
                             padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
                             decoration: BoxDecoration(
                               color: isDark
-                                  ? Colors.white.withValues(alpha: 0.15)
+                                  ? (badgeBg ?? (badgeText.contains('ACTIVE') ? const Color(0xFF064E3B) : Colors.white.withValues(alpha: 0.15)))
                                   : (badgeBg ?? (iconBg ?? const Color(0xFFF1F5F9))),
                               borderRadius: BorderRadius.circular(4),
                             ),
@@ -770,7 +815,7 @@ class _MenuScreenState extends State<MenuScreen> {
                                 fontSize: 8,
                                 fontWeight: FontWeight.w800,
                                 color: isDark
-                                    ? Colors.white
+                                    ? (badgeColor ?? (badgeText.contains('ACTIVE') ? const Color(0xFF34D399) : Colors.white))
                                     : (badgeColor ?? (iconColor ?? const Color(0xFF475569))),
                               ),
                             ),

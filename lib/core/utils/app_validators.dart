@@ -84,4 +84,41 @@ class AppValidators {
     }
     return null;
   }
+
+  /// Normalizes phone number strictly to 12 digits (91XXXXXXXXXX) for WhatsApp without double country codes
+  static String formatWhatsAppPhone(String rawPhone) {
+    var digits = rawPhone.replaceAll(RegExp(r'\D'), '');
+    if (digits.startsWith('0')) {
+      digits = digits.replaceFirst(RegExp(r'^0+'), '');
+    }
+    if (digits.startsWith('91') && digits.length == 12) {
+      return digits; // already 91XXXXXXXXXX
+    }
+    if (digits.length == 10) {
+      return '91$digits';
+    }
+    return digits;
+  }
+
+  /// Validates Indian MSME / Udyam Aadhar (e.g. UDYAM-MH-12-0012345)
+  static String? validateUdyam(String? value, {bool required = false}) {
+    if (value == null || value.trim().isEmpty) {
+      return required ? 'Udyam / Shop Act required' : null;
+    }
+    if (value.trim().length < 5) {
+      return 'Enter valid registration number';
+    }
+    return null;
+  }
+
+  /// Validates Pharmacy Drug License (DL) Number
+  static String? validateDrugLicense(String? value, {bool required = false}) {
+    if (value == null || value.trim().isEmpty) {
+      return required ? 'Drug License required' : null;
+    }
+    if (value.trim().length < 5) {
+      return 'Enter valid Drug License (DL) number';
+    }
+    return null;
+  }
 }

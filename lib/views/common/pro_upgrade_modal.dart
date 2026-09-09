@@ -1,4 +1,6 @@
+import 'dart:ui';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../core/database/local_database.dart';
 import '../../models/models.dart';
@@ -12,7 +14,7 @@ class ProUpgradeModal extends StatefulWidget {
     return showDialog(
       context: context,
       barrierDismissible: true,
-      barrierColor: const Color(0xCC020617), // Slate 950 with 80% opacity
+      barrierColor: const Color(0xCC020617), // Deep obsidian slate overlay
       builder: (ctx) => const ProUpgradeModal(),
     );
   }
@@ -40,6 +42,7 @@ class _ProUpgradeModalState extends State<ProUpgradeModal> {
   }
 
   void _handleUpgrade() {
+    HapticFeedback.mediumImpact();
     setState(() => _isLoading = true);
     final plan = _isAnnual ? 'annual' : 'monthly';
 
@@ -86,518 +89,480 @@ class _ProUpgradeModalState extends State<ProUpgradeModal> {
 
   @override
   Widget build(BuildContext context) {
-    final businessTitle = _profile.ownerName.isNotEmpty
-        ? _profile.ownerName
-        : (_profile.storeName.isNotEmpty ? _profile.storeName : 'Rahul Shramas');
+    final businessTitle = _profile.storeName.isNotEmpty
+        ? _profile.storeName
+        : (_profile.ownerName.isNotEmpty ? _profile.ownerName : 'Retail Merchant');
 
-    final priceAmount = _isAnnual ? '1499' : '199';
-    final originalPrice = _isAnnual ? '2998' : '398';
+    final priceAmount = _isAnnual ? '1,499' : '199';
     final periodText = _isAnnual ? '/ year' : '/ month';
     final billingSubtext = _isAnnual
-        ? 'Just ₹125 / month • Instant 1-Year Access'
+        ? 'Just ₹125 / month • Instant 1-Year Full Access'
         : 'Billed monthly • Cancel anytime';
 
     return Dialog(
       backgroundColor: Colors.transparent,
-      insetPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 20),
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 420),
-        child: Container(
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(26),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.25),
-                blurRadius: 30,
-                offset: const Offset(0, 10),
+      insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 14, sigmaY: 14),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 420),
+          child: Container(
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                colors: [
+                  Color(0xF51E293B), // Slate 800 glass
+                  Color(0xF50F172A), // Slate 900 glass
+                ],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
               ),
-            ],
-          ),
-          clipBehavior: Clip.antiAlias,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              // 1. TOP HEADER WITH GRADIENT TINT
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.fromLTRB(20, 18, 16, 14),
-                decoration: const BoxDecoration(
-                  color: Color(0xFFFFFDF5),
-                  border: Border(bottom: BorderSide(color: Color(0xFFF1F5F9), width: 1)),
+              borderRadius: BorderRadius.circular(28),
+              border: Border.all(
+                color: Colors.white.withValues(alpha: 0.15),
+                width: 1.2,
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: const Color(0xFFF59E0B).withValues(alpha: 0.15),
+                  blurRadius: 36,
+                  spreadRadius: -4,
+                  offset: const Offset(0, 12),
                 ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        // Unlock Badge
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4.5),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFFFBBF24),
-                            borderRadius: BorderRadius.circular(20),
-                            boxShadow: [
-                              BoxShadow(
-                                color: const Color(0xFFF59E0B).withValues(alpha: 0.25),
-                                blurRadius: 4,
-                                offset: const Offset(0, 1.5),
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.4),
+                  blurRadius: 24,
+                  offset: const Offset(0, 8),
+                ),
+              ],
+            ),
+            clipBehavior: Clip.antiAlias,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // 1. TOP HEADER (Glass Frost)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(22, 20, 18, 14),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          // Pro Glow Pill
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4.5),
+                            decoration: BoxDecoration(
+                              gradient: const LinearGradient(
+                                colors: [Color(0xFFFBBF24), Color(0xFFF59E0B)],
                               ),
-                            ],
+                              borderRadius: BorderRadius.circular(20),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: const Color(0xFFF59E0B).withValues(alpha: 0.35),
+                                  blurRadius: 8,
+                                  offset: const Offset(0, 2),
+                                ),
+                              ],
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(Icons.auto_awesome_rounded, size: 13, color: Color(0xFF0F172A)),
+                                const SizedBox(width: 4.5),
+                                Text(
+                                  'KAMAI+ PRO',
+                                  style: GoogleFonts.outfit(
+                                    fontSize: 10.5,
+                                    fontWeight: FontWeight.w900,
+                                    letterSpacing: 0.8,
+                                    color: const Color(0xFF0F172A),
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              const Icon(Icons.stars_rounded, size: 13, color: Color(0xFF0F172A)),
-                              const SizedBox(width: 4),
-                              Text(
-                                'UNLOCK FULL POS POWER',
-                                style: GoogleFonts.plusJakartaSans(
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.w900,
-                                  letterSpacing: 0.4,
-                                  color: const Color(0xFF0F172A),
+                          // Close Button
+                          Material(
+                            color: Colors.transparent,
+                            child: InkWell(
+                              onTap: () => Navigator.of(context).pop(),
+                              borderRadius: BorderRadius.circular(20),
+                              child: Container(
+                                width: 32,
+                                height: 32,
+                                decoration: BoxDecoration(
+                                  color: Colors.white.withValues(alpha: 0.1),
+                                  shape: BoxShape.circle,
+                                  border: Border.all(color: Colors.white.withValues(alpha: 0.15)),
+                                ),
+                                child: const Icon(
+                                  Icons.close_rounded,
+                                  size: 18,
+                                  color: Color(0xFF94A3B8),
                                 ),
                               ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      Text(
+                        'Unlock Full Store Power',
+                        style: GoogleFonts.outfit(
+                          fontSize: 22,
+                          fontWeight: FontWeight.w800,
+                          color: Colors.white,
+                          height: 1.15,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Row(
+                        children: [
+                          const Icon(Icons.storefront_rounded, size: 14, color: Color(0xFF38BDF8)),
+                          const SizedBox(width: 5),
+                          Flexible(
+                            child: Text(
+                              businessTitle,
+                              style: GoogleFonts.inter(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                                color: const Color(0xFF94A3B8),
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+
+                // 2. SCROLLABLE BODY
+                Flexible(
+                  child: SingleChildScrollView(
+                    physics: const BouncingScrollPhysics(),
+                    padding: const EdgeInsets.fromLTRB(20, 4, 20, 20),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        // Dual Plan Toggle Cards
+                        Row(
+                          children: [
+                            // Annual Plan Card
+                            Expanded(
+                              child: GestureDetector(
+                                onTap: () {
+                                  HapticFeedback.selectionClick();
+                                  setState(() => _isAnnual = true);
+                                },
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 10),
+                                  decoration: BoxDecoration(
+                                    color: _isAnnual
+                                        ? const Color(0xFFF59E0B).withValues(alpha: 0.15)
+                                        : Colors.white.withValues(alpha: 0.04),
+                                    borderRadius: BorderRadius.circular(16),
+                                    border: Border.all(
+                                      color: _isAnnual ? const Color(0xFFFBBF24) : Colors.white.withValues(alpha: 0.08),
+                                      width: _isAnnual ? 1.6 : 1.0,
+                                    ),
+                                  ),
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Row(
+                                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                        children: [
+                                          Text(
+                                            'Annual',
+                                            style: GoogleFonts.outfit(
+                                              fontSize: 13,
+                                              fontWeight: FontWeight.w800,
+                                              color: _isAnnual ? const Color(0xFFFDE68A) : Colors.white70,
+                                            ),
+                                          ),
+                                          Container(
+                                            padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                                            decoration: BoxDecoration(
+                                              color: const Color(0xFF059669),
+                                              borderRadius: BorderRadius.circular(6),
+                                            ),
+                                            child: Text(
+                                              '50% OFF',
+                                              style: GoogleFonts.inter(
+                                                fontSize: 8.5,
+                                                fontWeight: FontWeight.w900,
+                                                color: Colors.white,
+                                              ),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                      const SizedBox(height: 6),
+                                      Text(
+                                        '₹1,499 / yr',
+                                        style: GoogleFonts.outfit(
+                                          fontSize: 16,
+                                          fontWeight: FontWeight.w900,
+                                          color: Colors.white,
+                                        ),
+                                      ),
+                                      Text(
+                                        '₹125 / month',
+                                        style: GoogleFonts.inter(
+                                          fontSize: 10,
+                                          fontWeight: FontWeight.w600,
+                                          color: const Color(0xFF34D399),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            // Monthly Plan Card
+                            Expanded(
+                              child: GestureDetector(
+                                onTap: () {
+                                  HapticFeedback.selectionClick();
+                                  setState(() => _isAnnual = false);
+                                },
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 10),
+                                  decoration: BoxDecoration(
+                                    color: !_isAnnual
+                                        ? const Color(0xFFF59E0B).withValues(alpha: 0.15)
+                                        : Colors.white.withValues(alpha: 0.04),
+                                    borderRadius: BorderRadius.circular(16),
+                                    border: Border.all(
+                                      color: !_isAnnual ? const Color(0xFFFBBF24) : Colors.white.withValues(alpha: 0.08),
+                                      width: !_isAnnual ? 1.6 : 1.0,
+                                    ),
+                                  ),
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        'Monthly',
+                                        style: GoogleFonts.outfit(
+                                          fontSize: 13,
+                                          fontWeight: FontWeight.w800,
+                                          color: !_isAnnual ? const Color(0xFFFDE68A) : Colors.white70,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 6),
+                                      Text(
+                                        '₹199 / mo',
+                                        style: GoogleFonts.outfit(
+                                          fontSize: 16,
+                                          fontWeight: FontWeight.w900,
+                                          color: Colors.white,
+                                        ),
+                                      ),
+                                      Text(
+                                        'Cancel anytime',
+                                        style: GoogleFonts.inter(
+                                          fontSize: 10,
+                                          fontWeight: FontWeight.w500,
+                                          color: const Color(0xFF94A3B8),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 12),
+
+                        // Subtitle note
+                        Center(
+                          child: Text(
+                            billingSubtext,
+                            style: GoogleFonts.inter(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                              color: const Color(0xFFFDE68A),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 14),
+
+                        // Pro Unlocked Features Glass Card
+                        Container(
+                          padding: const EdgeInsets.all(14),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withValues(alpha: 0.05),
+                            borderRadius: BorderRadius.circular(18),
+                            border: Border.all(color: Colors.white.withValues(alpha: 0.09)),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  const Icon(Icons.bolt_rounded, size: 15, color: Color(0xFFFBBF24)),
+                                  const SizedBox(width: 5),
+                                  Text(
+                                    'ALL PRO CAPABILITIES INCLUDED:',
+                                    style: GoogleFonts.outfit(
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.w900,
+                                      letterSpacing: 0.6,
+                                      color: const Color(0xFFFDE68A),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 10),
+                              _buildGlassFeature('Cloud Backup & Multi-Device Realtime Sync'),
+                              const SizedBox(height: 7),
+                              _buildGlassFeature('Govt GSTR-1 Tax Filing & HSN CA Reports'),
+                              const SizedBox(height: 7),
+                              _buildGlassFeature('Batch & Expiry Radar with Shelf-Life Alerts'),
+                              const SizedBox(height: 7),
+                              _buildGlassFeature('Custom Barcode Label Sticker Print Studio'),
+                              const SizedBox(height: 7),
+                              _buildGlassFeature('Custom Logo on Invoices (Zero Watermark)'),
                             ],
                           ),
                         ),
-                        // Close Button
+                        const SizedBox(height: 16),
+
+                        // Upgrade CTA Button
                         Material(
                           color: Colors.transparent,
                           child: InkWell(
-                            onTap: () => Navigator.of(context).pop(),
-                            borderRadius: BorderRadius.circular(20),
+                            onTap: _isLoading ? null : _handleUpgrade,
+                            borderRadius: BorderRadius.circular(16),
                             child: Container(
-                              width: 30,
-                              height: 30,
-                              decoration: const BoxDecoration(
-                                color: Color(0xFFF1F5F9),
-                                shape: BoxShape.circle,
+                              height: 48,
+                              decoration: BoxDecoration(
+                                gradient: const LinearGradient(
+                                  colors: [Color(0xFFFBBF24), Color(0xFFF59E0B)],
+                                  begin: Alignment.topLeft,
+                                  end: Alignment.bottomRight,
+                                ),
+                                borderRadius: BorderRadius.circular(16),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: const Color(0xFFF59E0B).withValues(alpha: 0.4),
+                                    blurRadius: 12,
+                                    offset: const Offset(0, 4),
+                                  ),
+                                ],
                               ),
-                              child: const Icon(
-                                Icons.close_rounded,
-                                size: 17,
-                                color: Color(0xFF64748B),
+                              child: Center(
+                                child: _isLoading
+                                    ? const SizedBox(
+                                        width: 22,
+                                        height: 22,
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 2.4,
+                                          color: Color(0xFF0F172A),
+                                        ),
+                                      )
+                                    : Row(
+                                        mainAxisAlignment: MainAxisAlignment.center,
+                                        children: [
+                                          Text(
+                                            'Upgrade to Kamai+ Pro • ₹$priceAmount $periodText',
+                                            style: GoogleFonts.outfit(
+                                              fontSize: 14.5,
+                                              fontWeight: FontWeight.w900,
+                                              color: const Color(0xFF0F172A),
+                                            ),
+                                          ),
+                                          const SizedBox(width: 6),
+                                          const Icon(Icons.arrow_forward_rounded, size: 16, color: Color(0xFF0F172A)),
+                                        ],
+                                      ),
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+
+                        // Trust Security Note
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            const Icon(Icons.lock_outline_rounded, size: 12, color: Color(0xFF64748B)),
+                            const SizedBox(width: 5),
+                            Flexible(
+                              child: Text(
+                                '256-bit Secure Razorpay UPI • 7-Day Money Back • 18% GST ITC',
+                                textAlign: TextAlign.center,
+                                style: GoogleFonts.inter(
+                                  fontSize: 9.5,
+                                  fontWeight: FontWeight.w500,
+                                  color: const Color(0xFF94A3B8),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 6),
+
+                        // Compare Plans Link
+                        Center(
+                          child: TextButton(
+                            onPressed: () {
+                              Navigator.of(context).pop();
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(builder: (_) => const ProMembershipScreen()),
+                              );
+                            },
+                            child: Text(
+                              'Compare Free vs Pro Plans & FAQs →',
+                              style: GoogleFonts.outfit(
+                                fontSize: 11.5,
+                                fontWeight: FontWeight.w700,
+                                color: const Color(0xFF38BDF8),
                               ),
                             ),
                           ),
                         ),
                       ],
                     ),
-                    const SizedBox(height: 10),
-                    Text(
-                      'Upgrade to Kamai+ Pro',
-                      style: GoogleFonts.plusJakartaSans(
-                        fontSize: 21,
-                        fontWeight: FontWeight.w900,
-                        color: const Color(0xFF0F172A),
-                        height: 1.15,
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      businessTitle,
-                      style: GoogleFonts.inter(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w500,
-                        color: const Color(0xFF64748B),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-
-              // 2. SCROLLABLE MODAL BODY
-              Flexible(
-                child: SingleChildScrollView(
-                  physics: const BouncingScrollPhysics(),
-                  padding: const EdgeInsets.fromLTRB(18, 16, 18, 18),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      // Toggle Switcher (Annual vs Monthly)
-                      Container(
-                        padding: const EdgeInsets.all(3.5),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFF1F5F9),
-                          borderRadius: BorderRadius.circular(13),
-                          border: Border.all(color: const Color(0xFFE2E8F0)),
-                        ),
-                        child: Row(
-                          children: [
-                            Expanded(
-                              child: GestureDetector(
-                                onTap: () => setState(() => _isAnnual = true),
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(vertical: 8),
-                                  decoration: BoxDecoration(
-                                    color: _isAnnual ? Colors.white : Colors.transparent,
-                                    borderRadius: BorderRadius.circular(10),
-                                    border: _isAnnual
-                                        ? Border.all(color: const Color(0xFFCBD5E1), width: 1)
-                                        : null,
-                                    boxShadow: _isAnnual
-                                        ? [
-                                            BoxShadow(
-                                              color: Colors.black.withValues(alpha: 0.05),
-                                              blurRadius: 3,
-                                              offset: const Offset(0, 1),
-                                            ),
-                                          ]
-                                        : null,
-                                  ),
-                                  child: Center(
-                                    child: Text(
-                                      'Annual (₹1,499 / yr - 50% Off) 🔥',
-                                      textAlign: TextAlign.center,
-                                      style: GoogleFonts.inter(
-                                        fontSize: 11,
-                                        fontWeight: FontWeight.w800,
-                                        color: _isAnnual
-                                            ? const Color(0xFF0F172A)
-                                            : const Color(0xFF64748B),
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ),
-                            const SizedBox(width: 4),
-                            Expanded(
-                              child: GestureDetector(
-                                onTap: () => setState(() => _isAnnual = false),
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(vertical: 8),
-                                  decoration: BoxDecoration(
-                                    color: !_isAnnual ? Colors.white : Colors.transparent,
-                                    borderRadius: BorderRadius.circular(10),
-                                    border: !_isAnnual
-                                        ? Border.all(color: const Color(0xFFCBD5E1), width: 1)
-                                        : null,
-                                    boxShadow: !_isAnnual
-                                        ? [
-                                            BoxShadow(
-                                              color: Colors.black.withValues(alpha: 0.05),
-                                              blurRadius: 3,
-                                              offset: const Offset(0, 1),
-                                            ),
-                                          ]
-                                        : null,
-                                  ),
-                                  child: Center(
-                                    child: Text(
-                                      'Monthly (₹199 / mo)',
-                                      textAlign: TextAlign.center,
-                                      style: GoogleFonts.inter(
-                                        fontSize: 11,
-                                        fontWeight: FontWeight.w800,
-                                        color: !_isAnnual
-                                            ? const Color(0xFF0F172A)
-                                            : const Color(0xFF64748B),
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-
-                      // Highlighted Pricing Card
-                      Container(
-                        padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFFFFBEB),
-                          borderRadius: BorderRadius.circular(16),
-                          border: Border.all(color: const Color(0xFFFDE68A), width: 1.4),
-                        ),
-                        child: Column(
-                          children: [
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              crossAxisAlignment: CrossAxisAlignment.baseline,
-                              textBaseline: TextBaseline.alphabetic,
-                              children: [
-                                Text(
-                                  '₹$originalPrice',
-                                  style: GoogleFonts.robotoMono(
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.w700,
-                                    color: const Color(0xFF94A3B8),
-                                    decoration: TextDecoration.lineThrough,
-                                    decorationColor: const Color(0xFF94A3B8),
-                                  ),
-                                ),
-                                const SizedBox(width: 8),
-                                Text(
-                                  '₹$priceAmount',
-                                  style: GoogleFonts.robotoMono(
-                                    fontSize: 32,
-                                    fontWeight: FontWeight.w900,
-                                    color: const Color(0xFF0F172A),
-                                  ),
-                                ),
-                                const SizedBox(width: 4),
-                                Text(
-                                  periodText,
-                                  style: GoogleFonts.inter(
-                                    fontSize: 12.5,
-                                    fontWeight: FontWeight.w700,
-                                    color: const Color(0xFF475569),
-                                  ),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 3),
-                            Text(
-                              billingSubtext,
-                              style: GoogleFonts.inter(
-                                fontSize: 11.5,
-                                fontWeight: FontWeight.w800,
-                                color: const Color(0xFF92400E),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 14),
-
-                      // Free Forever Features Box
-                      Container(
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFF8FAFC),
-                          borderRadius: BorderRadius.circular(14),
-                          border: Border.all(color: const Color(0xFFE2E8F0)),
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              children: [
-                                const Text('🎁 ', style: TextStyle(fontSize: 12)),
-                                Text(
-                                  '100% FREE FOREVER ON ALL ACCOUNTS:',
-                                  style: GoogleFonts.inter(
-                                    fontSize: 10,
-                                    fontWeight: FontWeight.w900,
-                                    letterSpacing: 0.3,
-                                    color: const Color(0xFF334155),
-                                  ),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 8),
-                            Row(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      _buildFreeItem('Unlimited POS Billing'),
-                                      const SizedBox(height: 4),
-                                      _buildFreeItem('Customer Khata Ledger'),
-                                      const SizedBox(height: 4),
-                                      _buildFreeItem('Thermal & PDF Invoices'),
-                                    ],
-                                  ),
-                                ),
-                                const SizedBox(width: 8),
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      _buildFreeItem('100% Offline Database'),
-                                      const SizedBox(height: 4),
-                                      _buildFreeItem('Full JSON Backup/Restore'),
-                                      const SizedBox(height: 4),
-                                      _buildFreeItem('Dynamic UPI QR on Bills'),
-                                    ],
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 14),
-
-                      // Pro Unlocked Features
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            children: [
-                              const Text('⚡ ', style: TextStyle(fontSize: 12)),
-                              Text(
-                                'WHAT YOU UNLOCK WITH PRO:',
-                                style: GoogleFonts.inter(
-                                  fontSize: 10.5,
-                                  fontWeight: FontWeight.w900,
-                                  letterSpacing: 0.3,
-                                  color: const Color(0xFF92400E),
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 8),
-                          _buildProFeature('Automatic Cloud Backup & Multi-Device Sync'),
-                          const SizedBox(height: 6),
-                          _buildProFeature('Batch Numbers & Expiry Date Radar (15/30 Days Alert)'),
-                          const SizedBox(height: 6),
-                          _buildProFeature('Government GSTR-1 & HSN Tax Filing Reports'),
-                          const SizedBox(height: 6),
-                          _buildProFeature('Custom Barcode Sticker Label Printing Studio'),
-                          const SizedBox(height: 6),
-                          _buildProFeature('WhatsApp Festival Greetings & Customer Win-Back'),
-                        ],
-                      ),
-                      const SizedBox(height: 16),
-
-                      // Upgrade CTA Button
-                      Material(
-                        color: Colors.transparent,
-                        child: InkWell(
-                          onTap: _isLoading ? null : _handleUpgrade,
-                          borderRadius: BorderRadius.circular(14),
-                          child: Container(
-                            height: 46,
-                            decoration: BoxDecoration(
-                              gradient: const LinearGradient(
-                                colors: [Color(0xFFFBBF24), Color(0xFFF59E0B)],
-                                begin: Alignment.topLeft,
-                                end: Alignment.bottomRight,
-                              ),
-                              borderRadius: BorderRadius.circular(14),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: const Color(0xFFF59E0B).withValues(alpha: 0.35),
-                                  blurRadius: 8,
-                                  offset: const Offset(0, 3),
-                                ),
-                              ],
-                            ),
-                            child: Center(
-                              child: _isLoading
-                                  ? const SizedBox(
-                                      width: 20,
-                                      height: 20,
-                                      child: CircularProgressIndicator(
-                                        strokeWidth: 2.2,
-                                        color: Color(0xFF0F172A),
-                                      ),
-                                    )
-                                  : Text(
-                                      'Upgrade to Kamai+ Pro (₹$priceAmount) 🚀',
-                                      style: GoogleFonts.plusJakartaSans(
-                                        fontSize: 13.5,
-                                        fontWeight: FontWeight.w900,
-                                        color: const Color(0xFF0F172A),
-                                      ),
-                                    ),
-                            ),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-
-                      // Trust Footer
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          const Text('🔒 ', style: TextStyle(fontSize: 10)),
-                          Flexible(
-                            child: Text(
-                              '256-bit Secure Payment via Razorpay UPI & Cards • Instant Invoice with 18% GST ITC',
-                              textAlign: TextAlign.center,
-                              style: GoogleFonts.inter(
-                                fontSize: 9.5,
-                                fontWeight: FontWeight.w500,
-                                color: const Color(0xFF94A3B8),
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 6),
-                      TextButton(
-                        onPressed: () {
-                          Navigator.of(context).pop();
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(builder: (_) => const ProMembershipScreen()),
-                          );
-                        },
-                        child: Text(
-                          'Compare Free vs Pro Plans & FAQs →',
-                          style: GoogleFonts.plusJakartaSans(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w700,
-                            color: const Color(0xFF2563EB),
-                          ),
-                        ),
-                      ),
-                    ],
                   ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
     );
   }
 
-  Widget _buildFreeItem(String text) {
+  Widget _buildGlassFeature(String title) {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          '✓ ',
-          style: GoogleFonts.inter(
-            fontSize: 10.5,
-            fontWeight: FontWeight.w800,
-            color: const Color(0xFF475569),
+        Container(
+          padding: const EdgeInsets.all(2),
+          decoration: const BoxDecoration(
+            color: Color(0xFF065F46),
+            shape: BoxShape.circle,
+          ),
+          child: const Icon(
+            Icons.check_rounded,
+            size: 12,
+            color: Color(0xFF34D399),
           ),
         ),
-        Expanded(
-          child: Text(
-            text,
-            style: GoogleFonts.inter(
-              fontSize: 10.5,
-              fontWeight: FontWeight.w600,
-              color: const Color(0xFF475569),
-              height: 1.25,
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildProFeature(String title) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Icon(
-          Icons.check_rounded,
-          size: 16,
-          color: Color(0xFF059669),
-        ),
-        const SizedBox(width: 7),
+        const SizedBox(width: 8),
         Expanded(
           child: Text(
             title,
             style: GoogleFonts.inter(
               fontSize: 11.5,
-              fontWeight: FontWeight.w700,
-              color: const Color(0xFF0F172A),
+              fontWeight: FontWeight.w600,
+              color: const Color(0xFFE2E8F0),
               height: 1.25,
             ),
           ),

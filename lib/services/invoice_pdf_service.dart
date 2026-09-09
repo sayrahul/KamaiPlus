@@ -101,6 +101,7 @@ class InvoicePdfService {
     String? phone,
     String? message,
     String? subject,
+    bool forceChooser = false,
   }) async {
     try {
       final res = await _channel.invokeMethod<bool>('sharePdf', {
@@ -110,6 +111,7 @@ class InvoicePdfService {
         'phone': phone ?? '',
         'message': message ?? '',
         'subject': subject ?? '',
+        'forceChooser': forceChooser,
       });
       return res ?? false;
     } catch (_) {
@@ -117,7 +119,7 @@ class InvoicePdfService {
     }
   }
 
-  /// Generates the PDF and immediately launches the native Android Share Sheet / WhatsApp
+  /// Generates the PDF and immediately launches the native Android System Share Chooser (always attaches PDF)
   static Future<bool> generateAndSharePdf({
     required SaleModel sale,
     required String storeName,
@@ -128,6 +130,7 @@ class InvoicePdfService {
     String? customerPhone,
     String? phone,
     String? message,
+    bool forceChooser = true,
   }) async {
     final path = await generateAndDownloadPdf(
       sale: sale,
@@ -143,9 +146,10 @@ class InvoicePdfService {
       filePath: path,
       invoiceNumber: sale.invoiceNumber,
       storeName: storeName,
-      phone: phone ?? customerPhone ?? sale.customerPhone,
+      phone: forceChooser ? '' : (phone ?? customerPhone ?? sale.customerPhone),
       message: message,
       subject: 'Tax Invoice #${sale.invoiceNumber} - $storeName',
+      forceChooser: forceChooser,
     );
   }
 

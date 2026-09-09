@@ -12,7 +12,11 @@ import '../../models/models.dart';
 import '../../services/firestore_sync_service.dart';
 import '../../services/invoice_pdf_service.dart';
 import '../customers/customers_screen.dart';
+import '../../services/contacts_service.dart';
+import 'package:qr_flutter/qr_flutter.dart';
+import '../transactions/sale_detail_modal.dart';
 import '../common/empty_state_card.dart';
+import '../common/in_app_notification.dart';
 
 class KhataScreen extends StatefulWidget {
   const KhataScreen({super.key});
@@ -34,6 +38,7 @@ class _KhataScreenState extends State<KhataScreen> {
   List<SaleModel> _customerBills = [];
   int _activeCustomerSubTab = 0; // 0: Ledger Timeline, 1: Pending Bills
   String _billsFilter = 'Pending'; // 'Pending' | 'All' | 'Settled'
+  final Set<String> _selectedBillIds = {};
 
   @override
   void initState() {
@@ -137,13 +142,15 @@ class _KhataScreenState extends State<KhataScreen> {
       );
 
       if (!shared) {
-        final url = Uri.parse('https://wa.me/91${customer.phone}?text=${Uri.encodeComponent(text)}');
+        final waPhone = AppValidators.formatWhatsAppPhone(customer.phone);
+        final url = Uri.parse('https://wa.me/$waPhone?text=${Uri.encodeComponent(text)}');
         if (await canLaunchUrl(url)) {
           await launchUrl(url, mode: LaunchMode.externalApplication);
         }
       }
     } catch (_) {
-      final url = Uri.parse('https://wa.me/91${customer.phone}?text=${Uri.encodeComponent(text)}');
+      final waPhone = AppValidators.formatWhatsAppPhone(customer.phone);
+      final url = Uri.parse('https://wa.me/$waPhone?text=${Uri.encodeComponent(text)}');
       try {
         if (await canLaunchUrl(url)) {
           await launchUrl(url, mode: LaunchMode.externalApplication);
@@ -184,7 +191,8 @@ class _KhataScreenState extends State<KhataScreen> {
         '📲 *UPI Pay:* $upiPayLink\n\n'
         'Dhanyawad!';
 
-    final url = Uri.parse('https://wa.me/91${customer.phone}?text=${Uri.encodeComponent(text)}');
+    final waPhone = AppValidators.formatWhatsAppPhone(customer.phone);
+    final url = Uri.parse('https://wa.me/$waPhone?text=${Uri.encodeComponent(text)}');
     try {
       if (await canLaunchUrl(url)) {
         await launchUrl(url, mode: LaunchMode.externalApplication);
@@ -220,8 +228,7 @@ class _KhataScreenState extends State<KhataScreen> {
     buffer.writeln('📲 *Instant UPI Pay / Receipt:* $upiPayLink');
     buffer.writeln('\nDhanyawad!');
 
-    final cleanPhone = customer.phone.replaceAll(RegExp(r'[^0-9]'), '');
-    final fullPhone = cleanPhone.length == 10 ? '91$cleanPhone' : cleanPhone;
+    final fullPhone = AppValidators.formatWhatsAppPhone(customer.phone);
 
     // 1. Generate & Share PDF
     final filePath = await InvoicePdfService.generateAndDownloadPdf(
@@ -1497,6 +1504,10 @@ class _KhataScreenState extends State<KhataScreen> {
       return true;
     }).toList();
 
+    final unpaidBills = _customerBills.where((b) => b.paymentMethod == 'credit' && b.status != 'settled').toList();
+    final selectedBills = _customerBills.where((b) => _selectedBillIds.contains(b.id)).toList();
+    final selectedTotalPaise = selectedBills.fold<int>(0, (sum, b) => sum + b.totalAmountPaise);
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -1510,7 +1521,103 @@ class _KhataScreenState extends State<KhataScreen> {
             _buildBillFilterChip('Settled', 'Settled (${_customerBills.where((b) => b.status == 'settled').length})'),
           ],
         ),
-        const SizedBox(height: 12),
+        const SizedBox(height: 10),
+
+        if (unpaidBills.isNotEmpty && _billsFilter != 'Settled')
+          Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  _selectedBillIds.isEmpty
+                      ? 'Tick checkbox to select multiple bills'
+                      : '${_selectedBillIds.length} of ${unpaidBills.length} bills selected',
+                  style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w600, color: const Color(0xFF64748B)),
+                ),
+                TextButton.icon(
+                  onPressed: () {
+                    HapticFeedback.selectionClick();
+                    setState(() {
+                      if (_selectedBillIds.length == unpaidBills.length) {
+                        _selectedBillIds.clear();
+                      } else {
+                        _selectedBillIds.addAll(unpaidBills.map((b) => b.id));
+                      }
+                    });
+                  },
+                  icon: Icon(
+                    _selectedBillIds.length == unpaidBills.length ? Icons.deselect_rounded : Icons.select_all_rounded,
+                    size: 16,
+                    color: const Color(0xFF0284C7),
+                  ),
+                  label: Text(
+                    _selectedBillIds.length == unpaidBills.length ? 'Deselect All' : 'Select All',
+                    style: GoogleFonts.outfit(fontSize: 12.5, fontWeight: FontWeight.w700, color: const Color(0xFF0284C7)),
+                  ),
+                  style: TextButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    minimumSize: Size.zero,
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+        // Floating / Sticky Selection Bar
+        if (_selectedBillIds.isNotEmpty)
+          Container(
+            margin: const EdgeInsets.only(bottom: 14),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                colors: [Color(0xFF0F172A), Color(0xFF1E293B)],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+              borderRadius: BorderRadius.circular(16),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.12),
+                  blurRadius: 10,
+                  offset: const Offset(0, 4),
+                ),
+              ],
+            ),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        '${_selectedBillIds.length} BILLS SELECTED',
+                        style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.w800, color: const Color(0xFF94A3B8), letterSpacing: 0.5),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        MoneyFormatter.formatINR(selectedTotalPaise),
+                        style: GoogleFonts.outfit(fontSize: 19, fontWeight: FontWeight.w900, color: Colors.white),
+                      ),
+                    ],
+                  ),
+                ),
+                ElevatedButton.icon(
+                  onPressed: () => _openSelectiveBillSettlementModal(customer, selectedBills),
+                  icon: const Icon(Icons.flash_on_rounded, size: 16, color: Colors.white),
+                  label: Text('Settle Bills ⚡', style: GoogleFonts.outfit(fontSize: 13, fontWeight: FontWeight.w800, color: Colors.white)),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF059669),
+                    foregroundColor: Colors.white,
+                    elevation: 0,
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                ),
+              ],
+            ),
+          ),
 
         if (creditBills.isEmpty)
           const EmptyStateCard(
@@ -1555,11 +1662,16 @@ class _KhataScreenState extends State<KhataScreen> {
   Widget _buildCreditBillCard(SaleModel bill, CustomerModel customer) {
     final isSettled = bill.status == 'settled';
     final dateStr = DateFormat('d MMM yyyy • hh:mm a').format(bill.createdAt);
+    final isSelected = _selectedBillIds.contains(bill.id);
 
-    // Items preview string
+    // Items preview string (Solved Issue 13: check product_name & quantity)
     String itemsPreview = '';
     if (bill.items.isNotEmpty) {
-      final names = bill.items.map((it) => '${it['qty']}x ${it['name']}').take(2).join(', ');
+      final names = bill.items.map((it) {
+        final q = it['quantity'] ?? it['qty'] ?? 1;
+        final n = it['product_name'] ?? it['name'] ?? 'Item';
+        return '${q}x $n';
+      }).take(2).join(', ');
       itemsPreview = 'Items (${bill.items.length}): $names${bill.items.length > 2 ? "..." : ""}';
     } else {
       itemsPreview = 'Items (1): Store credit sale';
@@ -1569,11 +1681,13 @@ class _KhataScreenState extends State<KhataScreen> {
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: isSelected ? const Color(0xFFF0FDF4) : Colors.white,
         borderRadius: BorderRadius.circular(18),
         border: Border.all(
-          color: isSettled ? const Color(0xFFE2E8F0) : const Color(0xFFFECACA),
-          width: 1.2,
+          color: isSelected
+              ? const Color(0xFF059669)
+              : (isSettled ? const Color(0xFFE2E8F0) : const Color(0xFFFECACA)),
+          width: isSelected ? 1.8 : 1.2,
         ),
         boxShadow: [
           BoxShadow(
@@ -1586,12 +1700,35 @@ class _KhataScreenState extends State<KhataScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Header: Invoice # + Badges
+          // Header: Checkbox (if unpaid) + Invoice # + Badges
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Row(
                 children: [
+                  if (!isSettled) ...[
+                    SizedBox(
+                      width: 24,
+                      height: 24,
+                      child: Checkbox(
+                        value: isSelected,
+                        activeColor: const Color(0xFF059669),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(5)),
+                        side: const BorderSide(color: Color(0xFFCBD5E1), width: 1.5),
+                        onChanged: (val) {
+                          HapticFeedback.selectionClick();
+                          setState(() {
+                            if (val == true) {
+                              _selectedBillIds.add(bill.id);
+                            } else {
+                              _selectedBillIds.remove(bill.id);
+                            }
+                          });
+                        },
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                  ],
                   Text(
                     '#${bill.invoiceNumber}',
                     style: GoogleFonts.outfit(
@@ -1735,6 +1872,20 @@ class _KhataScreenState extends State<KhataScreen> {
                   ),
                 ),
               ),
+              const SizedBox(width: 8),
+              InkWell(
+                onTap: () => _shareBillViaWhatsApp(bill, customer),
+                borderRadius: BorderRadius.circular(10),
+                child: Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFECFDF5),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: const Color(0xFFA7F3D0)),
+                  ),
+                  child: Image.asset('assets/images/whatsapp_logo.png', width: 20, height: 20),
+                ),
+              ),
               if (!isSettled) ...[
                 const SizedBox(width: 8),
                 Expanded(
@@ -1806,7 +1957,46 @@ class _KhataScreenState extends State<KhataScreen> {
                   'Create a new customer account to track Udhar and payment transactions.',
                   style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF64748B)),
                 ),
-                const SizedBox(height: 16),
+                const SizedBox(height: 14),
+
+                InkWell(
+                  onTap: () async {
+                    final contact = await ContactsService.instance.pickContact();
+                    if (contact != null) {
+                      if (contact['name']?.isNotEmpty == true) {
+                        nameCtrl.text = contact['name']!;
+                      }
+                      if (contact['phone']?.isNotEmpty == true) {
+                        phoneCtrl.text = contact['phone']!;
+                      }
+                    }
+                  },
+                  borderRadius: BorderRadius.circular(10),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFEFF6FF),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: const Color(0xFFBFDBFE)),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.contacts_rounded, size: 16, color: Color(0xFF2563EB)),
+                        const SizedBox(width: 8),
+                        Text(
+                          '📱 Phone Contacts se Chunein',
+                          style: GoogleFonts.plusJakartaSans(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                            color: const Color(0xFF2563EB),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 14),
 
                 // Customer Name
                 _buildModalTextField(
@@ -1858,22 +2048,12 @@ class _KhataScreenState extends State<KhataScreen> {
                 final int openBalPaise = (openBalRupees * 100).round();
 
                 if (name.isEmpty) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('Please enter customer full name.'),
-                      backgroundColor: Color(0xFFDC2626),
-                    ),
-                  );
+                  InAppNotification.error('Please enter customer full name.', context: context);
                   return;
                 }
                 final phoneErr = AppValidators.validatePhone(phone);
                 if (phoneErr != null) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text(phoneErr),
-                      backgroundColor: const Color(0xFFDC2626),
-                    ),
-                  );
+                  InAppNotification.error(phoneErr, context: context);
                   return;
                 }
                 final cleanPhone = AppValidators.cleanPhone(phone);
@@ -2226,7 +2406,7 @@ class _KhataScreenState extends State<KhataScreen> {
                         final int amtPaise = (amtRupees * 100).round();
 
                         if (amtPaise <= 0) {
-                          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please enter a valid amount.')));
+                          InAppNotification.error('Please enter a valid amount.', context: context);
                           return;
                         }
 
@@ -2374,7 +2554,7 @@ class _KhataScreenState extends State<KhataScreen> {
                         final int amtPaise = (amtRupees * 100).round();
 
                         if (amtPaise <= 0) {
-                          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please enter a valid amount.')));
+                          InAppNotification.error('Please enter a valid amount.', context: context);
                           return;
                         }
 
@@ -2430,111 +2610,461 @@ class _KhataScreenState extends State<KhataScreen> {
   }
 
   // 4. 1-TAP CLEAR SPECIFIC BILL
-  void _settleBill(SaleModel bill, CustomerModel customer) async {
-    HapticFeedback.lightImpact();
-    await LocalDatabase.instance.settleCustomerSaleBill(
-      saleId: bill.id,
-      customer: customer,
-      amountPaise: bill.totalAmountPaise,
-      paymentMode: 'Cash Settle',
-    );
-    if (!mounted) return;
-    _loadData();
+  void _settleBill(SaleModel bill, CustomerModel customer) {
+    _openSelectiveBillSettlementModal(customer, [bill]);
+  }
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('✓ Bill #${bill.invoiceNumber} settled successfully!'),
-        backgroundColor: const Color(0xFF059669),
+  // 5. VIEW BILL DETAILS MODAL (Solved Issue 13: route to professional SaleDetailModal)
+  void _showBillDetailModal(SaleModel bill) {
+    SaleDetailModal.show(
+      context,
+      sale: bill,
+      onVoidOrRefund: () {
+        _loadData();
+      },
+    );
+  }
+
+  // 6. SELECTIVE MULTI-BILL CREDIT SETTLEMENT MODAL (Solved Issue 14)
+  void _openSelectiveBillSettlementModal(CustomerModel customer, List<SaleModel> bills) {
+    if (bills.isEmpty) return;
+    HapticFeedback.lightImpact();
+
+    final totalPaise = bills.fold<int>(0, (sum, b) => sum + b.totalAmountPaise);
+    final totalRupees = totalPaise ~/ 100;
+    String selectedMode = 'cash'; // 'cash' | 'upi' | 'split'
+
+    final cashReceivedCtrl = TextEditingController(text: totalRupees.toString());
+    final splitCashCtrl = TextEditingController(text: (totalRupees ~/ 2).toString());
+    final splitUpiCtrl = TextEditingController(text: (totalRupees - (totalRupees ~/ 2)).toString());
+
+    final invoicesPreview = bills.map((b) => '#${b.invoiceNumber}').join(', ');
+    final storeName = _storeProfile.storeName.isNotEmpty ? _storeProfile.storeName : 'KamaiPlus Store';
+    final upiId = _storeProfile.upiVpa.isNotEmpty ? _storeProfile.upiVpa : 'proventure@icici';
+    final upiPayUrl = 'upi://pay?pa=$upiId&pn=${Uri.encodeComponent(storeName)}&am=${(totalPaise / 100.0).toStringAsFixed(2)}&cu=INR&tn=Settlement_${bills.length}_Bills';
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (modalCtx, setModalState) {
+            final int cashReceivedPaise = MoneyFormatter.parseRupeesToPaise(cashReceivedCtrl.text);
+            final int changeReturnPaise = (cashReceivedPaise - totalPaise).clamp(0, 999999999);
+
+            return Container(
+              margin: EdgeInsets.only(
+                bottom: MediaQuery.of(modalCtx).viewInsets.bottom,
+              ),
+              decoration: const BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+              ),
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Pull bar
+                    Center(
+                      child: Container(
+                        width: 40,
+                        height: 4,
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFCBD5E1),
+                          borderRadius: BorderRadius.circular(2),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+
+                    // Title & Close
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Settle Credit Bills',
+                              style: GoogleFonts.outfit(
+                                fontSize: 19,
+                                fontWeight: FontWeight.w800,
+                                color: const Color(0xFF0F172A),
+                              ),
+                            ),
+                            Text(
+                              'Customer: ${customer.name} • ${bills.length} Bill${bills.length > 1 ? "s" : ""}',
+                              style: GoogleFonts.inter(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w500,
+                                color: const Color(0xFF64748B),
+                              ),
+                            ),
+                          ],
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.close_rounded, color: Color(0xFF64748B)),
+                          onPressed: () => Navigator.pop(modalCtx),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+
+                    // Amount Card
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        gradient: const LinearGradient(
+                          colors: [Color(0xFF059669), Color(0xFF047857)],
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                        ),
+                        borderRadius: BorderRadius.circular(16),
+                        boxShadow: [
+                          BoxShadow(
+                            color: const Color(0xFF059669).withValues(alpha: 0.25),
+                            blurRadius: 10,
+                            offset: const Offset(0, 4),
+                          ),
+                        ],
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Text(
+                                'TOTAL SETTLEMENT DUE',
+                                style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.w800, color: const Color(0xFFA7F3D0), letterSpacing: 0.5),
+                              ),
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                decoration: BoxDecoration(
+                                  color: Colors.white.withValues(alpha: 0.2),
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: Text(
+                                  '${bills.length} Bills',
+                                  style: GoogleFonts.inter(fontSize: 10.5, fontWeight: FontWeight.w700, color: Colors.white),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 6),
+                          Text(
+                            MoneyFormatter.formatINR(totalPaise),
+                            style: GoogleFonts.outfit(
+                              fontSize: 28,
+                              fontWeight: FontWeight.w900,
+                              color: Colors.white,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            'Bills: $invoicesPreview',
+                            style: GoogleFonts.inter(fontSize: 11, color: const Color(0xFFD1FAE5)),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+
+                    // Payment Mode Segment Selector (Credit disabled!)
+                    Text(
+                      'Select Payment Mode Received:',
+                      style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w700, color: const Color(0xFF475569)),
+                    ),
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        _buildSettlementModeChip(
+                          mode: 'cash',
+                          label: 'Cash 💵',
+                          selected: selectedMode == 'cash',
+                          onTap: () => setModalState(() => selectedMode = 'cash'),
+                        ),
+                        const SizedBox(width: 8),
+                        _buildSettlementModeChip(
+                          mode: 'upi',
+                          label: 'UPI QR 📲',
+                          selected: selectedMode == 'upi',
+                          onTap: () => setModalState(() => selectedMode = 'upi'),
+                        ),
+                        const SizedBox(width: 8),
+                        _buildSettlementModeChip(
+                          mode: 'split',
+                          label: 'Split 🔀',
+                          selected: selectedMode == 'split',
+                          onTap: () => setModalState(() => selectedMode = 'split'),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+
+                    // Mode Specific Body
+                    if (selectedMode == 'cash') ...[
+                      Text(
+                        'Cash Received from Customer (₹):',
+                        style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w600, color: const Color(0xFF475569)),
+                      ),
+                      const SizedBox(height: 6),
+                      TextField(
+                        controller: cashReceivedCtrl,
+                        keyboardType: TextInputType.number,
+                        inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                        style: GoogleFonts.outfit(fontSize: 18, fontWeight: FontWeight.w800, color: const Color(0xFF0F172A)),
+                        decoration: InputDecoration(
+                          prefixIcon: const Icon(Icons.currency_rupee, color: Color(0xFF059669), size: 20),
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Color(0xFFCBD5E1))),
+                          focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Color(0xFF059669), width: 1.8)),
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                        ),
+                        onChanged: (_) => setModalState(() {}),
+                      ),
+                      const SizedBox(height: 8),
+                      // Quick Cash Chips
+                      SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        child: Row(
+                          children: [
+                            _buildQuickCashChip('Exact ₹$totalRupees', totalRupees.toString(), cashReceivedCtrl, setModalState),
+                            if (totalRupees % 100 != 0)
+                              _buildQuickCashChip('₹${((totalRupees ~/ 100) + 1) * 100}', (((totalRupees ~/ 100) + 1) * 100).toString(), cashReceivedCtrl, setModalState),
+                            _buildQuickCashChip('₹${totalRupees + 100}', (totalRupees + 100).toString(), cashReceivedCtrl, setModalState),
+                            _buildQuickCashChip('₹${totalRupees + 500}', (totalRupees + 500).toString(), cashReceivedCtrl, setModalState),
+                          ],
+                        ),
+                      ),
+                      if (changeReturnPaise > 0) ...[
+                        const SizedBox(height: 10),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFEFF6FF),
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(color: const Color(0xFFBFDBFE)),
+                          ),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Text(
+                                'Change to Return to Customer:',
+                                style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w600, color: const Color(0xFF1E40AF)),
+                              ),
+                              Text(
+                                MoneyFormatter.formatINR(changeReturnPaise),
+                                style: GoogleFonts.outfit(fontSize: 14, fontWeight: FontWeight.w900, color: const Color(0xFF1E40AF)),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ] else if (selectedMode == 'upi') ...[
+                      Center(
+                        child: Column(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.all(12),
+                              decoration: BoxDecoration(
+                                color: Colors.white,
+                                borderRadius: BorderRadius.circular(16),
+                                border: Border.all(color: const Color(0xFFE2E8F0)),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: Colors.black.withValues(alpha: 0.04),
+                                    blurRadius: 8,
+                                    offset: const Offset(0, 2),
+                                  ),
+                                ],
+                              ),
+                              child: QrImageView(
+                                data: upiPayUrl,
+                                version: QrVersions.auto,
+                                size: 160.0,
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              'Scan with any UPI App (GPay, PhonePe, Paytm)',
+                              style: GoogleFonts.inter(fontSize: 11.5, fontWeight: FontWeight.w600, color: const Color(0xFF475569)),
+                            ),
+                            Text(
+                              'UPI ID: $upiId',
+                              style: GoogleFonts.inter(fontSize: 11, color: const Color(0xFF94A3B8)),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ] else if (selectedMode == 'split') ...[
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text('Cash (₹):', style: GoogleFonts.inter(fontSize: 11.5, fontWeight: FontWeight.w600, color: const Color(0xFF475569))),
+                                const SizedBox(height: 4),
+                                TextField(
+                                  controller: splitCashCtrl,
+                                  keyboardType: TextInputType.number,
+                                  style: GoogleFonts.outfit(fontSize: 15, fontWeight: FontWeight.w700),
+                                  decoration: InputDecoration(
+                                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                                    contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                                  ),
+                                  onChanged: (val) {
+                                    final cashAmt = int.tryParse(val) ?? 0;
+                                    final rem = (totalRupees - cashAmt).clamp(0, totalRupees);
+                                    splitUpiCtrl.text = rem.toString();
+                                    setModalState(() {});
+                                  },
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text('UPI (₹):', style: GoogleFonts.inter(fontSize: 11.5, fontWeight: FontWeight.w600, color: const Color(0xFF475569))),
+                                const SizedBox(height: 4),
+                                TextField(
+                                  controller: splitUpiCtrl,
+                                  keyboardType: TextInputType.number,
+                                  style: GoogleFonts.outfit(fontSize: 15, fontWeight: FontWeight.w700),
+                                  decoration: InputDecoration(
+                                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                                    contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                                  ),
+                                  onChanged: (val) {
+                                    final upiAmt = int.tryParse(val) ?? 0;
+                                    final rem = (totalRupees - upiAmt).clamp(0, totalRupees);
+                                    splitCashCtrl.text = rem.toString();
+                                    setModalState(() {});
+                                  },
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+
+                    const SizedBox(height: 20),
+
+                    // Confirm Settle Button
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton.icon(
+                        onPressed: () async {
+                          HapticFeedback.mediumImpact();
+                          final paymentModeStr = selectedMode == 'cash'
+                              ? 'Cash Settle'
+                              : (selectedMode == 'upi' ? 'UPI Settle' : 'Split Settle');
+
+                          await LocalDatabase.instance.settleMultipleCustomerSaleBills(
+                            saleIds: bills.map((b) => b.id).toList(),
+                            customer: customer,
+                            totalAmountPaise: totalPaise,
+                            paymentMode: paymentModeStr,
+                          );
+
+                          if (!modalCtx.mounted) return;
+                          Navigator.pop(modalCtx);
+
+                          if (!mounted) return;
+                          setState(() {
+                            _selectedBillIds.clear();
+                          });
+                          _loadData();
+
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text('✓ Cleared ${bills.length} bills (${MoneyFormatter.formatINR(totalPaise)}) via $paymentModeStr!'),
+                              backgroundColor: const Color(0xFF059669),
+                            ),
+                          );
+                        },
+                        icon: const Icon(Icons.check_circle_rounded, color: Colors.white, size: 20),
+                        label: Text(
+                          'Confirm & Clear ${MoneyFormatter.formatINR(totalPaise)}',
+                          style: GoogleFonts.outfit(fontSize: 16, fontWeight: FontWeight.w800, color: Colors.white),
+                        ),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF059669),
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          elevation: 0,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Widget _buildSettlementModeChip({
+    required String mode,
+    required String label,
+    required bool selected,
+    required VoidCallback onTap,
+  }) {
+    return Expanded(
+      child: InkWell(
+        onTap: () {
+          HapticFeedback.selectionClick();
+          onTap();
+        },
+        borderRadius: BorderRadius.circular(12),
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 10),
+          decoration: BoxDecoration(
+            color: selected ? const Color(0xFF0F172A) : const Color(0xFFF1F5F9),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: selected ? const Color(0xFF0F172A) : const Color(0xFFE2E8F0),
+            ),
+          ),
+          child: Center(
+            child: Text(
+              label,
+              style: GoogleFonts.outfit(
+                fontSize: 13,
+                fontWeight: selected ? FontWeight.w800 : FontWeight.w600,
+                color: selected ? Colors.white : const Color(0xFF334155),
+              ),
+            ),
+          ),
+        ),
       ),
     );
   }
 
-  // 5. VIEW BILL DETAILS MODAL
-  void _showBillDetailModal(SaleModel bill) {
-    showDialog(
-      context: context,
-      builder: (ctx) {
-        return AlertDialog(
-          backgroundColor: Colors.white,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-          title: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text('Invoice #${bill.invoiceNumber}', style: GoogleFonts.outfit(fontWeight: FontWeight.w800, fontSize: 18)),
-              IconButton(icon: const Icon(Icons.close_rounded), onPressed: () => Navigator.pop(ctx)),
-            ],
-          ),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Date: ${DateFormat('d MMM yyyy, hh:mm a').format(bill.createdAt)}',
-                  style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF64748B)),
-                ),
-                Text(
-                  'Status: ${bill.status.toUpperCase()} • Mode: ${bill.paymentMethod.toUpperCase()}',
-                  style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w600, color: const Color(0xFF0F172A)),
-                ),
-                const Divider(height: 20),
-
-                // Items
-                ...bill.items.map((it) {
-                  return Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 4),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Expanded(
-                          child: Text('${it['qty']}x ${it['name']}', style: GoogleFonts.inter(fontSize: 13)),
-                        ),
-                        Text(
-                          MoneyFormatter.formatINR((it['price'] as int? ?? 0) * (it['qty'] as num? ?? 1).toInt()),
-                          style: GoogleFonts.outfit(fontWeight: FontWeight.w700),
-                        ),
-                      ],
-                    ),
-                  );
-                }),
-                const Divider(height: 20),
-
-                // Total
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text('Total Bill Amount', style: GoogleFonts.outfit(fontSize: 15, fontWeight: FontWeight.w800)),
-                    Text(
-                      MoneyFormatter.formatINR(bill.totalAmountPaise),
-                      style: GoogleFonts.outfit(fontSize: 18, fontWeight: FontWeight.w900, color: const Color(0xFF059669)),
-                    ),
-                  ],
-                ),
-                if (_selectedCustomer != null) ...[
-                  const SizedBox(height: 16),
-                  SizedBox(
-                    width: double.infinity,
-                    child: ElevatedButton.icon(
-                      onPressed: () => _shareBillViaWhatsApp(bill, _selectedCustomer!),
-                      icon: Image.asset('assets/images/whatsapp_logo.png', width: 18, height: 18),
-                      label: Text(
-                        'Send Bill on WhatsApp',
-                        style: GoogleFonts.outfit(fontSize: 13.5, fontWeight: FontWeight.w700, color: Colors.white),
-                      ),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF059669),
-                        padding: const EdgeInsets.symmetric(vertical: 10),
-                        elevation: 0,
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                      ),
-                    ),
-                  ),
-                ],
-              ],
-            ),
-          ),
-        );
-      },
+  Widget _buildQuickCashChip(String label, String value, TextEditingController ctrl, StateSetter setModalState) {
+    return Padding(
+      padding: const EdgeInsets.only(right: 6),
+      child: ActionChip(
+        label: Text(label, style: GoogleFonts.outfit(fontSize: 11.5, fontWeight: FontWeight.w700, color: const Color(0xFF059669))),
+        backgroundColor: const Color(0xFFECFDF5),
+        side: const BorderSide(color: Color(0xFFA7F3D0)),
+        onPressed: () {
+          HapticFeedback.selectionClick();
+          setModalState(() => ctrl.text = value);
+        },
+      ),
     );
   }
 }

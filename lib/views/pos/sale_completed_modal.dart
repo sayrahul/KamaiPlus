@@ -13,6 +13,8 @@ import '../../services/notification_service.dart';
 import '../../services/invoice_pdf_service.dart';
 import '../settings/bluetooth_printer_dialog.dart';
 import '../common/store_logo_avatar.dart';
+import '../common/in_app_notification.dart';
+import '../../core/utils/app_validators.dart';
 
 class SaleCompletedModal extends StatefulWidget {
   final SaleModel sale;
@@ -94,19 +96,15 @@ class _SaleCompletedModalState extends State<SaleCompletedModal> {
   }
 
   Future<void> _sendWhatsAppBill() async {
-    final phone = _phoneCtrl.text.trim().replaceAll(RegExp(r'[^0-9]'), '');
-    if (phone.length < 10) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Please enter a valid 10-digit WhatsApp number'),
-          backgroundColor: Color(0xFFE11D48),
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
+    final rawPhone = _phoneCtrl.text.trim();
+    final phoneErr = AppValidators.validatePhone(rawPhone);
+    if (phoneErr != null) {
+      InAppNotification.error(phoneErr, context: context);
       return;
     }
 
-    final targetPhone = phone.length == 10 ? '91$phone' : phone;
+    final phone = AppValidators.cleanPhone(rawPhone);
+    final targetPhone = '91$phone';
 
     final dateStr = DateFormat('dd MMM yyyy, hh:mm a').format(widget.sale.createdAt);
     final amountStr = MoneyFormatter.formatINR(widget.sale.totalAmountPaise);
@@ -159,10 +157,11 @@ Have a wonderful day! Visit us again soon.
         phone: targetPhone,
         message: message,
         subject: 'Tax Invoice #${widget.sale.invoiceNumber} - $_storeName',
+        forceChooser: false,
       );
     }
 
-    // If native attachment channel succeeded or fallback to text message
+    // If direct WhatsApp package dispatch failed, fallback to external wa.me intent
     if (!shared) {
       final webWaUrl = Uri.parse('https://wa.me/$targetPhone?text=${Uri.encodeComponent(message)}');
       try {
@@ -176,12 +175,9 @@ Have a wonderful day! Visit us again soon.
     );
 
     if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('✓ A4 Invoice PDF dispatched to WhatsApp with bill attached!'),
-          backgroundColor: Color(0xFF059669),
-          behavior: SnackBarBehavior.floating,
-        ),
+      InAppNotification.success(
+        '✓ A4 Invoice PDF dispatched to WhatsApp with bill attached!',
+        context: context,
       );
     }
   }
@@ -197,17 +193,12 @@ Have a wonderful day! Visit us again soon.
 
       if (printerAddress == null || printerAddress.isEmpty) {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: const Text('No Bluetooth printer configured. Tap "Bluetooth Print" to pair.'),
-              backgroundColor: const Color(0xFF0F172A),
-              behavior: SnackBarBehavior.floating,
-              action: SnackBarAction(
-                label: 'Pair Now',
-                textColor: const Color(0xFFFBBF24),
-                onPressed: _openBluetoothDialog,
-              ),
-            ),
+          InAppNotification.show(
+            context: context,
+            type: NotificationType.warning,
+            message: 'No Bluetooth printer configured.',
+            actionLabel: 'PAIR',
+            onAction: _openBluetoothDialog,
           );
         }
         return;
@@ -226,19 +217,11 @@ Have a wonderful day! Visit us again soon.
       });
 
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('✓ Thermal receipt printed successfully!'),
-            backgroundColor: Color(0xFF059669),
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
+        InAppNotification.success('✓ Thermal receipt printed successfully!', context: context);
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Print failed: $e'), backgroundColor: Colors.red),
-        );
+        InAppNotification.error('Print failed: $e', context: context);
       }
     } finally {
       if (mounted) setState(() => _isPrinting = false);
@@ -266,32 +249,16 @@ Have a wonderful day! Visit us again soon.
 
     if (!mounted) return;
     if (filePath != null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Row(
-            children: [
-              const Icon(Icons.picture_as_pdf_rounded, color: Color(0xFF10B981), size: 18),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  '✓ Invoice #${widget.sale.invoiceNumber} PDF saved to Downloads',
-                  style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w600),
-                ),
-              ),
-            ],
-          ),
-          backgroundColor: const Color(0xFF0F172A),
-          behavior: SnackBarBehavior.floating,
-          action: SnackBarAction(
-            label: 'Open',
-            textColor: const Color(0xFFFBBF24),
-            onPressed: () => InvoicePdfService.openPdf(filePath),
-          ),
-        ),
+      InAppNotification.show(
+        context: context,
+        message: '✓ Invoice #${widget.sale.invoiceNumber} PDF saved to Downloads',
+        actionLabel: 'OPEN',
+        onAction: () => InvoicePdfService.openPdf(filePath),
       );
     } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('PDF generated and notification dispatched!')),
+      InAppNotification.error(
+        'Could not generate PDF. Please check storage permissions.',
+        context: context,
       );
     }
   }
@@ -306,10 +273,12 @@ Have a wonderful day! Visit us again soon.
       gstin: _profile.gstin,
       logoPath: _profile.logoUrl,
       customerPhone: _phoneCtrl.text.trim(),
+      forceChooser: true, // Always open system chooser for Share PDF
     );
     if (!ok && mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Could not open system share dialog.')),
+      InAppNotification.error(
+        'Could not open system share dialog.',
+        context: context,
       );
     }
   }

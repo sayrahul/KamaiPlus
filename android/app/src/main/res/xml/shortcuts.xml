@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="utf-8"?>
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+    <shortcut
+        android:shortcutId="new_sale"
+        android:enabled="true"
+        android:icon="@drawable/ic_shortcut_sale"
+        android:shortcutShortLabel="@string/shortcut_new_sale_short"
+        android:shortcutLongLabel="@string/shortcut_new_sale_long">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:targetPackage="com.kamaiplus.pos"
+            android:targetClass="com.kamaiplus.pos.MainActivity"
+            android:data="kamaiplus://shortcut/pos">
+            <extra android:name="shortcut" android:value="pos" />
+            <extra android:name="test_screen" android:value="pos" />
+        </intent>
+    </shortcut>
+
+    <shortcut
+        android:shortcutId="add_khata"
+        android:enabled="true"
+        android:icon="@drawable/ic_shortcut_khata"
+        android:shortcutShortLabel="@string/shortcut_add_khata_short"
+        android:shortcutLongLabel="@string/shortcut_add_khata_long">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:targetPackage="com.kamaiplus.pos"
+            android:targetClass="com.kamaiplus.pos.MainActivity"
+            android:data="kamaiplus://shortcut/khata">
+            <extra android:name="shortcut" android:value="khata" />
+            <extra android:name="test_screen" android:value="khata" />
+        </intent>
+    </shortcut>
+
+    <shortcut
+        android:shortcutId="scan_barcode"
+        android:enabled="true"
+        android:icon="@drawable/ic_shortcut_scan"
+        android:shortcutShortLabel="@string/shortcut_scan_barcode_short"
+        android:shortcutLongLabel="@string/shortcut_scan_barcode_long">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:targetPackage="com.kamaiplus.pos"
+            android:targetClass="com.kamaiplus.pos.MainActivity"
+            android:data="kamaiplus://shortcut/barcode">
+            <extra android:name="shortcut" android:value="barcode" />
+            <extra android:name="test_screen" android:value="barcode" />
+        </intent>
+    </shortcut>
+
+    <shortcut
+        android:shortcutId="reports"
+        android:enabled="true"
+        android:icon="@drawable/ic_shortcut_report"
+        android:shortcutShortLabel="@string/shortcut_reports_short"
+        android:shortcutLongLabel="@string/shortcut_reports_long">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:targetPackage="com.kamaiplus.pos"
+            android:targetClass="com.kamaiplus.pos.MainActivity"
+            android:data="kamaiplus://shortcut/reports">
+            <extra android:name="shortcut" android:value="reports" />
+            <extra android:name="test_screen" android:value="reports" />
+        </intent>
+    </shortcut>
+</shortcuts>

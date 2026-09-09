@@ -17,6 +17,7 @@ import '../growth/growth_campaigns_screen.dart';
 import '../reports/gst_reports_screen.dart';
 import '../tools/barcode_studio_screen.dart';
 import '../settings/bluetooth_printer_dialog.dart';
+import '../../core/constants/business_vertical_config.dart';
 
 class HomePulseTab extends StatefulWidget {
   final VoidCallback onNavigateToPos;
@@ -44,15 +45,15 @@ class _HomePulseTabState extends State<HomePulseTab> {
   String _selectedModeFilter = 'All Modes'; // 'All Modes', 'Cash', 'UPI', 'Udhar'
   String _searchQuery = '';
 
-  // Pulse Metrics
-  int _todaySalesPaise = 190200; // Rs 1,902.00
-  int _todayBillsCount = 4;
-  int _todayProfitPaise = 26750; // Rs 267.50 (~14% Margin)
-  int _cashInHandPaise = 29700;  // Rs 297.00
-  int _marketUdharPaise = 98000; // Rs 980.00
-  int _debtorsCount = 1;
+  // Pulse Metrics (Default to 0 for clean merchant state)
+  int _todaySalesPaise = 0;
+  int _todayBillsCount = 0;
+  int _todayProfitPaise = 0;
+  int _cashInHandPaise = 0;
+  int _marketUdharPaise = 0;
+  int _debtorsCount = 0;
 
-  int _totalProductsCount = 8;
+  int _totalProductsCount = 0;
   List<SaleModel> _recentSales = [];
 
   @override
@@ -83,127 +84,34 @@ class _HomePulseTabState extends State<HomePulseTab> {
           e.createdAt.month == now.month &&
           e.createdAt.day == now.day).fold(0, (sum, e) => sum + e.amountPaise);
 
-      if (sales.isNotEmpty) {
-        final totalSales = todaySales.fold(0, (sum, s) => sum + s.totalAmountPaise);
-        final cashSales = todaySales.where((s) => s.paymentMethod == 'cash').fold(0, (sum, s) => sum + s.totalAmountPaise);
+      final totalSales = todaySales.fold(0, (sum, s) => sum + s.totalAmountPaise);
+      final cashSales = todaySales.where((s) => s.paymentMethod == 'cash').fold(0, (sum, s) => sum + s.totalAmountPaise);
+      final calculatedCash = (cashSales - todayExp);
 
-        if (mounted) {
-          setState(() {
-            if (todaySales.isNotEmpty) {
-              _todaySalesPaise = totalSales;
-              _todayBillsCount = todaySales.length;
-              _todayProfitPaise = (totalSales * 0.14).round();
-              _cashInHandPaise = (cashSales > 0 ? cashSales : 29700) - todayExp;
-            }
-            if (debtors.isNotEmpty) {
-              _marketUdharPaise = totalUdhar;
-              _debtorsCount = debtors.length;
-            }
-            _totalProductsCount = products.isNotEmpty ? products.length : 8;
-            _recentSales = sales;
-            _isLoading = false;
-          });
-        }
-      } else {
-        if (mounted) {
-          setState(() {
-            _totalProductsCount = products.isNotEmpty ? products.length : 8;
-            _recentSales = _getSampleScreenshotSales();
-            _isLoading = false;
-          });
-        }
+      if (mounted) {
+        setState(() {
+          _todaySalesPaise = totalSales;
+          _todayBillsCount = todaySales.length;
+          _todayProfitPaise = (totalSales * 0.14).round();
+          _cashInHandPaise = calculatedCash > 0 ? calculatedCash : 0;
+          _marketUdharPaise = totalUdhar;
+          _debtorsCount = debtors.length;
+          _totalProductsCount = products.length;
+          _recentSales = sales;
+          _isLoading = false;
+        });
       }
     } catch (_) {
       if (mounted) {
         setState(() {
-          _recentSales = _getSampleScreenshotSales();
+          _recentSales = [];
           _isLoading = false;
         });
       }
     }
   }
 
-  List<SaleModel> _getSampleScreenshotSales() {
-    final now = DateTime.now();
-    return [
-      SaleModel(
-        id: 'inv-004',
-        businessId: 'biz-default',
-        invoiceNumber: 'INV-004',
-        customerName: 'Rahul Sharma',
-        customerPhone: '9876543210',
-        paymentMethod: 'upi',
-        totalAmountPaise: 62500,
-        subtotalPaise: 62500,
-        taxAmountPaise: 0,
-        discountPaise: 0,
-        items: [
-          {'name': 'Aashirvaad Atta 5kg', 'qty': 1, 'price': 24500},
-          {'name': 'Fortune Oil 1L', 'qty': 1, 'price': 13500},
-          {'name': 'Tata Salt 1kg', 'qty': 1, 'price': 2800},
-          {'name': 'Maggi 2-Min 70g', 'qty': 2, 'price': 2800},
-          {'name': 'Amul Butter 100g', 'qty': 1, 'price': 5600},
-          {'name': 'Sugar Loose 1kg', 'qty': 3, 'price': 13200},
-        ],
-        createdAt: DateTime(now.year, now.month, now.day, 16, 23),
-      ),
-      SaleModel(
-        id: 'inv-003',
-        businessId: 'biz-default',
-        invoiceNumber: 'INV-003',
-        customerName: 'Rahul Sharma',
-        customerPhone: '9876543210',
-        paymentMethod: 'credit',
-        totalAmountPaise: 49000,
-        subtotalPaise: 49000,
-        taxAmountPaise: 0,
-        discountPaise: 0,
-        items: [
-          {'name': 'Basmati Rice 1kg', 'qty': 2, 'price': 24000},
-          {'name': 'Toor Dal 1kg', 'qty': 1, 'price': 16500},
-          {'name': 'Red Chilli Powder', 'qty': 1, 'price': 8500},
-        ],
-        createdAt: DateTime(now.year, now.month, now.day, 16, 21),
-      ),
-      SaleModel(
-        id: 'inv-002',
-        businessId: 'biz-default',
-        invoiceNumber: 'INV-002',
-        customerName: 'Rahul Sharma',
-        customerPhone: '9876543210',
-        paymentMethod: 'credit',
-        totalAmountPaise: 49000,
-        subtotalPaise: 49000,
-        taxAmountPaise: 0,
-        discountPaise: 0,
-        items: [
-          {'name': 'Basmati Rice 1kg', 'qty': 2, 'price': 24000},
-          {'name': 'Toor Dal 1kg', 'qty': 1, 'price': 16500},
-          {'name': 'Red Chilli Powder', 'qty': 1, 'price': 8500},
-        ],
-        createdAt: DateTime(now.year, now.month, now.day, 16, 20),
-      ),
-      SaleModel(
-        id: 'inv-001',
-        businessId: 'biz-default',
-        invoiceNumber: 'INV-001',
-        customerName: 'Rahul Sharma',
-        customerPhone: '9876543210',
-        paymentMethod: 'cash',
-        totalAmountPaise: 29700,
-        subtotalPaise: 29700,
-        taxAmountPaise: 0,
-        discountPaise: 0,
-        items: [
-          {'name': 'Milk 1L', 'qty': 2, 'price': 6600},
-          {'name': 'Brown Bread', 'qty': 1, 'price': 4500},
-          {'name': 'Eggs 6-pack', 'qty': 1, 'price': 5500},
-          {'name': 'Surf Excel 500g', 'qty': 1, 'price': 13100},
-        ],
-        createdAt: DateTime(now.year, now.month, now.day, 16, 19),
-      ),
-    ];
-  }
+
 
   String _formatDisplayPaise(int paise, [bool isMasked = false]) {
     if (isMasked) return '••••••';
@@ -757,118 +665,195 @@ class _HomePulseTabState extends State<HomePulseTab> {
   // SECTION 3: FAST COUNTER BANNER
   // -------------------------------------------------------------
   Widget _buildFastCounterBanner() {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-      decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: [Color(0xFF064E3B), Color(0xFF042F2E)],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        borderRadius: BorderRadius.circular(14),
-        boxShadow: const [
-          BoxShadow(
-            color: Color(0x20064E3B),
-            blurRadius: 8,
-            offset: Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Row(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(7),
-            decoration: BoxDecoration(
-              color: const Color(0xFF10B981).withValues(alpha: 0.2),
-              borderRadius: BorderRadius.circular(8),
+    return ValueListenableBuilder<String>(
+      valueListenable: BusinessVerticals.activeBusinessTypeNotifier,
+      builder: (context, verticalId, _) {
+        final vert = BusinessVerticals.resolve(verticalId);
+
+        String counterTitle;
+        String counterTag;
+        String counterDesk;
+        String counterSub;
+        IconData counterIcon;
+        List<Color> gradientColors;
+        Color accentColor;
+        Color tagBg;
+        Color tagColor;
+
+        switch (vert.id) {
+          case 'pharmacy':
+            counterTitle = 'Prescription Counter';
+            counterTag = 'PHARMACY';
+            counterDesk = 'Rx & OTC Quick Checkout';
+            counterSub = 'Batch & expiry tracked • Instant dosage bill';
+            counterIcon = Icons.medication_rounded;
+            gradientColors = const [Color(0xFF0C4A6E), Color(0xFF082F49)];
+            accentColor = const Color(0xFF0284C7);
+            tagBg = const Color(0xFF0284C7).withValues(alpha: 0.3);
+            tagColor = const Color(0xFF7DD3FC);
+            break;
+          case 'restaurant':
+            counterTitle = 'Table & Dine-in Express';
+            counterTag = 'RESTAURANT';
+            counterDesk = 'KOT & Table Billing';
+            counterSub = 'Quick dish punch • Dine-in & parcel billing';
+            counterIcon = Icons.restaurant_rounded;
+            gradientColors = const [Color(0xFF7C2D12), Color(0xFF451A03)];
+            accentColor = const Color(0xFFEA580C);
+            tagBg = const Color(0xFFEA580C).withValues(alpha: 0.3);
+            tagColor = const Color(0xFFFDBA74);
+            break;
+          case 'clothing':
+            counterTitle = 'Tag & Barcode Express';
+            counterTag = 'APPAREL';
+            counterDesk = 'Garment & Footwear Billing';
+            counterSub = 'Size & color variants • Rapid tag scan';
+            counterIcon = Icons.checkroom_rounded;
+            gradientColors = const [Color(0xFF581C87), Color(0xFF3B0764)];
+            accentColor = const Color(0xFF9333EA);
+            tagBg = const Color(0xFF9333EA).withValues(alpha: 0.3);
+            tagColor = const Color(0xFFD8B4FE);
+            break;
+          case 'hardware':
+            counterTitle = 'Contractor & Retail Counter';
+            counterTag = 'HARDWARE';
+            counterDesk = 'Fast Measurement & Estimate Billing';
+            counterSub = 'Unit conversions • Quick proforma bill';
+            counterIcon = Icons.handyman_rounded;
+            gradientColors = const [Color(0xFF1E293B), Color(0xFF0F172A)];
+            accentColor = const Color(0xFF2563EB);
+            tagBg = const Color(0xFF2563EB).withValues(alpha: 0.3);
+            tagColor = const Color(0xFF93C5FD);
+            break;
+          case 'grocery':
+          default:
+            counterTitle = 'Quick Kirana Counter';
+            counterTag = 'GROCERY';
+            counterDesk = 'Loose Staples & FMCG Desk';
+            counterSub = 'Rapid weigh items • Scanner auto-focus';
+            counterIcon = Icons.scale_rounded;
+            gradientColors = const [Color(0xFF064E3B), Color(0xFF042F2E)];
+            accentColor = const Color(0xFF10B981);
+            tagBg = const Color(0xFF10B981).withValues(alpha: 0.3);
+            tagColor = const Color(0xFF6EE7B7);
+            break;
+        }
+
+        return Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: gradientColors,
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
             ),
-            child: const Icon(
-              Icons.scale_rounded,
-              color: Color(0xFF34D399),
-              size: 20,
-            ),
+            borderRadius: BorderRadius.circular(14),
+            boxShadow: [
+              BoxShadow(
+                color: gradientColors.first.withValues(alpha: 0.25),
+                blurRadius: 8,
+                offset: const Offset(0, 2),
+              ),
+            ],
           ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Row(
+          child: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(7),
+                decoration: BoxDecoration(
+                  color: accentColor.withValues(alpha: 0.2),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Icon(
+                  counterIcon,
+                  color: tagColor,
+                  size: 20,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Flexible(
-                      child: Text(
-                        'Kirana Fast Counter',
-                        style: GoogleFonts.outfit(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w700,
-                          color: Colors.white,
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Flexible(
+                          child: Text(
+                            counterTitle,
+                            style: GoogleFonts.outfit(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w700,
+                              color: Colors.white,
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                          ),
                         ),
-                        overflow: TextOverflow.ellipsis,
-                      ),
+                        const SizedBox(width: 4),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                          decoration: BoxDecoration(
+                            color: tagBg,
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: Text(
+                            counterTag,
+                            style: GoogleFonts.inter(
+                              fontSize: 8,
+                              fontWeight: FontWeight.w700,
+                              color: tagColor,
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
-                    const SizedBox(width: 4),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF10B981).withValues(alpha: 0.3),
-                        borderRadius: BorderRadius.circular(4),
+                    Text(
+                      counterDesk,
+                      style: GoogleFonts.outfit(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.white,
                       ),
-                      child: Text(
-                        'GROCERY',
-                        style: GoogleFonts.inter(
-                          fontSize: 8,
-                          fontWeight: FontWeight.w700,
-                          color: const Color(0xFF6EE7B7),
-                        ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    Text(
+                      counterSub,
+                      style: GoogleFonts.inter(
+                        fontSize: 9,
+                        color: const Color(0xFF94A3B8),
                       ),
+                      overflow: TextOverflow.ellipsis,
                     ),
                   ],
                 ),
-                Text(
-                  'Loose Staples Desk',
-                  style: GoogleFonts.outfit(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w600,
-                    color: Colors.white,
-                  ),
+              ),
+              const SizedBox(width: 6),
+              ElevatedButton(
+                onPressed: widget.onNavigateToPos,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: accentColor,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  elevation: 0,
                 ),
-                Text(
-                  '1 loose items • Scanner auto-focus',
-                  style: GoogleFonts.inter(
-                    fontSize: 9,
-                    color: const Color(0xFF94A3B8),
-                  ),
-                  overflow: TextOverflow.ellipsis,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      'Counter',
+                      style: GoogleFonts.outfit(fontSize: 10.5, fontWeight: FontWeight.w700),
+                    ),
+                    const SizedBox(width: 2),
+                    const Icon(Icons.arrow_forward_rounded, size: 12),
+                  ],
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
-          const SizedBox(width: 6),
-          ElevatedButton(
-            onPressed: widget.onNavigateToPos,
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF10B981),
-              foregroundColor: Colors.white,
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-              elevation: 0,
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  'Counter',
-                  style: GoogleFonts.outfit(fontSize: 10.5, fontWeight: FontWeight.w700),
-                ),
-                const SizedBox(width: 2),
-                const Icon(Icons.arrow_forward_rounded, size: 12),
-              ],
-            ),
-          ),
-        ],
-      ),
+        );
+      },
     );
   }
 
