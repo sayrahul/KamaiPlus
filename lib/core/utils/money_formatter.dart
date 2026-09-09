@@ -1,4 +1,4 @@
-﻿import 'package:intl/intl.dart';
+import 'package:intl/intl.dart';
 
 /// Sacred Financial Invariant: Zero-Drift Integer Paise Math Engine
 /// All money is stored, computed, and passed in integer paise (1 INR = 100 paise).
@@ -26,12 +26,35 @@ class MoneyFormatter {
     return _inrFormatter.format(rupees);
   }
 
-  /// Parses user string input like "499.50" into 49950 paise safely
+  /// Parses user string input like "499.50" into 49950 paise safely with 0 floating point drift
   static int parseRupeesToPaise(String input) {
     if (input.trim().isEmpty) return 0;
     final cleaned = input.replaceAll('₹', '').replaceAll(',', '').trim();
-    final double val = double.tryParse(cleaned) ?? 0.0;
-    return (val * 100).round();
+    if (cleaned.isEmpty) return 0;
+
+    final bool isNegative = cleaned.startsWith('-');
+    final absCleaned = isNegative ? cleaned.substring(1) : cleaned;
+
+    final parts = absCleaned.split('.');
+    final int rupees = int.tryParse(parts[0]) ?? 0;
+    int paise = 0;
+
+    if (parts.length > 1) {
+      final dec = parts[1];
+      if (dec.length == 1) {
+        paise = (int.tryParse(dec) ?? 0) * 10;
+      } else if (dec.length == 2) {
+        paise = int.tryParse(dec) ?? 0;
+      } else if (dec.length > 2) {
+        // Round to nearest paisa based on 3rd decimal digit
+        final firstTwo = int.tryParse(dec.substring(0, 2)) ?? 0;
+        final thirdDigit = int.tryParse(dec[2]) ?? 0;
+        paise = thirdDigit >= 5 ? firstTwo + 1 : firstTwo;
+      }
+    }
+
+    final total = rupees * 100 + paise;
+    return isNegative ? -total : total;
   }
 
   /// GST Tax Calculation (Inclusive vs Exclusive)

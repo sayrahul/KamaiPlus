@@ -24,7 +24,12 @@ export async function POST(req: NextRequest) {
     // 1. Read Raw Body as Text (Crucial for cryptographic HMAC verification)
     const rawBody = await req.text();
     const signature = req.headers.get('x-razorpay-signature');
-    const webhookSecret = process.env.RAZORPAY_WEBHOOK_SECRET || 'bhs9g8FV7KjDV7xlqTcDOVcp';
+    const webhookSecret = process.env.RAZORPAY_WEBHOOK_SECRET;
+
+    if (!webhookSecret) {
+      console.error('RAZORPAY_WEBHOOK_SECRET environment variable is not configured');
+      return NextResponse.json({ error: 'Server configuration error' }, { status: 500 });
+    }
 
     if (!signature) {
       return NextResponse.json({ error: 'Missing Razorpay signature' }, { status: 400 });

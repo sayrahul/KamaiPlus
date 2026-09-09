@@ -52,3 +52,5 @@ app.*.map.json
 # Environment local secrets
 env.local
 *.env.local
+android/app/google-services.json
+google-services.json

@@ -65,6 +65,17 @@ service cloud.firestore {
     }
 
     // =========================================================================
+    // MERCHANTS DIRECTORY (SUPER ADMIN & FAST LOOKUP MIRROR)
+    // =========================================================================
+    match /merchants/{merchantId} {
+      allow read, write: if isAuthenticated() && (
+        merchantId == 'biz_' + request.auth.uid ||
+        merchantId == request.auth.uid ||
+        isBusinessOwner(merchantId)
+      );
+    }
+
+    // =========================================================================
     // DEFAULT DENY: BLOCK ALL OTHER ROOT ACCESS
     // =========================================================================
     match /{document=**} {

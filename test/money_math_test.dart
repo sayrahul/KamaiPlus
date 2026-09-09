@@ -1,4 +1,4 @@
-﻿import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter_test/flutter_test.dart';
 import 'package:kamaiplus_pos/core/utils/money_formatter.dart';
 
 void main() {
@@ -13,6 +13,10 @@ void main() {
       expect(MoneyFormatter.parseRupeesToPaise('499.00'), 49900);
       expect(MoneyFormatter.parseRupeesToPaise('₹1,250.50'), 125050);
       expect(MoneyFormatter.parseRupeesToPaise('0'), 0);
+      expect(MoneyFormatter.parseRupeesToPaise('2.675'), 268);
+      expect(MoneyFormatter.parseRupeesToPaise('2.674'), 267);
+      expect(MoneyFormatter.parseRupeesToPaise('10.5'), 1050);
+      expect(MoneyFormatter.parseRupeesToPaise(''), 0);
     });
 
     test('Tax Inclusive GST Calculation (Zero Drift)', () {

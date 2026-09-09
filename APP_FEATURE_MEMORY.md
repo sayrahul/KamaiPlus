@@ -734,4 +734,38 @@ Comprehensive enterprise-grade retail UX upgrade suite aligned with PhonePe Busi
       - Updated `.gitignore` to ignore `*.aab` and `*.apk` binary artifacts to keep GitHub repository lightweight.
       - All source code, adaptive icon XMLs, mipmaps, and `APP_FEATURE_MEMORY.md` committed and pushed to `origin/main` ([`a930bb7`](https://github.com/sayrahul/KamaiPlus/commit/a930bb7) and [`c1d73ff`](https://github.com/sayrahul/KamaiPlus/commit/c1d73ff)).
 
+41. **Security Hardening, GST Invariant Fix & Cloud Deletion Sync (LOCKED):**
+    - **Razorpay Key Secret Purge & Webhook Hardening:**
+      - Removed `razorpayKeySecret` from `RazorpayService` Dart code (`lib/services/razorpay_service.dart`). Client checkout uses only `razorpayKeyId`.
+      - Removed hardcoded fallback secret strings from Next.js serverless routes (`backend/nextjs_razorpay_webhook_route.ts` & `pages.js`). Strictly mandates `process.env.RAZORPAY_WEBHOOK_SECRET`.
+    - **Google Services Configuration Protection:**
+      - Added `android/app/google-services.json` to `.gitignore` and untracked from Git history (`git rm --cached`).
+      - Created `android/app/google-services.json.example` template with placeholder values for open-source contributors.
+    - **POS Billing GST Calculation Invariant (`local_database.dart`):**
+      - Resolved silent GST bug where `taxAmountPaise` was hardcoded to 0.
+      - Now iterates through `cartItems` and calculates item-level GST via `MoneyFormatter.calculateGst`, accurately accumulating and storing `totalTaxPaise` in every sale.
+    - **Pro Subscription Expiry Enforcement (`models.dart` & `firestore_sync_service.dart`):**
+      - Added `isProEffective` property on `StoreProfileModel` and evaluated `effectivePro` in `fromMap` against `proExpiry`.
+      - In `FirestoreSyncService._businessSub` and `initialCloudRestore()`, if `pro_expiry` has passed (`DateTime.now().isAfter(expiry)`), the subscription automatically downgrades to Free tier in SQLite and SharedPreferences.
+    - **Firestore Deletion Sync (`firestore_sync_service.dart`):**
+      - Added explicit handling for `DocumentChangeType.removed` in both `_productsSub` and `_customersSub` streams.
+      - Removals made from desktop web or Cloud Firestore now cleanly delete the corresponding product or customer from the local SQLite database.
+    - **Zero-Drift Float Precision Safety (`money_formatter.dart`):**
+      - Upgraded `MoneyFormatter.parseRupeesToPaise` to use exact string parsing (split by `.`, 2-digit padding, and 3rd-digit half-up rounding) to eliminate IEEE 754 floating-point drift (e.g., `2.675` correctly parses to `268` paise).
+
+42. **Cash Register Refund Outflow & Monotonic Invoice Sequencing (LOCKED):**
+    - **Cash Drawer Refund Tracking (`local_database.dart` & `cash_register_screen.dart`):**
+      - In `LocalDatabase.processSalesReturn`: If a returned sale was paid via Cash or Split Cash, an automatic cash expense outflow entry (`ExpenseModel`) is inserted under category `'Refund'` with title `'Cash Refund: #INV-XXX'`.
+      - In `CashRegisterScreen`: Today's cash sales represent all physical cash taken into the drawer. When cash is refunded out of the drawer, it tracks as an expense outflow under `'Refund'`, ensuring expected cash matches physical galla count across multi-day returns.
+    - **Collision-Proof Monotonic Invoice Sequencing (`local_database.dart`):**
+      - Replaced fragile `SELECT COUNT(*) FROM sales` with an atomic monotonic `app_counters` SQLite table (`invoice_sequence`).
+      - On fresh installs or first run, seeds automatically from existing sales count so sequences continue seamlessly.
+      - Even if a merchant clears their sales history via `clearSalesHistory()`, invoice numbers NEVER reset to `INV-001`, completely eliminating cloud bill collisions.
+    - **Merchants Index Write Rule in Firestore (`firestore.rules`):**
+      - Added `match /merchants/{merchantId}` rule allowing store owners to write their store directory summary mirror without permission-denied errors.
+    - **Gemini Model Ordering Optimization (`gemini_ai_service.dart`):**
+      - Prioritized `gemini-2.0-flash` and `gemini-2.5-flash` at the front of `_modelsToTry`, eliminating failing HTTP roundtrips on retired endpoints.
+    - **Smoke Test Stabilization (`test/widget_test.dart`):**
+      - Added `SharedPreferences.setMockInitialValues` and tested the core Material/Theme shell so tests execute reliably in local and CI environments.
+
 

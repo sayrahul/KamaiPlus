@@ -2,6 +2,7 @@ import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart' as p;
 import 'package:uuid/uuid.dart';
 import '../../models/models.dart';
+import '../utils/money_formatter.dart';
 
 class LocalDatabase {
   static final LocalDatabase instance = LocalDatabase._init();
@@ -172,6 +173,12 @@ class LocalDatabase {
         status TEXT NOT NULL,
         opened_at TEXT NOT NULL,
         closed_at TEXT
+      )
+    ''');
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS app_counters (
+        key TEXT PRIMARY KEY,
+        last_val INTEGER NOT NULL DEFAULT 0
       )
     ''');
     try {
@@ -493,9 +500,36 @@ class LocalDatabase {
 
   Future<int> getNextInvoiceSequence() async {
     final db = await instance.database;
-    final result = await db.rawQuery('SELECT COUNT(*) as count FROM sales');
-    final count = Sqflite.firstIntValue(result) ?? 0;
-    return count + 1;
+    return await db.transaction((txn) async {
+      // Ensure counter exists; if first time, seed from existing max sales count
+      final row = await txn.query(
+        'app_counters',
+        where: 'key = ?',
+        whereArgs: ['invoice_sequence'],
+        limit: 1,
+      );
+
+      int nextVal = 1;
+      if (row.isEmpty) {
+        final countRes = await txn.rawQuery('SELECT COUNT(*) as count FROM sales');
+        final currentSalesCount = Sqflite.firstIntValue(countRes) ?? 0;
+        nextVal = currentSalesCount + 1;
+        await txn.insert('app_counters', {
+          'key': 'invoice_sequence',
+          'last_val': nextVal,
+        });
+      } else {
+        final currentVal = (row.first['last_val'] as num?)?.toInt() ?? 0;
+        nextVal = currentVal + 1;
+        await txn.update(
+          'app_counters',
+          {'last_val': nextVal},
+          where: 'key = ?',
+          whereArgs: ['invoice_sequence'],
+        );
+      }
+      return nextVal;
+    });
   }
 
   // --- ATOMIC MULTI-TABLE POS TRANSACTION (Sub-10ms) ---
@@ -523,6 +557,14 @@ class LocalDatabase {
 
     for (var item in cartItems) {
       subtotalPaise += item.grossTotalPaise;
+      if (item.product.taxRate > 0) {
+        final gst = MoneyFormatter.calculateGst(
+          grossOrBasePaise: item.grossTotalPaise,
+          taxRatePercent: item.product.taxRate,
+          isInclusive: item.product.isTaxInclusive,
+        );
+        totalTaxPaise += gst['totalGst'] ?? 0;
+      }
       itemsList.add(item.toMap());
     }
 
@@ -707,6 +749,24 @@ class LocalDatabase {
           );
           await txn.insert('ledger_transactions', ledgerEntry.toMap());
         }
+      }
+
+      // 4. If cash or split-cash was paid, record cash drawer refund outflow entry
+      final cashToRefund = sale.paymentMethod == 'cash'
+          ? sale.totalAmountPaise
+          : (sale.paymentMethod == 'split' ? sale.splitCashPaise : 0);
+
+      if (cashToRefund > 0) {
+        final refundExpense = ExpenseModel(
+          id: _uuid.v4(),
+          businessId: sale.businessId,
+          title: 'Cash Refund: #${sale.invoiceNumber}',
+          amountPaise: cashToRefund,
+          category: 'Refund',
+          createdAt: DateTime.now(),
+          note: reason,
+        );
+        await txn.insert('expenses', refundExpense.toMap());
       }
     });
   }

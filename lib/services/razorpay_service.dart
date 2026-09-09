@@ -14,8 +14,8 @@ class RazorpayService {
   static final RazorpayService instance = RazorpayService._internal();
   RazorpayService._internal();
 
-  static const String razorpayKeyId = 'rzp_live_TSJvcf9JnWpMMm';
-  static const String razorpayKeySecret = 'bhs9g8FV7KjDV7xlqTcDOVcp';
+  static const String razorpayKeyId = 'rzp_live_TZyyw8Rfxy6y7A';
+  
 
   Razorpay? _razorpay;
   Function(PaymentSuccessResponse)? _onSuccessCallback;

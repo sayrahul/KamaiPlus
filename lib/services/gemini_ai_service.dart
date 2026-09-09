@@ -111,10 +111,9 @@ class GeminiAiService {
   static const int freeMonthlyPictureScanLimit = 10;
 
   static const List<String> _modelsToTry = [
-    'gemini-1.5-flash',
     'gemini-2.0-flash',
-    'gemini-1.5-flash-8b',
     'gemini-2.5-flash',
+    'gemini-1.5-flash',
   ];
 
   /// Get effective API key from SharedPreferences, or from environment

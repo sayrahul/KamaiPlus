@@ -585,6 +585,15 @@ class StoreProfileModel {
       businessType.trim().isNotEmpty &&
       storeName.trim() != 'KamaiPlus Store';
 
+  /// Evaluates whether Pro membership is currently active and unexpired
+  bool get isProEffective {
+    if (!isPro) return false;
+    if (proExpiry.trim().isEmpty) return true;
+    final exp = DateTime.tryParse(proExpiry.trim());
+    if (exp == null) return true;
+    return DateTime.now().isBefore(exp);
+  }
+
   Map<String, dynamic> toMap() => {
     'store_name': storeName,
     'tagline': tagline,
@@ -606,26 +615,33 @@ class StoreProfileModel {
     'razorpay_payment_id': razorpayPaymentId,
   };
 
-  factory StoreProfileModel.fromMap(Map<String, dynamic> map) => StoreProfileModel(
-    storeName: (map['store_name'] as String?)?.isNotEmpty == true ? map['store_name'] : 'KamaiPlus Store',
-    tagline: (map['tagline'] as String?)?.isNotEmpty == true ? map['tagline'] : 'Always Fresh, Best Wholesale Rates',
-    ownerName: (map['owner_name'] as String?)?.isNotEmpty == true ? map['owner_name'] : 'Store Owner',
-    phone: map['phone'] ?? '',
-    email: map['email'] ?? '',
-    upiVpa: map['upi_vpa'] ?? '',
-    category: (map['category'] as String?)?.isNotEmpty == true ? map['category'] : 'Retail Store',
-    businessType: (map['business_type'] as String?)?.isNotEmpty == true ? map['business_type'] : 'grocery',
-    address: map['address'] ?? 'Main Market, Station Road',
-    pincode: map['pincode'] ?? '',
-    gstin: map['gstin'] ?? '',
-    fssai: map['fssai'] ?? '',
-    logoUrl: map['logo_url'] ?? '',
-    upiAccountsJson: map['upi_accounts_json'] ?? '[]',
-    isPro: (map['is_pro'] is int ? map['is_pro'] == 1 : (map['is_pro'] as bool? ?? false)),
-    proPlan: (map['pro_plan'] as String?)?.isNotEmpty == true ? map['pro_plan'] : 'free',
-    proExpiry: map['pro_expiry'] ?? '',
-    razorpayPaymentId: map['razorpay_payment_id'] ?? '',
-  );
+  factory StoreProfileModel.fromMap(Map<String, dynamic> map) {
+    final rawIsPro = (map['is_pro'] is int ? map['is_pro'] == 1 : (map['is_pro'] as bool? ?? false));
+    final expiryStr = (map['pro_expiry'] ?? '').toString().trim();
+    final expiryDate = expiryStr.isNotEmpty ? DateTime.tryParse(expiryStr) : null;
+    final bool effectivePro = rawIsPro && (expiryDate == null || DateTime.now().isBefore(expiryDate));
+
+    return StoreProfileModel(
+      storeName: (map['store_name'] as String?)?.isNotEmpty == true ? map['store_name'] : 'KamaiPlus Store',
+      tagline: (map['tagline'] as String?)?.isNotEmpty == true ? map['tagline'] : 'Always Fresh, Best Wholesale Rates',
+      ownerName: (map['owner_name'] as String?)?.isNotEmpty == true ? map['owner_name'] : 'Store Owner',
+      phone: map['phone'] ?? '',
+      email: map['email'] ?? '',
+      upiVpa: map['upi_vpa'] ?? '',
+      category: (map['category'] as String?)?.isNotEmpty == true ? map['category'] : 'Retail Store',
+      businessType: (map['business_type'] as String?)?.isNotEmpty == true ? map['business_type'] : 'grocery',
+      address: map['address'] ?? 'Main Market, Station Road',
+      pincode: map['pincode'] ?? '',
+      gstin: map['gstin'] ?? '',
+      fssai: map['fssai'] ?? '',
+      logoUrl: map['logo_url'] ?? '',
+      upiAccountsJson: map['upi_accounts_json'] ?? '[]',
+      isPro: effectivePro,
+      proPlan: (map['pro_plan'] as String?)?.isNotEmpty == true ? map['pro_plan'] : 'free',
+      proExpiry: expiryStr,
+      razorpayPaymentId: map['razorpay_payment_id'] ?? '',
+    );
+  }
 }
 
 class InventoryMovementModel {

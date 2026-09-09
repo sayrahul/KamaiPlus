@@ -41,7 +41,12 @@ export default async function handler(req, res) {
   try {
     const rawBodyBuffer = await getRawBody(req);
     const signature = req.headers['x-razorpay-signature'];
-    const webhookSecret = process.env.RAZORPAY_WEBHOOK_SECRET || 'bhs9g8FV7KjDV7xlqTcDOVcp';
+    const webhookSecret = process.env.RAZORPAY_WEBHOOK_SECRET;
+
+    if (!webhookSecret) {
+      console.error('RAZORPAY_WEBHOOK_SECRET environment variable is not configured');
+      return res.status(500).json({ error: 'Server configuration error' });
+    }
 
     if (!signature) {
       return res.status(400).json({ error: 'Missing Razorpay signature' });
