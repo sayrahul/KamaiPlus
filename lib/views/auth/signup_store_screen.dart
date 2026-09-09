@@ -31,10 +31,10 @@ class SignupStoreScreen extends StatefulWidget {
 
 class _SignupStoreScreenState extends State<SignupStoreScreen> {
   final _formKey = GlobalKey<FormState>();
-  final _storeNameCtrl = TextEditingController(text: 'Sharma Kirana & General Store');
+  late final TextEditingController _storeNameCtrl;
   late final TextEditingController _ownerNameCtrl;
   late final TextEditingController _phoneCtrl;
-  final _upiCtrl = TextEditingController(text: 'sharmakirana@paytm');
+  late final TextEditingController _upiCtrl;
 
   String _selectedCategory = 'Grocery / Kirana';
   bool _preloadCatalog = true;
@@ -77,8 +77,10 @@ class _SignupStoreScreenState extends State<SignupStoreScreen> {
   @override
   void initState() {
     super.initState();
-    _ownerNameCtrl = TextEditingController(text: widget.initialOwnerName ?? 'Rahul Jadhav');
-    _phoneCtrl = TextEditingController(text: widget.initialPhone ?? '98765 43210');
+    _storeNameCtrl = TextEditingController();
+    _ownerNameCtrl = TextEditingController(text: widget.initialOwnerName ?? '');
+    _phoneCtrl = TextEditingController(text: widget.initialPhone ?? '');
+    _upiCtrl = TextEditingController();
   }
 
   @override
@@ -103,14 +105,16 @@ class _SignupStoreScreenState extends State<SignupStoreScreen> {
       final upiVpa = _upiCtrl.text.trim();
 
       // Setup initial UPI accounts JSON
-      final upiAccounts = [
-        {
-          'id': 'upi_primary',
-          'label': 'Shop Primary QR',
-          'upi_vpa': upiVpa.isNotEmpty ? upiVpa : 'rahuljadhav44@ybl',
-          'is_default': 1,
-        }
-      ];
+      final upiAccounts = upiVpa.isNotEmpty
+          ? [
+              {
+                'id': 'upi_primary',
+                'label': 'Shop Primary QR',
+                'upi_vpa': upiVpa,
+                'is_default': 1,
+              }
+            ]
+          : [];
 
       final selectedCat = _categories.firstWhere(
         (c) => c['title'] == _selectedCategory,
@@ -122,15 +126,15 @@ class _SignupStoreScreenState extends State<SignupStoreScreen> {
       await LocalDatabase.instance.completeFactoryReset(resetStoreProfile: true);
 
       final profile = StoreProfileModel(
-        storeName: storeName.isNotEmpty ? storeName : 'Sharma Kirana Store',
+        storeName: storeName.isNotEmpty ? storeName : 'My Store',
         tagline: 'Always Fresh, Best Wholesale Rates',
-        ownerName: ownerName.isNotEmpty ? ownerName : 'Rahul Jadhav',
-        phone: phone.isNotEmpty ? phone : '9876543210',
+        ownerName: ownerName.isNotEmpty ? ownerName : 'Store Owner',
+        phone: phone,
         email: widget.initialEmail ?? '',
-        upiVpa: upiVpa.isNotEmpty ? upiVpa : 'sharmakirana@paytm',
+        upiVpa: upiVpa,
         category: _selectedCategory,
         businessType: businessTypeId,
-        address: 'Shop #4, Main Market Road',
+        address: 'Main Market Road',
         pincode: '400001',
         gstin: '',
         fssai: '',
@@ -157,6 +161,7 @@ class _SignupStoreScreenState extends State<SignupStoreScreen> {
       await prefs.setString('business_type', businessTypeId);
       await prefs.setString('business_id', businessId);
       FirestoreSyncService.instance.initialize(businessId: businessId);
+      FirestoreSyncService.syncAllPending();
 
       if (!mounted) return;
 

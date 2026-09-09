@@ -17,6 +17,7 @@ import '../common/pro_upgrade_modal.dart';
 import '../auth/login_screen.dart';
 import '../../core/database/local_database.dart';
 import '../../models/models.dart';
+import '../../services/auth_service.dart';
 
 class MenuScreen extends StatefulWidget {
   final bool isModal;
@@ -133,11 +134,13 @@ class _MenuScreenState extends State<MenuScreen> {
             child: Text('Cancel', style: GoogleFonts.inter(fontWeight: FontWeight.w600, color: const Color(0xFF64748B))),
           ),
           ElevatedButton(
-            onPressed: () {
+            onPressed: () async {
               Navigator.pop(ctx);
               if (widget.isModal && Navigator.canPop(context)) {
                 Navigator.pop(context);
               }
+              await AuthService.instance.signOut();
+              if (!mounted) return;
               Navigator.pushAndRemoveUntil(
                 context,
                 MaterialPageRoute(builder: (_) => const LoginScreen()),

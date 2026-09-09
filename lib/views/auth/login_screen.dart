@@ -2,9 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../core/constants/business_vertical_config.dart';
 import '../../core/database/local_database.dart';
+import '../../models/models.dart';
 import '../../services/auth_service.dart';
+import '../../services/firestore_sync_service.dart';
 import '../dashboard/home_dashboard_screen.dart';
 import 'signup_store_screen.dart';
 
@@ -35,13 +38,46 @@ class _LoginScreenState extends State<LoginScreen> {
       // 1. Switch to user-scoped isolated SQLite database
       await LocalDatabase.instance.switchUser(uid);
 
-      // 2. Check if THIS specific user already has a configured store profile setup
-      final bool hasStore = await LocalDatabase.instance.hasConfiguredStoreProfile();
+      // 2. Check if THIS specific user already has a configured store profile setup in SQLite
+      bool hasStore = await LocalDatabase.instance.hasConfiguredStoreProfile();
+
+      // 3. If not found locally, check Firestore Cloud Database (e.g. existing merchant on fresh install)
+      if (!hasStore) {
+        try {
+          final bizDoc = await FirebaseFirestore.instance.collection('businesses').doc('biz_$uid').get();
+          if (bizDoc.exists && bizDoc.data() != null) {
+            final data = bizDoc.data()!;
+            final sName = data['store_name']?.toString() ?? data['business_name']?.toString() ?? '';
+            final bType = data['business_type']?.toString() ?? 'grocery';
+            if (sName.trim().isNotEmpty && sName.trim() != 'KamaiPlus Store') {
+              final restoredProfile = StoreProfileModel(
+                storeName: sName,
+                tagline: data['tagline']?.toString() ?? '',
+                ownerName: data['owner_name']?.toString() ?? user.displayName ?? '',
+                phone: data['phone']?.toString() ?? user.phoneNumber ?? '',
+                email: data['email']?.toString() ?? user.email ?? '',
+                upiVpa: data['upi_vpa']?.toString() ?? '',
+                category: data['category']?.toString() ?? 'Grocery / Kirana',
+                businessType: bType,
+                address: data['address']?.toString() ?? '',
+                pincode: data['pincode']?.toString() ?? '',
+                gstin: data['gstin']?.toString() ?? '',
+              );
+              await LocalDatabase.instance.saveStoreProfile(restoredProfile);
+              hasStore = true;
+              FirestoreSyncService.instance.initialize(businessId: 'biz_$uid');
+              await FirestoreSyncService.instance.initialCloudRestore();
+            }
+          }
+        } catch (e) {
+          debugPrint('Cloud profile check notice: $e');
+        }
+      }
+
       final profile = await LocalDatabase.instance.getStoreProfile();
 
-      // 3. Persist session
+      // 4. Persist session flags
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setBool('is_logged_in', true);
       await prefs.setString('auth_user_id', uid);
       await prefs.setString('auth_user_email', user.email ?? '');
       await prefs.setString('auth_user_name', user.displayName ?? '');
@@ -50,11 +86,16 @@ class _LoginScreenState extends State<LoginScreen> {
       }
 
       if (hasStore) {
+        await prefs.setBool('is_logged_in', true);
         await prefs.setBool('is_onboarded', true);
+        await prefs.setString('business_id', 'biz_$uid');
         await prefs.setString('business_name', profile.storeName);
         await prefs.setString('business_type', profile.businessType);
         BusinessVerticals.updateActiveBusinessType(profile.businessType);
+        FirestoreSyncService.instance.initialize(businessId: 'biz_$uid');
       } else {
+        // User is NEW / NOT REGISTERED -> do not set is_logged_in until store registration is complete
+        await prefs.setBool('is_logged_in', false);
         await prefs.setBool('is_onboarded', false);
         await prefs.remove('business_name');
         await prefs.remove('business_type');

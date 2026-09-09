@@ -48,17 +48,16 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
     _splashTimer = Timer(const Duration(milliseconds: 2200), () async {
       if (mounted) {
         final prefs = await SharedPreferences.getInstance();
-        final isLoggedIn = prefs.getBool('is_logged_in') ?? false;
         final firebaseUser = FirebaseAuth.instance.currentUser;
-        final authUserId = prefs.getString('auth_user_id') ?? firebaseUser?.uid;
+        final isLoggedIn = prefs.getBool('is_logged_in') ?? false;
 
-        // Session check: User must be signed in with Firebase or have active logged-in flag with valid userId
-        final bool hasActiveSession = (firebaseUser != null || isLoggedIn) && (authUserId != null && authUserId.isNotEmpty);
+        // Strict Session check: User MUST be signed in with Firebase AND have is_logged_in flag
+        final bool hasActiveSession = (firebaseUser != null) && isLoggedIn;
 
         bool hasStore = false;
         if (hasActiveSession) {
           try {
-            await LocalDatabase.instance.switchUser(authUserId);
+            await LocalDatabase.instance.switchUser(firebaseUser.uid);
             hasStore = await LocalDatabase.instance.hasConfiguredStoreProfile();
             if (hasStore) {
               final profile = await LocalDatabase.instance.getStoreProfile();
@@ -69,6 +68,10 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
               await prefs.setBool('is_onboarded', false);
             }
           } catch (_) {}
+        } else if (firebaseUser == null) {
+          // If no Firebase user is authenticated, clear obsolete local login flag
+          await prefs.setBool('is_logged_in', false);
+          await prefs.setBool('is_onboarded', false);
         }
 
         final testScreen = prefs.getString('test_screen');
@@ -116,8 +119,8 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
               target = HomeDashboardScreen(key: HomeDashboardScreen.dashboardKey);
             } else {
               target = SignupStoreScreen(
-                initialEmail: prefs.getString('auth_user_email') ?? firebaseUser?.email,
-                initialOwnerName: prefs.getString('auth_user_name') ?? firebaseUser?.displayName,
+                initialEmail: prefs.getString('auth_user_email') ?? firebaseUser.email,
+                initialOwnerName: prefs.getString('auth_user_name') ?? firebaseUser.displayName,
                 initialPhone: prefs.getString('merchant_phone') ?? '',
               );
             }

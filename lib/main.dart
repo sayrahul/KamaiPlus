@@ -45,13 +45,15 @@ void main() async {
   // 4. Initialize Local Notifications & FCM Push Engine
   await NotificationService.instance.init();
 
-  // 5. Silent Auth Check (Non-blocking) — init GoogleSignIn singleton first (v7 requirement)
-  AuthService.instance.initGoogleSignIn().then((_) => AuthService.instance.signInSilently());
+  // 5. Initialize GoogleSignIn singleton (Non-blocking) — do not auto-prompt Credential Manager on app open
+  AuthService.instance.initGoogleSignIn();
 
-  // 6. Initialize Cloud Firestore Realtime Sync Engine in Background
-  final savedBizId = prefs.getString('business_id') ??
-      (cachedUserId != null && cachedUserId.isNotEmpty ? 'biz_$cachedUserId' : 'biz_starter_pos');
-  FirestoreSyncService.instance.initialize(businessId: savedBizId);
+  // 6. Initialize Cloud Firestore Realtime Sync Engine if already authenticated
+  final bool isLoggedIn = prefs.getBool('is_logged_in') ?? false;
+  if (isLoggedIn && cachedUserId != null && cachedUserId.isNotEmpty) {
+    final savedBizId = prefs.getString('business_id') ?? 'biz_$cachedUserId';
+    FirestoreSyncService.instance.initialize(businessId: savedBizId);
+  }
 
   runApp(const KamaiPlusApp());
 }
