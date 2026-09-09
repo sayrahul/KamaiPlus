@@ -18,6 +18,7 @@ import '../reports/gst_reports_screen.dart';
 import '../tools/barcode_studio_screen.dart';
 import '../settings/bluetooth_printer_dialog.dart';
 import '../../core/constants/business_vertical_config.dart';
+import '../../services/firestore_sync_service.dart';
 
 class HomePulseTab extends StatefulWidget {
   final VoidCallback onNavigateToPos;
@@ -55,6 +56,7 @@ class _HomePulseTabState extends State<HomePulseTab> {
 
   int _totalProductsCount = 0;
   List<SaleModel> _recentSales = [];
+  bool _isBroadcastDismissed = false;
 
   @override
   void initState() {
@@ -149,6 +151,9 @@ class _HomePulseTabState extends State<HomePulseTab> {
                 physics: const ClampingScrollPhysics(parent: AlwaysScrollableScrollPhysics()),
                 padding: const EdgeInsets.fromLTRB(12, 14, 12, 100),
                 children: [
+                  // SECTION 0: LIVE BROADCAST ANNOUNCEMENT BANNER
+                  _buildLiveBroadcastBanner(),
+
                   // SECTION 1: TODAY'S BUSINESS PULSE
                   _buildPulseHeader(),
                   const SizedBox(height: 10),
@@ -1685,6 +1690,141 @@ class _HomePulseTabState extends State<HomePulseTab> {
           Text(value, style: GoogleFonts.outfit(fontSize: 13.5, fontWeight: FontWeight.w700, color: const Color(0xFF0F172A))),
         ],
       ),
+    );
+  }
+
+  Widget _buildLiveBroadcastBanner() {
+    return ValueListenableBuilder<Map<String, dynamic>?>(
+      valueListenable: FirestoreSyncService.instance.broadcastNotifier,
+      builder: (context, broadcast, _) {
+        if (broadcast == null || _isBroadcastDismissed) {
+          return const SizedBox.shrink();
+        }
+
+        final message = broadcast['message']?.toString() ?? '';
+        if (message.isEmpty) return const SizedBox.shrink();
+
+        final type = broadcast['type']?.toString().toLowerCase() ?? 'info';
+        List<Color> gradientColors;
+        IconData iconData;
+        Color badgeColor;
+        String badgeText;
+
+        switch (type) {
+          case 'festive':
+            gradientColors = const [Color(0xFF881337), Color(0xFFE11D48)];
+            iconData = Icons.auto_awesome_rounded;
+            badgeColor = const Color(0xFFFBBF24);
+            badgeText = 'SPECIAL UPDATE';
+            break;
+          case 'warning':
+            gradientColors = const [Color(0xFF78350F), Color(0xFFD97706)];
+            iconData = Icons.warning_amber_rounded;
+            badgeColor = const Color(0xFFFDE68A);
+            badgeText = 'NOTICE';
+            break;
+          case 'success':
+            gradientColors = const [Color(0xFF064E3B), Color(0xFF059669)];
+            iconData = Icons.verified_rounded;
+            badgeColor = const Color(0xFFA7F3D0);
+            badgeText = 'ANNOUNCEMENT';
+            break;
+          default:
+            gradientColors = const [Color(0xFF1E3A8A), Color(0xFF2563EB)];
+            iconData = Icons.campaign_rounded;
+            badgeColor = const Color(0xFFBFDBFE);
+            badgeText = 'BROADCAST';
+        }
+
+        return Container(
+          margin: const EdgeInsets.only(bottom: 14),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: gradientColors,
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+            borderRadius: BorderRadius.circular(12),
+            boxShadow: [
+              BoxShadow(
+                color: gradientColors.last.withValues(alpha: 0.28),
+                blurRadius: 10,
+                offset: const Offset(0, 4),
+              ),
+            ],
+          ),
+          child: Material(
+            color: Colors.transparent,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.15),
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(iconData, color: Colors.white, size: 20),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                          decoration: BoxDecoration(
+                            color: badgeColor,
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: Text(
+                            badgeText,
+                            style: GoogleFonts.inter(
+                              fontSize: 9,
+                              fontWeight: FontWeight.w900,
+                              color: const Color(0xFF0F172A),
+                              letterSpacing: 0.5,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 3),
+                        Text(
+                          message,
+                          style: GoogleFonts.inter(
+                            fontSize: 12.5,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.white,
+                            height: 1.3,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  InkWell(
+                    onTap: () {
+                      setState(() {
+                        _isBroadcastDismissed = true;
+                      });
+                    },
+                    borderRadius: BorderRadius.circular(20),
+                    child: Container(
+                      padding: const EdgeInsets.all(4),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.12),
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(Icons.close_rounded, color: Colors.white70, size: 16),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
     );
   }
 }

@@ -21,6 +21,11 @@ class FirestoreSyncService {
   StreamSubscription? _productsSub;
   StreamSubscription? _customersSub;
   StreamSubscription? _businessSub;
+  StreamSubscription? _broadcastSub;
+  StreamSubscription? _globalConfigSub;
+
+  final ValueNotifier<Map<String, dynamic>?> broadcastNotifier = ValueNotifier<Map<String, dynamic>?>(null);
+  final ValueNotifier<Map<String, dynamic>?> globalConfigNotifier = ValueNotifier<Map<String, dynamic>?>(null);
 
   String get activeBusinessId => _activeBusinessId;
 
@@ -280,6 +285,42 @@ class FirestoreSyncService {
     }, onError: (e) {
       debugPrint('Live business stream error: $e');
     });
+
+    // 4. Live Platform Broadcast Announcements from Admin WebApp
+    _broadcastSub?.cancel();
+    _broadcastSub = firestore
+        .collection('platform_settings')
+        .doc('broadcast')
+        .snapshots()
+        .listen((docSnap) {
+      if (docSnap.exists && docSnap.data() != null) {
+        final data = docSnap.data()!;
+        final enabled = data['enabled'] == true;
+        final expiresAtStr = data['expires_at']?.toString();
+        final expiresAt = expiresAtStr != null ? DateTime.tryParse(expiresAtStr) : null;
+        final isExpired = expiresAt != null && DateTime.now().isAfter(expiresAt);
+
+        if (enabled && !isExpired && (data['message']?.toString().isNotEmpty ?? false)) {
+          broadcastNotifier.value = data;
+        } else {
+          broadcastNotifier.value = null;
+        }
+      } else {
+        broadcastNotifier.value = null;
+      }
+    }, onError: (_) {});
+
+    // 5. Live Global Remote Config (Maintenance, Pricing & Versioning)
+    _globalConfigSub?.cancel();
+    _globalConfigSub = firestore
+        .collection('platform_settings')
+        .doc('global_config')
+        .snapshots()
+        .listen((docSnap) {
+      if (docSnap.exists && docSnap.data() != null) {
+        globalConfigNotifier.value = docSnap.data();
+      }
+    }, onError: (_) {});
   }
 
   /// Initial Cloud Catalog download
@@ -563,9 +604,15 @@ class FirestoreSyncService {
     _productsSub?.cancel();
     _customersSub?.cancel();
     _businessSub?.cancel();
+    _broadcastSub?.cancel();
+    _globalConfigSub?.cancel();
     _productsSub = null;
     _customersSub = null;
     _businessSub = null;
+    _broadcastSub = null;
+    _globalConfigSub = null;
+    broadcastNotifier.value = null;
+    globalConfigNotifier.value = null;
     _isInitialized = false;
     _activeBusinessId = 'biz_starter_pos';
     syncState.value = SyncState.offline;

@@ -812,6 +812,23 @@ Comprehensive enterprise-grade retail UX upgrade suite aligned with PhonePe Busi
     - **Non-Disruptive In-App Update Priority (`in_app_update_service.dart`):**
       - Prioritizes background flexible updates over blocking immediate updates to prevent counter interruptions during billing.
 
+45. **SuperAdmin Panel & Native Android Full Interconnection (LOCKED):**
+    - **Port 3000 Collision Resolution:**
+      - Terminated rogue background Next.js process (`mrparthexim_backup`) listening on port 3000. `Billing WebApp` is now running live on `http://localhost:3000` (`http://localhost:3000/admin`).
+    - **Admin Password .env.local Parsing Guard (`.env.local` & `login/route.ts`):**
+      - Unquoted `#` in `ADMIN_PASSWORD=KamaiAdmin@2026!SecureKey#` was parsed as an inline comment delimiter by dotenv. Enclosed password in double quotes `"..."` and added flexible `#` stripping in `login/route.ts` so admin key verification is guaranteed.
+    - **Tombstone Resurrection Bug Elimination (`merchants/route.ts`):**
+      - `merchants/route.ts` was unconditionally calling `merchantsMap.delete(d.id)` from `deleted_businesses` without timestamp comparison. Updated with `checkAndDelete()` comparing `created_at` and `updated_at` against `deleted_at`. Deleted stale test tombstones from Firestore so merchant store `biz_5VdcmtVKC0XAF7glK28K2xvZGTr1` is 100% visible and connected in SuperAdmin.
+    - **Real-Time Pro License Grant Invariant (`merchants/[id]/route.ts`):**
+      - Updating tier in SuperAdmin sets `is_pro: true/false`, `subscription_tier`, `pro_plan`, `pro_expiry`, and `subscription_valid_until` across `businesses` and `merchants` Firestore documents. Android app's `_businessSub` live listener picks up changes instantly (<100ms) and activates/deactivates Pro in local SQLite and SharedPreferences.
+    - **Firestore Node.js Server Runtime Alignment (`config.ts`):**
+      - Fixed `src/lib/firebase/config.ts` so `getFirestoreDb()` uses `getFirestore(firebaseApp)` directly on Node.js server instead of browser-only `initializeFirestore(..., { experimentalAutoDetectLongPolling: true })`, eliminating `invalid-argument` errors across `metrics`, `broadcast`, and `config` endpoints.
+    - **Live Broadcast Announcement & Remote Config Ecosystem:**
+      - `broadcast/route.ts`: Fixed `undefined` values on `expires_at` so broadcasts write cleanly to Firestore `platform_settings/broadcast`.
+      - `config/route.ts`: Synchronizes Remote Config (maintenance mode, minimum version, pricing) to Firestore `platform_settings/global_config`.
+      - Android App (`firestore_sync_service.dart`): Added live Firestore stream listeners `_broadcastSub` and `_globalConfigSub` exposing `broadcastNotifier` and `globalConfigNotifier`.
+      - Android Home Pulse (`home_pulse_tab.dart`): Added `_buildLiveBroadcastBanner()` rendering responsive Festive, Warning, Success, or Broadcast banners directly on the merchant's POS home screen with dismiss controls.
+
 
 
 
