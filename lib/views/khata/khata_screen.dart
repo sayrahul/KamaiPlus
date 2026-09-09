@@ -119,15 +119,19 @@ class _KhataScreenState extends State<KhataScreen> {
     final int rupees = customer.currentBalancePaise ~/ 100;
     final totalRupeesStr = (customer.currentBalancePaise / 100.0).toStringAsFixed(2);
     final storeName = _storeProfile.storeName.isNotEmpty ? _storeProfile.storeName : 'KamaiPlus Store';
-    final upiId = _storeProfile.upiVpa.isNotEmpty ? _storeProfile.upiVpa : 'proventure@icici';
-    final upiPayLink = 'upi://pay?pa=$upiId&pn=${Uri.encodeComponent(storeName)}&am=$totalRupeesStr&cu=INR';
+    final upiId = _storeProfile.upiVpa.trim();
+    final upiPayLink = upiId.isNotEmpty ? 'upi://pay?pa=$upiId&pn=${Uri.encodeComponent(storeName)}&am=$totalRupeesStr&cu=INR' : '';
 
-    final text = 'Namaste ${customer.name} ji! 🙏\n\n'
-        '$storeName par aapka baki hisaab ₹$rupees hai.\n'
-        'Kripya samay par chukta karein.\n\n'
-        '📲 *Instant UPI Pay:* $upiPayLink\n'
-        '📌 UPI ID: $upiId\n\n'
-        'Dhanyawad!';
+    final buffer = StringBuffer();
+    buffer.writeln('Namaste ${customer.name} ji! 🙏\n');
+    buffer.writeln('$storeName par aapka baki hisaab ₹$rupees hai.');
+    buffer.writeln('Kripya samay par chukta karein.\n');
+    if (upiPayLink.isNotEmpty) {
+      buffer.writeln('📲 *Instant UPI Pay:* $upiPayLink');
+      buffer.writeln('📌 UPI ID: $upiId\n');
+    }
+    buffer.writeln('Dhanyawad!');
+    final text = buffer.toString();
 
     // Generate Statement PDF and share
     try {
@@ -175,21 +179,25 @@ class _KhataScreenState extends State<KhataScreen> {
     final amtRupees = tx.amountPaise ~/ 100;
     final balRupees = tx.balanceAfterPaise ~/ 100;
     final storeName = _storeProfile.storeName.isNotEmpty ? _storeProfile.storeName : 'KamaiPlus Store';
-    final upiId = _storeProfile.upiVpa.isNotEmpty ? _storeProfile.upiVpa : 'proventure@icici';
-    final upiPayLink = 'upi://pay?pa=$upiId&pn=${Uri.encodeComponent(storeName)}&am=$balRupees&cu=INR';
+    final upiId = _storeProfile.upiVpa.trim();
+    final upiPayLink = upiId.isNotEmpty ? 'upi://pay?pa=$upiId&pn=${Uri.encodeComponent(storeName)}&am=$balRupees&cu=INR' : '';
     final dateStr = DateFormat('d MMM yyyy, hh:mm a').format(tx.createdAt);
 
-    final text = '🧾 *HISAB PARCHA / HISAAB SLIP*\n'
-        '🏪 *$storeName*\n'
-        '👤 Customer: ${customer.name}\n'
-        '📅 Date: $dateStr\n'
-        '--------------------------\n'
-        '${isUdhar ? "🔴 Udhar Diya (Given)" : "🟢 Jama Mila (Received)"}: ₹$amtRupees\n'
-        '📝 Note: ${tx.description.isNotEmpty ? tx.description : "Khata Transaction"}\n'
-        '--------------------------\n'
-        '💰 *Kul Baki (Balance): ₹$balRupees*\n'
-        '📲 *UPI Pay:* $upiPayLink\n\n'
-        'Dhanyawad!';
+    final buffer = StringBuffer();
+    buffer.writeln('🧾 *HISAB PARCHA / HISAAB SLIP*');
+    buffer.writeln('🏪 *$storeName*');
+    buffer.writeln('👤 Customer: ${customer.name}');
+    buffer.writeln('📅 Date: $dateStr');
+    buffer.writeln('--------------------------');
+    buffer.writeln('${isUdhar ? "🔴 Udhar Diya (Given)" : "🟢 Jama Mila (Received)"}: ₹$amtRupees');
+    buffer.writeln('📝 Note: ${tx.description.isNotEmpty ? tx.description : "Khata Transaction"}');
+    buffer.writeln('--------------------------');
+    buffer.writeln('💰 *Kul Baki (Balance): ₹$balRupees*');
+    if (upiPayLink.isNotEmpty) {
+      buffer.writeln('📲 *UPI Pay:* $upiPayLink');
+    }
+    buffer.writeln('\nDhanyawad!');
+    final text = buffer.toString();
 
     final waPhone = AppValidators.formatWhatsAppPhone(customer.phone);
     final url = Uri.parse('https://wa.me/$waPhone?text=${Uri.encodeComponent(text)}');
@@ -205,8 +213,8 @@ class _KhataScreenState extends State<KhataScreen> {
     final amtRupees = bill.totalAmountPaise ~/ 100;
     final totalRupees = (bill.totalAmountPaise / 100.0).toStringAsFixed(2);
     final storeName = _storeProfile.storeName.isNotEmpty ? _storeProfile.storeName : 'KamaiPlus Store';
-    final upiId = _storeProfile.upiVpa.isNotEmpty ? _storeProfile.upiVpa : 'proventure@icici';
-    final upiPayLink = 'upi://pay?pa=$upiId&pn=${Uri.encodeComponent(storeName)}&am=$totalRupees&cu=INR&tn=Bill_${bill.invoiceNumber}';
+    final upiId = _storeProfile.upiVpa.trim();
+    final upiPayLink = upiId.isNotEmpty ? 'upi://pay?pa=$upiId&pn=${Uri.encodeComponent(storeName)}&am=$totalRupees&cu=INR&tn=Bill_${bill.invoiceNumber}' : '';
     final dateStr = DateFormat('d MMM yyyy, hh:mm a').format(bill.createdAt);
 
     final buffer = StringBuffer();
@@ -225,7 +233,9 @@ class _KhataScreenState extends State<KhataScreen> {
     buffer.writeln('--------------------------');
     buffer.writeln('💰 *Total Amount: ₹$amtRupees*');
     buffer.writeln('📌 Status: ${bill.status.toUpperCase()}');
-    buffer.writeln('📲 *Instant UPI Pay / Receipt:* $upiPayLink');
+    if (upiPayLink.isNotEmpty) {
+      buffer.writeln('📲 *Instant UPI Pay / Receipt:* $upiPayLink');
+    }
     buffer.writeln('\nDhanyawad!');
 
     final fullPhone = AppValidators.formatWhatsAppPhone(customer.phone);
@@ -2640,8 +2650,8 @@ class _KhataScreenState extends State<KhataScreen> {
 
     final invoicesPreview = bills.map((b) => '#${b.invoiceNumber}').join(', ');
     final storeName = _storeProfile.storeName.isNotEmpty ? _storeProfile.storeName : 'KamaiPlus Store';
-    final upiId = _storeProfile.upiVpa.isNotEmpty ? _storeProfile.upiVpa : 'proventure@icici';
-    final upiPayUrl = 'upi://pay?pa=$upiId&pn=${Uri.encodeComponent(storeName)}&am=${(totalPaise / 100.0).toStringAsFixed(2)}&cu=INR&tn=Settlement_${bills.length}_Bills';
+    final upiId = _storeProfile.upiVpa.trim();
+    final upiPayUrl = upiId.isNotEmpty ? 'upi://pay?pa=$upiId&pn=${Uri.encodeComponent(storeName)}&am=${(totalPaise / 100.0).toStringAsFixed(2)}&cu=INR&tn=Settlement_${bills.length}_Bills' : '';
 
     showModalBottomSheet(
       context: context,

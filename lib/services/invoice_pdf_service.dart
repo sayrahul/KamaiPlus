@@ -1,6 +1,7 @@
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../core/database/local_database.dart';
 import '../core/utils/money_formatter.dart';
 import '../models/models.dart';
 
@@ -25,7 +26,13 @@ class InvoicePdfService {
           '1. Goods once sold cannot be taken back or exchanged.\n2. Electronic invoice generated via Kamai+ POS System.';
       final footerNote = prefs.getString('custom_invoice_footer') ?? 'Thank you for shopping with us! Visit again.';
       final showDynamicUpiQr = prefs.getBool('invoice_show_dynamic_upi_qr') ?? true;
-      final upiId = prefs.getString('store_upi_id') ?? 'proventure@icici';
+      String upiId = prefs.getString('store_upi_id') ?? '';
+      if (upiId.isEmpty) {
+        try {
+          final profile = await LocalDatabase.instance.getStoreProfile();
+          upiId = profile.upiVpa;
+        } catch (_) {}
+      }
 
       final dateStr = DateFormat('dd MMM yyyy, hh:mm a').format(sale.createdAt);
       final totalAmount = MoneyFormatter.formatPaise(sale.totalAmountPaise);
@@ -179,6 +186,18 @@ class InvoicePdfService {
         };
       }).toList();
 
+      String effectiveUpiId = (upiId != null && upiId.isNotEmpty) ? upiId : '';
+      if (effectiveUpiId.isEmpty) {
+        final prefs = await SharedPreferences.getInstance();
+        effectiveUpiId = prefs.getString('store_upi_id') ?? '';
+        if (effectiveUpiId.isEmpty) {
+          try {
+            final profile = await LocalDatabase.instance.getStoreProfile();
+            effectiveUpiId = profile.upiVpa;
+          } catch (_) {}
+        }
+      }
+
       final String? path = await _channel.invokeMethod<String>('generateAndSaveKhataStatementPdf', {
         'storeName': storeName,
         'storePhone': storePhone ?? '',
@@ -186,15 +205,18 @@ class InvoicePdfService {
         'customerPhone': customer.phone,
         'dateStr': dateStr,
         'totalBalance': totalBalance,
-        'upiId': upiId ?? 'proventure@icici',
+        'upiId': effectiveUpiId,
         'transactions': txList,
       });
 
       if (path == null || path.isEmpty) return false;
 
       final defaultSubject = 'Khata Statement - $storeName';
+      final upiSuffix = effectiveUpiId.isNotEmpty
+          ? '\n\n📲 *Pay via UPI:* upi://pay?pa=$effectiveUpiId&pn=${Uri.encodeComponent(storeName)}&am=${(customer.currentBalancePaise / 100).toStringAsFixed(2)}&cu=INR'
+          : '';
       final defaultMsg = customMessage ??
-          'Namaste ${customer.name} ji! 🙏\n\n$storeName par aapka baki hisaab $totalBalance hai. Kripya samay par chukta karein.\n\n📲 *Pay via UPI:* upi://pay?pa=${upiId ?? "proventure@icici"}&pn=${Uri.encodeComponent(storeName)}&am=${(customer.currentBalancePaise / 100).toStringAsFixed(2)}&cu=INR\n\nDhanyawad!';
+          'Namaste ${customer.name} ji! 🙏\n\n$storeName par aapka baki hisaab $totalBalance hai. Kripya samay par chukta karein.$upiSuffix\n\nDhanyawad!';
 
       return await sharePdf(
         filePath: path,

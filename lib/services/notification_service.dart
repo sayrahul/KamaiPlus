@@ -87,8 +87,11 @@ class NotificationService {
           final prefs = await SharedPreferences.getInstance();
           await prefs.setString('fcm_token', _fcmToken!);
 
-          // Trigger background sync to push updated FCM token to cloud
-          FirestoreSyncService.syncAllPending();
+          // Trigger background sync to push updated FCM token to cloud only if already authenticated
+          final isLoggedIn = prefs.getBool('is_logged_in') ?? false;
+          if (isLoggedIn) {
+            FirestoreSyncService.syncAllPending();
+          }
         }
 
         // Subscribe to Admin broadcast & announcement topics

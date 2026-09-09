@@ -160,7 +160,7 @@ class _StoreProfileScreenState extends State<StoreProfileScreen> {
           UpiAccountModel(
             id: 'upi_primary',
             label: 'Shop Primary QR',
-            upiVpa: profile.upiVpa.isNotEmpty ? profile.upiVpa : 'rahuljadhav44@ybl',
+            upiVpa: profile.upiVpa,
             isDefault: true,
           ),
         ];
@@ -374,7 +374,7 @@ class _StoreProfileScreenState extends State<StoreProfileScreen> {
 
   String get _defaultUpiVpa {
     final def = _upiAccounts.firstWhere((a) => a.isDefault, orElse: () => _upiAccounts.first);
-    return def.upiVpa.isNotEmpty ? def.upiVpa : 'rahuljadhav44@ybl';
+    return def.upiVpa;
   }
 
   Future<void> _saveProfile() async {

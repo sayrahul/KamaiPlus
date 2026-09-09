@@ -1,16 +1,51 @@
-﻿import 'dart:typed_data';
+import 'package:flutter/services.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import '../core/database/local_database.dart';
 import '../models/models.dart';
 import '../core/utils/money_formatter.dart';
 
 class ThermalPrinterService {
   static const int cols58mm = 32;
   static const int cols80mm = 48;
+  static const MethodChannel _btChannel = MethodChannel('com.kamaiplus.pos/bluetooth_printer');
 
-  /// Generates raw ESC/POS binary stream for receipt printing
-  static Future<bool> printReceipt({required SaleModel sale, String storeName = 'Sharma Kirana Store'}) async {
-    // Generate bytes
-    generateReceiptBytes(sale: sale, storeName: storeName);
-    return true;
+  /// Prints raw ESC/POS receipt via connected Bluetooth thermal printer
+  static Future<bool> printReceipt({
+    required SaleModel sale,
+    String? storeName,
+    String? printerMacAddress,
+    bool? is80mm,
+    bool kickCashDrawer = true,
+  }) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final address = printerMacAddress ?? prefs.getString('printer_mac_address');
+      if (address == null || address.isEmpty) {
+        return false;
+      }
+      final bool use80mm = is80mm ?? (prefs.getBool('printer_is_80mm') ?? false);
+      final profile = await LocalDatabase.instance.getStoreProfile();
+      final resolvedStoreName = (storeName != null && storeName.isNotEmpty)
+          ? storeName
+          : (profile.storeName.isNotEmpty ? profile.storeName : 'KamaiPlus Store');
+
+      final bytes = generateReceiptBytes(
+        sale: sale,
+        storeName: resolvedStoreName,
+        storePhone: profile.phone,
+        storeAddress: profile.address,
+        is80mm: use80mm,
+        kickCashDrawer: kickCashDrawer,
+      );
+
+      final result = await _btChannel.invokeMethod<bool>('printBytes', {
+        'address': address,
+        'bytes': bytes,
+      });
+      return result ?? true;
+    } catch (_) {
+      return false;
+    }
   }
 
   static Uint8List generateReceiptBytes({

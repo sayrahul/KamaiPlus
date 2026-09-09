@@ -57,11 +57,11 @@ class _PaymentModalState extends State<PaymentModal> {
   // Generates standard UPI payment URI
   String get upiPaymentUrl {
     final double rupees = totalPaise / 100.0;
-    final vpa = _storeProfile?.upiVpa.trim();
-    final activeVpa = (vpa != null && vpa.isNotEmpty) ? vpa : 'proventure@icici';
+    final vpa = _storeProfile?.upiVpa.trim() ?? '';
+    if (vpa.isEmpty) return '';
     final sName = _storeProfile?.storeName.trim();
     final activeName = (sName != null && sName.isNotEmpty) ? sName : 'KamaiPlus Store';
-    return 'upi://pay?pa=$activeVpa&pn=${Uri.encodeComponent(activeName)}&am=${rupees.toStringAsFixed(2)}&cu=INR&tn=POS+Bill';
+    return 'upi://pay?pa=$vpa&pn=${Uri.encodeComponent(activeName)}&am=${rupees.toStringAsFixed(2)}&cu=INR&tn=POS+Bill';
   }
 
   Future<void> _processPayment() async {
@@ -171,34 +171,55 @@ class _PaymentModalState extends State<PaymentModal> {
           // Content based on method
           if (_selectedMethod == 'upi')
             Center(
-              child: Column(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(16),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withValues(alpha: 0.06),
-                          blurRadius: 10,
-                          offset: const Offset(0, 4),
+              child: upiPaymentUrl.isNotEmpty
+                  ? Column(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(16),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withValues(alpha: 0.06),
+                                blurRadius: 10,
+                                offset: const Offset(0, 4),
+                              ),
+                            ],
+                          ),
+                          child: QrImageView(
+                            data: upiPaymentUrl,
+                            version: QrVersions.auto,
+                            size: 160.0,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        const Text(
+                          'Scan with any UPI App (GPay, PhonePe, Paytm)',
+                          style: TextStyle(fontSize: 12, color: Colors.grey, fontWeight: FontWeight.w500),
                         ),
                       ],
+                    )
+                  : Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFFEF2F2),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: const Color(0xFFFECACA)),
+                      ),
+                      child: const Row(
+                        children: [
+                          Icon(Icons.warning_amber_rounded, color: Color(0xFFDC2626)),
+                          SizedBox(width: 12),
+                          Expanded(
+                            child: Text(
+                              'Store UPI ID set nahi hai. Kripya Settings > Store Profile me jaakar UPI ID configure karein.',
+                              style: TextStyle(fontSize: 12, color: Color(0xFF991B1B), fontWeight: FontWeight.w600),
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
-                    child: QrImageView(
-                      data: upiPaymentUrl,
-                      version: QrVersions.auto,
-                      size: 160.0,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  const Text(
-                    'Scan with any UPI App (GPay, PhonePe, Paytm)',
-                    style: TextStyle(fontSize: 12, color: Colors.grey, fontWeight: FontWeight.w500),
-                  ),
-                ],
-              ),
             )
           else if (_selectedMethod == 'cash')
             Container(

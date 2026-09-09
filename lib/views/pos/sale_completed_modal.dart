@@ -60,12 +60,7 @@ class _SaleCompletedModalState extends State<SaleCompletedModal> {
     super.initState();
     _phoneCtrl = TextEditingController(text: widget.sale.customerPhone ?? '');
     _loadStoreName();
-    NativeNotificationService.notifySaleCompleted(
-      invoiceNumber: widget.sale.invoiceNumber,
-      amountFormatted: MoneyFormatter.formatINR(widget.sale.totalAmountPaise),
-      paymentMode: widget.sale.paymentMethod,
-    );
-    // Also fire Flutter Local Notification banner (FCM-style heads-up)
+    // Fire Flutter Local Notification heads-up banner
     NotificationService.instance.showSaleNotification(
       invoiceNo: widget.sale.invoiceNumber,
       totalPaise: widget.sale.totalAmountPaise,
@@ -109,8 +104,10 @@ class _SaleCompletedModalState extends State<SaleCompletedModal> {
     final dateStr = DateFormat('dd MMM yyyy, hh:mm a').format(widget.sale.createdAt);
     final amountStr = MoneyFormatter.formatINR(widget.sale.totalAmountPaise);
     final totalRupees = (widget.sale.totalAmountPaise / 100.0).toStringAsFixed(2);
-    final upiId = _profile.upiVpa.isNotEmpty ? _profile.upiVpa : 'proventure@icici';
-    final upiPayLink = 'upi://pay?pa=$upiId&pn=${Uri.encodeComponent(_storeName)}&am=$totalRupees&cu=INR&tn=Bill_${widget.sale.invoiceNumber}';
+    final upiId = _profile.upiVpa.trim();
+    final upiPayLink = upiId.isNotEmpty
+        ? 'upi://pay?pa=$upiId&pn=${Uri.encodeComponent(_storeName)}&am=$totalRupees&cu=INR&tn=Bill_${widget.sale.invoiceNumber}'
+        : '';
 
     final itemLines = widget.sale.items.map((it) {
       final name = it['product_name'] ?? it['name'] ?? 'Item';
@@ -118,6 +115,8 @@ class _SaleCompletedModalState extends State<SaleCompletedModal> {
       final price = ((it['unit_price_paise'] ?? it['price'] as num?) ?? 0) / 100.0;
       return '• $name x $qty = ₹${(price * (qty as num)).toStringAsFixed(2)}';
     }).join('\n');
+
+    final upiLine = upiPayLink.isNotEmpty ? '📲 *Instant UPI Pay / Receipt:* $upiPayLink\n' : '';
 
     final message = '''
 Namaste ${widget.sale.customerName ?? 'Valued Customer'}! 🙏
@@ -131,8 +130,7 @@ Thank you for shopping at *$_storeName*. Here is your digital tax invoice:
 $itemLines
 
 💰 *Total Amount:* *$amountStr*
-📲 *Instant UPI Pay / Receipt:* $upiPayLink
-
+$upiLine
 Have a wonderful day! Visit us again soon.
 ''';
 

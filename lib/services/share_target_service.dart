@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'gemini_ai_service.dart';
 import 'mlkit_ocr_service.dart';
 import '../views/purchases/bill_scan_review_sheet.dart';
 
@@ -72,27 +73,56 @@ class ShareTargetService {
     );
 
     try {
-      final result = await MlKitOcrService.instance.scanBillImage(filePath);
-      if (context.mounted) {
-        Navigator.of(context, rootNavigator: true).pop(); // dismiss loading
-      }
+      final isPdf = filePath.toLowerCase().endsWith('.pdf');
+      if (isPdf) {
+        final bytes = await file.readAsBytes();
+        final result = await GeminiAiService.extractItemsFromImage(bytes, mimeType: 'application/pdf');
 
-      if (context.mounted) {
-        if (result.items.isNotEmpty) {
-          BillScanReviewSheet.show(
-            context,
-            items: result.items,
-            supplierName: result.supplierName,
-            billNumber: result.billNumber,
-            billDate: result.billDate,
-          );
-        } else {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Bill image received, but no product lines could be recognized.'),
-              backgroundColor: Colors.orange,
-            ),
-          );
+        if (context.mounted) {
+          Navigator.of(context, rootNavigator: true).pop(); // dismiss loading
+        }
+
+        if (context.mounted) {
+          if (result.items.isNotEmpty) {
+            BillScanReviewSheet.show(
+              context,
+              items: result.items,
+              supplierName: result.supplierName,
+              billNumber: result.billNumber,
+              billDate: result.billDate,
+            );
+          } else {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(result.errorMessage ?? 'Could not parse products from shared PDF.'),
+                backgroundColor: Colors.orange,
+              ),
+            );
+          }
+        }
+      } else {
+        final result = await MlKitOcrService.instance.scanBillImage(filePath);
+        if (context.mounted) {
+          Navigator.of(context, rootNavigator: true).pop(); // dismiss loading
+        }
+
+        if (context.mounted) {
+          if (result.items.isNotEmpty) {
+            BillScanReviewSheet.show(
+              context,
+              items: result.items,
+              supplierName: result.supplierName,
+              billNumber: result.billNumber,
+              billDate: result.billDate,
+            );
+          } else {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Bill image received, but no product lines could be recognized.'),
+                backgroundColor: Colors.orange,
+              ),
+            );
+          }
         }
       }
     } catch (e) {

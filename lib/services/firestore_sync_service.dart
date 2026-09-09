@@ -25,13 +25,17 @@ class FirestoreSyncService {
   String get activeBusinessId => _activeBusinessId;
 
   /// Batch sync all pending local records (sales, store profile, etc.) to Cloud Firestore
-  static Future<void> syncAllPending() async {
+  static Future<void> syncAllPending({String? businessId}) async {
     final service = FirestoreSyncService.instance;
     try {
       service.syncState.value = SyncState.syncing;
 
+      if (businessId != null && businessId.isNotEmpty) {
+        service._activeBusinessId = businessId;
+      }
+
       if (!service._isInitialized) {
-        await service.initialize();
+        await service.initialize(businessId: businessId);
       }
 
       final firestore = FirebaseFirestore.instance;

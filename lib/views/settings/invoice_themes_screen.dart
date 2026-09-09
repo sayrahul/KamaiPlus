@@ -915,7 +915,7 @@ class _InvoiceThemesScreenState extends State<InvoiceThemesScreen> {
                         child: Row(
                           children: [
                             QrImageView(
-                              data: 'upi://pay?pa=rahuljadhav44@ybl&pn=ShramaPharmacy&am=1044.75&cu=INR',
+                              data: 'upi://pay?pa=store@upi&pn=SampleStore&am=1044.75&cu=INR',
                               version: QrVersions.auto,
                               size: 42,
                             ),
@@ -925,7 +925,7 @@ class _InvoiceThemesScreenState extends State<InvoiceThemesScreen> {
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   Text('Primary Shop QR', style: GoogleFonts.outfit(fontSize: 10.5, fontWeight: FontWeight.w700)),
-                                  Text('rahuljadhav44@ybl', style: GoogleFonts.inter(fontSize: 9, color: const Color(0xFF64748B))),
+                                  Text('store@upi', style: GoogleFonts.inter(fontSize: 9, color: const Color(0xFF64748B))),
                                   Text('Zero transaction charges', style: GoogleFonts.inter(fontSize: 8, color: const Color(0xFF94A3B8))),
                                 ],
                               ),

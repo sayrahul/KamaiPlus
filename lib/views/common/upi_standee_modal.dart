@@ -41,10 +41,10 @@ class _UpiStandeeModalState extends State<UpiStandeeModal> {
   Widget build(BuildContext context) {
     final storeName = _profile.storeName.isNotEmpty
         ? _profile.storeName
-        : (_profile.ownerName.isNotEmpty ? _profile.ownerName : 'Rahul Shramas');
+        : (_profile.ownerName.isNotEmpty ? _profile.ownerName : 'KamaiPlus Store');
 
-    final upiId = _profile.upiVpa.isNotEmpty ? _profile.upiVpa : 'rahuljadhav44@yb1';
-    final qrData = 'upi://pay?pa=$upiId&pn=${Uri.encodeComponent(storeName)}&cu=INR';
+    final upiId = _profile.upiVpa.trim();
+    final qrData = upiId.isNotEmpty ? 'upi://pay?pa=$upiId&pn=${Uri.encodeComponent(storeName)}&cu=INR' : '';
 
     return Dialog(
       backgroundColor: Colors.transparent,
@@ -197,41 +197,66 @@ class _UpiStandeeModalState extends State<UpiStandeeModal> {
                             ),
                           ],
                         ),
-                        child: Column(
-                          children: [
-                            QrImageView(
-                              data: qrData,
-                              version: QrVersions.auto,
-                              size: 190,
-                              eyeStyle: const QrEyeStyle(
-                                eyeShape: QrEyeShape.square,
-                                color: Color(0xFF0F172A),
-                              ),
-                              dataModuleStyle: const QrDataModuleStyle(
-                                dataModuleShape: QrDataModuleShape.square,
-                                color: Color(0xFF0F172A),
-                              ),
-                            ),
-                            const SizedBox(height: 10),
-                            // UPI ID pill
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 5),
-                              decoration: BoxDecoration(
-                                color: const Color(0xFFF1F5F9),
-                                borderRadius: BorderRadius.circular(20),
-                                border: Border.all(color: const Color(0xFFE2E8F0)),
-                              ),
-                              child: Text(
-                                upiId,
-                                style: GoogleFonts.robotoMono(
-                                  fontSize: 11.5,
-                                  fontWeight: FontWeight.w800,
-                                  color: const Color(0xFF0F172A),
+                        child: upiId.isNotEmpty
+                            ? Column(
+                                children: [
+                                  QrImageView(
+                                    data: qrData,
+                                    version: QrVersions.auto,
+                                    size: 190,
+                                    eyeStyle: const QrEyeStyle(
+                                      eyeShape: QrEyeShape.square,
+                                      color: Color(0xFF0F172A),
+                                    ),
+                                    dataModuleStyle: const QrDataModuleStyle(
+                                      dataModuleShape: QrDataModuleShape.square,
+                                      color: Color(0xFF0F172A),
+                                    ),
+                                  ),
+                                  const SizedBox(height: 10),
+                                  // UPI ID pill
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 5),
+                                    decoration: BoxDecoration(
+                                      color: const Color(0xFFF1F5F9),
+                                      borderRadius: BorderRadius.circular(20),
+                                      border: Border.all(color: const Color(0xFFE2E8F0)),
+                                    ),
+                                    child: Text(
+                                      upiId,
+                                      style: GoogleFonts.robotoMono(
+                                        fontSize: 11.5,
+                                        fontWeight: FontWeight.w800,
+                                        color: const Color(0xFF0F172A),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              )
+                            : Container(
+                                padding: const EdgeInsets.all(20),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFFFEF2F2),
+                                  borderRadius: BorderRadius.circular(16),
+                                  border: Border.all(color: const Color(0xFFFECACA)),
+                                ),
+                                child: Column(
+                                  children: [
+                                    const Icon(Icons.warning_amber_rounded, color: Color(0xFFDC2626), size: 36),
+                                    const SizedBox(height: 8),
+                                    Text(
+                                      'UPI ID Not Configured',
+                                      style: GoogleFonts.inter(fontWeight: FontWeight.bold, color: const Color(0xFF991B1B)),
+                                    ),
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      'Store Profile me jakar apna UPI ID set karein taaki counter standee QR ban sake.',
+                                      textAlign: TextAlign.center,
+                                      style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF7F1D1D)),
+                                    ),
+                                  ],
                                 ),
                               ),
-                            ),
-                          ],
-                        ),
                       ),
                       const SizedBox(height: 14),
 

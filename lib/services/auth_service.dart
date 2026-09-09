@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../core/constants/business_vertical_config.dart';
 import '../core/database/local_database.dart';
 import 'firestore_sync_service.dart';
+import 'workmanager_sync_service.dart';
 
 class AuthService {
   static final AuthService instance = AuthService._internal();
@@ -121,6 +122,9 @@ class AuthService {
     } catch (_) {}
     try {
       BusinessVerticals.updateActiveBusinessType('grocery');
+    } catch (_) {}
+    try {
+      await WorkmanagerSyncService.instance.cancel();
     } catch (_) {}
   }
 }

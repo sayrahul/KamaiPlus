@@ -209,8 +209,8 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
 
     final profile = await LocalDatabase.instance.getStoreProfile();
     final sName = profile.storeName.isNotEmpty ? profile.storeName : 'KamaiPlus Store';
-    final upiId = profile.upiVpa.isNotEmpty ? profile.upiVpa : 'proventure@icici';
-    final upiPayLink = 'upi://pay?pa=$upiId&pn=${Uri.encodeComponent(sName)}&am=$totalRupees&cu=INR&tn=Bill_${sale.invoiceNumber}';
+    final upiId = profile.upiVpa.trim();
+    final upiPayLink = upiId.isNotEmpty ? 'upi://pay?pa=$upiId&pn=${Uri.encodeComponent(sName)}&am=$totalRupees&cu=INR&tn=Bill_${sale.invoiceNumber}' : '';
 
     final buffer = StringBuffer();
     buffer.writeln('🧾 *TAX INVOICE #${sale.invoiceNumber}*');
@@ -228,7 +228,9 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
     buffer.writeln('--------------------------');
     buffer.writeln('💰 *Total Amount: ₹$amtRupees*');
     buffer.writeln('📌 Mode: ${sale.paymentMethod.toUpperCase()} (${sale.status.toUpperCase()})');
-    buffer.writeln('📲 *Instant UPI Pay:* $upiPayLink');
+    if (upiPayLink.isNotEmpty) {
+      buffer.writeln('📲 *Instant UPI Pay:* $upiPayLink');
+    }
     buffer.writeln('\nDhanyawad! Phir aaiyega! 🙏');
 
     final cleanPhone = phone.replaceAll(RegExp(r'\D'), '');

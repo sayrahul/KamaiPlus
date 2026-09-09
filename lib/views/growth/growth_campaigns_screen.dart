@@ -24,6 +24,7 @@ class _GrowthCampaignsScreenState extends State<GrowthCampaignsScreen> {
   int _campaignPageIndex = 0;
   final PageController _campaignPageController = PageController();
   bool _isPro = false;
+  String _storeUpiVpa = '';
 
   // Voucher Customizer State
   final _discountController = TextEditingController(text: '10%');
@@ -54,6 +55,7 @@ class _GrowthCampaignsScreenState extends State<GrowthCampaignsScreen> {
         setState(() {
           _isPro = profile.isPro;
           if (profile.storeName.isNotEmpty) _storeName = profile.storeName;
+          _storeUpiVpa = profile.upiVpa.trim();
           _customers = customers;
         });
       }
@@ -359,14 +361,14 @@ class _GrowthCampaignsScreenState extends State<GrowthCampaignsScreen> {
 
     if (camp['tag'] == 'KHATA DUE' && customer != null && customer.currentBalancePaise > 0) {
       final amt = customer.currentBalancePaise ~/ 100;
+      final upiPart = _storeUpiVpa.isNotEmpty ? '\n📌 *Pay via UPI:* $_storeUpiVpa\n' : '\n';
       return '''
 Namaste $custName ji! 🙏
 🏪 *$_storeName*
 
 Aapka kul baki hisaab *₹$amt* hai.
 Kripya samay par chukta karein ya counter par aakar settle karein.
-
-📌 *Pay via UPI:* proventure@icici
+$upiPart
 Dhanyawad! Have a great day!
 '''.trim();
     }

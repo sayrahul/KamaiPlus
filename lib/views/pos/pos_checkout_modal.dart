@@ -217,7 +217,7 @@ class _PosCheckoutModalState extends State<PosCheckoutModal> {
   String get _activeUpiVpa {
     final v = _storeProfile?.upiVpa.trim();
     if (v != null && v.isNotEmpty) return v;
-    return 'proventure@icici';
+    return '';
   }
 
   String get _activeStoreName {

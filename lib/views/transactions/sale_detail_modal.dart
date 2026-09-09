@@ -108,8 +108,8 @@ class SaleDetailModal extends StatelessWidget {
 
     final profile = await LocalDatabase.instance.getStoreProfile();
     final sName = profile.storeName.isNotEmpty ? profile.storeName : 'KamaiPlus Store';
-    final upiId = profile.upiVpa.isNotEmpty ? profile.upiVpa : 'proventure@icici';
-    final upiPayLink = 'upi://pay?pa=$upiId&pn=${Uri.encodeComponent(sName)}&am=$totalRupees&cu=INR&tn=Bill_${sale.invoiceNumber}';
+    final upiId = profile.upiVpa.trim();
+    final upiPayLink = upiId.isNotEmpty ? 'upi://pay?pa=$upiId&pn=${Uri.encodeComponent(sName)}&am=$totalRupees&cu=INR&tn=Bill_${sale.invoiceNumber}' : '';
 
     final buffer = StringBuffer();
     buffer.writeln('🧾 *INVOICE #${sale.invoiceNumber}*');
@@ -128,7 +128,9 @@ class SaleDetailModal extends StatelessWidget {
     buffer.writeln('--------------------------');
     buffer.writeln('💰 *Total Amount: ₹$amtRupees*');
     buffer.writeln('💳 Paid via: ${sale.paymentMethod.toUpperCase()}');
-    buffer.writeln('📲 *Instant UPI Pay / Receipt:* $upiPayLink');
+    if (upiPayLink.isNotEmpty) {
+      buffer.writeln('📲 *Instant UPI Pay / Receipt:* $upiPayLink');
+    }
     buffer.writeln('\nDhanyawad! Phir Padhaarein 🙏');
 
     final phone = sale.customerPhone ?? '';

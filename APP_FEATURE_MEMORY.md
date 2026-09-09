@@ -768,4 +768,28 @@ Comprehensive enterprise-grade retail UX upgrade suite aligned with PhonePe Busi
     - **Smoke Test Stabilization (`test/widget_test.dart`):**
       - Added `SharedPreferences.setMockInitialValues` and tested the core Material/Theme shell so tests execute reliably in local and CI environments.
 
+43. **Confirmed Wiring Bug Fixes & Architecture Hardening (LOCKED):**
+    - **Home-Screen Widget Query Case-Mismatch & Live Refresh (`home_widget_service.dart`):**
+      - Fixed SQL queries where uppercase `status = 'COMPLETED'` and `payment_method = 'CASH'` caused ₹0 displays. Now uses `LOWER(status) != 'refunded'` and `LOWER(payment_method) = 'cash'`.
+      - Corrected cash-in-hand calculation to opening float + cash in - petty expenses.
+      - Added fully qualified widget class name (`qualifiedAndroidName: 'com.kamaiplus.pos.widget.*'`).
+    - **WorkManager Multi-Account Isolation & Cancellation (`workmanager_sync_service.dart` & `auth_service.dart`):**
+      - Workmanager isolate reads authenticated user ID from SharedPreferences, switches SQLite connection via `LocalDatabase.instance.switchUser(cachedUserId)`, and scopes sync to `biz_<cachedUserId>`.
+      - Bails out early if unauthenticated.
+      - Added `WorkmanagerSyncService.cancel()` invoked on `AuthService.signOut()`.
+    - **FCM Token Startup Sync Gate (`notification_service.dart`):**
+      - Gated so incoming FCM token only calls `FirestoreSyncService.syncAllPending()` if `is_logged_in == true`.
+    - **Shared PDF Direct AI Processing (`share_target_service.dart`):**
+      - Distinguishes `.pdf` documents from images. Passes PDFs to `GeminiAiService.extractItemsFromImage(bytes, mimeType: 'application/pdf')` instead of feeding into ML Kit image-only OCR.
+    - **Thermal Printer MethodChannel Dispatch (`thermal_printer_service.dart`):**
+      - Implemented `ThermalPrinterService.printReceipt()` to dispatch formatted ESC/POS byte buffers directly through `MethodChannel('com.kamaiplus.pos/bluetooth_printer')`.
+    - **Duplicate Notification Removal (`sale_completed_modal.dart`):**
+      - Removed redundant `NativeNotificationService.notifySaleCompleted` call so merchants only get a single notification banner per bill.
+    - **Personal UPI ID Purge & Profile Fallback (`invoice_pdf_service.dart`, `MainActivity.java`, etc.):**
+      - Completely removed all hardcoded `proventure@icici` and `rahuljadhav` fallbacks from native PDF generator, invoice PDFs, checkout modals, khata reminders, and growth campaigns.
+      - Synchronized `StoreProfileScreen` saving to both SQLite and SharedPreferences.
+    - **Soundbox TTS Startup Race Mitigation (`MainActivity.java`):**
+      - Added speech announcement queueing in `MainActivity.java` (`pendingSpeakText` / `pendingSpeakLang`). Flushes queued speech immediately once `TextToSpeech.onInit` completes, preventing silent announcements on the merchant's first morning sale.
+
+
 

@@ -64,6 +64,8 @@ public class MainActivity extends FlutterFragmentActivity implements TextToSpeec
 
     private TextToSpeech tts;
     private boolean isTtsReady = false;
+    private String pendingSpeakText = null;
+    private String pendingSpeakLang = null;
     private MethodChannel.Result pendingContactResult;
     private String pendingShortcut = null;
     private String pendingSharedFile = null;
@@ -286,10 +288,16 @@ public class MainActivity extends FlutterFragmentActivity implements TextToSpeec
                         if ("speak".equals(call.method)) {
                             String text = call.argument("text");
                             String language = call.argument("lang");
-                            if (isTtsReady && text != null && !text.isEmpty()) {
-                                Locale locale = "hi".equals(language) ? new Locale("hi", "IN") : new Locale("en", "IN");
-                                tts.setLanguage(locale);
-                                tts.speak(text, TextToSpeech.QUEUE_FLUSH, null, "KAMAI_TTS");
+                            if (text != null && !text.isEmpty()) {
+                                if (isTtsReady) {
+                                    Locale locale = "hi".equals(language) ? new Locale("hi", "IN") : new Locale("en", "IN");
+                                    tts.setLanguage(locale);
+                                    tts.speak(text, TextToSpeech.QUEUE_FLUSH, null, "KAMAI_TTS");
+                                } else {
+                                    // Queue speech announcement so first customer sale of day is never missed
+                                    pendingSpeakText = text;
+                                    pendingSpeakLang = language;
+                                }
                                 result.success(true);
                             } else {
                                 result.success(false);
@@ -463,7 +471,7 @@ public class MainActivity extends FlutterFragmentActivity implements TextToSpeec
                                 if (termsText == null || termsText.trim().isEmpty()) termsText = "1. Goods once sold cannot be taken back.\n2. Electronic invoice generated via Kamai+ POS.";
                                 if (footerNote == null || footerNote.trim().isEmpty()) footerNote = "Thank you for shopping with us! Visit again.";
                                 if (showDynamicUpiQr == null) showDynamicUpiQr = true;
-                                if (upiId == null || upiId.trim().isEmpty()) upiId = "proventure@icici";
+                                if (upiId == null) upiId = "";
 
                                 int themeColor = Color.rgb(2, 132, 199);
                                 try {
@@ -717,7 +725,7 @@ public class MainActivity extends FlutterFragmentActivity implements TextToSpeec
                                         currentY += 12;
 
                                         // Left: Dynamic UPI QR / Payment Box (Matching live preview)
-                                        if (showDynamicUpiQr) {
+                                        if (showDynamicUpiQr && !upiId.trim().isEmpty()) {
                                             RectF upiBox = new RectF(36, currentY, 210, currentY + 52);
                                             canvas.drawRoundRect(upiBox, 6, 6, badgeBg);
                                             canvas.drawRoundRect(upiBox, 6, 6, linePaint);
@@ -926,7 +934,7 @@ public class MainActivity extends FlutterFragmentActivity implements TextToSpeec
                                 if (customerPhone == null) customerPhone = "";
                                 if (dateStr == null) dateStr = "";
                                 if (totalBalance == null) totalBalance = "₹0.00";
-                                if (upiId == null || upiId.trim().isEmpty()) upiId = "proventure@icici";
+                                if (upiId == null) upiId = "";
                                 if (transactions == null) transactions = new ArrayList<>();
 
                                 PdfDocument document = new PdfDocument();
@@ -1063,16 +1071,18 @@ public class MainActivity extends FlutterFragmentActivity implements TextToSpeec
                                     y += 18;
                                 }
 
-                                // Bottom Payment box
-                                float bY = Math.max(y + 15, 730);
-                                RectF upiBox = new RectF(36, bY, 559, bY + 48);
-                                Paint upiBg = new Paint();
-                                upiBg.setColor(Color.rgb(240, 253, 244));
-                                canvas.drawRoundRect(upiBox, 6, 6, upiBg);
-                                canvas.drawRoundRect(upiBox, 6, 6, linePaint);
+                                // Bottom Payment box (only if store has a configured UPI VPA)
+                                if (!upiId.trim().isEmpty()) {
+                                    float bY = Math.max(y + 15, 730);
+                                    RectF upiBox = new RectF(36, bY, 559, bY + 48);
+                                    Paint upiBg = new Paint();
+                                    upiBg.setColor(Color.rgb(240, 253, 244));
+                                    canvas.drawRoundRect(upiBox, 6, 6, upiBg);
+                                    canvas.drawRoundRect(upiBox, 6, 6, linePaint);
 
-                                canvas.drawText("Instant UPI Settlement: " + upiId, 50, bY + 20, boldTextPaint);
-                                canvas.drawText("Pay online directly using PhonePe, GPay, Paytm or BHIM UPI to clear balance.", 50, bY + 34, subPaint);
+                                    canvas.drawText("Instant UPI Settlement: " + upiId, 50, bY + 20, boldTextPaint);
+                                    canvas.drawText("Pay online directly using PhonePe, GPay, Paytm or BHIM UPI to clear balance.", 50, bY + 34, subPaint);
+                                }
 
                                 // Footer
                                 canvas.drawText("Generated via KamaiPlus POS System • Single Source of Truth", 160, 810, subPaint);
@@ -1223,6 +1233,13 @@ public class MainActivity extends FlutterFragmentActivity implements TextToSpeec
             tts.setLanguage(new Locale("hi", "IN"));
             tts.setSpeechRate(0.95f);
             isTtsReady = true;
+            if (pendingSpeakText != null) {
+                Locale locale = "hi".equals(pendingSpeakLang) ? new Locale("hi", "IN") : new Locale("en", "IN");
+                tts.setLanguage(locale);
+                tts.speak(pendingSpeakText, TextToSpeech.QUEUE_FLUSH, null, "KAMAI_TTS");
+                pendingSpeakText = null;
+                pendingSpeakLang = null;
+            }
         }
     }
 
