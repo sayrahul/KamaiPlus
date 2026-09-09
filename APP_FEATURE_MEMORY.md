@@ -829,6 +829,28 @@ Comprehensive enterprise-grade retail UX upgrade suite aligned with PhonePe Busi
       - Android App (`firestore_sync_service.dart`): Added live Firestore stream listeners `_broadcastSub` and `_globalConfigSub` exposing `broadcastNotifier` and `globalConfigNotifier`.
       - Android Home Pulse (`home_pulse_tab.dart`): Added `_buildLiveBroadcastBanner()` rendering responsive Festive, Warning, Success, or Broadcast banners directly on the merchant's POS home screen with dismiss controls.
 
+46. **Master Catalog & Zero-Friction Inventory Management Architecture (LOCKED ROADMAP FOR TOMORROW):**
+    - **Problem Addressed:** Indian small and medium retailers (Kirana, Pharmacy, Hardware) carry 2,000 to 20,000+ items. Forcing manual product-by-product entry or compulsory stock counting causes immediate onboarding friction and app abandonment.
+    - **Guiding Principles (The Vyapar / Petpooja / myBillBook Standard):**
+      1. *Stock Quantity is 100% Optional:* Products require only Name and Price. Blank/unspecified stock defaults to `isUnlimited = true` (`∞ Unlimited`). Counter billing must NEVER be blocked by stock count.
+      2. *Master Dictionary vs My Shop:* A comprehensive background catalog of ~3,000–5,000 top Indian FMCG, Grocery, and OTC healthcare items (~1.5 MB SQLite compressed footprint) is kept in `master_catalog` table. It does not clutter the merchant's active screen with unneeded items.
+      3. *Barcode Freedom (Dual-Mode):* If merchant has a scanner or clear barcode -> Beep and auto-add. If no barcode scanner or damaged/tiny barcode -> 2-letter instant T9 search (`mag` -> Maggi 70g) or 1-tap Visual Category Tiles (`Dairy`, `Biscuits`, `Soaps`).
+    - **4-Phase Implementation Breakdown:**
+      - **Phase 1: Master Catalog SQLite Table & Offline Dictionary:**
+        - Background table `master_catalog` (`barcode TEXT UNIQUE, name TEXT, category TEXT, mrp_paise INTEGER, unit TEXT, tax_rate REAL, business_type TEXT`).
+        - Indexed on `barcode` and `name` for ultra-fast `<2ms` lookups.
+        - Seeding top Indian brands (Tata, Amul, Parle, Britannia, Nestlé, HUL, ITC, Dolo, Crocin, etc.).
+      - **Phase 2: Ultra-Fast Non-Scanner POS Billing Search:**
+        - High-speed autocomplete dropdown on `PosBillingScreen` matching local store products first, with fallback 1-tap "Add from Master Catalog".
+        - 2x Camera Zoom and Flashlight toggle on mobile scanner viewfinder for tiny/faded barcodes.
+      - **Phase 3: 1-Tap In-Line Quantity & Stock Management:**
+        - Quick Stock Update sheet on product cards with instant chips: `[+6]`, `[+12]`, `[+24]`, `[+48]`.
+        - Stock adjustments modal with standardized retail loss reasons: `Damaged / Wastage (-N)`, `Expired (-N)`, `Personal / Home Use (-N)`, and `Physical Audit Correction (=N)`.
+      - **Phase 4: Wholesale AI Parcha Inward & Low-Stock WhatsApp Reorder:**
+        - Integrate existing AI Bill OCR with automatic master SKU matching and bulk inward.
+        - 1-Tap Low-Stock Radar filter to generate and send formatted WhatsApp purchase orders to wholesale distributors.
+    - **Financial & Code Invariants:** Strict Integer Paise Math preserved app-wide (`mrp_paise`, `selling_price_paise`). 0 compile errors rule maintained. Zero extra APK bloat.
+
 
 
 
