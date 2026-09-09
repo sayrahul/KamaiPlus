@@ -702,3 +702,20 @@ Comprehensive enterprise-grade retail UX upgrade suite aligned with PhonePe Busi
     - **Strict Input Validation Enforced Across All Screens (`AppValidators`):**
       - Standardized TRAI 10-digit phone, NPCI UPI, GSTIN, FSSAI, email, and pincode validations active in `StoreProfileScreen`, `SaleCompletedModal`, `CustomersScreen`, and `KhataScreen`.
 
+40. **Google Play Store Rejection Recovery & Zero-Mismatch Policy Architecture (LOCKED):**
+    - **Root Cause of Rejection (PWA vs Native Mismatch):**
+      - Previous PWA package had an on-device icon / label differing from the Google Play Store Listing Hi-Res 512x512 icon, triggering Google's `Misleading Claims: App store listing mismatch` policy (`LAUNCHER_ICON-8934.png` vs `HI_RES_ICON-8101.png`).
+      - On Android 8.0+ through 16, missing Adaptive Icons (`mipmap-anydpi-v26`) caused OS launchers to force a white circle mask around legacy icons, distorting launcher appearance compared to store graphics.
+    - **Universal Native Android Adaptive Icon System:**
+      - Added `android/app/src/main/res/values/colors.xml` specifying `<color name="ic_launcher_background">#FEC703</color>`.
+      - Implemented `mipmap-anydpi-v26/ic_launcher.xml` and `mipmap-anydpi-v26/ic_launcher_round.xml` referencing `@color/ic_launcher_background` and `@mipmap/ic_launcher_foreground`.
+      - Rendered ultra-crisp transparent foregrounds with centered "क+" logo and soft shadow across all densities (`mdpi` 108px, `hdpi` 162px, `xhdpi` 216px, `xxhdpi` 324px, `xxxhdpi` 432px).
+      - Generated matching legacy square and circular (`ic_launcher_round.png`) icons across all densities.
+      - Added `android:roundIcon="@mipmap/ic_launcher_round"` in `AndroidManifest.xml`.
+    - **100% Identical 512x512 Hi-Res Store Icon:**
+      - Generated `play_store_assets/hi_res_icon_512.png` and mirrored to `assets/images/app_icon.png` & `logo.png`.
+      - Uses the exact same `#FEC703` brand yellow background and identical centered "क+" scale, guaranteeing a 1:1 visual match with device launcher icons.
+    - **Release Bundle (.AAB) Generation:**
+      - Production Android App Bundle compiled at `play_store_assets/KamaiPlus_v4.20.0_release.aab` (`version: 4.20.0+42001`).
+      - Signed with Google Play release keystore (`android/app/kamai-release-key.jks`, alias: `kamaiplus`).
+
