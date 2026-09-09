@@ -843,10 +843,16 @@ Comprehensive enterprise-grade retail UX upgrade suite aligned with PhonePe Busi
         - Implemented atomic batch seeding `_seedMasterCatalogIfEmpty(db)` inside `_ensureExtraTables(db)` executing in <20ms on SQLite open.
         - Added lookup helpers `findMasterProductByBarcode`, `searchMasterCatalog`, `getMasterCatalogCount`, and `importMasterProductToStore`.
         - Wired instant auto-import into POS Billing scanner (`pos_billing_screen.dart`), Add Product modal (`add_product_modal.dart`), and Products screen (`products_screen.dart`). Scanning any master barcode automatically resolves, imports with default uncounted stock (`99999.0` = `∞ Unlimited`), and adds to bill in 1 tap!
-      - **Phase 2: Ultra-Fast Non-Scanner POS Billing Search (NEXT UP):**
-        - High-speed autocomplete dropdown on `PosBillingScreen` matching local store products first, with fallback 1-tap "Add from Master Catalog".
-        - 2x Camera Zoom and Flashlight toggle on mobile scanner viewfinder for tiny/faded barcodes.
-      - **Phase 3: 1-Tap In-Line Quantity & Stock Management:**
+      - **Phase 2: Ultra-Fast Non-Scanner POS Billing Search (COMPLETED & LOCKED):**
+        - High-speed dual-search autocomplete on `PosBillingScreen` (`pos_billing_screen.dart`):
+          - Category pills automatically collapse when typing in the search bar, dedicating the entire screen to instant results.
+          - Section A: `IN YOUR STORE (N)` displaying matching active store items with in-bill quantity badges and tap-to-add.
+          - Section B: `✨ FROM MASTER CATALOG (N)` displaying matching master items with golden badge, standard MRP, category, and direct `+ Add & Bill` button. Tapping imports the SKU with uncounted stock (`99999.0`) and adds to active cart in <2ms with zero cashier friction.
+          - Section C: `+ Quick Bill Custom Item` bottom sheet allowing cashiers to enter price and immediately bill unlisted products without filling long forms.
+        - Viewfinder 1.0x / 2.0x Zoom & Flashlight Controls (`barcode_scanner_view.dart`):
+          - Added interactive `[ 1.0x (Standard) ]` and `[ 🔍 2.0x (Small Barcode) ]` chips above the bottom instruction bar for scanning small OTC medicine blisters or spice pouches.
+          - Added high-contrast `[ Light ON / Flash ]` indicator chip for dark warehouse or shelf counter illumination.
+      - **Phase 3: 1-Tap In-Line Quantity & Stock Management (NEXT UP):**
         - Quick Stock Update sheet on product cards with instant chips: `[+6]`, `[+12]`, `[+24]`, `[+48]`.
         - Stock adjustments modal with standardized retail loss reasons: `Damaged / Wastage (-N)`, `Expired (-N)`, `Personal / Home Use (-N)`, and `Physical Audit Correction (=N)`.
       - **Phase 4: Wholesale AI Parcha Inward & Low-Stock WhatsApp Reorder:**

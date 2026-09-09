@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 
@@ -14,6 +14,7 @@ class _BarcodeScannerViewState extends State<BarcodeScannerView> with SingleTick
   late final AnimationController _animController;
   bool _isScanned = false;
   bool _torchEnabled = false;
+  double _zoomScale = 1.0;
 
   @override
   void initState() {
@@ -34,6 +35,14 @@ class _BarcodeScannerViewState extends State<BarcodeScannerView> with SingleTick
     _animController.dispose();
     _controller.dispose();
     super.dispose();
+  }
+
+  Future<void> _setZoom(double zoom) async {
+    try {
+      await _controller.setZoomScale(zoom);
+      setState(() => _zoomScale = zoom);
+      HapticFeedback.selectionClick();
+    } catch (_) {}
   }
 
   void _onDetect(BarcodeCapture capture) {
@@ -155,32 +164,59 @@ class _BarcodeScannerViewState extends State<BarcodeScannerView> with SingleTick
                 children: [
                   IconButton(
                     style: IconButton.styleFrom(
-                      backgroundColor: Colors.black45,
+                      backgroundColor: Colors.black54,
                       foregroundColor: Colors.white,
                     ),
-                    icon: const Icon(Icons.close, size: 28),
+                    icon: const Icon(Icons.close, size: 26),
                     onPressed: () => Navigator.of(context).pop(),
                   ),
                   Row(
                     children: [
-                      IconButton(
-                        style: IconButton.styleFrom(
-                          backgroundColor: Colors.black45,
-                          foregroundColor: _torchEnabled ? const Color(0xFFF59E0B) : Colors.white,
-                        ),
-                        icon: Icon(_torchEnabled ? Icons.flash_on : Icons.flash_off),
-                        onPressed: () async {
+                      // Torch Toggle Button with Active Indicator
+                      InkWell(
+                        onTap: () async {
                           await _controller.toggleTorch();
                           setState(() => _torchEnabled = !_torchEnabled);
+                          HapticFeedback.lightImpact();
                         },
+                        borderRadius: BorderRadius.circular(20),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                          decoration: BoxDecoration(
+                            color: _torchEnabled ? const Color(0xFFF59E0B) : Colors.black54,
+                            borderRadius: BorderRadius.circular(20),
+                            border: Border.all(
+                              color: _torchEnabled ? const Color(0xFFFBBF24) : Colors.white24,
+                            ),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                _torchEnabled ? Icons.flash_on : Icons.flash_off,
+                                size: 18,
+                                color: _torchEnabled ? const Color(0xFF0F172A) : Colors.white,
+                              ),
+                              const SizedBox(width: 6),
+                              Text(
+                                _torchEnabled ? 'Light ON' : 'Flash',
+                                style: TextStyle(
+                                  color: _torchEnabled ? const Color(0xFF0F172A) : Colors.white,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
                       ),
                       const SizedBox(width: 8),
                       IconButton(
                         style: IconButton.styleFrom(
-                          backgroundColor: Colors.black45,
+                          backgroundColor: Colors.black54,
                           foregroundColor: Colors.white,
                         ),
-                        icon: const Icon(Icons.flip_camera_android),
+                        icon: const Icon(Icons.flip_camera_android, size: 22),
                         onPressed: () => _controller.switchCamera(),
                       ),
                     ],
@@ -190,9 +226,34 @@ class _BarcodeScannerViewState extends State<BarcodeScannerView> with SingleTick
             ),
           ),
 
-          // 5. Instruction Text at Bottom
+          // 5. 1x / 2x Zoom Toggle Controls (Above bottom instructions)
           Positioned(
-            bottom: 48,
+            bottom: 104,
+            left: 0,
+            right: 0,
+            child: Center(
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                decoration: BoxDecoration(
+                  color: Colors.black.withValues(alpha: 0.75),
+                  borderRadius: BorderRadius.circular(24),
+                  border: Border.all(color: Colors.white24),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    _buildZoomChip(1.0, '1.0x (Standard)'),
+                    const SizedBox(width: 4),
+                    _buildZoomChip(2.0, '🔍 2.0x (Small Barcode)'),
+                  ],
+                ),
+              ),
+            ),
+          ),
+
+          // 6. Instruction Text at Bottom
+          Positioned(
+            bottom: 42,
             left: 24,
             right: 24,
             child: Container(
@@ -208,10 +269,10 @@ class _BarcodeScannerViewState extends State<BarcodeScannerView> with SingleTick
                   Icon(Icons.qr_code_scanner, color: Color(0xFFF59E0B), size: 20),
                   SizedBox(width: 10),
                   Text(
-                    "Point camera at any barcode or QR",
+                    "Point camera at barcode on item",
                     style: TextStyle(
                       color: Colors.white,
-                      fontSize: 14,
+                      fontSize: 13.5,
                       fontWeight: FontWeight.w600,
                     ),
                   ),
@@ -223,5 +284,30 @@ class _BarcodeScannerViewState extends State<BarcodeScannerView> with SingleTick
       ),
     );
   }
+
+  Widget _buildZoomChip(double zoom, String label) {
+    final isSel = (_zoomScale == zoom);
+    return InkWell(
+      onTap: () => _setZoom(zoom),
+      borderRadius: BorderRadius.circular(18),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+        decoration: BoxDecoration(
+          color: isSel ? const Color(0xFFF59E0B) : Colors.transparent,
+          borderRadius: BorderRadius.circular(18),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            color: isSel ? const Color(0xFF0F172A) : Colors.white,
+            fontSize: 12,
+            fontWeight: isSel ? FontWeight.w800 : FontWeight.w500,
+          ),
+        ),
+      ),
+    );
+  }
 }
+
 

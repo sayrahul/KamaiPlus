@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 import '../../core/constants/business_vertical_config.dart';
 import '../../models/models.dart';
 import '../../core/database/local_database.dart';
+import '../../core/utils/money_formatter.dart';
 import '../../services/firestore_sync_service.dart';
 import '../../services/home_widget_service.dart';
 import 'pos_checkout_modal.dart';
@@ -37,6 +38,10 @@ class _PosBillingScreenState extends State<PosBillingScreen> {
   String _searchQuery = '';
   String? _selectedCategoryId; // null = 'all'
   bool _isLoading = true;
+
+  // Master Catalog Search Results (<2ms offline lookup)
+  List<MasterProductModel> _matchingMasterProducts = [];
+  bool _isSearchingMaster = false;
 
   // Multi-cart Hold & Resume system
   late List<CartTab> _tabs;
@@ -116,6 +121,73 @@ class _PosBillingScreenState extends State<PosBillingScreen> {
       final matchesCat = _selectedCategoryId == null || p.categoryId == _selectedCategoryId;
       return matchesSearch && matchesCat;
     }).toList();
+  }
+
+  /// Real-time dual search: local store products + background master catalog (<2ms)
+  Future<void> _performSearch(String val) async {
+    setState(() => _searchQuery = val);
+    final clean = val.trim();
+    if (clean.length >= 2) {
+      setState(() => _isSearchingMaster = true);
+      try {
+        final results = await LocalDatabase.instance.searchMasterCatalog(clean, limit: 15);
+        final storeBarcodes = _allProducts.map((p) => p.barcode).whereType<String>().toSet();
+        final storeNames = _allProducts.map((p) => p.name.toLowerCase().trim()).toSet();
+        final nonDuplicates = results.where((m) {
+          final barMatch = m.barcode.isNotEmpty && storeBarcodes.contains(m.barcode);
+          final nameMatch = storeNames.contains(m.name.toLowerCase().trim());
+          return !barMatch && !nameMatch;
+        }).toList();
+
+        if (mounted && _searchQuery.trim() == clean) {
+          setState(() {
+            _matchingMasterProducts = nonDuplicates;
+            _isSearchingMaster = false;
+          });
+        }
+      } catch (_) {
+        if (mounted) setState(() => _isSearchingMaster = false);
+      }
+    } else {
+      if (_matchingMasterProducts.isNotEmpty || _isSearchingMaster) {
+        setState(() {
+          _matchingMasterProducts = [];
+          _isSearchingMaster = false;
+        });
+      }
+    }
+  }
+
+  void _clearSearch() {
+    setState(() {
+      _searchController.clear();
+      _searchQuery = '';
+      _matchingMasterProducts = [];
+      _isSearchingMaster = false;
+    });
+  }
+
+  Future<void> _importAndAddToCart(MasterProductModel masterItem) async {
+    HapticFeedback.selectionClick();
+    final imported = await LocalDatabase.instance.importMasterProductToStore(masterItem);
+    _addToCart(imported);
+    await _loadData();
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Row(
+            children: [
+              const Icon(Icons.auto_awesome, color: Colors.amber, size: 18),
+              const SizedBox(width: 8),
+              Expanded(child: Text('Added to Bill: ${imported.name}')),
+            ],
+          ),
+          backgroundColor: const Color(0xFF1E293B),
+          duration: const Duration(milliseconds: 1200),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
   }
 
   int get cartTotalPaise {
@@ -370,14 +442,16 @@ class _PosBillingScreenState extends State<PosBillingScreen> {
                 // 2. Dynamic Bill Counter Tabs (Multi-Bill System)
                 _buildBillTabsBar(),
 
-                // 3. Category Filter Pills
-                _buildCategoryPills(),
+                // 3. Category Filter Pills (hidden when searching for maximum vertical space)
+                if (_searchQuery.trim().isEmpty) _buildCategoryPills(),
 
-                // 4. 2-Column Product Cards Grid
+                // 4. Content: Real-Time Dual Search Results or Standard Product Grid
                 Expanded(
                   child: _isLoading
                       ? const Center(child: CircularProgressIndicator(color: Color(0xFFF59E0B)))
-                      : _buildProductGrid(),
+                      : (_searchQuery.trim().isNotEmpty
+                          ? _buildSearchResultsView()
+                          : _buildProductGrid()),
                 ),
 
                 // Space buffer so products don't get covered by bottom floating bar
@@ -421,7 +495,7 @@ class _PosBillingScreenState extends State<PosBillingScreen> {
                   Expanded(
                     child: TextField(
                       controller: _searchController,
-                      onChanged: (val) => setState(() => _searchQuery = val),
+                      onChanged: _performSearch,
                       style: GoogleFonts.plusJakartaSans(
                         fontSize: 13,
                         fontWeight: FontWeight.w600,
@@ -440,12 +514,7 @@ class _PosBillingScreenState extends State<PosBillingScreen> {
                   ),
                   if (_searchQuery.isNotEmpty)
                     GestureDetector(
-                      onTap: () {
-                        setState(() {
-                          _searchController.clear();
-                          _searchQuery = '';
-                        });
-                      },
+                      onTap: _clearSearch,
                       child: const Icon(Icons.clear, size: 18, color: Color(0xFF94A3B8)),
                     ),
                 ],
@@ -791,6 +860,587 @@ class _PosBillingScreenState extends State<PosBillingScreen> {
           inCartQty: inCartQty,
           categoryDisplay: categoryDisplay,
           onTap: () => _addToCart(product),
+        );
+      },
+    );
+  }
+
+  // 3.5 REAL-TIME DUAL SEARCH RESULTS VIEW (STORE + MASTER CATALOG)
+  Widget _buildSearchResultsView() {
+    final storeMatches = filteredProducts;
+    final hasStoreMatches = storeMatches.isNotEmpty;
+    final hasMasterMatches = _matchingMasterProducts.isNotEmpty;
+
+    if (!hasStoreMatches && !hasMasterMatches && !_isSearchingMaster) {
+      return Center(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: const BoxDecoration(
+                  color: Color(0xFFF1F5F9),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(Icons.search_off_rounded, size: 40, color: Color(0xFF64748B)),
+              ),
+              const SizedBox(height: 16),
+              Text(
+                'No matching items found',
+                style: GoogleFonts.plusJakartaSans(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700,
+                  color: const Color(0xFF0F172A),
+                ),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                '"$_searchQuery" is not in your store or master catalog',
+                textAlign: TextAlign.center,
+                style: GoogleFonts.plusJakartaSans(
+                  fontSize: 13,
+                  color: const Color(0xFF64748B),
+                ),
+              ),
+              const SizedBox(height: 20),
+              ElevatedButton.icon(
+                onPressed: () => _openQuickAddCustomDialog(_searchQuery.trim()),
+                icon: const Icon(Icons.flash_on_rounded, size: 18, color: Color(0xFF0F172A)),
+                label: Text(
+                  'Quick Bill "$_searchQuery"',
+                  style: GoogleFonts.plusJakartaSans(
+                    fontWeight: FontWeight.w700,
+                    color: const Color(0xFF0F172A),
+                    fontSize: 13,
+                  ),
+                ),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFFFBBF24),
+                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  elevation: 0,
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return ListView(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+      children: [
+        // A. STORE ITEMS MATCHING QUERY
+        if (hasStoreMatches) ...[
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
+            child: Row(
+              children: [
+                Container(
+                  width: 8,
+                  height: 8,
+                  decoration: const BoxDecoration(
+                    color: Color(0xFF10B981),
+                    shape: BoxShape.circle,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  'IN YOUR STORE (${storeMatches.length})',
+                  style: GoogleFonts.plusJakartaSans(
+                    fontSize: 11.5,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 0.5,
+                    color: const Color(0xFF475569),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          ...storeMatches.map((product) {
+            final cartItem = _cart[product.id];
+            final inCartQty = cartItem?.quantity.toInt() ?? 0;
+            return _buildStoreSearchItem(product, inCartQty);
+          }),
+          const SizedBox(height: 12),
+        ],
+
+        // B. MASTER CATALOG SUGGESTIONS (1-TAP BILLING)
+        if (hasMasterMatches) ...[
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
+            child: Row(
+              children: [
+                const Icon(Icons.auto_awesome_rounded, size: 14, color: Color(0xFFD97706)),
+                const SizedBox(width: 6),
+                Text(
+                  'FROM MASTER CATALOG (${_matchingMasterProducts.length})',
+                  style: GoogleFonts.plusJakartaSans(
+                    fontSize: 11.5,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 0.5,
+                    color: const Color(0xFFD97706),
+                  ),
+                ),
+                const Spacer(),
+                Text(
+                  '1-Tap Add & Bill',
+                  style: GoogleFonts.plusJakartaSans(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    color: const Color(0xFF94A3B8),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          ..._matchingMasterProducts.map((masterItem) {
+            return _buildMasterCatalogSearchItem(masterItem);
+          }),
+          const SizedBox(height: 12),
+        ],
+
+        // C. Searching spinner
+        if (_isSearchingMaster)
+          const Padding(
+            padding: EdgeInsets.all(16),
+            child: Center(
+              child: SizedBox(
+                width: 20,
+                height: 20,
+                child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFFF59E0B)),
+              ),
+            ),
+          ),
+
+        // D. Quick Custom Bill Option at bottom
+        Container(
+          margin: const EdgeInsets.only(top: 8, bottom: 24),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: const Color(0xFFE2E8F0)),
+          ),
+          child: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFEFF6FF),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Icon(Icons.add_shopping_cart_rounded, size: 18, color: Color(0xFF2563EB)),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Can\'t find item?',
+                      style: GoogleFonts.plusJakartaSans(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                        color: const Color(0xFF1E293B),
+                      ),
+                    ),
+                    Text(
+                      'Bill custom "$_searchQuery"',
+                      style: GoogleFonts.plusJakartaSans(
+                        fontSize: 11,
+                        color: const Color(0xFF64748B),
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
+                ),
+              ),
+              ElevatedButton(
+                onPressed: () => _openQuickAddCustomDialog(_searchQuery.trim()),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF0F172A),
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  elevation: 0,
+                ),
+                child: Text(
+                  '+ Bill Custom',
+                  style: GoogleFonts.plusJakartaSans(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    color: Colors.white,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildStoreSearchItem(ProductModel product, int inCartQty) {
+    final priceStr = MoneyFormatter.formatINR(product.sellingPricePaise);
+    final mrpStr = MoneyFormatter.formatINR(product.mrpPaise);
+    final isUnlimited = product.isUnlimitedStock;
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      decoration: BoxDecoration(
+        color: inCartQty > 0 ? const Color(0xFFF0FDF4) : Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: inCartQty > 0 ? const Color(0xFF86EFAC) : const Color(0xFFE2E8F0),
+          width: inCartQty > 0 ? 1.5 : 1.0,
+        ),
+      ),
+      child: ListTile(
+        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 2),
+        onTap: () => _addToCart(product),
+        title: Text(
+          product.name,
+          style: GoogleFonts.plusJakartaSans(
+            fontSize: 13.5,
+            fontWeight: FontWeight.w700,
+            color: const Color(0xFF0F172A),
+          ),
+        ),
+        subtitle: Row(
+          children: [
+            Text(
+              priceStr,
+              style: GoogleFonts.jetBrainsMono(
+                fontSize: 13,
+                fontWeight: FontWeight.w800,
+                color: const Color(0xFF0F172A),
+              ),
+            ),
+            if (product.mrpPaise > product.sellingPricePaise) ...[
+              const SizedBox(width: 6),
+              Text(
+                mrpStr,
+                style: GoogleFonts.jetBrainsMono(
+                  fontSize: 11,
+                  decoration: TextDecoration.lineThrough,
+                  color: const Color(0xFF94A3B8),
+                ),
+              ),
+            ],
+            const SizedBox(width: 8),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
+              decoration: BoxDecoration(
+                color: const Color(0xFFF1F5F9),
+                borderRadius: BorderRadius.circular(6),
+              ),
+              child: Text(
+                isUnlimited ? '∞ Unlimited' : '${product.stockQuantity.toInt()} ${product.unit}',
+                style: GoogleFonts.plusJakartaSans(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w600,
+                  color: const Color(0xFF64748B),
+                ),
+              ),
+            ),
+          ],
+        ),
+        trailing: inCartQty > 0
+            ? Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF10B981),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Text(
+                      '$inCartQty in Bill',
+                      style: GoogleFonts.plusJakartaSans(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 4),
+                  IconButton(
+                    icon: const Icon(Icons.add_circle, color: Color(0xFF0F172A), size: 24),
+                    onPressed: () => _addToCart(product),
+                  ),
+                ],
+              )
+            : IconButton(
+                icon: const Icon(Icons.add_circle_outline, color: Color(0xFF0F172A), size: 24),
+                onPressed: () => _addToCart(product),
+              ),
+      ),
+    );
+  }
+
+  Widget _buildMasterCatalogSearchItem(MasterProductModel masterItem) {
+    final mrpStr = MoneyFormatter.formatINR(masterItem.mrpPaise);
+    final sellStr = MoneyFormatter.formatINR(
+      masterItem.sellingPricePaise > 0 ? masterItem.sellingPricePaise : masterItem.mrpPaise,
+    );
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFFFBEB),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: const Color(0xFFFDE68A),
+          width: 1.2,
+        ),
+      ),
+      child: ListTile(
+        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 2),
+        onTap: () => _importAndAddToCart(masterItem),
+        title: Row(
+          children: [
+            Expanded(
+              child: Text(
+                masterItem.name,
+                style: GoogleFonts.plusJakartaSans(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                  color: const Color(0xFF0F172A),
+                ),
+              ),
+            ),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+              decoration: BoxDecoration(
+                color: const Color(0xFFFEF3C7),
+                borderRadius: BorderRadius.circular(6),
+                border: Border.all(color: const Color(0xFFF59E0B), width: 0.8),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.auto_awesome, size: 10, color: Color(0xFFD97706)),
+                  const SizedBox(width: 3),
+                  Text(
+                    'Master SKU',
+                    style: GoogleFonts.plusJakartaSans(
+                      fontSize: 9.5,
+                      fontWeight: FontWeight.w700,
+                      color: const Color(0xFF92400E),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        subtitle: Row(
+          children: [
+            Text(
+              sellStr,
+              style: GoogleFonts.jetBrainsMono(
+                fontSize: 13,
+                fontWeight: FontWeight.w800,
+                color: const Color(0xFF0F172A),
+              ),
+            ),
+            if (masterItem.mrpPaise > masterItem.sellingPricePaise && masterItem.sellingPricePaise > 0) ...[
+              const SizedBox(width: 6),
+              Text(
+                mrpStr,
+                style: GoogleFonts.jetBrainsMono(
+                  fontSize: 11,
+                  decoration: TextDecoration.lineThrough,
+                  color: const Color(0xFF94A3B8),
+                ),
+              ),
+            ],
+            const SizedBox(width: 8),
+            Text(
+              masterItem.category,
+              style: GoogleFonts.plusJakartaSans(
+                fontSize: 11,
+                color: const Color(0xFF64748B),
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ],
+        ),
+        trailing: ElevatedButton(
+          onPressed: () => _importAndAddToCart(masterItem),
+          style: ElevatedButton.styleFrom(
+            backgroundColor: const Color(0xFF0F172A),
+            foregroundColor: Colors.white,
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            elevation: 0,
+          ),
+          child: Text(
+            '+ Add & Bill',
+            style: GoogleFonts.plusJakartaSans(
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _openQuickAddCustomDialog(String queryName) {
+    final priceCtrl = TextEditingController();
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) {
+        return Padding(
+          padding: EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom),
+          child: Container(
+            decoration: const BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+            ),
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      '⚡ Quick Bill Custom Item',
+                      style: GoogleFonts.plusJakartaSans(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w700,
+                        color: const Color(0xFF0F172A),
+                      ),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.close, size: 20, color: Color(0xFF64748B)),
+                      onPressed: () => Navigator.pop(ctx),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  'Item Name',
+                  style: GoogleFonts.plusJakartaSans(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: const Color(0xFF64748B),
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF1F5F9),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Text(
+                    queryName,
+                    style: GoogleFonts.plusJakartaSans(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w700,
+                      color: const Color(0xFF1E293B),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  'Selling Price (₹)',
+                  style: GoogleFonts.plusJakartaSans(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: const Color(0xFF64748B),
+                  ),
+                ),
+                const SizedBox(height: 6),
+                TextField(
+                  controller: priceCtrl,
+                  autofocus: true,
+                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  style: GoogleFonts.plusJakartaSans(
+                    fontSize: 20,
+                    fontWeight: FontWeight.w800,
+                    color: const Color(0xFF0F172A),
+                  ),
+                  decoration: InputDecoration(
+                    prefixText: '₹ ',
+                    prefixStyle: GoogleFonts.plusJakartaSans(
+                      fontSize: 20,
+                      fontWeight: FontWeight.w800,
+                      color: const Color(0xFF0F172A),
+                    ),
+                    hintText: '0.00',
+                    filled: true,
+                    fillColor: const Color(0xFFF8FAFC),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: const BorderSide(color: Color(0xFFCBD5E1)),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 20),
+                SizedBox(
+                  width: double.infinity,
+                  height: 48,
+                  child: ElevatedButton(
+                    onPressed: () async {
+                      final rupees = double.tryParse(priceCtrl.text) ?? 0.0;
+                      if (rupees <= 0) return;
+                      final pricePaise = (rupees * 100).round();
+                      final customProduct = ProductModel(
+                        id: 'prod_custom_${DateTime.now().millisecondsSinceEpoch}',
+                        businessId: _allProducts.isNotEmpty ? _allProducts.first.businessId : 'biz_default_retail',
+                        name: queryName,
+                        sellingPricePaise: pricePaise,
+                        mrpPaise: pricePaise,
+                        purchasePricePaise: (pricePaise * 0.85).round(),
+                        stockQuantity: 99999.0, // Unlimited
+                        taxRate: 0.0,
+                        isTaxInclusive: true,
+                        unit: 'pcs',
+                        isLooseItem: false,
+                        syncStatus: 'pending',
+                      );
+                      await LocalDatabase.instance.upsertProduct(customProduct);
+                      _addToCart(customProduct);
+                      await _loadData();
+                      if (ctx.mounted) Navigator.pop(ctx);
+                      _clearSearch();
+                      if (mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text('Added $queryName to bill!'),
+                            duration: const Duration(seconds: 1),
+                          ),
+                        );
+                      }
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF0F172A),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    ),
+                    child: Text(
+                      'Add to Bill (₹)',
+                      style: GoogleFonts.plusJakartaSans(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w700,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
         );
       },
     );
