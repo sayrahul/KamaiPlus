@@ -8,6 +8,7 @@ import '../common/pwa_top_bar.dart';
 import '../common/owner_privacy_modal.dart';
 import 'ai_inward_modal.dart';
 import 'add_product_modal.dart';
+import 'quick_stock_update_modal.dart';
 import '../pos/barcode_scanner_view.dart';
 import '../../services/firestore_sync_service.dart';
 
@@ -176,107 +177,10 @@ class _ProductsScreenState extends State<ProductsScreen> {
   }
 
   void _openQuickUpdateDialog(ProductModel product) {
-    final priceCtrl = TextEditingController(text: (product.sellingPricePaise / 100).toStringAsFixed(0));
-    final stockCtrl = TextEditingController(text: product.stockQuantity.toInt().toString());
-
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: Colors.white,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(6),
-              decoration: BoxDecoration(
-                color: const Color(0xFFEFF6FF),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: const Icon(Icons.bolt_rounded, color: Color(0xFF2563EB), size: 20),
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('Quick Update', style: GoogleFonts.outfit(fontSize: 15, fontWeight: FontWeight.bold)),
-                  Text(product.name, style: GoogleFonts.inter(fontSize: 11, color: const Color(0xFF64748B)), maxLines: 1, overflow: TextOverflow.ellipsis),
-                ],
-              ),
-            ),
-          ],
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: priceCtrl,
-              keyboardType: const TextInputType.numberWithOptions(decimal: true),
-              decoration: InputDecoration(
-                labelText: 'Selling Price (₹)',
-                prefixIcon: const Icon(Icons.currency_rupee_rounded, size: 18),
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-                isDense: true,
-              ),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: stockCtrl,
-              keyboardType: TextInputType.number,
-              decoration: InputDecoration(
-                labelText: 'Stock Qty (${product.unit})',
-                prefixIcon: const Icon(Icons.inventory_2_outlined, size: 18),
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-                isDense: true,
-              ),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: Text('Cancel', style: GoogleFonts.inter(color: const Color(0xFF64748B))),
-          ),
-          ElevatedButton(
-            onPressed: () async {
-              final parsedPrice = (double.tryParse(priceCtrl.text) ?? (product.sellingPricePaise / 100)) * 100;
-              final parsedStock = double.tryParse(stockCtrl.text) ?? product.stockQuantity;
-              final updated = ProductModel(
-                id: product.id,
-                businessId: product.businessId,
-                name: product.name,
-                barcode: product.barcode,
-                categoryId: product.categoryId,
-                sellingPricePaise: parsedPrice.round(),
-                mrpPaise: product.mrpPaise,
-                purchasePricePaise: product.purchasePricePaise,
-                stockQuantity: parsedStock,
-                taxRate: product.taxRate,
-                isTaxInclusive: product.isTaxInclusive,
-                unit: product.unit,
-                syncStatus: 'pending',
-              );
-              await LocalDatabase.instance.upsertProduct(updated);
-              if (ctx.mounted) Navigator.pop(ctx);
-              _loadData();
-              if (mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text('Updated ${product.name}'),
-                    behavior: SnackBarBehavior.floating,
-                    duration: const Duration(seconds: 1),
-                  ),
-                );
-              }
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF0F172A),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-            ),
-            child: Text('Save Update', style: GoogleFonts.outfit(fontWeight: FontWeight.bold, color: Colors.white)),
-          ),
-        ],
-      ),
+    QuickStockUpdateModal.show(
+      context,
+      product: product,
+      onUpdated: () => _loadData(),
     );
   }
 
@@ -1139,7 +1043,11 @@ class _ProductsScreenState extends State<ProductsScreen> {
                   ),
                 ),
               ),
-              _buildStockTrafficBadge(product.stockQuantity, product.unit, isLooseOrInfinite: isInfinite),
+              InkWell(
+                onTap: () => _openQuickUpdateDialog(product),
+                borderRadius: BorderRadius.circular(6),
+                child: _buildStockTrafficBadge(product.stockQuantity, product.unit, isLooseOrInfinite: isInfinite),
+              ),
             ],
           ),
           const SizedBox(height: 10),
@@ -1211,27 +1119,31 @@ class _ProductsScreenState extends State<ProductsScreen> {
 
               // Stock Counter: Hide Stepper (+/-) for Infinite/Loose Stock items
               if (isInfinite)
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFF0FDF4),
-                    borderRadius: BorderRadius.circular(10),
-                    border: Border.all(color: const Color(0xFFBBF7D0)),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Icon(Icons.all_inclusive_rounded, size: 13, color: Color(0xFF16A34A)),
-                      const SizedBox(width: 4),
-                      Text(
-                        'Unlimited',
-                        style: GoogleFonts.inter(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w700,
-                          color: const Color(0xFF16A34A),
+                InkWell(
+                  onTap: () => _openQuickUpdateDialog(product),
+                  borderRadius: BorderRadius.circular(10),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF0FDF4),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: const Color(0xFFBBF7D0)),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.all_inclusive_rounded, size: 13, color: Color(0xFF16A34A)),
+                        const SizedBox(width: 4),
+                        Text(
+                          'Unlimited',
+                          style: GoogleFonts.inter(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
+                            color: const Color(0xFF16A34A),
+                          ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
                 )
               else
@@ -1255,14 +1167,17 @@ class _ProductsScreenState extends State<ProductsScreen> {
                           child: const Icon(Icons.remove_rounded, size: 14, color: Color(0xFF475569)),
                         ),
                       ),
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 6),
-                        child: Text(
-                          '${product.stockQuantity.toInt()} ${product.unit}',
-                          style: GoogleFonts.robotoMono(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w800,
-                            color: isLowStock ? const Color(0xFFE11D48) : const Color(0xFF0F172A),
+                      GestureDetector(
+                        onTap: () => _openQuickUpdateDialog(product),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 6),
+                          child: Text(
+                            '${product.stockQuantity.toInt()} ${product.unit}',
+                            style: GoogleFonts.robotoMono(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w800,
+                              color: isLowStock ? const Color(0xFFE11D48) : const Color(0xFF0F172A),
+                            ),
                           ),
                         ),
                       ),
@@ -1351,7 +1266,11 @@ class _ProductsScreenState extends State<ProductsScreen> {
           const SizedBox(height: 4),
 
           // Stock Traffic Badge
-          _buildStockTrafficBadge(product.stockQuantity, product.unit, isLooseOrInfinite: isInfinite),
+          InkWell(
+            onTap: () => _openQuickUpdateDialog(product),
+            borderRadius: BorderRadius.circular(6),
+            child: _buildStockTrafficBadge(product.stockQuantity, product.unit, isLooseOrInfinite: isInfinite),
+          ),
 
           const Spacer(),
 
@@ -1373,16 +1292,20 @@ class _ProductsScreenState extends State<ProductsScreen> {
               ),
               // If infinite, show badge with no +/- stepper
               if (isInfinite)
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFF0FDF4),
-                    borderRadius: BorderRadius.circular(6),
-                    border: Border.all(color: const Color(0xFFBBF7D0)),
-                  ),
-                  child: Text(
-                    '∞ Unlimited',
-                    style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.w700, color: const Color(0xFF16A34A)),
+                InkWell(
+                  onTap: () => _openQuickUpdateDialog(product),
+                  borderRadius: BorderRadius.circular(6),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF0FDF4),
+                      borderRadius: BorderRadius.circular(6),
+                      border: Border.all(color: const Color(0xFFBBF7D0)),
+                    ),
+                    child: Text(
+                      '∞ Unlimited',
+                      style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.w700, color: const Color(0xFF16A34A)),
+                    ),
                   ),
                 )
               else
@@ -1401,11 +1324,14 @@ class _ProductsScreenState extends State<ProductsScreen> {
                         child: const Icon(Icons.remove_rounded, size: 13, color: Color(0xFF475569)),
                       ),
                     ),
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 4),
-                      child: Text(
-                        '${product.stockQuantity.toInt()}',
-                        style: GoogleFonts.robotoMono(fontSize: 11, fontWeight: FontWeight.bold),
+                    GestureDetector(
+                      onTap: () => _openQuickUpdateDialog(product),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 4),
+                        child: Text(
+                          '${product.stockQuantity.toInt()}',
+                          style: GoogleFonts.robotoMono(fontSize: 11, fontWeight: FontWeight.bold),
+                        ),
                       ),
                     ),
                     GestureDetector(

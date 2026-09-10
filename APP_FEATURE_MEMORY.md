@@ -852,13 +852,28 @@ Comprehensive enterprise-grade retail UX upgrade suite aligned with PhonePe Busi
         - Viewfinder 1.0x / 2.0x Zoom & Flashlight Controls (`barcode_scanner_view.dart`):
           - Added interactive `[ 1.0x (Standard) ]` and `[ 🔍 2.0x (Small Barcode) ]` chips above the bottom instruction bar for scanning small OTC medicine blisters or spice pouches.
           - Added high-contrast `[ Light ON / Flash ]` indicator chip for dark warehouse or shelf counter illumination.
-      - **Phase 3: 1-Tap In-Line Quantity & Stock Management (NEXT UP):**
-        - Quick Stock Update sheet on product cards with instant chips: `[+6]`, `[+12]`, `[+24]`, `[+48]`.
-        - Stock adjustments modal with standardized retail loss reasons: `Damaged / Wastage (-N)`, `Expired (-N)`, `Personal / Home Use (-N)`, and `Physical Audit Correction (=N)`.
-      - **Phase 4: Wholesale AI Parcha Inward & Low-Stock WhatsApp Reorder:**
+      - **Phase 3: 1-Tap In-Line Quantity & Stock Management (COMPLETED & LOCKED):**
+        - Modal Bottom Sheet `QuickStockUpdateModal` (`lib/views/products/quick_stock_update_modal.dart`):
+          - Dual-tab interface: Tab 0 (`+ Inward Stock`) and Tab 1 (`- Loss / Adjust`).
+          - Rapid Wholesale Box Chips: `[+6]`, `[+12]`, `[+24]`, `[+48]`, `[+100]` with custom numeric delta input.
+          - Live visual calculation display: `Current Stock` + `Added Delta` = `New Effective Stock`.
+          - `∞ Unlimited Stock` toggle switch with instant `isUnlimitedStock` state handling (`99999.0`).
+          - Direct Selling Price (`sellingPricePaise`) adjustment in the same sheet without leaving the counter.
+          - 4 Standard Indian Retail Loss Reasons:
+            1. `Damaged / Wastage` (Torn pack, leak, broken) -> Movement Type `DAMAGE`
+            2. `Expired Item` (Expiry date passed, spoiled) -> Movement Type `EXPIRED`
+            3. `Personal / Home Use` (Ghar ke liye le gaye) -> Movement Type `PERSONAL`
+            4. `Physical Audit Recount` (Counter ginti correction) -> Movement Type `ADJUSTMENT` (=N absolute stock set)
+          - Automatic SQLite audit log written to `inventory_movements` table via `LocalDatabase.instance.recordInventoryMovement` with timestamps, previous stock, delta/new stock, and reference reason note.
+          - Seamless background sync to Firebase Firestore via `FirestoreSyncService.instance.pushProductToCloud`.
+        - Fully integrated into `ProductsScreen` (`products_screen.dart`):
+          - Replaced legacy small dialog in `_openQuickUpdateDialog(product)` with `QuickStockUpdateModal.show(context, product: product, onUpdated: () => _loadData())`.
+          - Wired direct tap gesture on List View & Grid View stock traffic badges (`_buildStockTrafficBadge`), Unlimited badges, and numeric stock counts to open `QuickStockUpdateModal` in 1 tap.
+      - **Phase 4: Wholesale AI Parcha Inward & Low-Stock WhatsApp Reorder (NEXT UP):**
         - Integrate existing AI Bill OCR with automatic master SKU matching and bulk inward.
         - 1-Tap Low-Stock Radar filter to generate and send formatted WhatsApp purchase orders to wholesale distributors.
     - **Financial & Code Invariants:** Strict Integer Paise Math preserved app-wide (`mrp_paise`, `selling_price_paise`). 0 compile errors rule maintained. Zero extra APK bloat.
+
 
 
 
