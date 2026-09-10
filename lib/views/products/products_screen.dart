@@ -9,6 +9,7 @@ import '../common/owner_privacy_modal.dart';
 import 'ai_inward_modal.dart';
 import 'add_product_modal.dart';
 import 'quick_stock_update_modal.dart';
+import '../inventory/low_stock_reorder_modal.dart';
 import '../pos/barcode_scanner_view.dart';
 import '../../services/firestore_sync_service.dart';
 
@@ -379,6 +380,12 @@ class _ProductsScreenState extends State<ProductsScreen> {
             // 3. SEARCH & FILTERS TOOLBAR
             _buildSearchToolbar(),
             const SizedBox(height: 10),
+
+            // Low Stock WhatsApp Reorder Banner
+            if (_filterLowStockOnly && _lowStockCount > 0) ...[
+              _buildLowStockWhatsAppBanner(),
+              const SizedBox(height: 10),
+            ],
 
             // 4. CATEGORY HORIZONTAL PILLS
             _buildCategoryPills(),
@@ -823,6 +830,59 @@ class _ProductsScreenState extends State<ProductsScreen> {
               HapticFeedback.selectionClick();
               setState(() => _isGridView = !_isGridView);
             },
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildLowStockWhatsAppBanner() {
+    final lowStockProds = _products.where((p) => p.stockQuantity <= 15).toList();
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF0FDF4),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFFBBF7D0), width: 1.2),
+      ),
+      child: Row(
+        children: [
+          Image.asset(
+            'assets/images/whatsapp_logo.png',
+            width: 20,
+            height: 20,
+            errorBuilder: (context, error, stackTrace) => const Icon(Icons.send_rounded, color: Color(0xFF16A34A), size: 18),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              '${lowStockProds.length} items low on stock',
+              style: GoogleFonts.outfit(
+                fontSize: 12.5,
+                fontWeight: FontWeight.w800,
+                color: const Color(0xFF14532D),
+              ),
+            ),
+          ),
+          ElevatedButton.icon(
+            onPressed: () {
+              LowStockReorderModal.show(
+                context,
+                initialProducts: lowStockProds,
+                onReorderDispatched: () => _loadData(),
+              );
+            },
+            icon: const Icon(Icons.send_rounded, size: 12, color: Colors.white),
+            label: Text(
+              'WhatsApp Order',
+              style: GoogleFonts.outfit(fontSize: 11.5, fontWeight: FontWeight.w800, color: Colors.white),
+            ),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF16A34A),
+              elevation: 0,
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            ),
           ),
         ],
       ),

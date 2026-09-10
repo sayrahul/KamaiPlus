@@ -59,6 +59,7 @@ class _ReviewItemState {
   String unit;
   String category;
   ProductModel? matchedProduct;
+  MasterProductModel? matchedMasterProduct;
 
   _ReviewItemState({
     required this.nameCtrl,
@@ -69,6 +70,7 @@ class _ReviewItemState {
     required this.unit,
     required this.category,
     this.matchedProduct,
+    this.matchedMasterProduct,
   });
 
   void dispose() {
@@ -116,16 +118,39 @@ class _BillScanReviewSheetState extends State<BillScanReviewSheet> {
 
     for (final it in widget.initialItems) {
       final matched = _findMatch(it.productName);
+      MasterProductModel? masterMatched;
+      if (matched == null) {
+        masterMatched = await _findMasterMatch(it.productName);
+      }
+
+      final effectiveCost = it.purchasePricePaise > 0
+          ? it.purchasePricePaise
+          : (masterMatched != null ? (masterMatched.sellingPricePaise * 0.82).round() : 0);
+      final effectiveSelling = it.sellingPricePaise > 0
+          ? it.sellingPricePaise
+          : (masterMatched?.sellingPricePaise ?? (matched?.sellingPricePaise ?? 0));
+      final effectiveMrp = it.mrpPaise > 0
+          ? it.mrpPaise
+          : (masterMatched?.mrpPaise ?? (matched?.mrpPaise ?? 0));
+      final effectiveCategory = it.categoryName.isNotEmpty && it.categoryName != 'General'
+          ? it.categoryName
+          : (masterMatched?.category ?? (matched?.categoryId ?? 'General'));
+      final effectiveUnit = _availableUnits.contains(it.unit.toLowerCase())
+          ? it.unit.toLowerCase()
+          : (masterMatched != null && _availableUnits.contains(masterMatched.unit.toLowerCase())
+              ? masterMatched.unit.toLowerCase()
+              : 'pcs');
 
       final itemState = _ReviewItemState(
         nameCtrl: TextEditingController(text: it.productName),
         qtyCtrl: TextEditingController(text: (it.quantity % 1 == 0 ? it.quantity.toInt() : it.quantity).toString()),
-        costCtrl: TextEditingController(text: (it.purchasePricePaise / 100.0).toStringAsFixed(2)),
-        sellingCtrl: TextEditingController(text: (it.sellingPricePaise / 100.0).toStringAsFixed(2)),
-        mrpCtrl: TextEditingController(text: (it.mrpPaise / 100.0).toStringAsFixed(2)),
-        unit: _availableUnits.contains(it.unit.toLowerCase()) ? it.unit.toLowerCase() : 'pcs',
-        category: it.categoryName,
+        costCtrl: TextEditingController(text: (effectiveCost / 100.0).toStringAsFixed(2)),
+        sellingCtrl: TextEditingController(text: (effectiveSelling / 100.0).toStringAsFixed(2)),
+        mrpCtrl: TextEditingController(text: (effectiveMrp / 100.0).toStringAsFixed(2)),
+        unit: effectiveUnit,
+        category: effectiveCategory,
         matchedProduct: matched,
+        matchedMasterProduct: masterMatched,
       );
 
       _items.add(itemState);
@@ -150,11 +175,38 @@ class _BillScanReviewSheetState extends State<BillScanReviewSheet> {
     return null;
   }
 
-  void _onNameChanged(int index, String newName) {
+  Future<MasterProductModel?> _findMasterMatch(String name) async {
+    if (name.trim().isEmpty) return null;
+    final clean = name.trim();
+    try {
+      final results = await LocalDatabase.instance.searchMasterCatalog(clean, limit: 3);
+      if (results.isNotEmpty) {
+        return results.first;
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  Future<void> _onNameChanged(int index, String newName) async {
     final matched = _findMatch(newName);
-    setState(() {
-      _items[index].matchedProduct = matched;
-    });
+    MasterProductModel? masterMatched;
+    if (matched == null) {
+      masterMatched = await _findMasterMatch(newName);
+    }
+    if (mounted) {
+      setState(() {
+        _items[index].matchedProduct = matched;
+        _items[index].matchedMasterProduct = masterMatched;
+        if (masterMatched != null) {
+          if (_items[index].mrpCtrl.text == '0.00' || _items[index].mrpCtrl.text.isEmpty) {
+            _items[index].mrpCtrl.text = (masterMatched.mrpPaise / 100.0).toStringAsFixed(2);
+          }
+          if (_items[index].sellingCtrl.text == '0.00' || _items[index].sellingCtrl.text.isEmpty) {
+            _items[index].sellingCtrl.text = (masterMatched.sellingPricePaise / 100.0).toStringAsFixed(2);
+          }
+        }
+      });
+    }
   }
 
   void _removeItem(int index) {
@@ -252,17 +304,29 @@ class _BillScanReviewSheetState extends State<BillScanReviewSheet> {
           FirestoreSyncService.instance.pushProductToCloud(updatedProd);
           updatedCount++;
         } else {
-          // Insert brand new SKU
+          // Insert brand new SKU (Check Master Catalog first for EAN/tax/category)
+          final masterMatched = it.matchedMasterProduct ?? await _findMasterMatch(name);
           final newId = const Uuid().v4();
           final newProd = ProductModel(
             id: newId,
             businessId: bizId,
             name: name,
+            barcode: masterMatched?.barcode,
+            categoryId: masterMatched != null && masterMatched.category.isNotEmpty
+                ? masterMatched.category
+                : it.category,
             purchasePricePaise: costPaise,
-            sellingPricePaise: sellingPaise > 0 ? sellingPaise : (costPaise * 1.15).round(),
-            mrpPaise: mrpPaise > 0 ? mrpPaise : (costPaise * 1.2).round(),
+            sellingPricePaise: sellingPaise > 0
+                ? sellingPaise
+                : (masterMatched?.sellingPricePaise ?? (costPaise * 1.15).round()),
+            mrpPaise: mrpPaise > 0
+                ? mrpPaise
+                : (masterMatched?.mrpPaise ?? (costPaise * 1.2).round()),
             stockQuantity: qty,
-            unit: it.unit,
+            taxRate: masterMatched?.taxRate ?? 0.0,
+            isTaxInclusive: true,
+            unit: it.unit.isNotEmpty ? it.unit : (masterMatched?.unit ?? 'pcs'),
+            syncStatus: 'pending',
           );
 
           await LocalDatabase.instance.upsertProduct(newProd);
@@ -618,8 +682,28 @@ class _BillScanReviewSheetState extends State<BillScanReviewSheet> {
                   const Icon(Icons.sync_rounded, color: Color(0xFF2563EB), size: 12),
                   const SizedBox(width: 4),
                   Text(
-                    'Existing SKU • Current Stock: ${it.matchedProduct!.stockQuantity.toInt()} ➔ New: ${(it.matchedProduct!.stockQuantity + (double.tryParse(it.qtyCtrl.text) ?? 1.0)).toInt()} ${it.matchedProduct!.unit}',
+                    'Existing Store SKU • Current Stock: ${it.matchedProduct!.stockQuantity.toInt()} ➔ New: ${(it.matchedProduct!.stockQuantity + (double.tryParse(it.qtyCtrl.text) ?? 1.0)).toInt()} ${it.matchedProduct!.unit}',
                     style: GoogleFonts.plusJakartaSans(fontSize: 10, fontWeight: FontWeight.w700, color: const Color(0xFF1D4ED8)),
+                  ),
+                ],
+              ),
+            )
+          else if (it.matchedMasterProduct != null)
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+              decoration: BoxDecoration(
+                color: const Color(0xFFFFFBEB),
+                borderRadius: BorderRadius.circular(6),
+                border: Border.all(color: const Color(0xFFFDE68A)),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.auto_awesome, color: Color(0xFFD97706), size: 12),
+                  const SizedBox(width: 4),
+                  Text(
+                    '✨ Master Catalog Match: ${it.matchedMasterProduct!.name} • EAN: ${it.matchedMasterProduct!.barcode}',
+                    style: GoogleFonts.plusJakartaSans(fontSize: 10, fontWeight: FontWeight.w700, color: const Color(0xFFB45309)),
                   ),
                 ],
               ),
@@ -635,10 +719,10 @@ class _BillScanReviewSheetState extends State<BillScanReviewSheet> {
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const Icon(Icons.auto_awesome_rounded, color: Color(0xFF059669), size: 12),
+                  const Icon(Icons.add_circle_outline_rounded, color: Color(0xFF059669), size: 12),
                   const SizedBox(width: 4),
                   Text(
-                    '✨ New SKU • Will be added to catalog',
+                    '➕ New Custom SKU • Will be created in shop',
                     style: GoogleFonts.plusJakartaSans(fontSize: 10, fontWeight: FontWeight.w700, color: const Color(0xFF059669)),
                   ),
                 ],

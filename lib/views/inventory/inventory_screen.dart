@@ -12,6 +12,7 @@ import '../common/empty_state_card.dart';
 import '../dashboard/home_dashboard_screen.dart';
 import '../purchases/ai_inward_sheet.dart';
 import '../../services/csv_inward_service.dart';
+import 'low_stock_reorder_modal.dart';
 
 class InventoryScreen extends StatefulWidget {
   const InventoryScreen({super.key});
@@ -145,6 +146,15 @@ class _InventoryScreenState extends State<InventoryScreen> {
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (_) => AiInwardSheet(onInwardComplete: _loadData),
+    );
+  }
+
+  void _openWhatsAppReorderModal(List<ProductModel> products) {
+    HapticFeedback.selectionClick();
+    LowStockReorderModal.show(
+      context,
+      initialProducts: products,
+      onReorderDispatched: () => _loadData(),
     );
   }
 
@@ -477,6 +487,29 @@ class _InventoryScreenState extends State<InventoryScreen> {
                   ),
                   alignment: Alignment.center,
                   child: const Icon(Icons.description_outlined, color: Color(0xFF16A34A), size: 18),
+                ),
+              ),
+              const SizedBox(width: 8),
+
+              // WhatsApp Reorder Icon Button [ 📲 ]
+              InkWell(
+                onTap: () => _openWhatsAppReorderModal(_lowStockProducts),
+                borderRadius: BorderRadius.circular(10),
+                child: Container(
+                  width: 40,
+                  height: 40,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFDCFCE7),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: const Color(0xFFBBF7D0)),
+                  ),
+                  alignment: Alignment.center,
+                  child: Image.asset(
+                    'assets/images/whatsapp_logo.png',
+                    width: 20,
+                    height: 20,
+                    errorBuilder: (context, error, stackTrace) => const Icon(Icons.send_rounded, color: Color(0xFF16A34A), size: 18),
+                  ),
                 ),
               ),
               const SizedBox(width: 8),
@@ -820,7 +853,74 @@ class _InventoryScreenState extends State<InventoryScreen> {
     }
 
     return Column(
-      children: lowStock.map((prod) => _buildReorderItemCard(prod)).toList(),
+      children: [
+        // 📲 1-Tap Send WhatsApp Order to Distributor Banner
+        Container(
+          margin: const EdgeInsets.only(bottom: 12),
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: const Color(0xFFF0FDF4),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: const Color(0xFFBBF7D0), width: 1.2),
+          ),
+          child: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFDCFCE7),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Image.asset(
+                  'assets/images/whatsapp_logo.png',
+                  width: 22,
+                  height: 22,
+                  errorBuilder: (context, error, stackTrace) => const Icon(Icons.send_rounded, color: Color(0xFF16A34A), size: 20),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '${lowStock.length} Low Stock Items Detected',
+                      style: GoogleFonts.outfit(
+                        fontSize: 13.5,
+                        fontWeight: FontWeight.w800,
+                        color: const Color(0xFF14532D),
+                      ),
+                    ),
+                    Text(
+                      'Generate and send 1-Tap Restock Purchase Order to your distributor',
+                      style: GoogleFonts.inter(
+                        fontSize: 10.5,
+                        color: const Color(0xFF15803D),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              ElevatedButton.icon(
+                onPressed: () => _openWhatsAppReorderModal(lowStock),
+                icon: const Icon(Icons.send_rounded, size: 13, color: Colors.white),
+                label: Text(
+                  'Order',
+                  style: GoogleFonts.outfit(fontSize: 12, fontWeight: FontWeight.w800, color: Colors.white),
+                ),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF16A34A),
+                  elevation: 0,
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                ),
+              ),
+            ],
+          ),
+        ),
+        ...lowStock.map((prod) => _buildReorderItemCard(prod)),
+      ],
     );
   }
 

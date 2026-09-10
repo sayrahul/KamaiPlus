@@ -869,10 +869,28 @@ Comprehensive enterprise-grade retail UX upgrade suite aligned with PhonePe Busi
         - Fully integrated into `ProductsScreen` (`products_screen.dart`):
           - Replaced legacy small dialog in `_openQuickUpdateDialog(product)` with `QuickStockUpdateModal.show(context, product: product, onUpdated: () => _loadData())`.
           - Wired direct tap gesture on List View & Grid View stock traffic badges (`_buildStockTrafficBadge`), Unlimited badges, and numeric stock counts to open `QuickStockUpdateModal` in 1 tap.
-      - **Phase 4: Wholesale AI Parcha Inward & Low-Stock WhatsApp Reorder (NEXT UP):**
-        - Integrate existing AI Bill OCR with automatic master SKU matching and bulk inward.
-        - 1-Tap Low-Stock Radar filter to generate and send formatted WhatsApp purchase orders to wholesale distributors.
+      - **Phase 4: Wholesale AI Parcha Inward & Low-Stock WhatsApp Reorder (COMPLETED & LOCKED):**
+        - **Wholesale AI Parcha Inward with Master Catalog Matching (`lib/views/purchases/bill_scan_review_sheet.dart`):**
+          - Extended `_ReviewItemState` to support `MasterProductModel? matchedMasterProduct`.
+          - During bill scan review initialization and item name edits, unmatched items are checked against `LocalDatabase.instance.searchMasterCatalog(name)`.
+          - Automatically resolves barcodes, standard MRP, standard selling prices, tax rates, and categories for newly scanned wholesale items.
+          - Visual badges on each row:
+            - `✓ Existing Store SKU (Current: N ➔ New: N+Qty)`
+            - `✨ Master Catalog Match: Name • EAN: Barcode`
+            - `➕ New Custom SKU • Will be created in shop`
+          - When confirming and saving, master catalog SKUs inherit their official EAN barcode, HSN, tax rate, and category, and log an audit movement to `inventory_movements`.
+        - **1-Tap Low-Stock Radar & WhatsApp Reorder System (`lib/views/inventory/low_stock_reorder_modal.dart`):**
+          - Clean modal bottom sheet with automatic detection of low stock / out of stock products (`stockQuantity <= 15`, excluding infinite stock).
+          - Distributor/Agency name and phone input with vertical-specific quick supplier chips (`Metro Wholesale`, `Hindustan Unilever`, `Parle Agency`, `Amul Dairy`, `Cipla Stockist`, `Apex Distributors`, etc.).
+          - Item selection checkboxes, editable reorder quantities with stepper buttons and quick `+12` box bump chips.
+          - Live order summary showing selected SKU count, total units, and estimated restock valuation (`Integer Paise Math`).
+          - Formatted WhatsApp message generator with store name, date, itemized restock list, and distributor greeting.
+          - Dual-mode dispatch: native `whatsapp://send` with fallback to web `https://wa.me/` and clipboard copy fallback.
+        - **Screen Integrations:**
+          - `InventoryScreen` (`lib/views/inventory/inventory_screen.dart`): Added WhatsApp Reorder icon button in Hero Card and a dedicated 1-Tap Restock banner above the Reorder Radar items list.
+          - `ProductsScreen` (`lib/views/products/products_screen.dart`): Added a responsive WhatsApp Reorder action banner whenever the low-stock filter (`_filterLowStockOnly`) is active.
     - **Financial & Code Invariants:** Strict Integer Paise Math preserved app-wide (`mrp_paise`, `selling_price_paise`). 0 compile errors rule maintained. Zero extra APK bloat.
+
 
 
 
