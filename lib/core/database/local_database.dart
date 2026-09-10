@@ -74,6 +74,7 @@ class LocalDatabase {
       },
       onOpen: (db) async {
         await _ensureExtraTables(db);
+        await _seedMasterCatalogIfEmpty(db);
       },
     );
   }
@@ -102,6 +103,9 @@ class LocalDatabase {
     } catch (_) {}
     try {
       await db.execute('ALTER TABLE products ADD COLUMN is_loose_item INTEGER DEFAULT 0');
+    } catch (_) {}
+    try {
+      await db.execute('ALTER TABLE products ADD COLUMN is_favorite INTEGER DEFAULT 0');
     } catch (_) {}
     try {
       await db.execute('ALTER TABLE products ADD COLUMN business_type TEXT DEFAULT "grocery"');
@@ -339,12 +343,28 @@ class LocalDatabase {
         );
       ''');
 
+      // 3b. Crossover health & hygiene items sold in BOTH Grocery & Pharmacy
+      await db.execute('''
+        UPDATE master_catalog SET business_type = 'both'
+        WHERE (
+          name LIKE '%Dettol%' OR name LIKE '%Savlon%' OR name LIKE '%Lifebuoy%'
+          OR name LIKE '%Vicks%' OR name LIKE '%Moov%' OR name LIKE '%Volini%'
+          OR name LIKE '%Band-Aid%' OR name LIKE '%Boroline%' OR name LIKE '%Glucose%'
+          OR name LIKE '%Horlicks%' OR name LIKE '%Bournvita%' OR name LIKE '%Complan%'
+          OR name LIKE '%Toothpaste%' OR name LIKE '%Colgate%' OR name LIKE '%Close Up%'
+          OR name LIKE '%Sensodyne%' OR name LIKE '%Eno%' OR name LIKE '%Pudin Hara%'
+          OR name LIKE '%Strepsils%' OR name LIKE '%Iodex%' OR name LIKE '%Sanitizer%'
+          OR name LIKE '%Diaper%' OR name LIKE '%Pampers%' OR name LIKE '%Johnson%Baby%'
+        );
+      ''');
+
       // 4. Default any remaining to grocery
       await db.execute('''
         UPDATE products SET business_type = 'grocery' WHERE business_type IS NULL OR business_type = '';
       ''');
     } catch (_) {}
   }
+
 
   /// Seeds default starter categories & products for a specific business vertical if not already present.
   Future<void> seedVerticalStarterData(String businessType) async {
@@ -455,6 +475,7 @@ class LocalDatabase {
         imei_serial TEXT,
         hsn_code TEXT,
         is_loose_item INTEGER DEFAULT 0,
+        is_favorite INTEGER DEFAULT 0,
         sync_status TEXT NOT NULL,
         business_type TEXT DEFAULT 'grocery'
       )
@@ -525,6 +546,9 @@ class LocalDatabase {
         sync_status TEXT NOT NULL
       )
     ''');
+
+    // Always ensure Master Catalog is pre-loaded with top Indian retail SKUs
+    await _seedMasterCatalogIfEmpty(db);
 
     // Pre-populate starter retail items & customers ONLY for default demo db
     if (_activeDbName == 'kamaiplus_local.db') {
@@ -685,19 +709,38 @@ class LocalDatabase {
   }
 
   // --- QUERY APIS ---
+
   Future<List<ProductModel>> getAllProducts({String? businessType}) async {
     final db = await instance.database;
     if (businessType != null && businessType.isNotEmpty) {
       final result = await db.query(
         'products',
-        where: 'business_type = ?',
+        where: 'business_type = ? OR business_type = "both"',
         whereArgs: [businessType],
-        orderBy: 'name ASC',
+        orderBy: 'is_favorite DESC, name ASC',
       );
-      return result.map((json) => ProductModel.fromMap(json)).toList();
+      if (result.isNotEmpty) {
+        return result.map((json) => ProductModel.fromMap(json)).toList();
+      }
+      // Resilient fallback: if no products match the vertical, check if the store has any products
+      final allResult = await db.query('products', orderBy: 'is_favorite DESC, name ASC');
+      if (allResult.isNotEmpty) {
+        return allResult.map((json) => ProductModel.fromMap(json)).toList();
+      }
+      // If store is completely empty, auto-seed starter products for this vertical!
+      await seedVerticalStarterData(businessType);
+      final seeded = await db.query('products', orderBy: 'is_favorite DESC, name ASC');
+      return seeded.map((json) => ProductModel.fromMap(json)).toList();
     }
-    final result = await db.query('products', orderBy: 'name ASC');
-    return result.map((json) => ProductModel.fromMap(json)).toList();
+    final allResult = await db.query('products', orderBy: 'is_favorite DESC, name ASC');
+    if (allResult.isEmpty) {
+      final profile = await getStoreProfile();
+      final type = profile.businessType.isNotEmpty ? profile.businessType : 'grocery';
+      await seedVerticalStarterData(type);
+      final seeded = await db.query('products', orderBy: 'is_favorite DESC, name ASC');
+      return seeded.map((json) => ProductModel.fromMap(json)).toList();
+    }
+    return allResult.map((json) => ProductModel.fromMap(json)).toList();
   }
 
   Future<List<CategoryModel>> getAllCategories({String? businessType}) async {
@@ -705,16 +748,21 @@ class LocalDatabase {
     if (businessType != null && businessType.isNotEmpty) {
       final result = await db.query(
         'categories',
-        where: 'business_type = ?',
+        where: 'business_type = ? OR business_type = "both"',
         whereArgs: [businessType],
         orderBy: 'name ASC',
       );
-      return result.map((json) => CategoryModel.fromMap(json)).toList();
+      if (result.isNotEmpty) {
+        return result.map((json) => CategoryModel.fromMap(json)).toList();
+      }
+      final allCats = await db.query('categories', orderBy: 'name ASC');
+      if (allCats.isNotEmpty) {
+        return allCats.map((json) => CategoryModel.fromMap(json)).toList();
+      }
     }
-    final result = await db.query('categories', orderBy: 'name ASC');
-    return result.map((json) => CategoryModel.fromMap(json)).toList();
+    final allCats = await db.query('categories', orderBy: 'name ASC');
+    return allCats.map((json) => CategoryModel.fromMap(json)).toList();
   }
-
 
   Future<List<CustomerModel>> getAllCustomers() async {
     final db = await instance.database;
@@ -739,18 +787,39 @@ class LocalDatabase {
   // --- MASTER CATALOG APIS (<2ms indexed offline lookup) ---
 
   /// Fast indexed barcode lookup in Master Catalog (<2ms)
-  Future<MasterProductModel?> findMasterProductByBarcode(String barcode) async {
+  Future<MasterProductModel?> findMasterProductByBarcode(
+    String barcode, {
+    String? businessType,
+  }) async {
     final cleanBarcode = barcode.trim();
     if (cleanBarcode.isEmpty) return null;
     final db = await instance.database;
-    final result = await db.query(
+    String whereClause = 'barcode = ?';
+    List<dynamic> whereArgs = [cleanBarcode];
+    if (businessType != null && businessType.isNotEmpty) {
+      whereClause += ' AND (business_type = ? OR business_type = "both")';
+      whereArgs.add(businessType);
+    }
+    var result = await db.query(
       'master_catalog',
-      where: 'barcode = ?',
-      whereArgs: [cleanBarcode],
+      where: whereClause,
+      whereArgs: whereArgs,
       limit: 1,
     );
     if (result.isNotEmpty) {
       return MasterProductModel.fromMap(result.first);
+    }
+    // Fallback: lookup by exact barcode regardless of vertical
+    if (businessType != null && businessType.isNotEmpty) {
+      result = await db.query(
+        'master_catalog',
+        where: 'barcode = ?',
+        whereArgs: [cleanBarcode],
+        limit: 1,
+      );
+      if (result.isNotEmpty) {
+        return MasterProductModel.fromMap(result.first);
+      }
     }
     return null;
   }
@@ -770,7 +839,7 @@ class LocalDatabase {
     List<dynamic> whereArgs = ['%$cleanQuery%', '%$cleanQuery%'];
 
     if (businessType != null && businessType.isNotEmpty) {
-      whereClause += ' AND business_type = ?';
+      whereClause += ' AND (business_type = ? OR business_type = "both")';
       whereArgs.add(businessType);
     }
 
@@ -790,6 +859,16 @@ class LocalDatabase {
     return result.map((row) => MasterProductModel.fromMap(row)).toList();
   }
 
+  /// Insert or update an item in the local master catalog (e.g. from cloud barcode resolution)
+  Future<void> insertMasterProduct(MasterProductModel item) async {
+    final db = await instance.database;
+    await db.insert(
+      'master_catalog',
+      item.toMap(),
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
   /// Total count of items available in the offline master catalog
   Future<int> getMasterCatalogCount() async {
     final db = await instance.database;
@@ -802,6 +881,7 @@ class LocalDatabase {
   Future<ProductModel> importMasterProductToStore(
     MasterProductModel masterItem, {
     String? businessId,
+    String? targetVertical,
     double initialStock = 99999.0, // Default: Unlimited / Uncounted
     int? customSellingPricePaise,
   }) async {
@@ -820,15 +900,49 @@ class LocalDatabase {
         bizId = 'biz_default_retail';
       }
     }
+
+    final effectiveVertical = masterItem.businessType == 'both'
+        ? 'both'
+        : ((targetVertical != null && targetVertical.isNotEmpty)
+            ? targetVertical
+            : masterItem.businessType);
+
+    String? categoryId;
+    if (masterItem.category.isNotEmpty && masterItem.category.toLowerCase() != 'general') {
+      final db = await instance.database;
+      final existingCat = await db.query(
+        'categories',
+        where: 'LOWER(TRIM(name)) = ?',
+        whereArgs: [masterItem.category.trim().toLowerCase()],
+        limit: 1,
+      );
+      if (existingCat.isNotEmpty) {
+        categoryId = existingCat.first['id'] as String?;
+      } else {
+        final newCatId = 'cat_${DateTime.now().millisecondsSinceEpoch}';
+        await db.insert('categories', {
+          'id': newCatId,
+          'business_id': bizId,
+          'name': masterItem.category.trim(),
+          'business_type': effectiveVertical,
+        }, conflictAlgorithm: ConflictAlgorithm.replace);
+        categoryId = newCatId;
+      }
+    }
+
     final newProduct = masterItem.toProductModel(
       businessId: bizId,
+      categoryId: categoryId,
       initialStock: initialStock,
       customSellingPricePaise: customSellingPricePaise,
+    ).copyWith(
+      businessType: effectiveVertical,
     );
 
     await upsertProduct(newProduct);
     return newProduct;
   }
+
 
   Future<int> getNextInvoiceSequence() async {
     final db = await instance.database;
@@ -1119,6 +1233,16 @@ class LocalDatabase {
   Future<void> deleteProduct(String id) async {
     final db = await instance.database;
     await db.delete('products', where: 'id = ?', whereArgs: [id]);
+  }
+
+  Future<void> toggleProductFavorite(String id, bool isFavorite) async {
+    final db = await instance.database;
+    await db.update(
+      'products',
+      {'is_favorite': isFavorite ? 1 : 0},
+      where: 'id = ?',
+      whereArgs: [id],
+    );
   }
 
   Future<void> upsertCategory(CategoryModel category) async {

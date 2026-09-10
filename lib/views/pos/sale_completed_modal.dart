@@ -7,11 +7,10 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../core/database/local_database.dart';
 import '../../core/utils/money_formatter.dart';
 import '../../models/models.dart';
-import '../../services/thermal_printer_service.dart';
 import '../../services/native_notification_service.dart';
 import '../../services/notification_service.dart';
 import '../../services/invoice_pdf_service.dart';
-import '../settings/bluetooth_printer_dialog.dart';
+import '../../services/app_printer_service.dart';
 import '../common/store_logo_avatar.dart';
 import '../common/in_app_notification.dart';
 import '../../core/utils/app_validators.dart';
@@ -47,11 +46,10 @@ class SaleCompletedModal extends StatefulWidget {
 }
 
 class _SaleCompletedModalState extends State<SaleCompletedModal> {
-  static const _btChannel = MethodChannel('com.kamaiplus.pos/bluetooth_printer');
-
   late final TextEditingController _phoneCtrl;
   bool _isPrinting = false;
   bool _showPdfPreview = false;
+  bool _isWhatsAppExpanded = false;
   String _storeName = 'KamaiPlus Store';
   StoreProfileModel _profile = StoreProfileModel();
 
@@ -180,84 +178,21 @@ Have a wonderful day! Visit us again soon.
     }
   }
 
-  Future<void> _printReceiptManually() async {
+  Future<void> _handleUnifiedPrint() async {
     setState(() => _isPrinting = true);
     HapticFeedback.mediumImpact();
 
     try {
-      final prefs = await SharedPreferences.getInstance();
-      final printerAddress = prefs.getString('printer_mac_address');
-      final is80mm = prefs.getBool('printer_is_80mm') ?? false;
-
-      if (printerAddress == null || printerAddress.isEmpty) {
-        if (mounted) {
-          InAppNotification.show(
-            context: context,
-            type: NotificationType.warning,
-            message: 'No Bluetooth printer configured.',
-            actionLabel: 'PAIR',
-            onAction: _openBluetoothDialog,
-          );
-        }
-        return;
-      }
-
-      final bytes = ThermalPrinterService.generateReceiptBytes(
+      await AppPrinterService.printSale(
+        context: context,
         sale: widget.sale,
-        storeName: _storeName,
-        is80mm: is80mm,
-        kickCashDrawer: widget.sale.paymentMethod == 'cash',
       );
-
-      await _btChannel.invokeMethod('printBytes', {
-        'address': printerAddress,
-        'bytes': bytes,
-      });
-
-      if (mounted) {
-        InAppNotification.success('✓ Thermal receipt printed successfully!', context: context);
-      }
     } catch (e) {
       if (mounted) {
         InAppNotification.error('Print failed: $e', context: context);
       }
     } finally {
       if (mounted) setState(() => _isPrinting = false);
-    }
-  }
-
-  void _openBluetoothDialog() {
-    showDialog(
-      context: context,
-      builder: (ctx) => const BluetoothPrinterDialog(),
-    );
-  }
-
-  Future<void> _downloadPdf() async {
-    HapticFeedback.selectionClick();
-    final filePath = await InvoicePdfService.generateAndDownloadPdf(
-      sale: widget.sale,
-      storeName: _storeName,
-      storePhone: _profile.phone,
-      storeAddress: _profile.address,
-      gstin: _profile.gstin,
-      logoPath: _profile.logoUrl,
-      customerPhone: _phoneCtrl.text.trim(),
-    );
-
-    if (!mounted) return;
-    if (filePath != null) {
-      InAppNotification.show(
-        context: context,
-        message: '✓ Invoice #${widget.sale.invoiceNumber} PDF saved to Downloads',
-        actionLabel: 'OPEN',
-        onAction: () => InvoicePdfService.openPdf(filePath),
-      );
-    } else {
-      InAppNotification.error(
-        'Could not generate PDF. Please check storage permissions.',
-        context: context,
-      );
     }
   }
 
@@ -495,9 +430,8 @@ Have a wonderful day! Visit us again soon.
                     ),
                     child: Column(
                       children: [
-                        // WhatsApp Bill Section
+                        // WhatsApp Bill Collapsible Dropdown (Space-saving per user request)
                         Container(
-                          padding: const EdgeInsets.all(10),
                           decoration: BoxDecoration(
                             color: const Color(0xFFF0FDF4),
                             borderRadius: BorderRadius.circular(12),
@@ -506,145 +440,139 @@ Have a wonderful day! Visit us again soon.
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Row(
-                                children: [
-                                  const Icon(Icons.chat_bubble_outline_rounded, size: 14, color: Color(0xFF16A34A)),
-                                  const SizedBox(width: 6),
-                                  Text(
-                                    'WhatsApp Bill:',
-                                    style: GoogleFonts.plusJakartaSans(
-                                      fontSize: 11.5,
-                                      fontWeight: FontWeight.w800,
-                                      color: const Color(0xFF15803D),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              const SizedBox(height: 6),
-                              Row(
-                                children: [
-                                  Expanded(
-                                    child: Container(
-                                      height: 38,
-                                      padding: const EdgeInsets.symmetric(horizontal: 10),
-                                      decoration: BoxDecoration(
-                                        color: Colors.white,
-                                        borderRadius: BorderRadius.circular(8),
-                                        border: Border.all(color: const Color(0xFF86EFAC)),
+                              InkWell(
+                                onTap: () => setState(() => _isWhatsAppExpanded = !_isWhatsAppExpanded),
+                                borderRadius: BorderRadius.circular(12),
+                                child: Padding(
+                                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+                                  child: Row(
+                                    children: [
+                                      const Icon(Icons.chat_bubble_outline_rounded, size: 15, color: Color(0xFF16A34A)),
+                                      const SizedBox(width: 8),
+                                      Expanded(
+                                        child: Text(
+                                          _phoneCtrl.text.trim().isNotEmpty
+                                              ? 'WhatsApp Bill (${_phoneCtrl.text.trim()})'
+                                              : 'Send Bill on WhatsApp',
+                                          style: GoogleFonts.plusJakartaSans(
+                                            fontSize: 12,
+                                            fontWeight: FontWeight.w700,
+                                            color: const Color(0xFF15803D),
+                                          ),
+                                        ),
                                       ),
-                                      child: Row(
-                                        children: [
-                                          const Icon(Icons.phone_iphone_rounded, size: 14, color: Color(0xFF94A3B8)),
-                                          const SizedBox(width: 6),
-                                          Expanded(
-                                            child: TextField(
-                                              controller: _phoneCtrl,
-                                              keyboardType: TextInputType.phone,
-                                              style: GoogleFonts.robotoMono(fontSize: 12, fontWeight: FontWeight.w600),
-                                              decoration: const InputDecoration(
-                                                hintText: 'Customer 10-digit number...',
-                                                hintStyle: TextStyle(fontSize: 11, color: Color(0xFF94A3B8)),
-                                                border: InputBorder.none,
-                                                isDense: true,
-                                                contentPadding: EdgeInsets.zero,
+                                      Container(
+                                        padding: const EdgeInsets.all(2),
+                                        decoration: BoxDecoration(
+                                          color: const Color(0xFFDCFCE7),
+                                          borderRadius: BorderRadius.circular(6),
+                                        ),
+                                        child: Icon(
+                                          _isWhatsAppExpanded
+                                              ? Icons.keyboard_arrow_up_rounded
+                                              : Icons.keyboard_arrow_down_rounded,
+                                          size: 18,
+                                          color: const Color(0xFF16A34A),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                              if (_isWhatsAppExpanded) ...[
+                                Padding(
+                                  padding: const EdgeInsets.fromLTRB(10, 2, 10, 10),
+                                  child: Row(
+                                    children: [
+                                      Expanded(
+                                        child: Container(
+                                          height: 38,
+                                          padding: const EdgeInsets.symmetric(horizontal: 10),
+                                          decoration: BoxDecoration(
+                                            color: Colors.white,
+                                            borderRadius: BorderRadius.circular(8),
+                                            border: Border.all(color: const Color(0xFF86EFAC)),
+                                          ),
+                                          child: Row(
+                                            children: [
+                                              const Icon(Icons.phone_iphone_rounded, size: 14, color: Color(0xFF94A3B8)),
+                                              const SizedBox(width: 6),
+                                              Expanded(
+                                                child: TextField(
+                                                  controller: _phoneCtrl,
+                                                  keyboardType: TextInputType.phone,
+                                                  style: GoogleFonts.robotoMono(fontSize: 12, fontWeight: FontWeight.w600),
+                                                  decoration: const InputDecoration(
+                                                    hintText: 'Customer 10-digit number...',
+                                                    hintStyle: TextStyle(fontSize: 11, color: Color(0xFF94A3B8)),
+                                                    border: InputBorder.none,
+                                                    isDense: true,
+                                                    contentPadding: EdgeInsets.zero,
+                                                  ),
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                      ),
+                                      const SizedBox(width: 8),
+                                      ElevatedButton(
+                                        onPressed: _sendWhatsAppBill,
+                                        style: ElevatedButton.styleFrom(
+                                          backgroundColor: const Color(0xFF16A34A),
+                                          foregroundColor: Colors.white,
+                                          elevation: 0,
+                                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                        ),
+                                        child: Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            const Icon(Icons.send_rounded, size: 13, color: Colors.white),
+                                            const SizedBox(width: 4),
+                                            Text(
+                                              'Send',
+                                              style: GoogleFonts.plusJakartaSans(
+                                                fontSize: 11.5,
+                                                fontWeight: FontWeight.w800,
+                                                color: Colors.white,
                                               ),
                                             ),
-                                          ),
-                                        ],
+                                          ],
+                                        ),
                                       ),
-                                    ),
+                                    ],
                                   ),
-                                  const SizedBox(width: 8),
-                                  ElevatedButton(
-                                    onPressed: _sendWhatsAppBill,
-                                    style: ElevatedButton.styleFrom(
-                                      backgroundColor: const Color(0xFF16A34A),
-                                      foregroundColor: Colors.white,
-                                      elevation: 0,
-                                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                                    ),
-                                    child: Text(
-                                      'Send WhatsApp',
-                                      style: GoogleFonts.plusJakartaSans(
-                                        fontSize: 11.5,
-                                        fontWeight: FontWeight.w800,
-                                        color: Colors.white,
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
+                                ),
+                              ],
                             ],
                           ),
                         ),
                         const SizedBox(height: 10),
 
-                        // 2x2 Action Buttons (Print, Bluetooth, Download PDF, Show PDF Preview)
+                        // Action Buttons: Unified Print + Share PDF (Download PDF removed per user request)
                         Row(
                           children: [
                             Expanded(
-                              child: OutlinedButton.icon(
-                                onPressed: _isPrinting ? null : _printReceiptManually,
+                              child: ElevatedButton.icon(
+                                onPressed: _isPrinting ? null : _handleUnifiedPrint,
                                 icon: _isPrinting
-                                    ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2))
-                                    : const Icon(Icons.print_outlined, size: 15, color: Color(0xFF0F172A)),
+                                    ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                                    : const Icon(Icons.print_rounded, size: 16, color: Colors.white),
                                 label: Text(
-                                  'Print Receipt',
+                                  _isPrinting ? 'Printing...' : 'Print Bill',
                                   style: GoogleFonts.plusJakartaSans(
-                                    fontSize: 11.5,
-                                    fontWeight: FontWeight.w700,
-                                    color: const Color(0xFF0F172A),
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w800,
+                                    color: Colors.white,
                                   ),
                                 ),
-                                style: OutlinedButton.styleFrom(
-                                  padding: const EdgeInsets.symmetric(vertical: 10),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: const Color(0xFF0F172A),
+                                  foregroundColor: Colors.white,
+                                  padding: const EdgeInsets.symmetric(vertical: 11),
                                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                                  side: const BorderSide(color: Color(0xFFCBD5E1)),
-                                ),
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: OutlinedButton.icon(
-                                onPressed: _openBluetoothDialog,
-                                icon: const Icon(Icons.bluetooth_rounded, size: 15, color: Color(0xFF0284C7)),
-                                label: Text(
-                                  'Bluetooth Print',
-                                  style: GoogleFonts.plusJakartaSans(
-                                    fontSize: 11.5,
-                                    fontWeight: FontWeight.w700,
-                                    color: const Color(0xFF0284C7),
-                                  ),
-                                ),
-                                style: OutlinedButton.styleFrom(
-                                  padding: const EdgeInsets.symmetric(vertical: 10),
-                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                                  side: const BorderSide(color: Color(0xFFBAE6FD)),
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 8),
-                        Row(
-                          children: [
-                            Expanded(
-                              child: OutlinedButton.icon(
-                                onPressed: _downloadPdf,
-                                icon: const Icon(Icons.download_rounded, size: 15, color: Color(0xFF0F172A)),
-                                label: Text(
-                                  'Download PDF',
-                                  style: GoogleFonts.plusJakartaSans(
-                                    fontSize: 11.5,
-                                    fontWeight: FontWeight.w700,
-                                    color: const Color(0xFF0F172A),
-                                  ),
-                                ),
-                                style: OutlinedButton.styleFrom(
-                                  padding: const EdgeInsets.symmetric(vertical: 10),
-                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                                  side: const BorderSide(color: Color(0xFFCBD5E1)),
+                                  elevation: 0,
                                 ),
                               ),
                             ),
@@ -656,15 +584,15 @@ Have a wonderful day! Visit us again soon.
                                 label: Text(
                                   'Share PDF',
                                   style: GoogleFonts.plusJakartaSans(
-                                    fontSize: 11.5,
-                                    fontWeight: FontWeight.w700,
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w800,
                                     color: Colors.white,
                                   ),
                                 ),
                                 style: ElevatedButton.styleFrom(
                                   backgroundColor: const Color(0xFF059669),
                                   foregroundColor: Colors.white,
-                                  padding: const EdgeInsets.symmetric(vertical: 10),
+                                  padding: const EdgeInsets.symmetric(vertical: 11),
                                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                                   elevation: 0,
                                 ),
@@ -673,34 +601,31 @@ Have a wonderful day! Visit us again soon.
                           ],
                         ),
                         const SizedBox(height: 8),
-                        Row(
-                          children: [
-                            Expanded(
-                              child: OutlinedButton.icon(
-                                onPressed: () {
-                                  setState(() => _showPdfPreview = !_showPdfPreview);
-                                },
-                                icon: Icon(
-                                  _showPdfPreview ? Icons.visibility_off_outlined : Icons.visibility_outlined,
-                                  size: 15,
-                                  color: const Color(0xFF475569),
-                                ),
-                                label: Text(
-                                  _showPdfPreview ? 'Hide Preview' : 'PDF Preview',
-                                  style: GoogleFonts.plusJakartaSans(
-                                    fontSize: 11.5,
-                                    fontWeight: FontWeight.w700,
-                                    color: const Color(0xFF475569),
-                                  ),
-                                ),
-                                style: OutlinedButton.styleFrom(
-                                  padding: const EdgeInsets.symmetric(vertical: 10),
-                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                                  side: const BorderSide(color: Color(0xFFCBD5E1)),
-                                ),
+                        SizedBox(
+                          width: double.infinity,
+                          child: OutlinedButton.icon(
+                            onPressed: () {
+                              setState(() => _showPdfPreview = !_showPdfPreview);
+                            },
+                            icon: Icon(
+                              _showPdfPreview ? Icons.visibility_off_outlined : Icons.visibility_outlined,
+                              size: 15,
+                              color: const Color(0xFF475569),
+                            ),
+                            label: Text(
+                              _showPdfPreview ? 'Hide Invoice Preview' : 'Show Invoice Preview',
+                              style: GoogleFonts.plusJakartaSans(
+                                fontSize: 11.5,
+                                fontWeight: FontWeight.w700,
+                                color: const Color(0xFF475569),
                               ),
                             ),
-                          ],
+                            style: OutlinedButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(vertical: 8),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                              side: const BorderSide(color: Color(0xFFE2E8F0)),
+                            ),
+                          ),
                         ),
                       ],
                     ),

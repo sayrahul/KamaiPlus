@@ -8,6 +8,7 @@ import '../../core/database/local_database.dart';
 import '../../core/utils/money_formatter.dart';
 import '../../services/firestore_sync_service.dart';
 import '../../services/home_widget_service.dart';
+import '../../services/cloud_barcode_resolver_service.dart';
 import 'pos_checkout_modal.dart';
 import 'barcode_scanner_view.dart';
 
@@ -38,6 +39,7 @@ class _PosBillingScreenState extends State<PosBillingScreen> {
   String _searchQuery = '';
   String? _selectedCategoryId; // null = 'all'
   bool _isLoading = true;
+  String _restaurantOrderType = 'Dine-In';
 
   // Master Catalog Search Results (<2ms offline lookup)
   List<MasterProductModel> _matchingMasterProducts = [];
@@ -118,12 +120,18 @@ class _PosBillingScreenState extends State<PosBillingScreen> {
   Map<String, CartItemModel> get _cart => currentTab.items;
 
   List<ProductModel> get filteredProducts {
-    return _allProducts.where((p) {
+    final list = _allProducts.where((p) {
       final matchesSearch = p.name.toLowerCase().contains(_searchQuery.toLowerCase()) ||
           (p.barcode != null && p.barcode!.contains(_searchQuery));
       final matchesCat = _selectedCategoryId == null || p.categoryId == _selectedCategoryId;
       return matchesSearch && matchesCat;
     }).toList();
+    list.sort((a, b) {
+      if (a.isFavorite && !b.isFavorite) return -1;
+      if (!a.isFavorite && b.isFavorite) return 1;
+      return a.name.toLowerCase().compareTo(b.name.toLowerCase());
+    });
+    return list;
   }
 
   /// Real-time dual search: local store products + background master catalog (<2ms)
@@ -380,6 +388,7 @@ class _PosBillingScreenState extends State<PosBillingScreen> {
     );
 
     if (barcode != null && barcode.isNotEmpty && mounted) {
+      final activeType = BusinessVerticals.activeBusinessTypeNotifier.value;
       final matched = await LocalDatabase.instance.findProductByBarcode(barcode);
       if (matched != null) {
         _addToCart(matched);
@@ -399,10 +408,16 @@ class _PosBillingScreenState extends State<PosBillingScreen> {
           );
         }
       } else {
-        // Fallback: Check Master Catalog (<2ms)
-        final masterMatch = await LocalDatabase.instance.findMasterProductByBarcode(barcode);
+        // Fallback 1: Check Local Master Catalog (<2ms) with vertical filter
+        final masterMatch = await LocalDatabase.instance.findMasterProductByBarcode(
+          barcode,
+          businessType: activeType,
+        );
         if (masterMatch != null && mounted) {
-          final imported = await LocalDatabase.instance.importMasterProductToStore(masterMatch);
+          final imported = await LocalDatabase.instance.importMasterProductToStore(
+            masterMatch,
+            targetVertical: activeType,
+          );
           _addToCart(imported);
           _loadData(); // Update background products list
           if (mounted) {
@@ -421,14 +436,43 @@ class _PosBillingScreenState extends State<PosBillingScreen> {
             );
           }
         } else {
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text('No item found with barcode: $barcode'),
-                backgroundColor: const Color(0xFFF59E0B),
-                duration: const Duration(seconds: 2),
-              ),
+          // Fallback 2: Cloud Barcode Resolver (Open Food Facts & Indian Barcode DB)
+          final cloudMatch = await CloudBarcodeResolverService.instance.resolveBarcode(
+            barcode,
+            businessType: activeType,
+          );
+          if (cloudMatch != null && mounted) {
+            final imported = await LocalDatabase.instance.importMasterProductToStore(
+              cloudMatch,
+              targetVertical: activeType,
             );
+            _addToCart(imported);
+            _loadData();
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Row(
+                    children: [
+                      const Icon(Icons.cloud_done_rounded, color: Colors.cyanAccent, size: 20),
+                      const SizedBox(width: 8),
+                      Expanded(child: Text('Cloud SKU Added: ${imported.name}')),
+                    ],
+                  ),
+                  backgroundColor: const Color(0xFF0F172A),
+                  duration: const Duration(seconds: 2),
+                ),
+              );
+            }
+          } else {
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text('No item found with barcode: $barcode'),
+                  backgroundColor: const Color(0xFFF59E0B),
+                  duration: const Duration(seconds: 2),
+                ),
+              );
+            }
           }
         }
       }
@@ -531,21 +575,61 @@ class _PosBillingScreenState extends State<PosBillingScreen> {
           ),
           const SizedBox(width: 8),
 
-          // Camera Barcode Button
-          InkWell(
-            onTap: _openCameraBarcodeScanner,
-            borderRadius: BorderRadius.circular(12),
-            child: Container(
-              width: 48,
-              height: 48,
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: const Color(0xFFCBD5E1)),
+          // Camera Barcode Button (or Dine-In / Parcel Toggle for Restaurants)
+          if (BusinessVerticals.activeBusinessTypeNotifier.value == 'restaurant')
+            InkWell(
+              onTap: () {
+                HapticFeedback.selectionClick();
+                setState(() {
+                  _restaurantOrderType = _restaurantOrderType == 'Dine-In' ? 'Parcel' : 'Dine-In';
+                });
+              },
+              borderRadius: BorderRadius.circular(12),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10),
+                height: 48,
+                decoration: BoxDecoration(
+                  color: _restaurantOrderType == 'Dine-In' ? const Color(0xFFECFDF5) : const Color(0xFFFFFBEB),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: _restaurantOrderType == 'Dine-In' ? const Color(0xFFA7F3D0) : const Color(0xFFFDE68A),
+                  ),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      _restaurantOrderType == 'Dine-In' ? '🍽️' : '🥡',
+                      style: const TextStyle(fontSize: 16),
+                    ),
+                    const SizedBox(width: 4),
+                    Text(
+                      _restaurantOrderType,
+                      style: GoogleFonts.plusJakartaSans(
+                        fontSize: 11.5,
+                        fontWeight: FontWeight.w700,
+                        color: _restaurantOrderType == 'Dine-In' ? const Color(0xFF065F46) : const Color(0xFF92400E),
+                      ),
+                    ),
+                  ],
+                ),
               ),
-              child: const Icon(Icons.camera_alt_outlined, size: 22, color: Color(0xFF334155)),
+            )
+          else
+            InkWell(
+              onTap: _openCameraBarcodeScanner,
+              borderRadius: BorderRadius.circular(12),
+              child: Container(
+                width: 48,
+                height: 48,
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: const Color(0xFFCBD5E1)),
+                ),
+                child: const Icon(Icons.camera_alt_outlined, size: 22, color: Color(0xFF334155)),
+              ),
             ),
-          ),
           const SizedBox(width: 8),
 
           // Filter / Settings Button with Yellow Lock Badge
@@ -1109,13 +1193,23 @@ class _PosBillingScreenState extends State<PosBillingScreen> {
       child: ListTile(
         contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 2),
         onTap: () => _addToCart(product),
-        title: Text(
-          product.name,
-          style: GoogleFonts.plusJakartaSans(
-            fontSize: 13.5,
-            fontWeight: FontWeight.w700,
-            color: const Color(0xFF0F172A),
-          ),
+        title: Row(
+          children: [
+            if (product.isFavorite) ...[
+              const Icon(Icons.star_rounded, size: 16, color: Color(0xFFF59E0B)),
+              const SizedBox(width: 4),
+            ],
+            Expanded(
+              child: Text(
+                product.name,
+                style: GoogleFonts.plusJakartaSans(
+                  fontSize: 13.5,
+                  fontWeight: FontWeight.w700,
+                  color: const Color(0xFF0F172A),
+                ),
+              ),
+            ),
+          ],
         ),
         subtitle: Row(
           children: [
@@ -1653,21 +1747,32 @@ class _PosProductGridItemState extends State<_PosProductGridItem> {
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                // Top Row: Category Subtitle + 'X in cart' Gold Badge or OUT OF STOCK Red Badge
+                // Top Row: Category Subtitle + Favorite Gold Star + 'X in cart' Gold Badge or OUT OF STOCK Red Badge
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     Expanded(
-                      child: Text(
-                        widget.categoryDisplay,
-                        style: GoogleFonts.plusJakartaSans(
-                          fontSize: 8.5,
-                          fontWeight: FontWeight.w700,
-                          letterSpacing: 0.2,
-                          color: const Color(0xFF94A3B8),
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          if (widget.product.isFavorite) ...[
+                            const Icon(Icons.star_rounded, size: 13, color: Color(0xFFF59E0B)),
+                            const SizedBox(width: 3),
+                          ],
+                          Flexible(
+                            child: Text(
+                              widget.categoryDisplay,
+                              style: GoogleFonts.plusJakartaSans(
+                                fontSize: 8.5,
+                                fontWeight: FontWeight.w700,
+                                letterSpacing: 0.2,
+                                color: widget.product.isFavorite ? const Color(0xFFD97706) : const Color(0xFF94A3B8),
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                     if (isStockDepleted)

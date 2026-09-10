@@ -975,7 +975,7 @@ class _InvoiceThemesScreenState extends State<InvoiceThemesScreen> {
                 child: Row(
                   children: [
                     const Icon(Icons.bolt_rounded, size: 14, color: Color(0xFFFDE68A)),
-                    const SizedBox(width: 4),
+                    const SizedBox(width: 4),      
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -989,7 +989,7 @@ class _InvoiceThemesScreenState extends State<InvoiceThemesScreen> {
                             style: GoogleFonts.inter(fontSize: 8, color: Colors.white.withValues(alpha: 0.8)),
                           ),
                         ],
-                      ),
+                      ),  
                     ),
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),

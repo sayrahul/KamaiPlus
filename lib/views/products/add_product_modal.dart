@@ -6,7 +6,9 @@ import '../../core/constants/business_vertical_config.dart';
 import '../../core/database/local_database.dart';
 import '../../models/models.dart';
 import '../../services/firestore_sync_service.dart';
+import '../../services/cloud_barcode_resolver_service.dart';
 import '../pos/barcode_scanner_view.dart';
+import 'rapid_barcode_inward_screen.dart';
 
 class AddProductModal extends StatefulWidget {
   final ProductModel? existingProduct;
@@ -70,6 +72,8 @@ class _AddProductModalState extends State<AddProductModal> {
   bool _isSaving = false;
   bool _isUnlimitedStock = false;
   bool _isStockExpanded = false;
+  bool _isFavorite = false;
+  bool _isResolvingBarcode = false;
 
   late final List<Map<String, String>> _units;
 
@@ -91,6 +95,7 @@ class _AddProductModalState extends State<AddProductModal> {
       return {'label': label, 'val': u};
     }).toList();
 
+    _isFavorite = p?.isFavorite ?? false;
     _isUnlimitedStock = p != null && p.stockQuantity >= 99999;
     _nameCtrl = TextEditingController(text: p?.name ?? '');
     _barcodeCtrl = TextEditingController(text: p?.barcode ?? '');
@@ -236,34 +241,193 @@ class _AddProductModalState extends State<AddProductModal> {
       setState(() {
         _barcodeCtrl.text = scanned;
       });
+      await _lookupAndAutofillBarcode(scanned);
+    }
+  }
 
-      // Check Master Catalog for instant autofill (<2ms)
-      final master = await LocalDatabase.instance.findMasterProductByBarcode(scanned);
-      if (master != null && mounted) {
+  Future<void> _lookupAndAutofillBarcode(String rawBarcode) async {
+    final barcode = rawBarcode.trim();
+    if (barcode.isEmpty) return;
+
+    setState(() => _isResolvingBarcode = true);
+    try {
+      final activeType = BusinessVerticals.activeBusinessTypeNotifier.value;
+
+      // 0. Check if this product already exists in merchant's own store database
+      final existingStoreItem = await LocalDatabase.instance.findProductByBarcode(barcode);
+      if (existingStoreItem != null && mounted) {
         setState(() {
-          if (_nameCtrl.text.trim().isEmpty) _nameCtrl.text = master.name;
-          if (_mrpCtrl.text.trim().isEmpty) _mrpCtrl.text = (master.mrpPaise / 100).toStringAsFixed(0);
-          if (_sellPriceCtrl.text.trim().isEmpty) {
-            final sPrice = master.sellingPricePaise > 0 ? master.sellingPricePaise : master.mrpPaise;
-            _sellPriceCtrl.text = (sPrice / 100).toStringAsFixed(0);
+          _nameCtrl.text = existingStoreItem.name;
+          if (existingStoreItem.mrpPaise > 0) {
+            _mrpCtrl.text = (existingStoreItem.mrpPaise / 100).toStringAsFixed(2);
           }
+          if (existingStoreItem.sellingPricePaise > 0) {
+            _sellPriceCtrl.text = (existingStoreItem.sellingPricePaise / 100).toStringAsFixed(2);
+          }
+          if (existingStoreItem.purchasePricePaise > 0) {
+            _costPriceCtrl.text = (existingStoreItem.purchasePricePaise / 100).toStringAsFixed(2);
+          }
+          _autofillUnit(existingStoreItem.unit);
+          if (existingStoreItem.categoryId != null && existingStoreItem.categoryId!.isNotEmpty) {
+            if (_localCategories.any((c) => c.id == existingStoreItem.categoryId)) {
+              _selectedCategoryId = existingStoreItem.categoryId!;
+            }
+          }
+          _autofillTaxRate(existingStoreItem.taxRate);
+          _isStockExpanded = true;
         });
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Row(
                 children: [
-                  const Icon(Icons.bolt_rounded, color: Colors.amber, size: 20),
+                  const Icon(Icons.check_circle_rounded, color: Colors.greenAccent, size: 20),
                   const SizedBox(width: 8),
-                  Expanded(child: Text('Auto-filled from Master Catalog: ${master.name}')),
+                  Expanded(child: Text('Loaded from Store: ${existingStoreItem.name} (${existingStoreItem.unit})')),
                 ],
               ),
-              backgroundColor: const Color(0xFF1E293B),
+              backgroundColor: const Color(0xFF0F172A),
               duration: const Duration(seconds: 2),
             ),
           );
         }
+        return;
       }
+
+      // 1. Check Master Catalog for instant autofill (<2ms)
+      final master = await LocalDatabase.instance.findMasterProductByBarcode(
+        barcode,
+        businessType: activeType,
+      );
+      if (master != null && mounted) {
+        await _applyMasterData(master, source: 'Master Catalog');
+        return;
+      }
+
+      // 2. Cloud Fallback: Query Online Barcode Database (Open Food Facts / GS1)
+      final cloudItem = await CloudBarcodeResolverService.instance.resolveBarcode(
+        barcode,
+        businessType: activeType,
+      );
+      if (cloudItem != null && mounted) {
+        await _applyMasterData(cloudItem, source: 'Indian Barcode Cloud');
+        return;
+      }
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                const Icon(Icons.info_outline_rounded, color: Colors.amberAccent, size: 20),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Barcode "$barcode" naya hai. Ek baar Naam & Unit set kar dein — aage se yeh hamesha auto-fill hoga!',
+                    style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w600),
+                  ),
+                ),
+              ],
+            ),
+            backgroundColor: const Color(0xFF0F172A),
+            duration: const Duration(seconds: 4),
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isResolvingBarcode = false);
+    }
+  }
+
+  Future<void> _applyMasterData(MasterProductModel master, {required String source}) async {
+    setState(() {
+      _nameCtrl.text = master.name;
+      if (master.mrpPaise > 0) {
+        _mrpCtrl.text = (master.mrpPaise / 100).toStringAsFixed(0);
+      }
+      final sPrice = master.sellingPricePaise > 0 ? master.sellingPricePaise : master.mrpPaise;
+      if (sPrice > 0) {
+        _sellPriceCtrl.text = (sPrice / 100).toStringAsFixed(0);
+      }
+      _autofillUnit(master.unit);
+      _autofillCategory(master.category);
+      _autofillTaxRate(master.taxRate);
+      _isStockExpanded = true;
+    });
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Row(
+            children: [
+              Icon(
+                source == 'Master Catalog' ? Icons.bolt_rounded : Icons.cloud_done_rounded,
+                color: source == 'Master Catalog' ? Colors.amber : Colors.cyanAccent,
+                size: 20,
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text('Auto-filled ($source): ${master.name} • Unit: ${_selectedUnit.toUpperCase()}'),
+              ),
+            ],
+          ),
+          backgroundColor: const Color(0xFF1E293B),
+          duration: const Duration(seconds: 2),
+        ),
+      );
+    }
+  }
+
+  void _autofillUnit(String unitRaw) {
+    if (unitRaw.trim().isEmpty) return;
+    final clean = unitRaw.trim().toLowerCase();
+    final match = _units.firstWhere(
+      (u) => (u['val'] ?? '').toLowerCase() == clean,
+      orElse: () => {},
+    );
+    if (match.isNotEmpty) {
+      _selectedUnit = match['val']!;
+    } else {
+      final customLabel = BusinessVerticals.unitDisplayLabels[clean] ?? '${unitRaw.trim()} (${unitRaw.trim()})';
+      _units.add({'label': customLabel, 'val': unitRaw.trim()});
+      _selectedUnit = unitRaw.trim();
+    }
+  }
+
+  void _autofillCategory(String catRaw) {
+    if (catRaw.trim().isEmpty || catRaw.trim().toLowerCase() == 'general') return;
+    final clean = catRaw.trim();
+    final match = _localCategories.firstWhere(
+      (c) => c.name.trim().toLowerCase() == clean.toLowerCase(),
+      orElse: () => CategoryModel(id: '', businessId: '', name: ''),
+    );
+    if (match.id.isNotEmpty) {
+      _selectedCategoryId = match.id;
+    } else {
+      final activeType = BusinessVerticals.activeBusinessTypeNotifier.value;
+      final newCat = CategoryModel(
+        id: 'cat_${DateTime.now().millisecondsSinceEpoch}',
+        businessId: _localCategories.isNotEmpty ? _localCategories.first.businessId : 'biz_default',
+        name: clean,
+        businessType: activeType,
+      );
+      _localCategories.add(newCat);
+      _selectedCategoryId = newCat.id;
+      LocalDatabase.instance.upsertCategory(newCat);
+    }
+  }
+
+  void _autofillTaxRate(double rate) {
+    if (rate <= 0) return;
+    final matchTax = _taxRates.firstWhere(
+      (t) => ((t['val'] as num).toDouble() - rate).abs() < 0.01,
+      orElse: () => {},
+    );
+    if (matchTax.isNotEmpty) {
+      _selectedTaxRate = (matchTax['val'] as num).toDouble();
+    } else {
+      _taxRates.add({'label': '$rate% GST', 'val': rate});
+      _selectedTaxRate = rate;
     }
   }
 
@@ -354,7 +518,7 @@ class _AddProductModalState extends State<AddProductModal> {
     );
   }
 
-  Future<void> _saveProduct() async {
+  Future<void> _saveProduct({bool continueAddingNext = false}) async {
     if (!_formKey.currentState!.validate()) return;
 
     setState(() => _isSaving = true);
@@ -382,13 +546,59 @@ class _AddProductModalState extends State<AddProductModal> {
         size: _sizeCtrl.text.trim().isNotEmpty ? _sizeCtrl.text.trim() : widget.existingProduct?.size,
         color: _colorCtrl.text.trim().isNotEmpty ? _colorCtrl.text.trim() : widget.existingProduct?.color,
         imeiSerial: _imeiCtrl.text.trim().isNotEmpty ? _imeiCtrl.text.trim() : widget.existingProduct?.imeiSerial,
+        isFavorite: _isFavorite,
         syncStatus: 'synced',
         businessType: widget.existingProduct?.businessType ?? BusinessVerticals.activeBusinessTypeNotifier.value,
       );
 
       await LocalDatabase.instance.upsertProduct(p);
+      if (p.barcode != null && p.barcode!.isNotEmpty) {
+        try {
+          await LocalDatabase.instance.insertMasterProduct(MasterProductModel(
+            barcode: p.barcode!,
+            name: p.name,
+            category: 'General',
+            unit: p.unit,
+            mrpPaise: p.mrpPaise,
+            sellingPricePaise: p.sellingPricePaise,
+            taxRate: p.taxRate,
+            businessType: p.businessType,
+          ));
+        } catch (_) {}
+      }
+      FirestoreSyncService.instance.pushProductToCloud(p).catchError((_) {});
 
       if (!mounted) return;
+
+      if (continueAddingNext) {
+        widget.onSaved();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                const Icon(Icons.check_circle_rounded, color: Colors.greenAccent, size: 18),
+                const SizedBox(width: 8),
+                Expanded(child: Text('✓ Saved "${p.name}". Scanning next barcode...')),
+              ],
+            ),
+            backgroundColor: const Color(0xFF0F172A),
+            duration: const Duration(milliseconds: 1600),
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          ),
+        );
+        setState(() {
+          _nameCtrl.clear();
+          _barcodeCtrl.clear();
+          _sellPriceCtrl.clear();
+          _mrpCtrl.clear();
+          _costPriceCtrl.clear();
+          _stockCtrl.text = '10';
+          _isFavorite = false;
+        });
+        _openBarcodeScanner();
+        return;
+      }
 
       Navigator.of(context).pop();
       widget.onSaved();
@@ -567,10 +777,39 @@ class _AddProductModalState extends State<AddProductModal> {
                               GestureDetector(
                                 onTap: () {
                                   Navigator.of(context).pop();
+                                  RapidBarcodeInwardScreen.show(context, onInwardSuccess: widget.onSaved);
+                                },
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFF7C3AED),
+                                    borderRadius: BorderRadius.circular(10),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      const Icon(Icons.flash_on_rounded, size: 12, color: Colors.white),
+                                      const SizedBox(width: 3),
+                                      Text(
+                                        'Rapid Scan',
+                                        style: GoogleFonts.inter(
+                                          fontSize: 10,
+                                          fontWeight: FontWeight.w800,
+                                          color: Colors.white,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 6),
+                              GestureDetector(
+                                onTap: () {
+                                  Navigator.of(context).pop();
                                   widget.onSwitchToAiInward();
                                 },
                                 child: Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
                                   decoration: BoxDecoration(
                                     color: const Color(0xFF0F172A),
                                     borderRadius: BorderRadius.circular(10),
@@ -579,11 +818,11 @@ class _AddProductModalState extends State<AddProductModal> {
                                     mainAxisSize: MainAxisSize.min,
                                     children: [
                                       const Icon(Icons.camera_alt_outlined, size: 12, color: Colors.white),
-                                      const SizedBox(width: 4),
+                                      const SizedBox(width: 3),
                                       Text(
-                                        'Inward with AI',
+                                        'AI Bill',
                                         style: GoogleFonts.inter(
-                                          fontSize: 10.5,
+                                          fontSize: 10,
                                           fontWeight: FontWeight.w800,
                                           color: Colors.white,
                                         ),
@@ -606,6 +845,19 @@ class _AddProductModalState extends State<AddProductModal> {
                         style: GoogleFonts.inter(fontSize: 13.5, fontWeight: FontWeight.w600),
                         decoration: _buildInputDecoration(
                           BusinessVerticals.resolve(BusinessVerticals.activeBusinessTypeNotifier.value).placeholders.newProductName,
+                        ).copyWith(
+                          suffixIcon: IconButton(
+                            tooltip: _isFavorite ? 'Remove from Favorite' : 'Mark as Favorite (Top in Billing)',
+                            icon: Icon(
+                              _isFavorite ? Icons.star_rounded : Icons.star_border_rounded,
+                              color: _isFavorite ? const Color(0xFFF59E0B) : const Color(0xFF94A3B8),
+                              size: 22,
+                            ),
+                            onPressed: () {
+                              HapticFeedback.selectionClick();
+                              setState(() => _isFavorite = !_isFavorite);
+                            },
+                          ),
                         ),
                         validator: (v) => (v == null || v.trim().isEmpty) ? 'Product name is required' : null,
                       ),
@@ -902,36 +1154,113 @@ class _AddProductModalState extends State<AddProductModal> {
                       ],
 
                       // 4. Barcode / EAN-13 (hidden for restaurant)
+                      // 4. Barcode / EAN-13 with Unified In-Field Scan & Auto-Fill
                       if (vert.toggles.showBarcode) ...[
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            _buildLabel('Barcode / EAN-13'),
-                            GestureDetector(
-                              onTap: _openBarcodeScanner,
-                              child: Row(
-                                children: [
-                                  const Icon(Icons.qr_code_scanner_rounded, size: 14, color: Color(0xFF0284C7)),
-                                  const SizedBox(width: 4),
-                                  Text(
-                                    'Scan Camera',
-                                    style: GoogleFonts.inter(
-                                      fontSize: 11,
-                                      fontWeight: FontWeight.w800,
-                                      color: const Color(0xFF0284C7),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ],
-                        ),
+                        _buildLabel('Barcode / EAN-13'),
                         const SizedBox(height: 5),
                         TextFormField(
                           controller: _barcodeCtrl,
                           keyboardType: TextInputType.number,
                           style: GoogleFonts.robotoMono(fontSize: 13.5, fontWeight: FontWeight.w700),
-                          decoration: _buildInputDecoration('e.g. 8901030383748'),
+                          textInputAction: TextInputAction.search,
+                          onFieldSubmitted: (val) {
+                            if (val.trim().isNotEmpty) {
+                              _lookupAndAutofillBarcode(val.trim());
+                            }
+                          },
+                          decoration: _buildInputDecoration('e.g. 8901030383748').copyWith(
+                            suffixIcon: Padding(
+                              padding: const EdgeInsets.only(right: 6),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  // Scan Camera Button within field
+                                  InkWell(
+                                    onTap: _openBarcodeScanner,
+                                    borderRadius: BorderRadius.circular(8),
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                                      decoration: BoxDecoration(
+                                        color: const Color(0xFFF1F5F9),
+                                        borderRadius: BorderRadius.circular(8),
+                                        border: Border.all(color: const Color(0xFFCBD5E1)),
+                                      ),
+                                      child: Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          const Icon(Icons.qr_code_scanner_rounded, size: 14, color: Color(0xFF0F172A)),
+                                          const SizedBox(width: 4),
+                                          Text(
+                                            'Scan',
+                                            style: GoogleFonts.inter(
+                                              fontSize: 11,
+                                              fontWeight: FontWeight.w700,
+                                              color: const Color(0xFF0F172A),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 6),
+                                  // Auto-fill Button within field
+                                  InkWell(
+                                    onTap: _isResolvingBarcode
+                                        ? null
+                                        : () {
+                                            if (_barcodeCtrl.text.trim().isNotEmpty) {
+                                              _lookupAndAutofillBarcode(_barcodeCtrl.text.trim());
+                                            }
+                                          },
+                                    borderRadius: BorderRadius.circular(8),
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                                      decoration: BoxDecoration(
+                                        color: const Color(0xFFF0F9FF),
+                                        borderRadius: BorderRadius.circular(8),
+                                        border: Border.all(color: const Color(0xFFBAE6FD)),
+                                      ),
+                                      child: Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          if (_isResolvingBarcode) ...[
+                                            const SizedBox(
+                                              width: 12,
+                                              height: 12,
+                                              child: CircularProgressIndicator(
+                                                strokeWidth: 2,
+                                                color: Color(0xFF0284C7),
+                                              ),
+                                            ),
+                                            const SizedBox(width: 5),
+                                            Text(
+                                              'Finding...',
+                                              style: GoogleFonts.inter(
+                                                fontSize: 11,
+                                                fontWeight: FontWeight.w700,
+                                                color: const Color(0xFF0284C7),
+                                              ),
+                                            ),
+                                          ] else ...[
+                                            const Icon(Icons.auto_awesome_rounded, size: 13, color: Color(0xFF0284C7)),
+                                            const SizedBox(width: 4),
+                                            Text(
+                                              'Auto-fill',
+                                              style: GoogleFonts.inter(
+                                                fontSize: 11,
+                                                fontWeight: FontWeight.w700,
+                                                color: const Color(0xFF0284C7),
+                                              ),
+                                            ),
+                                          ],
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
                         ),
                         const SizedBox(height: 12),
                       ],
@@ -1227,11 +1556,11 @@ class _AddProductModalState extends State<AddProductModal> {
                       ),
                       const SizedBox(height: 20),
 
-                      // Bottom Action Buttons: Cancel and Save Product
+                      // Bottom Action Buttons: Cancel, Save & Next, and Save Product
                       Row(
                         children: [
                           Expanded(
-                            flex: 1,
+                            flex: 2,
                             child: OutlinedButton(
                               onPressed: () => Navigator.of(context).pop(),
                               style: OutlinedButton.styleFrom(
@@ -1242,18 +1571,42 @@ class _AddProductModalState extends State<AddProductModal> {
                               child: Text(
                                 'Cancel',
                                 style: GoogleFonts.outfit(
-                                  fontSize: 13.5,
+                                  fontSize: 13,
                                   fontWeight: FontWeight.w800,
                                   color: const Color(0xFF475569),
                                 ),
                               ),
                             ),
                           ),
-                          const SizedBox(width: 10),
+                          if (!isEditing) ...[
+                            const SizedBox(width: 8),
+                            Expanded(
+                              flex: 3,
+                              child: OutlinedButton.icon(
+                                onPressed: _isSaving ? null : () => _saveProduct(continueAddingNext: true),
+                                icon: const Icon(Icons.flash_on_rounded, size: 16, color: Color(0xFFD97706)),
+                                label: Text(
+                                  'Save & Next',
+                                  style: GoogleFonts.outfit(
+                                    fontSize: 12.5,
+                                    fontWeight: FontWeight.w800,
+                                    color: const Color(0xFFD97706),
+                                  ),
+                                ),
+                                style: OutlinedButton.styleFrom(
+                                  backgroundColor: const Color(0xFFFFFBEB),
+                                  padding: const EdgeInsets.symmetric(vertical: 13),
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                                  side: const BorderSide(color: Color(0xFFFDE68A), width: 1.2),
+                                ),
+                              ),
+                            ),
+                          ],
+                          const SizedBox(width: 8),
                           Expanded(
-                            flex: 2,
+                            flex: 3,
                             child: ElevatedButton(
-                              onPressed: _isSaving ? null : _saveProduct,
+                              onPressed: _isSaving ? null : () => _saveProduct(continueAddingNext: false),
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: const Color(0xFF0F172A),
                                 padding: const EdgeInsets.symmetric(vertical: 13),
@@ -1267,10 +1620,10 @@ class _AddProductModalState extends State<AddProductModal> {
                                       child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
                                     )
                                   : Text(
-                                      isEditing ? 'Update Product' : 'Save Product',
+                                      isEditing ? 'Update' : 'Save',
                                       style: GoogleFonts.outfit(
                                         fontSize: 13.5,
-                                        fontWeight: FontWeight.w900,
+                                        fontWeight: FontWeight.w800,
                                         color: Colors.white,
                                       ),
                                     ),

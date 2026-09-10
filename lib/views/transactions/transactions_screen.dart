@@ -6,8 +6,8 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../core/database/local_database.dart';
 import '../../core/utils/money_formatter.dart';
 import '../../models/models.dart';
-import '../../services/thermal_printer_service.dart';
 import '../../services/invoice_pdf_service.dart';
+import '../../services/app_printer_service.dart';
 import '../common/kamai_bottom_nav.dart';
 import '../common/in_app_notification.dart';
 import '../../core/utils/app_validators.dart';
@@ -339,13 +339,10 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
 
   void _printBill(SaleModel sale) async {
     HapticFeedback.lightImpact();
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('Printing Thermal Bill #${sale.invoiceNumber}...'),
-        duration: const Duration(seconds: 2),
-      ),
+    await AppPrinterService.printSale(
+      context: context,
+      sale: sale,
     );
-    await ThermalPrinterService.printReceipt(sale: sale);
   }
 
   // =========================================================================

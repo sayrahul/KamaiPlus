@@ -12,6 +12,7 @@ import 'quick_stock_update_modal.dart';
 import '../inventory/low_stock_reorder_modal.dart';
 import '../pos/barcode_scanner_view.dart';
 import '../../services/firestore_sync_service.dart';
+import '../../services/cloud_barcode_resolver_service.dart';
 import '../../core/constants/business_vertical_config.dart';
 
 
@@ -35,7 +36,6 @@ class _ProductsScreenState extends State<ProductsScreen> {
   bool _isGridView = false; // Instant List / Grid view toggle
 
   final TextEditingController _searchCtrl = TextEditingController();
-  final Set<String> _favoriteProductIds = {};
 
   @override
   void initState() {
@@ -87,7 +87,7 @@ class _ProductsScreenState extends State<ProductsScreen> {
   }
 
   List<ProductModel> get _filteredProducts {
-    return _products.where((p) {
+    final list = _products.where((p) {
       final matchesSearch = _searchQuery.isEmpty ||
           p.name.toLowerCase().contains(_searchQuery.toLowerCase()) ||
           (p.barcode != null && p.barcode!.contains(_searchQuery));
@@ -95,6 +95,23 @@ class _ProductsScreenState extends State<ProductsScreen> {
       final matchesLowStock = !_filterLowStockOnly || p.stockQuantity <= 15;
       return matchesSearch && matchesCategory && matchesLowStock;
     }).toList();
+    list.sort((a, b) {
+      if (a.isFavorite && !b.isFavorite) return -1;
+      if (!a.isFavorite && b.isFavorite) return 1;
+      return a.name.toLowerCase().compareTo(b.name.toLowerCase());
+    });
+    return list;
+  }
+
+  Future<void> _toggleFavorite(ProductModel product) async {
+    HapticFeedback.selectionClick();
+    final updated = product.copyWith(
+      isFavorite: !product.isFavorite,
+      syncStatus: 'pending',
+    );
+    await LocalDatabase.instance.upsertProduct(updated);
+    FirestoreSyncService.instance.pushProductToCloud(updated).catchError((_) {});
+    _loadData();
   }
 
   Future<void> _adjustStock(ProductModel product, double delta) async {
@@ -135,6 +152,7 @@ class _ProductsScreenState extends State<ProductsScreen> {
       MaterialPageRoute(builder: (context) => const BarcodeScannerView()),
     );
     if (scanned != null && scanned.isNotEmpty && mounted) {
+      final activeType = BusinessVerticals.activeBusinessTypeNotifier.value;
       final existing = await LocalDatabase.instance.findProductByBarcode(scanned);
       if (existing != null) {
         setState(() {
@@ -142,10 +160,16 @@ class _ProductsScreenState extends State<ProductsScreen> {
           _searchQuery = scanned;
         });
       } else {
-        // Fallback: Check Master Catalog (<2ms)
-        final master = await LocalDatabase.instance.findMasterProductByBarcode(scanned);
+        // Fallback 1: Check Local Master Catalog (<2ms) with vertical filter
+        final master = await LocalDatabase.instance.findMasterProductByBarcode(
+          scanned,
+          businessType: activeType,
+        );
         if (master != null && mounted) {
-          final imported = await LocalDatabase.instance.importMasterProductToStore(master);
+          final imported = await LocalDatabase.instance.importMasterProductToStore(
+            master,
+            targetVertical: activeType,
+          );
           await _loadData();
           setState(() {
             _searchCtrl.text = imported.name;
@@ -167,10 +191,42 @@ class _ProductsScreenState extends State<ProductsScreen> {
             );
           }
         } else {
-          setState(() {
-            _searchCtrl.text = scanned;
-            _searchQuery = scanned;
-          });
+          // Fallback 2: Query Cloud Barcode Resolver (Open Food Facts / GS1)
+          final cloudItem = await CloudBarcodeResolverService.instance.resolveBarcode(
+            scanned,
+            businessType: activeType,
+          );
+          if (cloudItem != null && mounted) {
+            final imported = await LocalDatabase.instance.importMasterProductToStore(
+              cloudItem,
+              targetVertical: activeType,
+            );
+            await _loadData();
+            setState(() {
+              _searchCtrl.text = imported.name;
+              _searchQuery = imported.name;
+            });
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Row(
+                    children: [
+                      const Icon(Icons.cloud_done_rounded, color: Colors.cyanAccent, size: 20),
+                      const SizedBox(width: 8),
+                      Expanded(child: Text('Imported from Indian Barcode Cloud: ${imported.name}')),
+                    ],
+                  ),
+                  backgroundColor: const Color(0xFF0F172A),
+                  duration: const Duration(seconds: 3),
+                ),
+              );
+            }
+          } else {
+            setState(() {
+              _searchCtrl.text = scanned;
+              _searchQuery = scanned;
+            });
+          }
         }
       }
     }
@@ -956,7 +1012,7 @@ class _ProductsScreenState extends State<ProductsScreen> {
   Widget _buildProductCard(ProductModel product) {
     final profitPaise = product.sellingPricePaise - product.purchasePricePaise;
     final profitStr = profitPaise > 0 ? '+₹${(profitPaise / 100).toStringAsFixed(2)}' : '₹0.00';
-    final isFav = _favoriteProductIds.contains(product.id);
+    final isFav = product.isFavorite;
     final categoryName = _getCategoryName(product.categoryId);
     final isLowStock = product.stockQuantity <= 15;
     final isInfinite = product.isLooseItem || product.stockQuantity >= 99999;
@@ -996,15 +1052,7 @@ class _ProductsScreenState extends State<ProductsScreen> {
               const SizedBox(width: 6),
               // Favorite Star
               GestureDetector(
-                onTap: () {
-                  setState(() {
-                    if (isFav) {
-                      _favoriteProductIds.remove(product.id);
-                    } else {
-                      _favoriteProductIds.add(product.id);
-                    }
-                  });
-                },
+                onTap: () => _toggleFavorite(product),
                 child: Icon(
                   isFav ? Icons.star_rounded : Icons.star_outline_rounded,
                   size: 20,
@@ -1297,10 +1345,19 @@ class _ProductsScreenState extends State<ProductsScreen> {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   InkWell(
+                    onTap: () => _toggleFavorite(product),
+                    child: Icon(
+                      product.isFavorite ? Icons.star_rounded : Icons.star_outline_rounded,
+                      size: 16,
+                      color: const Color(0xFFF59E0B),
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  InkWell(
                     onTap: () => _openAddProductSheet(existingProduct: product),
                     child: const Icon(Icons.edit_outlined, size: 15, color: Color(0xFF475569)),
                   ),
-                  const SizedBox(width: 8),
+                  const SizedBox(width: 6),
                   InkWell(
                     onTap: () => _confirmDeleteProduct(product),
                     child: const Icon(Icons.delete_outline_rounded, size: 15, color: Color(0xFFDC2626)),

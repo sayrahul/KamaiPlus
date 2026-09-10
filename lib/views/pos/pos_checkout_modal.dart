@@ -10,12 +10,13 @@ import '../../core/database/local_database.dart';
 import '../../core/utils/app_validators.dart';
 import '../../services/soundbox_service.dart';
 import '../../services/firestore_sync_service.dart';
-import '../../services/thermal_printer_service.dart';
+import '../../services/app_printer_service.dart';
 import '../../core/utils/money_formatter.dart';
 import '../../core/constants/business_vertical_config.dart';
 import 'pos_item_edit_modal.dart';
 import 'sale_completed_modal.dart';
 import '../common/in_app_notification.dart';
+import '../../services/upi_payment_detector_service.dart';
 
 class PosCheckoutModal extends StatefulWidget {
   final List<CartItemModel> cartItems;
@@ -112,8 +113,6 @@ class PosCheckoutModal extends StatefulWidget {
 }
 
 class _PosCheckoutModalState extends State<PosCheckoutModal> {
-  static const _btChannel = MethodChannel('com.kamaiplus.pos/bluetooth_printer');
-
   late int _currentTabIndex;
   CustomerModel? _currentCustomer;
   String _paymentMode = 'cash'; // 'cash', 'upi', 'credit', 'split'
@@ -146,6 +145,12 @@ class _PosCheckoutModalState extends State<PosCheckoutModal> {
   StoreProfileModel? _storeProfile;
 
   bool _isProcessing = false;
+
+  // UPI Auto-Detection State
+  bool _isUpiPaymentDetected = false;
+  DetectedPaymentEvent? _detectedUpiEvent;
+  bool _hasNotificationAccess = true;
+  bool _soundboxAnnouncedForUpi = false;
 
   List<CartItemModel> get currentCartItems {
     if (widget.tabs != null && widget.tabs!.isNotEmpty) {
@@ -203,6 +208,54 @@ class _PosCheckoutModalState extends State<PosCheckoutModal> {
 
     _loadDoctors();
     _loadStoreProfile();
+    _checkNotificationAccess();
+    if (_paymentMode == 'upi') {
+      _startUpiPaymentListening();
+    }
+  }
+
+  Future<void> _checkNotificationAccess() async {
+    try {
+      final granted = await UpiPaymentDetectorService.instance.isNotificationAccessGranted();
+      if (mounted) {
+        setState(() => _hasNotificationAccess = granted);
+      }
+    } catch (_) {}
+  }
+
+  void _startUpiPaymentListening() {
+    if (grandTotalPaise <= 0) return;
+    _checkNotificationAccess();
+    UpiPaymentDetectorService.instance.startListeningForBill(
+      amountPaise: grandTotalPaise,
+      onMatchedPayment: (event) async {
+        if (!mounted) return;
+        HapticFeedback.heavyImpact();
+        setState(() {
+          _isUpiPaymentDetected = true;
+          _detectedUpiEvent = event;
+          _soundboxAnnouncedForUpi = true;
+        });
+
+        // 1. Voice soundbox announcement in Hindi
+        await SoundboxService.instance.announceHindiPayment(
+          grandTotalPaise,
+          paymentMethod: event.appName.toUpperCase(),
+        );
+
+        // 2. Exactly 1 second delay as requested by user
+        await Future.delayed(const Duration(milliseconds: 1000));
+
+        // 3. Auto complete sale and launch Success modal
+        if (mounted && !_isProcessing) {
+          _handleCompleteSale();
+        }
+      },
+    );
+  }
+
+  void _stopUpiPaymentListening() {
+    UpiPaymentDetectorService.instance.stopListening();
   }
 
   Future<void> _loadStoreProfile() async {
@@ -261,10 +314,14 @@ class _PosCheckoutModalState extends State<PosCheckoutModal> {
     _splitUpiController.text = other.toString();
     _splitCreditController.text = '0';
     _billDiscountController.clear();
+    if (_paymentMode == 'upi') {
+      _startUpiPaymentListening();
+    }
   }
 
   @override
   void dispose() {
+    _stopUpiPaymentListening();
     _cashTenderedController.dispose();
     _splitCashController.dispose();
     _splitUpiController.dispose();
@@ -868,14 +925,16 @@ class _PosCheckoutModalState extends State<PosCheckoutModal> {
     if (currentCartItems.isEmpty) return;
 
     if (_paymentMode == 'credit' && _currentCustomer == null) {
-      setState(() {
-        _isSearchingCustomer = true;
-      });
+      HapticFeedback.heavyImpact();
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Please select or add a Customer for Credit (Udhar) billing'),
-          backgroundColor: Color(0xFFD97706),
+        SnackBar(
+          content: Text(
+            'Please select or add a customer for Credit (Udhar) bill',
+            style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w600, fontSize: 12),
+          ),
+          backgroundColor: const Color(0xFFDC2626),
           behavior: SnackBarBehavior.floating,
+          duration: const Duration(seconds: 2),
         ),
       );
       return;
@@ -929,11 +988,13 @@ class _PosCheckoutModalState extends State<PosCheckoutModal> {
         splitCreditPaise: _paymentMode == 'split' ? splitCreditPaise : (_paymentMode == 'credit' ? grandTotalPaise : 0),
       );
 
-      // Soundbox Voice announcement
-      await SoundboxService.instance.announceHindiPayment(
-        grandTotalPaise,
-        paymentMethod: _paymentMode == 'split' ? 'SPLIT' : _paymentMode.toUpperCase(),
-      );
+      // Soundbox Voice announcement (if not already announced during UPI auto-detect)
+      if (!_soundboxAnnouncedForUpi) {
+        await SoundboxService.instance.announceHindiPayment(
+          grandTotalPaise,
+          paymentMethod: _paymentMode == 'split' ? 'SPLIT' : _paymentMode.toUpperCase(),
+        );
+      }
 
       // Push to cloud in background
       FirestoreSyncService.instance.pushSaleToCloud(sale);
@@ -941,6 +1002,7 @@ class _PosCheckoutModalState extends State<PosCheckoutModal> {
       // Auto-print receipt if configured
       _autoPrintReceipt(sale);
 
+      _stopUpiPaymentListening();
       setState(() => _isProcessing = false);
 
       if (mounted) {
@@ -961,22 +1023,13 @@ class _PosCheckoutModalState extends State<PosCheckoutModal> {
   Future<void> _autoPrintReceipt(SaleModel sale) async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      final printerAddress = prefs.getString('printer_mac_address');
-      final is80mm = prefs.getBool('printer_is_80mm') ?? false;
-      final storeName = prefs.getString('business_name') ?? 'KamaiPlus Store';
-
-      if (printerAddress != null && printerAddress.isNotEmpty) {
-        final bytes = ThermalPrinterService.generateReceiptBytes(
+      final autoPrint = prefs.getBool('auto_print_on_checkout') ?? false;
+      if (autoPrint && mounted) {
+        await AppPrinterService.printSale(
+          context: context,
           sale: sale,
-          storeName: storeName,
-          is80mm: is80mm,
-          kickCashDrawer: _paymentMode == 'cash',
+          showToast: false,
         );
-
-        await _btChannel.invokeMethod('printBytes', {
-          'address': printerAddress,
-          'bytes': bytes,
-        });
       }
     } catch (_) {}
   }
@@ -1209,50 +1262,31 @@ class _PosCheckoutModalState extends State<PosCheckoutModal> {
                           Row(
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
-                              Row(
-                                children: [
-                                  Text(
-                                    'CUSTOMER',
-                                    style: GoogleFonts.plusJakartaSans(
-                                      fontSize: 11,
-                                      fontWeight: FontWeight.w800,
-                                      letterSpacing: 0.5,
-                                      color: isCustomerCompulsoryMissing ? const Color(0xFFDC2626) : const Color(0xFF64748B),
-                                    ),
-                                  ),
-                                  if (isCustomerCompulsoryMissing) ...[
-                                    const SizedBox(width: 6),
-                                    Container(
-                                      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
-                                      decoration: BoxDecoration(
-                                        color: const Color(0xFFFEE2E2),
-                                        borderRadius: BorderRadius.circular(4),
-                                        border: Border.all(color: const Color(0xFFFCA5A5)),
-                                      ),
-                                      child: Text(
-                                        'COMPULSORY *',
-                                        style: GoogleFonts.plusJakartaSans(
-                                          fontSize: 9,
-                                          fontWeight: FontWeight.w900,
-                                          color: const Color(0xFFDC2626),
-                                        ),
-                                      ),
-                                    ),
-                                  ],
-                                ],
+                              Text(
+                                'CUSTOMER',
+                                style: GoogleFonts.plusJakartaSans(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w800,
+                                  letterSpacing: 0.5,
+                                  color: isCustomerCompulsoryMissing ? const Color(0xFFEF4444) : const Color(0xFF64748B),
+                                ),
                               ),
                               GestureDetector(
                                 onTap: _showNewCustomerDialog,
                                 child: Row(
                                   children: [
-                                    const Icon(Icons.person_add_alt_1, size: 14, color: Color(0xFF2563EB)),
+                                    Icon(
+                                      Icons.person_add_alt_1,
+                                      size: 14,
+                                      color: isCustomerCompulsoryMissing ? const Color(0xFFEF4444) : const Color(0xFF2563EB),
+                                    ),
                                     const SizedBox(width: 4),
                                     Text(
                                       '+ New Customer',
                                       style: GoogleFonts.plusJakartaSans(
                                         fontSize: 11,
                                         fontWeight: FontWeight.w700,
-                                        color: const Color(0xFF2563EB),
+                                        color: isCustomerCompulsoryMissing ? const Color(0xFFEF4444) : const Color(0xFF2563EB),
                                       ),
                                     ),
                                   ],
@@ -1330,127 +1364,75 @@ class _PosCheckoutModalState extends State<PosCheckoutModal> {
                               ),
                             )
                           else
-                            Column(
-                              children: [
-                                Container(
-                                  height: 42,
-                                  decoration: BoxDecoration(
-                                    color: isCustomerCompulsoryMissing ? const Color(0xFFFFF1F2) : Colors.white,
-                                    borderRadius: BorderRadius.circular(10),
-                                    border: Border.all(
-                                      color: isCustomerCompulsoryMissing
-                                          ? const Color(0xFFEF4444)
-                                          : (_isSearchingCustomer ? const Color(0xFF2563EB) : const Color(0xFFCBD5E1)),
-                                      width: isCustomerCompulsoryMissing ? 1.8 : (_isSearchingCustomer ? 1.4 : 1.0),
-                                    ),
-                                  ),
-                                  padding: const EdgeInsets.symmetric(horizontal: 10),
-                                  child: Row(
-                                    children: [
-                                      Icon(
-                                        isCustomerCompulsoryMissing ? Icons.error_outline_rounded : Icons.search,
-                                        size: 18,
-                                        color: isCustomerCompulsoryMissing ? const Color(0xFFEF4444) : const Color(0xFF94A3B8),
-                                      ),
-                                      const SizedBox(width: 8),
-                                      Expanded(
-                                        child: TextField(
-                                          controller: _customerSearchController,
-                                          onTap: () {
-                                            setState(() {
-                                              _isSearchingCustomer = true;
-                                              if (_customerSearchController.text.trim().isEmpty) {
-                                                _filteredCustomers = widget.allCustomers;
-                                              } else {
-                                                _onCustomerSearch(_customerSearchController.text);
-                                              }
-                                            });
-                                          },
-                                          onChanged: _onCustomerSearch,
-                                          style: GoogleFonts.plusJakartaSans(
-                                            fontSize: 12,
-                                            fontWeight: FontWeight.w600,
-                                            color: const Color(0xFF0F172A),
-                                          ),
-                                          decoration: InputDecoration(
-                                            hintText: isCustomerCompulsoryMissing
-                                                ? '⚠️ Udhar ke liye Customer add karna jaruri hai (Tap here)...'
-                                                : 'Search or tap to choose customer...',
-                                            hintStyle: GoogleFonts.plusJakartaSans(
-                                              fontSize: 12,
-                                              color: isCustomerCompulsoryMissing ? const Color(0xFFDC2626) : const Color(0xFF94A3B8),
-                                              fontWeight: isCustomerCompulsoryMissing ? FontWeight.w600 : FontWeight.normal,
-                                            ),
-                                            border: InputBorder.none,
-                                            isDense: true,
-                                          ),
-                                        ),
-                                      ),
-                                      if (_isSearchingCustomer)
-                                        InkWell(
-                                          onTap: () {
-                                            setState(() {
-                                              _isSearchingCustomer = false;
-                                              _customerSearchController.clear();
-                                            });
-                                          },
-                                          child: const Padding(
-                                            padding: EdgeInsets.all(4),
-                                            child: Icon(Icons.close, size: 16, color: Color(0xFF64748B)),
-                                          ),
-                                        ),
-                                    ],
-                                  ),
+                            Container(
+                              height: 42,
+                              decoration: BoxDecoration(
+                                color: isCustomerCompulsoryMissing ? const Color(0xFFFEF2F2) : Colors.white,
+                                borderRadius: BorderRadius.circular(10),
+                                border: Border.all(
+                                  color: isCustomerCompulsoryMissing
+                                      ? const Color(0xFFEF4444)
+                                      : (_isSearchingCustomer ? const Color(0xFF2563EB) : const Color(0xFFCBD5E1)),
+                                  width: isCustomerCompulsoryMissing ? 1.5 : (_isSearchingCustomer ? 1.4 : 1.0),
                                 ),
-                                if (isCustomerCompulsoryMissing)
-                                  Container(
-                                    margin: const EdgeInsets.only(top: 8),
-                                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                                    decoration: BoxDecoration(
-                                      color: const Color(0xFFFFFBEB),
-                                      borderRadius: BorderRadius.circular(10),
-                                      border: Border.all(color: const Color(0xFFFDE68A)),
-                                    ),
-                                    child: Row(
-                                      children: [
-                                        const Icon(Icons.info_outline_rounded, size: 16, color: Color(0xFFD97706)),
-                                        const SizedBox(width: 8),
-                                        Expanded(
-                                          child: Text(
-                                            'Udhar / Credit bill ke liye Customer select karein',
-                                            style: GoogleFonts.plusJakartaSans(
-                                              fontSize: 11.5,
-                                              fontWeight: FontWeight.w700,
-                                              color: const Color(0xFF92400E),
-                                            ),
-                                          ),
+                              ),
+                              padding: const EdgeInsets.symmetric(horizontal: 10),
+                              child: Row(
+                                children: [
+                                  Icon(
+                                    isCustomerCompulsoryMissing ? Icons.person_search_outlined : Icons.search,
+                                    size: 18,
+                                    color: isCustomerCompulsoryMissing ? const Color(0xFFEF4444) : const Color(0xFF94A3B8),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: TextField(
+                                      controller: _customerSearchController,
+                                      onTap: () {
+                                        setState(() {
+                                          _isSearchingCustomer = true;
+                                          if (_customerSearchController.text.trim().isEmpty) {
+                                            _filteredCustomers = widget.allCustomers;
+                                          } else {
+                                            _onCustomerSearch(_customerSearchController.text);
+                                          }
+                                        });
+                                      },
+                                      onChanged: _onCustomerSearch,
+                                      style: GoogleFonts.plusJakartaSans(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w600,
+                                        color: const Color(0xFF0F172A),
+                                      ),
+                                      decoration: InputDecoration(
+                                        hintText: isCustomerCompulsoryMissing
+                                            ? 'Select or add customer for Credit (Udhar)...'
+                                            : 'Search or tap to choose customer...',
+                                        hintStyle: GoogleFonts.plusJakartaSans(
+                                          fontSize: 12,
+                                          color: isCustomerCompulsoryMissing ? const Color(0xFFEF4444) : const Color(0xFF94A3B8),
+                                          fontWeight: isCustomerCompulsoryMissing ? FontWeight.w600 : FontWeight.normal,
                                         ),
-                                        InkWell(
-                                          onTap: () {
-                                            setState(() {
-                                              _isSearchingCustomer = true;
-                                            });
-                                          },
-                                          child: Container(
-                                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                                            decoration: BoxDecoration(
-                                              color: const Color(0xFFD97706),
-                                              borderRadius: BorderRadius.circular(6),
-                                            ),
-                                            child: Text(
-                                              'Select',
-                                              style: GoogleFonts.plusJakartaSans(
-                                                fontSize: 10.5,
-                                                fontWeight: FontWeight.w800,
-                                                color: Colors.white,
-                                              ),
-                                            ),
-                                          ),
-                                        ),
-                                      ],
+                                        border: InputBorder.none,
+                                        isDense: true,
+                                      ),
                                     ),
                                   ),
-                              ],
+                                  if (_isSearchingCustomer)
+                                    InkWell(
+                                      onTap: () {
+                                        setState(() {
+                                          _isSearchingCustomer = false;
+                                          _customerSearchController.clear();
+                                        });
+                                      },
+                                      child: const Padding(
+                                        padding: EdgeInsets.all(4),
+                                        child: Icon(Icons.close, size: 16, color: Color(0xFF64748B)),
+                                      ),
+                                    ),
+                                ],
+                              ),
                             ),
                           if (_isSearchingCustomer)
                             Container(
@@ -2069,71 +2051,242 @@ class _PosCheckoutModalState extends State<PosCheckoutModal> {
                               ),
                             ],
                           ),
-                          const SizedBox(height: 14),
-
-                          // QR White Canvas Container
-                          Container(
-                            padding: const EdgeInsets.all(12),
-                            decoration: BoxDecoration(
-                              color: Colors.white,
-                              borderRadius: BorderRadius.circular(14),
-                              boxShadow: const [
-                                BoxShadow(
-                                  color: Color(0x1A000000),
-                                  blurRadius: 10,
-                                  offset: Offset(0, 4),
-                                ),
-                              ],
-                            ),
-                            child: Column(
-                              children: [
-                                QrImageView(
-                                  data: 'upi://pay?pa=$_activeUpiVpa&pn=${Uri.encodeComponent(_activeStoreName)}&am=${(grandTotalPaise / 100.0).toStringAsFixed(2)}&cu=INR&tn=POS+Bill',
-                                  version: QrVersions.auto,
-                                  size: 150,
-                                ),
-                                const SizedBox(height: 6),
-                                Text(
-                                  'Scan to Pay Exact ₹${(grandTotalPaise / 100.0).toStringAsFixed(2)}',
-                                  style: GoogleFonts.outfit(
-                                    fontSize: 13.5,
-                                    fontWeight: FontWeight.w800,
-                                    color: const Color(0xFF0F172A),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
                           const SizedBox(height: 12),
 
-                          // Accepted UPI Apps Strip & Timer
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              Text(
-                                'PhonePe • GPay • Paytm • BHIM',
-                                style: GoogleFonts.inter(
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.w600,
-                                  color: const Color(0xFF94A3B8),
+                          // Auto-Detect Live Radar or Notification Access Banner
+                          if (!_isUpiPaymentDetected) ...[
+                            if (!_hasNotificationAccess) ...[
+                              InkWell(
+                                onTap: () async {
+                                  await UpiPaymentDetectorService.instance.openNotificationAccessSettings();
+                                  await Future.delayed(const Duration(milliseconds: 600));
+                                  _checkNotificationAccess();
+                                },
+                                borderRadius: BorderRadius.circular(10),
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFFFFFBEB),
+                                    borderRadius: BorderRadius.circular(10),
+                                    border: Border.all(color: const Color(0xFFFDE68A)),
+                                  ),
+                                  child: Row(
+                                    children: [
+                                      const Icon(Icons.notifications_active_rounded, size: 15, color: Color(0xFFD97706)),
+                                      const SizedBox(width: 6),
+                                      Expanded(
+                                        child: Text(
+                                          'Enable Auto-Detect: Tap to grant Notification Access',
+                                          style: GoogleFonts.plusJakartaSans(
+                                            fontSize: 10,
+                                            fontWeight: FontWeight.w700,
+                                            color: const Color(0xFF92400E),
+                                          ),
+                                        ),
+                                      ),
+                                      const Icon(Icons.chevron_right_rounded, size: 16, color: Color(0xFFD97706)),
+                                    ],
+                                  ),
                                 ),
                               ),
-                              Row(
+                              const SizedBox(height: 10),
+                            ] else ...[
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFF10B981).withValues(alpha: 0.12),
+                                  borderRadius: BorderRadius.circular(16),
+                                  border: Border.all(color: const Color(0xFF059669).withValues(alpha: 0.3)),
+                                ),
+                                child: Row(
+                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Container(
+                                          width: 7,
+                                          height: 7,
+                                          decoration: const BoxDecoration(
+                                            color: Color(0xFF10B981),
+                                            shape: BoxShape.circle,
+                                          ),
+                                        ),
+                                        const SizedBox(width: 6),
+                                        Text(
+                                          'Live Auto-Detect Active',
+                                          style: GoogleFonts.plusJakartaSans(
+                                            fontSize: 10,
+                                            fontWeight: FontWeight.w700,
+                                            color: const Color(0xFF34D399),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                    InkWell(
+                                      onTap: () {
+                                        // Trigger instant test detection simulation
+                                        UpiPaymentDetectorService.instance.simulatePayment(amountPaise: grandTotalPaise);
+                                      },
+                                      borderRadius: BorderRadius.circular(6),
+                                      child: Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                        decoration: BoxDecoration(
+                                          color: const Color(0xFF10B981).withValues(alpha: 0.25),
+                                          borderRadius: BorderRadius.circular(6),
+                                        ),
+                                        child: Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            const Icon(Icons.bolt_rounded, size: 11, color: Color(0xFF34D399)),
+                                            const SizedBox(width: 2),
+                                            Text(
+                                              'Test Detect',
+                                              style: GoogleFonts.inter(
+                                                fontSize: 9,
+                                                fontWeight: FontWeight.w800,
+                                                color: const Color(0xFF34D399),
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(height: 10),
+                            ],
+                          ],
+
+                          if (_isUpiPaymentDetected)
+                            // Green Animated Success Checkmark Card
+                            Container(
+                              width: double.infinity,
+                              padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 16),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF064E3B),
+                                borderRadius: BorderRadius.circular(14),
+                                border: Border.all(color: const Color(0xFF10B981), width: 2),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: const Color(0xFF10B981).withValues(alpha: 0.35),
+                                    blurRadius: 18,
+                                    offset: const Offset(0, 4),
+                                  ),
+                                ],
+                              ),
+                              child: Column(
                                 children: [
-                                  const Icon(Icons.timer_outlined, size: 12, color: Color(0xFFFBBF24)),
-                                  const SizedBox(width: 4),
+                                  Container(
+                                    padding: const EdgeInsets.all(12),
+                                    decoration: const BoxDecoration(
+                                      color: Color(0xFF10B981),
+                                      shape: BoxShape.circle,
+                                    ),
+                                    child: const Icon(
+                                      Icons.check_rounded,
+                                      color: Colors.white,
+                                      size: 34,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 12),
                                   Text(
-                                    'Valid: 05:00',
-                                    style: GoogleFonts.robotoMono(
-                                      fontSize: 10,
+                                    '₹${(grandTotalPaise / 100.0).toStringAsFixed(2)} Received!',
+                                    style: GoogleFonts.outfit(
+                                      fontSize: 20,
+                                      fontWeight: FontWeight.w900,
+                                      color: Colors.white,
+                                      letterSpacing: 0.3,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    'Detected via ${_detectedUpiEvent?.appName ?? 'UPI'} • Auto-Completing Bill...',
+                                    textAlign: TextAlign.center,
+                                    style: GoogleFonts.plusJakartaSans(
+                                      fontSize: 11.5,
                                       fontWeight: FontWeight.w700,
-                                      color: const Color(0xFFFBBF24),
+                                      color: const Color(0xFFA7F3D0),
+                                    ),
+                                  ),
+                                  const SizedBox(height: 12),
+                                  const SizedBox(
+                                    width: 18,
+                                    height: 18,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2.2,
+                                      color: Color(0xFF34D399),
                                     ),
                                   ),
                                 ],
                               ),
-                            ],
-                          ),
+                            )
+                          else ...[
+                            // QR White Canvas Container
+                            Container(
+                              padding: const EdgeInsets.all(12),
+                              decoration: BoxDecoration(
+                                color: Colors.white,
+                                borderRadius: BorderRadius.circular(14),
+                                boxShadow: const [
+                                  BoxShadow(
+                                    color: Color(0x1A000000),
+                                    blurRadius: 10,
+                                    offset: Offset(0, 4),
+                                  ),
+                                ],
+                              ),
+                              child: Column(
+                                children: [
+                                  QrImageView(
+                                    data: 'upi://pay?pa=$_activeUpiVpa&pn=${Uri.encodeComponent(_activeStoreName)}&am=${(grandTotalPaise / 100.0).toStringAsFixed(2)}&cu=INR&tn=POS+Bill',
+                                    version: QrVersions.auto,
+                                    size: 150,
+                                  ),
+                                  const SizedBox(height: 6),
+                                  Text(
+                                    'Scan to Pay Exact ₹${(grandTotalPaise / 100.0).toStringAsFixed(2)}',
+                                    style: GoogleFonts.outfit(
+                                      fontSize: 13.5,
+                                      fontWeight: FontWeight.w800,
+                                      color: const Color(0xFF0F172A),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(height: 12),
+
+                            // Accepted UPI Apps Strip & Timer
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Text(
+                                  'PhonePe • GPay • Paytm • BHIM',
+                                  style: GoogleFonts.inter(
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w600,
+                                    color: const Color(0xFF94A3B8),
+                                  ),
+                                ),
+                                Row(
+                                  children: [
+                                    const Icon(Icons.timer_outlined, size: 12, color: Color(0xFFFBBF24)),
+                                    const SizedBox(width: 4),
+                                    Text(
+                                      'Valid: 05:00',
+                                      style: GoogleFonts.robotoMono(
+                                        fontSize: 10,
+                                        fontWeight: FontWeight.w700,
+                                        color: const Color(0xFFFBBF24),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ),
+                          ],
                           if (_currentCustomer != null && _currentCustomer!.phone.isNotEmpty) ...[
                             const SizedBox(height: 12),
                             InkWell(
@@ -2524,10 +2677,17 @@ class _PosCheckoutModalState extends State<PosCheckoutModal> {
     return Expanded(
       child: InkWell(
         onTap: () {
+          final prevMode = _paymentMode;
           setState(() {
             _paymentMode = mode;
-            if (mode == 'credit' && _currentCustomer == null) {
-              _isSearchingCustomer = true;
+            if (prevMode == 'upi' && mode != 'upi') {
+              _stopUpiPaymentListening();
+              _isUpiPaymentDetected = false;
+              _soundboxAnnouncedForUpi = false;
+            } else if (mode == 'upi' && prevMode != 'upi') {
+              _isUpiPaymentDetected = false;
+              _soundboxAnnouncedForUpi = false;
+              _startUpiPaymentListening();
             }
             if (mode == 'split' && !isSplitBalanced) {
               final half = (grandTotalPaise / 200.0).floor();

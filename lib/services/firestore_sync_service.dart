@@ -83,20 +83,29 @@ class FirestoreSyncService {
         'platform': 'android_native',
       }, SetOptions(merge: true));
 
-      // Also mirror to merchants collection for Admin Portal fast lookup
+      // Also mirror to merchants collection for Admin Portal fast lookup (both by bizId and by owner UID)
       try {
-        await firestore.collection('merchants').doc(bizId).set({
-          'id': bizId,
+        final merchantPayload = {
+          'id': currentUid.isNotEmpty ? currentUid : bizId,
+          'uid': currentUid,
           'business_id': bizId,
-          'name': profile.storeName,
+          'name': profile.ownerName.isNotEmpty ? profile.ownerName : profile.storeName,
           'owner_name': profile.ownerName,
+          'shop_name': profile.storeName,
           'phone': profile.phone,
           'email': profile.email,
+          'role': 'admin',
           'is_pro': profile.isPro,
           'subscription_tier': profile.isPro ? (profile.proPlan.isNotEmpty ? profile.proPlan : 'pro') : 'free',
           'subscription_expires_at': profile.proExpiry,
+          'createdAt': DateTime.now().toIso8601String(),
+          'lastSyncedAt': DateTime.now().toIso8601String(),
           'updated_at': FieldValue.serverTimestamp(),
-        }, SetOptions(merge: true));
+        };
+        if (currentUid.isNotEmpty) {
+          await firestore.collection('merchants').doc(currentUid).set(merchantPayload, SetOptions(merge: true));
+        }
+        await firestore.collection('merchants').doc(bizId).set(merchantPayload, SetOptions(merge: true));
       } catch (_) {}
 
       // 2. Sync all pending sales bills
@@ -104,6 +113,22 @@ class FirestoreSyncService {
       for (final sale in pendingSales) {
         await service.pushSaleToCloud(sale);
       }
+
+      // 3. Dual-sync all store products to root catalog for admin panel
+      try {
+        final products = await LocalDatabase.instance.getAllProducts();
+        for (final p in products) {
+          await service.pushProductToCloud(p);
+        }
+      } catch (_) {}
+
+      // 4. Dual-sync all customers to root collection for admin panel
+      try {
+        final customers = await LocalDatabase.instance.getAllCustomers();
+        for (final c in customers) {
+          await service.pushCustomerToCloud(c);
+        }
+      } catch (_) {}
 
       service.syncState.value = SyncState.synced;
       service.liveSyncCounter.value++;
@@ -443,13 +468,66 @@ class FirestoreSyncService {
         'tax_amount_paise': sale.taxAmountPaise,
         'discount_paise': sale.discountPaise,
         'total_amount_paise': sale.totalAmountPaise,
+        'total_amount': sale.totalAmountPaise / 100.0,
         'payment_method': sale.paymentMethod,
         'status': sale.status,
         'items': sale.items,
         'created_at': sale.createdAt.toIso8601String(),
+        'timestamp': sale.createdAt.millisecondsSinceEpoch,
         'source': 'mobile_native_pos',
         'synced_at': FieldValue.serverTimestamp(),
       }, SetOptions(merge: true));
+
+      // Dual-Sync: Pushes directly to Root 'sales' Collection for Web Admin Portal (kamaiplus.proventure.in/admin)
+      try {
+        await firestore.collection('sales').doc(sale.id).set({
+          'id': sale.id,
+          'business_id': _activeBusinessId,
+          'invoice_number': sale.invoiceNumber,
+          'customer_id': sale.customerId,
+          'customer_name': sale.customerName ?? 'Cash Customer',
+          'customer_phone': sale.customerPhone,
+          'subtotal': sale.subtotalPaise,
+          'subtotal_paise': sale.subtotalPaise,
+          'tax_total': sale.taxAmountPaise,
+          'tax_amount_paise': sale.taxAmountPaise,
+          'discount_total': sale.discountPaise,
+          'discount_paise': sale.discountPaise,
+          'grand_total': sale.totalAmountPaise,
+          'total_amount_paise': sale.totalAmountPaise,
+          'total_amount': sale.totalAmountPaise / 100.0,
+          'amount_received': sale.totalAmountPaise,
+          'balance_due': 0,
+          'change_returned': 0,
+          'payment_method': sale.paymentMethod,
+          'payment_status': 'paid',
+          'status': sale.status,
+          'created_by': 'owner',
+          'items': sale.items,
+          'created_at': sale.createdAt.toIso8601String(),
+          'timestamp': sale.createdAt.millisecondsSinceEpoch,
+          'source': 'mobile_native_pos',
+          'sync_status': 'synced',
+          'lastSyncedAt': DateTime.now().toIso8601String(),
+          'synced_at': FieldValue.serverTimestamp(),
+        }, SetOptions(merge: true));
+      } catch (_) {}
+
+      // Realtime aggregate sync for Admin Portal (kamaiplus.proventure.in/admin)
+      try {
+        final liveMetrics = {
+          'last_sale_at': FieldValue.serverTimestamp(),
+          'last_synced_at': FieldValue.serverTimestamp(),
+          'total_sales_count': FieldValue.increment(1),
+          'total_revenue_paise': FieldValue.increment(sale.totalAmountPaise),
+        };
+        firestore.collection('businesses').doc(_activeBusinessId).set(liveMetrics, SetOptions(merge: true)).catchError((_) {});
+        firestore.collection('merchants').doc(_activeBusinessId).set(liveMetrics, SetOptions(merge: true)).catchError((_) {});
+        final currentUid = FirebaseAuth.instance.currentUser?.uid;
+        if (currentUid != null && currentUid.isNotEmpty) {
+          firestore.collection('merchants').doc(currentUid).set(liveMetrics, SetOptions(merge: true)).catchError((_) {});
+        }
+      } catch (_) {}
 
       // Decrement stock in Firestore if not already refunded
       if (sale.status != 'refunded') {
@@ -464,6 +542,12 @@ class FirestoreSyncService {
                 .doc(prodId)
                 .update({
               'stock_quantity': FieldValue.increment(-qty),
+            }).catchError((_) {});
+            firestore
+                .collection('products')
+                .doc(prodId)
+                .update({
+              'current_stock': FieldValue.increment(-qty),
             }).catchError((_) {});
           }
         }
@@ -482,33 +566,48 @@ class FirestoreSyncService {
     if (!_isInitialized) return;
     try {
       final firestore = FirebaseFirestore.instance;
-      await firestore
-          .collection('businesses')
-          .doc(_activeBusinessId)
-          .collection('products')
-          .doc(product.id)
-          .set({
+      final payload = {
         'id': product.id,
         'business_id': _activeBusinessId,
         'name': product.name,
         'barcode': product.barcode,
         'category_id': product.categoryId,
         'selling_price_paise': product.sellingPricePaise,
+        'selling_price': product.sellingPricePaise,
         'mrp_paise': product.mrpPaise,
+        'mrp': product.mrpPaise,
         'purchase_price_paise': product.purchasePricePaise,
+        'purchase_price': product.purchasePricePaise,
         'stock_quantity': product.stockQuantity,
+        'current_stock': product.stockQuantity,
         'tax_rate': product.taxRate,
         'is_tax_inclusive': product.isTaxInclusive,
         'unit': product.unit,
         'is_loose_item': product.isLooseItem,
+        'is_active': true,
+        'is_favorite': false,
         'batch_number': product.batchNumber,
         'expiry_date': product.expiryDate,
         'size': product.size,
         'color': product.color,
         'imei_serial': product.imeiSerial,
         'hsn_code': product.hsnCode,
+        'sync_status': 'synced',
+        'lastSyncedAt': DateTime.now().toIso8601String(),
         'updated_at': FieldValue.serverTimestamp(),
-      }, SetOptions(merge: true));
+      };
+
+      await firestore
+          .collection('businesses')
+          .doc(_activeBusinessId)
+          .collection('products')
+          .doc(product.id)
+          .set(payload, SetOptions(merge: true));
+
+      // Dual-sync to root products collection for admin portal
+      try {
+        await firestore.collection('products').doc(product.id).set(payload, SetOptions(merge: true));
+      } catch (_) {}
     } catch (e) {
       debugPrint('Cloud product push notice: $e');
     }
@@ -525,6 +624,9 @@ class FirestoreSyncService {
           .collection('products')
           .doc(productId)
           .delete();
+      try {
+        await firestore.collection('products').doc(productId).delete();
+      } catch (_) {}
     } catch (e) {
       debugPrint('Cloud product delete notice: $e');
     }
@@ -535,20 +637,33 @@ class FirestoreSyncService {
     if (!_isInitialized) return;
     try {
       final firestore = FirebaseFirestore.instance;
+      final payload = {
+        'id': customer.id,
+        'business_id': _activeBusinessId,
+        'name': customer.name,
+        'phone': customer.phone,
+        'address': customer.address ?? '',
+        'current_balance': customer.currentBalancePaise,
+        'current_balance_paise': customer.currentBalancePaise,
+        'credit_limit_paise': customer.creditLimitPaise,
+        'opening_balance': 0,
+        'customer_type': customer.isVip ? 'vip' : (customer.currentBalancePaise > 0 ? 'credit' : 'regular'),
+        'sync_status': 'synced',
+        'lastSyncedAt': DateTime.now().toIso8601String(),
+        'updated_at': FieldValue.serverTimestamp(),
+      };
+
       await firestore
           .collection('businesses')
           .doc(_activeBusinessId)
           .collection('customers')
           .doc(customer.id)
-          .set({
-        'id': customer.id,
-        'business_id': _activeBusinessId,
-        'name': customer.name,
-        'phone': customer.phone,
-        'current_balance_paise': customer.currentBalancePaise,
-        'credit_limit_paise': customer.creditLimitPaise,
-        'updated_at': FieldValue.serverTimestamp(),
-      }, SetOptions(merge: true));
+          .set(payload, SetOptions(merge: true));
+
+      // Dual-sync to root customers collection for admin portal
+      try {
+        await firestore.collection('customers').doc(customer.id).set(payload, SetOptions(merge: true));
+      } catch (_) {}
     } catch (e) {
       debugPrint('Cloud customer push notice: $e');
     }
@@ -565,6 +680,9 @@ class FirestoreSyncService {
           .collection('customers')
           .doc(customerId)
           .delete();
+      try {
+        await firestore.collection('customers').doc(customerId).delete();
+      } catch (_) {}
     } catch (e) {
       debugPrint('Cloud customer delete notice: $e');
     }

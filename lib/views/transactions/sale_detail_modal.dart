@@ -2,14 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../core/database/local_database.dart';
 import '../../core/utils/money_formatter.dart';
 import '../../models/models.dart';
 import '../../services/invoice_pdf_service.dart';
 import '../../services/native_notification_service.dart';
-import '../../services/thermal_printer_service.dart';
+import '../../services/app_printer_service.dart';
 import '../common/store_logo_avatar.dart';
 import '../common/pro_upgrade_modal.dart';
 import '../common/in_app_notification.dart';
@@ -43,61 +42,12 @@ class SaleDetailModal extends StatelessWidget {
     );
   }
 
-  static const _btChannel = MethodChannel('com.kamaiplus.pos/bluetooth_printer');
-
   void _printThermal(BuildContext context) async {
     HapticFeedback.mediumImpact();
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final printerAddress = prefs.getString('printer_mac_address');
-      final is80mm = prefs.getBool('printer_is_80mm') ?? false;
-
-      if (printerAddress == null || printerAddress.isEmpty) {
-        if (context.mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: const Text('No Bluetooth printer configured. Connect via Menu > Hardware & Bluetooth.'),
-              backgroundColor: const Color(0xFF0F172A),
-              behavior: SnackBarBehavior.floating,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-            ),
-          );
-        }
-        return;
-      }
-
-      final bytes = ThermalPrinterService.generateReceiptBytes(
-        sale: sale,
-        storeName: 'KamaiPlus Store',
-        is80mm: is80mm,
-        kickCashDrawer: sale.paymentMethod == 'cash',
-      );
-
-      await _btChannel.invokeMethod('printBytes', {
-        'address': printerAddress,
-        'bytes': bytes,
-      });
-
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('✓ Sent bill #${sale.invoiceNumber} to thermal printer'),
-            backgroundColor: const Color(0xFF059669),
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-          ),
-        );
-      }
-    } catch (e) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Print error: $e'),
-            backgroundColor: const Color(0xFFEF4444),
-          ),
-        );
-      }
-    }
+    await AppPrinterService.printSale(
+      context: context,
+      sale: sale,
+    );
   }
 
   void _shareWhatsApp(BuildContext context) async {

@@ -19,6 +19,7 @@ import '../growth/growth_campaigns_screen.dart';
 import '../auth/login_screen.dart';
 import '../../services/auth_service.dart';
 import '../../services/firestore_sync_service.dart';
+import 'printer_settings_screen.dart';
 
 class StoreProfileScreen extends StatefulWidget {
   final int initialTab;
@@ -1225,6 +1226,54 @@ class _StoreProfileScreenState extends State<StoreProfileScreen> {
                     ),
                   ),
                 ],
+              ),
+            ],
+          ),
+        ),
+        // CARD: PRINTER & HARDWARE SETUP
+        _buildSectionCard(
+          icon: Icons.print_rounded,
+          iconColor: const Color(0xFF7C3AED),
+          title: 'Printer & Hardware Setup',
+          trailing: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+            decoration: BoxDecoration(
+              color: const Color(0xFFF5F3FF),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: const Color(0xFFDDD6FE)),
+            ),
+            child: Text(
+              'Thermal & A4',
+              style: GoogleFonts.inter(fontSize: 10.5, fontWeight: FontWeight.w800, color: const Color(0xFF7C3AED)),
+            ),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Bluetooth Thermal (58mm/80mm) POS printer pair karein ya A4 Standard System Spooler select karein. Har sale par 1-tap direct print enable karein.',
+                style: GoogleFonts.inter(fontSize: 11.5, color: const Color(0xFF64748B)),
+              ),
+              const SizedBox(height: 14),
+              ElevatedButton.icon(
+                onPressed: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => const PrinterSettingsScreen()),
+                  );
+                },
+                icon: const Icon(Icons.settings_rounded, size: 18),
+                label: Text(
+                  'Configure Printer & Hardware',
+                  style: GoogleFonts.outfit(fontSize: 13, fontWeight: FontWeight.w700),
+                ),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF7C3AED),
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 11),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  elevation: 0,
+                ),
               ),
             ],
           ),

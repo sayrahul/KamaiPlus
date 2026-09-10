@@ -11,6 +11,7 @@ import '../reports/gst_reports_screen.dart';
 import '../settings/invoice_themes_screen.dart';
 import '../settings/backup_restore_screen.dart';
 import '../settings/store_profile_screen.dart';
+import '../settings/printer_settings_screen.dart';
 import '../tools/barcode_studio_screen.dart';
 import '../growth/growth_campaigns_screen.dart';
 import '../common/pro_upgrade_modal.dart';
@@ -523,6 +524,19 @@ class _MenuScreenState extends State<MenuScreen> {
                         ),
                       ),
                     ],
+                  ),
+                  const SizedBox(height: 10),
+                  _buildNavCard(
+                    title: 'Printer & Hardware Setup',
+                    subtitle: 'Bluetooth Thermal (58/80mm) & A4 System Spooler',
+                    icon: Icons.print_rounded,
+                    iconColor: const Color(0xFF7C3AED),
+                    iconBg: const Color(0xFFF5F3FF),
+                    borderColor: const Color(0xFFDDD6FE),
+                    badgeText: 'HARDWARE',
+                    badgeBg: const Color(0xFFF5F3FF),
+                    badgeColor: const Color(0xFF7C3AED),
+                    onTap: () => _handleScreenPush(const PrinterSettingsScreen()),
                   ),
                   const SizedBox(height: 16),
                 ],

@@ -1,5 +1,7 @@
+import 'dart:ui' as ui;
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
+import 'package:qr_flutter/qr_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../core/database/local_database.dart';
 import '../core/utils/money_formatter.dart';
@@ -31,6 +33,31 @@ class InvoicePdfService {
         try {
           final profile = await LocalDatabase.instance.getStoreProfile();
           upiId = profile.upiVpa;
+        } catch (_) {}
+      }
+
+      // Generate Crisp UPI QR Code bitmap bytes for the PDF engine
+      Uint8List? qrBytes;
+      if (showDynamicUpiQr && upiId.trim().isNotEmpty) {
+        try {
+          final cleanAmt = (sale.totalAmountPaise / 100).toStringAsFixed(2);
+          final upiPayload =
+              'upi://pay?pa=${upiId.trim()}&pn=${Uri.encodeComponent(storeName)}&am=$cleanAmt&cu=INR';
+          final painter = QrPainter(
+            data: upiPayload,
+            version: QrVersions.auto,
+            gapless: true,
+            dataModuleStyle: const QrDataModuleStyle(
+              dataModuleShape: QrDataModuleShape.square,
+              color: ui.Color(0xFF0F172A),
+            ),
+            eyeStyle: const QrEyeStyle(
+              eyeShape: QrEyeShape.square,
+              color: ui.Color(0xFF0F172A),
+            ),
+          );
+          final pic = await painter.toImageData(240, format: ui.ImageByteFormat.png);
+          qrBytes = pic?.buffer.asUint8List();
         } catch (_) {}
       }
 
@@ -82,6 +109,7 @@ class InvoicePdfService {
         'footerNote': footerNote,
         'showDynamicUpiQr': showDynamicUpiQr,
         'upiId': upiId,
+        'qrBytes': qrBytes,
       });
 
       return filePath;
@@ -94,6 +122,19 @@ class InvoicePdfService {
   static Future<bool> openPdf(String filePath) async {
     try {
       final res = await _channel.invokeMethod<bool>('openPdf', {'path': filePath});
+      return res ?? false;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// Sends PDF directly to native Android PrintManager for A4/Standard printing (Wi-Fi, USB, Mopria)
+  static Future<bool> printPdf({required String filePath, String? documentName}) async {
+    try {
+      final res = await _channel.invokeMethod<bool>('printPdf', {
+        'path': filePath,
+        'name': documentName ?? 'Tax_Invoice',
+      });
       return res ?? false;
     } catch (_) {
       return false;

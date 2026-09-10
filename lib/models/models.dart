@@ -2,7 +2,35 @@ import 'dart:convert';
 
 String inferBusinessType(String? name, String? category) {
   final text = '${name ?? ''} ${category ?? ''}'.toLowerCase();
+  if (text.contains('dettol') ||
+      text.contains('savlon') ||
+      text.contains('lifebuoy') ||
+      text.contains('vicks') ||
+      text.contains('moov') ||
+      text.contains('volini') ||
+      text.contains('band-aid') ||
+      text.contains('glucon') ||
+      text.contains('glucose-d') ||
+      text.contains('glucose powder') ||
+      text.contains('horlicks') ||
+      text.contains('bournvita') ||
+      text.contains('complan') ||
+      text.contains('toothpaste') ||
+      text.contains('colgate') ||
+      text.contains('close up') ||
+      text.contains('sensodyne') ||
+      text.contains('eno') ||
+      text.contains('pudin hara') ||
+      text.contains('strepsils') ||
+      text.contains('iodex') ||
+      text.contains('sanitizer') ||
+      text.contains('diaper') ||
+      text.contains('pampers') ||
+      text.contains('boroline')) {
+    return 'both';
+  }
   if (text.contains('tablet') ||
+
       text.contains('capsule') ||
       text.contains('syrup') ||
       text.contains('dolo') ||
@@ -121,6 +149,7 @@ class ProductModel {
   final String? imeiSerial;
   final String? hsnCode;
   final bool isLooseItem;
+  final bool isFavorite;
   final String syncStatus;
   final String businessType;
 
@@ -144,6 +173,7 @@ class ProductModel {
     this.imeiSerial,
     this.hsnCode,
     this.isLooseItem = false,
+    this.isFavorite = false,
     this.syncStatus = 'synced',
     this.businessType = 'grocery',
   });
@@ -168,6 +198,7 @@ class ProductModel {
     'imei_serial': imeiSerial,
     'hsn_code': hsnCode,
     'is_loose_item': isLooseItem ? 1 : 0,
+    'is_favorite': isFavorite ? 1 : 0,
     'sync_status': syncStatus,
     'business_type': businessType,
   };
@@ -192,6 +223,7 @@ class ProductModel {
     imeiSerial: map['imei_serial'] as String?,
     hsnCode: map['hsn_code'] as String?,
     isLooseItem: map['is_loose_item'] == 1 || map['is_loose_item'] == true,
+    isFavorite: (map['is_favorite'] == 1 || map['is_favorite'] == true),
     syncStatus: map['sync_status'] ?? 'pending',
     businessType: (map['business_type'] != null && map['business_type'].toString().isNotEmpty)
         ? map['business_type']
@@ -216,6 +248,7 @@ class ProductModel {
     String? imeiSerial,
     String? hsnCode,
     bool? isLooseItem,
+    bool? isFavorite,
     String? syncStatus,
     String? businessType,
   }) => ProductModel(
@@ -238,6 +271,7 @@ class ProductModel {
     imeiSerial: imeiSerial ?? this.imeiSerial,
     hsnCode: hsnCode ?? this.hsnCode,
     isLooseItem: isLooseItem ?? this.isLooseItem,
+    isFavorite: isFavorite ?? this.isFavorite,
     syncStatus: syncStatus ?? this.syncStatus,
     businessType: businessType ?? this.businessType,
   );

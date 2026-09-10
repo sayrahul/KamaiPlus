@@ -1,13 +1,11 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:qr_flutter/qr_flutter.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import '../../models/models.dart';
 import '../../core/utils/money_formatter.dart';
 import '../../core/database/local_database.dart';
 import '../../services/soundbox_service.dart';
 import '../../services/firestore_sync_service.dart';
-import '../../services/thermal_printer_service.dart';
+import '../../services/app_printer_service.dart';
 import 'sale_completed_modal.dart';
 
 class PaymentModal extends StatefulWidget {
@@ -27,8 +25,6 @@ class PaymentModal extends StatefulWidget {
 }
 
 class _PaymentModalState extends State<PaymentModal> {
-  static const _btChannel = MethodChannel('com.kamaiplus.pos/bluetooth_printer');
-
   String _selectedMethod = 'upi'; // 'cash' | 'upi' | 'credit'
   bool _isProcessing = false;
   StoreProfileModel? _storeProfile;
@@ -110,24 +106,11 @@ class _PaymentModalState extends State<PaymentModal> {
 
   Future<void> _autoPrintReceipt(SaleModel sale) async {
     try {
-      final prefs = await SharedPreferences.getInstance();
-      final printerAddress = prefs.getString('printer_mac_address');
-      final is80mm = prefs.getBool('printer_is_80mm') ?? false;
-      final storeName = prefs.getString('business_name') ?? 'KamaiPlus Store';
-
-      if (printerAddress != null && printerAddress.isNotEmpty) {
-        final bytes = ThermalPrinterService.generateReceiptBytes(
-          sale: sale,
-          storeName: storeName,
-          is80mm: is80mm,
-          kickCashDrawer: _selectedMethod == 'cash',
-        );
-
-        await _btChannel.invokeMethod('printBytes', {
-          'address': printerAddress,
-          'bytes': bytes,
-        });
-      }
+      await AppPrinterService.printSale(
+        context: context,
+        sale: sale,
+        showToast: false,
+      );
     } catch (_) {
       // Non-blocking silent catch for auto-print
     }

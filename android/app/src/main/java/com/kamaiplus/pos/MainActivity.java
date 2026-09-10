@@ -23,7 +23,15 @@ import android.graphics.Typeface;
 import android.graphics.pdf.PdfDocument;
 import android.net.Uri;
 import android.os.Build;
+import android.os.Bundle;
+import android.os.CancellationSignal;
 import android.os.Environment;
+import android.os.ParcelFileDescriptor;
+import android.print.PageRange;
+import android.print.PrintAttributes;
+import android.print.PrintDocumentAdapter;
+import android.print.PrintDocumentInfo;
+import android.print.PrintManager;
 import android.provider.ContactsContract;
 import android.provider.MediaStore;
 import android.database.Cursor;
@@ -58,6 +66,7 @@ public class MainActivity extends FlutterFragmentActivity implements TextToSpeec
     private static final String CONTACTS_CHANNEL = "com.kamaiplus.pos/contacts";
     private static final String SHORTCUT_CHANNEL = "com.kamaiplus.pos/shortcuts";
     private static final String SHARE_CHANNEL = "com.kamaiplus.pos/share_target";
+    private static final String PAYMENT_DETECTOR_CHANNEL = "com.kamaiplus.pos/payment_detector";
     private static final String CHANNEL_ID = "kamai_pos_channel";
     private static final UUID SPP_UUID = UUID.fromString("00001101-0000-1000-8000-00805F9B34FB");
     private static final int REQUEST_CODE_PICK_CONTACT = 5001;
@@ -71,6 +80,7 @@ public class MainActivity extends FlutterFragmentActivity implements TextToSpeec
     private String pendingSharedFile = null;
     private MethodChannel shortcutMethodChannel;
     private MethodChannel shareMethodChannel;
+    private MethodChannel paymentDetectorChannel;
 
     @Override
     protected void onResume() {
@@ -279,6 +289,62 @@ public class MainActivity extends FlutterFragmentActivity implements TextToSpeec
             }
         });
 
+        // Native UPI Payment Detection Channel (Zero-Cost Soundbox & In-App Notification Detector)
+        paymentDetectorChannel = new MethodChannel(flutterEngine.getDartExecutor().getBinaryMessenger(), PAYMENT_DETECTOR_CHANNEL);
+        paymentDetectorChannel.setMethodCallHandler(new MethodChannel.MethodCallHandler() {
+            @Override
+            public void onMethodCall(@NonNull MethodCall call, @NonNull MethodChannel.Result result) {
+                switch (call.method) {
+                    case "isNotificationAccessGranted": {
+                        boolean granted = false;
+                        String pkgName = getPackageName();
+                        String flat = android.provider.Settings.Secure.getString(getContentResolver(), "enabled_notification_listeners");
+                        if (flat != null && !flat.isEmpty()) {
+                            String[] names = flat.split(":");
+                            for (String name : names) {
+                                android.content.ComponentName cn = android.content.ComponentName.unflattenFromString(name);
+                                if (cn != null && pkgName.equals(cn.getPackageName())) {
+                                    granted = true;
+                                    break;
+                                }
+                            }
+                        }
+                        result.success(granted);
+                        break;
+                    }
+                    case "openNotificationAccessSettings": {
+                        try {
+                            Intent intent = new Intent(android.provider.Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS);
+                            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                            startActivity(intent);
+                            result.success(true);
+                        } catch (Exception e) {
+                            result.error("SETTINGS_ERROR", e.getMessage(), null);
+                        }
+                        break;
+                    }
+                    case "simulatePayment": {
+                        Number amt = call.argument("amountPaise");
+                        long amountPaise = amt != null ? amt.longValue() : 0;
+                        String appName = call.argument("appName") != null ? call.argument("appName").toString() : "PhonePe";
+                        forwardPaymentToFlutter(amountPaise, appName, "Customer", "Simulated Payment");
+                        result.success(true);
+                        break;
+                    }
+                    default:
+                        result.notImplemented();
+                        break;
+                }
+            }
+        });
+
+        PaymentNotificationListener.setCallback(new PaymentNotificationListener.PaymentCallback() {
+            @Override
+            public void onPaymentDetected(long amountPaise, String appName, String sender, String rawText) {
+                forwardPaymentToFlutter(amountPaise, appName, sender, rawText);
+            }
+        });
+
         // 1. TextToSpeech Voice Engine
         tts = new TextToSpeech(this, this);
         new MethodChannel(flutterEngine.getDartExecutor().getBinaryMessenger(), SOUNDBOX_CHANNEL)
@@ -457,6 +523,16 @@ public class MainActivity extends FlutterFragmentActivity implements TextToSpeec
                                 String tableNumber = call.argument("tableNumber");
                                 Boolean isPro = call.argument("isPro");
                                 if (isPro == null) isPro = false;
+
+                                byte[] qrBytes = call.argument("qrBytes");
+                                Bitmap qrBmp = null;
+                                if (qrBytes != null && qrBytes.length > 0) {
+                                    try {
+                                        BitmapFactory.Options qrOpts = new BitmapFactory.Options();
+                                        qrOpts.inPreferredConfig = Bitmap.Config.RGB_565;
+                                        qrBmp = BitmapFactory.decodeByteArray(qrBytes, 0, qrBytes.length, qrOpts);
+                                    } catch (Exception ignored) {}
+                                }
 
                                 if (invoiceNumber == null) invoiceNumber = "INV-" + System.currentTimeMillis();
                                 if (storeName == null || storeName.trim().isEmpty()) storeName = "KamaiPlus Store";
@@ -722,108 +798,167 @@ public class MainActivity extends FlutterFragmentActivity implements TextToSpeec
                                     // If last page, render Summary, Terms & Signatory Block
                                     if (pageIdx == totalPages) {
                                         canvas.drawLine(36, currentY + 2, 559, currentY + 2, linePaint);
-                                        currentY += 12;
+                                        currentY += 14;
 
-                                        // Left: Dynamic UPI QR / Payment Box (Matching live preview)
+                                        float sectionTopY = currentY;
+
+                                        // --- LEFT COLUMN: UPI PAYMENT CARD & TERMS & CONDITIONS (X: 36 to 305) ---
+                                        float afterUpiY = sectionTopY;
                                         if (showDynamicUpiQr && !upiId.trim().isEmpty()) {
-                                            RectF upiBox = new RectF(36, currentY, 210, currentY + 52);
-                                            canvas.drawRoundRect(upiBox, 6, 6, badgeBg);
-                                            canvas.drawRoundRect(upiBox, 6, 6, linePaint);
+                                            float upiBoxHeight = 62;
+                                            RectF upiBox = new RectF(36, sectionTopY, 305, sectionTopY + upiBoxHeight);
+                                            canvas.drawRoundRect(upiBox, 8, 8, badgeBg);
+                                            canvas.drawRoundRect(upiBox, 8, 8, linePaint);
+
+                                            float textStartX = 46;
+                                            if (qrBmp != null) {
+                                                RectF qrRect = new RectF(44, sectionTopY + 6, 94, sectionTopY + 56);
+                                                Paint bmpPaint = new Paint(Paint.FILTER_BITMAP_FLAG);
+                                                canvas.drawBitmap(qrBmp, null, qrRect, bmpPaint);
+                                                textStartX = 100;
+                                            }
 
                                             Paint upiTitlePaint = new Paint(boldTextPaint);
-                                            upiTitlePaint.setTextSize(9f);
-                                            canvas.drawText("Primary Shop QR (Instant UPI)", 44, currentY + 16, upiTitlePaint);
+                                            upiTitlePaint.setTextSize(9.5f);
+                                            canvas.drawText("Instant UPI Payment", textStartX, sectionTopY + 18, upiTitlePaint);
 
                                             Paint upiIdPaint = new Paint(subPaint);
                                             upiIdPaint.setTextSize(8.5f);
-                                            canvas.drawText(upiId, 44, currentY + 30, upiIdPaint);
+                                            String displayUpi = upiId.length() > 28 ? upiId.substring(0, 26) + "..." : upiId;
+                                            canvas.drawText("UPI ID: " + displayUpi, textStartX, sectionTopY + 32, upiIdPaint);
 
                                             Paint upiFree = new Paint(subPaint);
-                                            upiFree.setColor(Color.rgb(16, 185, 129));
+                                            upiFree.setColor(Color.rgb(5, 150, 105)); // Emerald 600
                                             upiFree.setTextSize(7.5f);
                                             upiFree.setFakeBoldText(true);
-                                            canvas.drawText("Zero transaction charges • Verified", 44, currentY + 44, upiFree);
+                                            canvas.drawText("✓ Scan & Pay with GPay, PhonePe, Paytm", textStartX, sectionTopY + 46, upiFree);
+
+                                            afterUpiY = sectionTopY + upiBoxHeight + 10;
                                         }
 
-                                        // Terms & Conditions block
-                                        float termsX = showDynamicUpiQr ? 220 : 36;
-                                        canvas.drawText("Terms & Conditions:", termsX, currentY + 12, boldTextPaint);
+                                        // Terms & Conditions Block (Uncluttered, comfortable width)
+                                        canvas.drawText("Terms & Conditions:", 36, afterUpiY + 12, boldTextPaint);
                                         String[] termLines = termsText.split("\n");
-                                        float tY = currentY + 24;
+                                        float tY = afterUpiY + 24;
                                         for (int tl = 0; tl < termLines.length && tl < 3; tl++) {
                                             String line = termLines[tl];
-                                            if (line.length() > 36) line = line.substring(0, 36) + "...";
-                                            canvas.drawText(line, termsX, tY, subPaint);
-                                            tY += 11;
+                                            if (line.length() > 56) line = line.substring(0, 54) + "...";
+                                            canvas.drawText(line, 36, tY, subPaint);
+                                            tY += 12;
                                         }
 
-                                        // Right: Totals Box
-                                        int totalsX = 380;
-                                        int totalsY = currentY;
+                                        // Store Thank You note
+                                        if (footerNote != null && !footerNote.trim().isEmpty()) {
+                                            Paint notePaint = new Paint(subPaint);
+                                            notePaint.setTextSize(8.5f);
+                                            notePaint.setColor(Color.rgb(100, 116, 139));
+                                            canvas.drawText("♥ " + footerNote, 36, tY + 10, notePaint);
+                                        }
+
+                                        // --- RIGHT COLUMN: TOTALS + AUTHORISED SIGNATORY (X: 330 to 559) ---
+                                        float totalsX = 330;
+                                        float totalsY = sectionTopY;
+
                                         if (discountAmount != null && !discountAmount.isEmpty() && !discountAmount.equals("₹0.00") && !discountAmount.equals("0")) {
-                                            canvas.drawText("Subtotal:", totalsX, totalsY, subPaint);
-                                            canvas.drawText(subtotalAmount, 490, totalsY, bodyPaint);
-                                            totalsY += 12;
-                                            canvas.drawText("Discount:", totalsX, totalsY, subPaint);
-                                            canvas.drawText("-" + discountAmount, 490, totalsY, bodyPaint);
-                                            totalsY += 12;
-                                        }
-                                        if (taxAmount != null && !taxAmount.isEmpty() && !taxAmount.equals("₹0.00") && !taxAmount.equals("0")) {
-                                            canvas.drawText("GST Tax:", totalsX, totalsY, subPaint);
-                                            canvas.drawText(taxAmount, 490, totalsY, bodyPaint);
-                                            totalsY += 12;
+                                            canvas.drawText("Subtotal:", totalsX, totalsY + 10, subPaint);
+                                            float subW = bodyPaint.measureText(subtotalAmount);
+                                            canvas.drawText(subtotalAmount, 555 - subW, totalsY + 10, bodyPaint);
+                                            totalsY += 14;
+
+                                            canvas.drawText("Discount:", totalsX, totalsY + 10, subPaint);
+                                            Paint discPaint = new Paint(bodyPaint);
+                                            discPaint.setColor(Color.rgb(220, 38, 38)); // Red
+                                            String discStr = "-" + discountAmount;
+                                            float discW = discPaint.measureText(discStr);
+                                            canvas.drawText(discStr, 555 - discW, totalsY + 10, discPaint);
+                                            totalsY += 14;
                                         }
 
-                                        // Grand Total Pill (Theme Colored)
-                                        RectF gtBox = new RectF(370, totalsY + 4, 559, totalsY + 36);
-                                        canvas.drawRoundRect(gtBox, 6, 6, grandTotalBg);
+                                        if (taxAmount != null && !taxAmount.isEmpty() && !taxAmount.equals("₹0.00") && !taxAmount.equals("0")) {
+                                            canvas.drawText("GST Tax:", totalsX, totalsY + 10, subPaint);
+                                            float taxW = bodyPaint.measureText(taxAmount);
+                                            canvas.drawText(taxAmount, 555 - taxW, totalsY + 10, bodyPaint);
+                                            totalsY += 14;
+                                        }
+
+                                        // Grand Total Box (Matching Live Preview)
+                                        RectF gtBox = new RectF(330, totalsY + 2, 559, totalsY + 36);
+                                        canvas.drawRoundRect(gtBox, 8, 8, grandTotalBg);
 
                                         Paint gtLabel = new Paint(thTextPaint);
-                                        gtLabel.setTextSize(9.5f);
-                                        canvas.drawText("GRAND TOTAL", 380, totalsY + 24, gtLabel);
+                                        gtLabel.setTextSize(10f);
+                                        canvas.drawText("GRAND TOTAL", 342, totalsY + 23, gtLabel);
 
                                         Paint gtVal = new Paint();
                                         gtVal.setColor(Color.WHITE);
-                                        gtVal.setTextSize(13.5f);
+                                        gtVal.setTextSize(14f);
                                         gtVal.setFakeBoldText(true);
                                         gtVal.setAntiAlias(true);
-                                        canvas.drawText(totalAmount, 475, totalsY + 24, gtVal);
+                                        float totalValW = gtVal.measureText(totalAmount);
+                                        canvas.drawText(totalAmount, 549 - totalValW, totalsY + 23, gtVal);
 
-                                        // Branding / Thank You Footer Strip
-                                        if (!isPro) {
-                                            // Free Tier: Professional KamaiPlus Branding Card with increased height (34pt)
-                                            float promoY = totalsY + 44;
-                                            RectF promoStrip = new RectF(36, promoY, 559, promoY + 34);
-                                            canvas.drawRoundRect(promoStrip, 8, 8, thBgPaint);
+                                        // Authorised Signatory block below Grand Total
+                                        float signY = totalsY + 52;
+                                        Paint signStoreName = new Paint(boldTextPaint);
+                                        signStoreName.setTextSize(8.5f);
+                                        signStoreName.setColor(Color.rgb(30, 41, 59));
+                                        canvas.drawText("For " + storeName.toUpperCase(), 390, signY, signStoreName);
 
-                                            Paint promoTextTitle = new Paint();
-                                            promoTextTitle.setColor(Color.WHITE);
-                                            promoTextTitle.setTextSize(9.5f);
-                                            promoTextTitle.setTypeface(Typeface.create(Typeface.DEFAULT, Typeface.BOLD));
-                                            promoTextTitle.setAntiAlias(true);
+                                        canvas.drawLine(380, signY + 30, 559, signY + 30, linePaint);
+                                        Paint signLabel = new Paint(subPaint);
+                                        signLabel.setTextSize(7.5f);
+                                        signLabel.setFakeBoldText(true);
+                                        canvas.drawText("AUTHORISED SIGNATORY", 412, signY + 40, signLabel);
+                                    }
 
-                                            Paint promoTextSub = new Paint();
-                                            promoTextSub.setColor(Color.argb(230, 255, 255, 255));
-                                            promoTextSub.setTextSize(7.5f);
-                                            promoTextSub.setAntiAlias(true);
+                                    // --- FOOTER SECTION ON EVERY PAGE (SABSE NICHE, PAGE NUMBER KE UPAR) ---
+                                    if (!isPro) {
+                                        float brandY = 778;
+                                        RectF brandStrip = new RectF(36, brandY, 559, brandY + 24);
 
-                                            canvas.drawText("⚡ POWERED BY KAMAIPLUS  •  INDIA'S #1 RETAIL POS & BILLING APP", 48, promoY + 14, promoTextTitle);
-                                            canvas.drawText("Billing, GST Invoicing, Khata Ledger & Inventory Management  •  www.kamaiplus.com", 48, promoY + 26, promoTextSub);
-                                        } else {
-                                            // Pro Tier: 100% White-Label (No marketing promo banner!)
-                                            if (footerNote != null && !footerNote.trim().isEmpty()) {
-                                                float noteY = totalsY + 44;
-                                                Paint proFooterNote = new Paint(subPaint);
-                                                proFooterNote.setTextSize(8.5f);
-                                                proFooterNote.setColor(Color.rgb(71, 85, 105));
-                                                canvas.drawText(footerNote, 36, noteY + 14, proFooterNote);
-                                            }
-                                        }
+                                        Paint brandBg = new Paint();
+                                        brandBg.setColor(Color.rgb(248, 250, 252)); // Sleek Slate-50 background
+                                        canvas.drawRoundRect(brandStrip, 6, 6, brandBg);
+
+                                        Paint brandBorder = new Paint();
+                                        brandBorder.setColor(Color.rgb(226, 232, 240)); // Slate-200 border
+                                        brandBorder.setStyle(Paint.Style.STROKE);
+                                        brandBorder.setStrokeWidth(0.8f);
+                                        canvas.drawRoundRect(brandStrip, 6, 6, brandBorder);
+
+                                        // Mini Gold/Theme Tag Pill on Left
+                                        RectF tagPill = new RectF(42, brandY + 4, 104, brandY + 20);
+                                        Paint tagBg = new Paint();
+                                        tagBg.setColor(themeColor);
+                                        canvas.drawRoundRect(tagPill, 4, 4, tagBg);
+
+                                        Paint tagText = new Paint();
+                                        tagText.setColor(Color.WHITE);
+                                        tagText.setTextSize(7.5f);
+                                        tagText.setFakeBoldText(true);
+                                        tagText.setAntiAlias(true);
+                                        canvas.drawText("⚡ KAMAI+", 47, brandY + 15, tagText);
+
+                                        // Center text
+                                        Paint centerBrand = new Paint();
+                                        centerBrand.setColor(Color.rgb(51, 65, 85)); // Slate 700
+                                        centerBrand.setTextSize(8f);
+                                        centerBrand.setFakeBoldText(true);
+                                        centerBrand.setAntiAlias(true);
+                                        canvas.drawText("India's #1 Retail POS & GST Billing App", 112, brandY + 15.5f, centerBrand);
+
+                                        // Right Link
+                                        Paint rightLink = new Paint();
+                                        rightLink.setColor(themeColor);
+                                        rightLink.setTextSize(8f);
+                                        rightLink.setFakeBoldText(true);
+                                        rightLink.setAntiAlias(true);
+                                        canvas.drawText("www.kamaiplus.com", 468, brandY + 15.5f, rightLink);
                                     }
 
                                     // --- FOOTER ON EVERY PAGE ---
                                     canvas.drawLine(36, 810, 559, 810, linePaint);
-                                    String footerBranding = isPro ? "Printed via KamaiPlus" : "Powered by KamaiPlus • Retail & Inventory Software";
+                                    String footerBranding = isPro ? "Printed via KamaiPlus Business" : "Powered by KamaiPlus • Retail & Inventory Suite";
                                     canvas.drawText(footerBranding, 36, 822, subPaint);
                                     canvas.drawText("Page " + pageIdx + " of " + totalPages, 505, 822, boldTextPaint);
 
@@ -1128,6 +1263,71 @@ public class MainActivity extends FlutterFragmentActivity implements TextToSpeec
                             } catch (Exception e) {
                                 result.error("OPEN_ERROR", e.getMessage(), null);
                             }
+                        } else if ("printPdf".equals(call.method)) {
+                            try {
+                                final String path = call.argument("path");
+                                String name = call.argument("name");
+                                if (name == null || name.isEmpty()) name = "Tax_Invoice";
+                                final String docName = name;
+                                if (path != null) {
+                                    final File file = new File(path);
+                                    if (file.exists()) {
+                                        final PrintManager printManager = (PrintManager) getSystemService(Context.PRINT_SERVICE);
+                                        if (printManager != null) {
+                                            runOnUiThread(new Runnable() {
+                                                @Override
+                                                public void run() {
+                                                    try {
+                                                        PrintDocumentAdapter pda = new PrintDocumentAdapter() {
+                                                            @Override
+                                                            public void onLayout(PrintAttributes oldAttributes, PrintAttributes newAttributes,
+                                                                                 CancellationSignal cancellationSignal,
+                                                                                 LayoutResultCallback callback, Bundle extras) {
+                                                                if (cancellationSignal.isCanceled()) {
+                                                                    callback.onLayoutCancelled();
+                                                                    return;
+                                                                }
+                                                                PrintDocumentInfo info = new PrintDocumentInfo.Builder(file.getName())
+                                                                        .setContentType(PrintDocumentInfo.CONTENT_TYPE_DOCUMENT)
+                                                                        .setPageCount(PrintDocumentInfo.PAGE_COUNT_UNKNOWN)
+                                                                        .build();
+                                                                callback.onLayoutFinished(info, !newAttributes.equals(oldAttributes));
+                                                            }
+
+                                                            @Override
+                                                            public void onWrite(PageRange[] pages, ParcelFileDescriptor destination,
+                                                                                CancellationSignal cancellationSignal,
+                                                                                WriteResultCallback callback) {
+                                                                try (InputStream in = new FileInputStream(file);
+                                                                     OutputStream out = new FileOutputStream(destination.getFileDescriptor())) {
+                                                                    byte[] buf = new byte[8192];
+                                                                    int bytesRead;
+                                                                    while ((bytesRead = in.read(buf)) > 0) {
+                                                                        if (cancellationSignal.isCanceled()) {
+                                                                            callback.onWriteCancelled();
+                                                                            return;
+                                                                        }
+                                                                        out.write(buf, 0, bytesRead);
+                                                                    }
+                                                                    callback.onWriteFinished(new PageRange[]{PageRange.ALL_PAGES});
+                                                                } catch (Exception e) {
+                                                                    callback.onWriteFailed(e.getMessage());
+                                                                }
+                                                            }
+                                                        };
+                                                        printManager.print(docName, pda, new PrintAttributes.Builder().build());
+                                                    } catch (Exception ignored) {}
+                                                }
+                                            });
+                                            result.success(true);
+                                            return;
+                                        }
+                                    }
+                                }
+                                result.success(false);
+                            } catch (Exception e) {
+                                result.error("PRINT_PDF_ERROR", e.getMessage(), null);
+                            }
                         } else if ("sharePdf".equals(call.method)) {
                             try {
                                 String path = call.argument("path");
@@ -1225,6 +1425,66 @@ public class MainActivity extends FlutterFragmentActivity implements TextToSpeec
                         }
                     }
                 });
+
+        // 9. Real-Time UPI Payment Notification & Soundbox Detector Engine
+        paymentDetectorChannel = new MethodChannel(flutterEngine.getDartExecutor().getBinaryMessenger(), PAYMENT_DETECTOR_CHANNEL);
+        PaymentNotificationListener.setCallback(new PaymentNotificationListener.PaymentCallback() {
+            @Override
+            public void onPaymentDetected(long amountPaise, String appName, String sender, String rawText) {
+                forwardPaymentToFlutter(amountPaise, appName, sender, rawText);
+            }
+        });
+
+        paymentDetectorChannel.setMethodCallHandler(new MethodChannel.MethodCallHandler() {
+            @Override
+            public void onMethodCall(@NonNull MethodCall call, @NonNull MethodChannel.Result result) {
+                if ("isNotificationAccessGranted".equals(call.method)) {
+                    result.success(isNotificationServiceEnabled());
+                } else if ("openNotificationAccessSettings".equals(call.method)) {
+                    try {
+                        Intent intent = new Intent(android.provider.Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS);
+                        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                        startActivity(intent);
+                        result.success(true);
+                    } catch (Exception e) {
+                        result.success(false);
+                    }
+                } else if ("simulatePayment".equals(call.method)) {
+                    try {
+                        Object amtObj = call.argument("amountPaise");
+                        long amountPaise = 0;
+                        if (amtObj instanceof Number) {
+                            amountPaise = ((Number) amtObj).longValue();
+                        }
+                        String appName = call.argument("appName");
+                        if (appName == null || appName.isEmpty()) appName = "PhonePe";
+                        forwardPaymentToFlutter(amountPaise, appName, "Simulator Test", "₹" + (amountPaise / 100.0) + " received");
+                        result.success(true);
+                    } catch (Exception e) {
+                        result.error("SIMULATION_ERROR", e.getMessage(), null);
+                    }
+                } else {
+                    result.notImplemented();
+                }
+            }
+        });
+    }
+
+    private boolean isNotificationServiceEnabled() {
+        try {
+            String pkgName = getPackageName();
+            final String flat = android.provider.Settings.Secure.getString(getContentResolver(), "enabled_notification_listeners");
+            if (flat != null && !flat.isEmpty()) {
+                final String[] names = flat.split(":");
+                for (String name : names) {
+                    final android.content.ComponentName cn = android.content.ComponentName.unflattenFromString(name);
+                    if (cn != null && pkgName.equals(cn.getPackageName())) {
+                        return true;
+                    }
+                }
+            }
+        } catch (Exception ignored) {}
+        return false;
     }
 
     @Override
@@ -1243,8 +1503,26 @@ public class MainActivity extends FlutterFragmentActivity implements TextToSpeec
         }
     }
 
+    private void forwardPaymentToFlutter(final long amountPaise, final String appName, final String sender, final String rawText) {
+        if (paymentDetectorChannel != null) {
+            runOnUiThread(new Runnable() {
+                @Override
+                public void run() {
+                    Map<String, Object> map = new HashMap<>();
+                    map.put("amountPaise", amountPaise);
+                    map.put("appName", appName);
+                    map.put("sender", sender != null ? sender : "");
+                    map.put("rawText", rawText != null ? rawText : "");
+                    map.put("timestamp", System.currentTimeMillis());
+                    paymentDetectorChannel.invokeMethod("onPaymentDetected", map);
+                }
+            });
+        }
+    }
+
     @Override
     protected void onDestroy() {
+        PaymentNotificationListener.setCallback(null);
         if (tts != null) {
             tts.stop();
             tts.shutdown();

@@ -3,6 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../../services/csv_inward_service.dart';
 import '../purchases/ai_inward_sheet.dart';
 import '../purchases/bill_scan_review_sheet.dart';
+import 'rapid_barcode_inward_screen.dart';
 
 class AiInwardModal extends StatelessWidget {
   final VoidCallback onSelectManual;
@@ -154,6 +155,25 @@ class AiInwardModal extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 16),
+
+            // Option 0: Rapid Continuous Barcode Inward (SUPER FAST)
+            _buildOptionCard(
+              context: context,
+              icon: Icons.qr_code_scanner_rounded,
+              iconColor: const Color(0xFF7C3AED),
+              iconBgColor: const Color(0xFFF5F3FF),
+              borderColor: const Color(0xFFDDD6FE),
+              title: 'Rapid Barcode Inward',
+              badgeLabel: 'LIGHTNING FAST ⚡',
+              badgeBg: const Color(0xFFF5F3FF),
+              badgeColor: const Color(0xFF6D28D9),
+              subtitle: 'Scan 20–30 items continuously with instant auto-fill',
+              onTap: () {
+                Navigator.pop(context);
+                RapidBarcodeInwardScreen.show(context, onInwardSuccess: onInwardSuccess);
+              },
+            ),
+            const SizedBox(height: 10),
 
             // Option 1: Scan Bill / Parcha Photo (RECOMMENDED)
             _buildOptionCard(

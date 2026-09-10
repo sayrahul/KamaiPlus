@@ -21,13 +21,15 @@ android {
             keyPassword = "kamaiplus2026"
             storeFile = file("kamai-release-key.jks")
             storePassword = "kamaiplus2026"
+            enableV1Signing = true
+            enableV2Signing = true
         }
     }
 
     defaultConfig {
         applicationId = "com.kamaiplus.pos"
-        minSdk = flutter.minSdkVersion
-        targetSdk = flutter.targetSdkVersion
+        minSdk = 24
+        targetSdk = 34
         versionCode = flutter.versionCode
         versionName = flutter.versionName
         ndk {
@@ -43,6 +45,12 @@ android {
             signingConfig = signingConfigs.getByName("release")
             isMinifyEnabled = false
             isShrinkResources = false
+        }
+    }
+
+    packaging {
+        jniLibs {
+            useLegacyPackaging = true
         }
     }
 
