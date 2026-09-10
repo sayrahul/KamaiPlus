@@ -12,6 +12,8 @@ import 'quick_stock_update_modal.dart';
 import '../inventory/low_stock_reorder_modal.dart';
 import '../pos/barcode_scanner_view.dart';
 import '../../services/firestore_sync_service.dart';
+import '../../core/constants/business_vertical_config.dart';
+
 
 class ProductsScreen extends StatefulWidget {
   final bool autoOpenFirstEdit;
@@ -39,17 +41,24 @@ class _ProductsScreenState extends State<ProductsScreen> {
   void initState() {
     super.initState();
     _loadData();
+    BusinessVerticals.activeBusinessTypeNotifier.addListener(_onVerticalChanged);
+  }
+
+  void _onVerticalChanged() {
+    if (mounted) _loadData();
   }
 
   @override
   void dispose() {
+    BusinessVerticals.activeBusinessTypeNotifier.removeListener(_onVerticalChanged);
     _searchCtrl.dispose();
     super.dispose();
   }
 
   Future<void> _loadData() async {
-    final prods = await LocalDatabase.instance.getAllProducts();
-    final cats = await LocalDatabase.instance.getAllCategories();
+    final activeType = BusinessVerticals.activeBusinessTypeNotifier.value;
+    final prods = await LocalDatabase.instance.getAllProducts(businessType: activeType);
+    final cats = await LocalDatabase.instance.getAllCategories(businessType: activeType);
     if (!mounted) return;
     setState(() {
       _products = prods;
@@ -91,19 +100,8 @@ class _ProductsScreenState extends State<ProductsScreen> {
   Future<void> _adjustStock(ProductModel product, double delta) async {
     HapticFeedback.lightImpact();
     final newQty = (product.stockQuantity + delta).clamp(0.0, 99999.0);
-    final updated = ProductModel(
-      id: product.id,
-      businessId: product.businessId,
-      name: product.name,
-      barcode: product.barcode,
-      categoryId: product.categoryId,
-      sellingPricePaise: product.sellingPricePaise,
-      mrpPaise: product.mrpPaise,
-      purchasePricePaise: product.purchasePricePaise,
+    final updated = product.copyWith(
       stockQuantity: newQty,
-      taxRate: product.taxRate,
-      isTaxInclusive: product.isTaxInclusive,
-      unit: product.unit,
       syncStatus: 'pending',
     );
 
@@ -111,6 +109,7 @@ class _ProductsScreenState extends State<ProductsScreen> {
     FirestoreSyncService.instance.pushProductToCloud(updated).catchError((_) {});
     _loadData();
   }
+
 
   void _openAiInwardSheet() {
     AiInwardModal.show(

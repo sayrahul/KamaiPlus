@@ -1,26 +1,103 @@
 import 'dart:convert';
 
+String inferBusinessType(String? name, String? category) {
+  final text = '${name ?? ''} ${category ?? ''}'.toLowerCase();
+  if (text.contains('tablet') ||
+      text.contains('capsule') ||
+      text.contains('syrup') ||
+      text.contains('dolo') ||
+      text.contains('crocin') ||
+      text.contains('paracetamol') ||
+      text.contains('cetirizine') ||
+      text.contains('ointment') ||
+      text.contains('first aid') ||
+      text.contains('bandage') ||
+      text.contains('injection') ||
+      text.contains('medical') ||
+      text.contains('pharma') ||
+      text.contains('strip') ||
+      text.contains('azithromycin') ||
+      text.contains('pantoprazole') ||
+      text.contains('disprin') ||
+      text.contains('benadryl') ||
+      text.contains('ascoril') ||
+      text.contains('betadine')) {
+    return 'pharmacy';
+  }
+  if (text.contains('shirt') ||
+      text.contains('t-shirt') ||
+      text.contains('kurti') ||
+      text.contains('saree') ||
+      text.contains('jeans') ||
+      text.contains('trouser') ||
+      text.contains('footwear') ||
+      text.contains('shoes') ||
+      text.contains('sandals') ||
+      text.contains('apparel') ||
+      text.contains('clothing') ||
+      text.contains('innerwear')) {
+    return 'clothing';
+  }
+  if (text.contains('pipe') ||
+      text.contains('paint') ||
+      text.contains('wire') ||
+      text.contains('switch') ||
+      text.contains('mcb') ||
+      text.contains('tool') ||
+      text.contains('screw') ||
+      text.contains('nail') ||
+      text.contains('washbasin') ||
+      text.contains('cement') ||
+      text.contains('sanitary') ||
+      text.contains('hardware') ||
+      text.contains('bulb') ||
+      text.contains('batten')) {
+    return 'hardware';
+  }
+  if (text.contains('chai') ||
+      text.contains('coffee') ||
+      text.contains('samosa') ||
+      text.contains('curry') ||
+      text.contains('roti') ||
+      text.contains('naan') ||
+      text.contains('burger') ||
+      text.contains('pizza') ||
+      text.contains('dessert') ||
+      text.contains('kulfi') ||
+      text.contains('restaurant') ||
+      text.contains('beverage')) {
+    return 'restaurant';
+  }
+  return 'grocery';
+}
+
 class CategoryModel {
   final String id;
   final String businessId;
   final String name;
+  final String businessType;
 
   CategoryModel({
     required this.id,
     required this.businessId,
     required this.name,
+    this.businessType = 'grocery',
   });
 
   Map<String, dynamic> toMap() => {
     'id': id,
     'business_id': businessId,
     'name': name,
+    'business_type': businessType,
   };
 
   factory CategoryModel.fromMap(Map<String, dynamic> map) => CategoryModel(
     id: map['id'] ?? '',
     businessId: map['business_id'] ?? '',
     name: map['name'] ?? '',
+    businessType: (map['business_type'] != null && map['business_type'].toString().isNotEmpty)
+        ? map['business_type']
+        : inferBusinessType(map['name'], ''),
   );
 }
 
@@ -45,6 +122,7 @@ class ProductModel {
   final String? hsnCode;
   final bool isLooseItem;
   final String syncStatus;
+  final String businessType;
 
   ProductModel({
     required this.id,
@@ -67,6 +145,7 @@ class ProductModel {
     this.hsnCode,
     this.isLooseItem = false,
     this.syncStatus = 'synced',
+    this.businessType = 'grocery',
   });
 
   Map<String, dynamic> toMap() => {
@@ -90,6 +169,7 @@ class ProductModel {
     'hsn_code': hsnCode,
     'is_loose_item': isLooseItem ? 1 : 0,
     'sync_status': syncStatus,
+    'business_type': businessType,
   };
 
   factory ProductModel.fromMap(Map<String, dynamic> map) => ProductModel(
@@ -113,6 +193,9 @@ class ProductModel {
     hsnCode: map['hsn_code'] as String?,
     isLooseItem: map['is_loose_item'] == 1 || map['is_loose_item'] == true,
     syncStatus: map['sync_status'] ?? 'pending',
+    businessType: (map['business_type'] != null && map['business_type'].toString().isNotEmpty)
+        ? map['business_type']
+        : inferBusinessType(map['name'], map['category_id']),
   );
 
   ProductModel copyWith({
@@ -134,6 +217,7 @@ class ProductModel {
     String? hsnCode,
     bool? isLooseItem,
     String? syncStatus,
+    String? businessType,
   }) => ProductModel(
     id: id,
     businessId: businessId,
@@ -155,7 +239,9 @@ class ProductModel {
     hsnCode: hsnCode ?? this.hsnCode,
     isLooseItem: isLooseItem ?? this.isLooseItem,
     syncStatus: syncStatus ?? this.syncStatus,
+    businessType: businessType ?? this.businessType,
   );
+
 
   /// Returns true if item has uncounted / infinite stock (stock quantity >= 99990).
   /// This prevents counter billing from being blocked by zero stock.
@@ -240,9 +326,11 @@ class MasterProductModel {
       hsnCode: hsnCode,
       isLooseItem: false,
       syncStatus: 'pending',
+      businessType: businessType,
     );
   }
 }
+
 
 
 class CustomerModel {

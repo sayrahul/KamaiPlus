@@ -53,7 +53,6 @@ class _PosBillingScreenState extends State<PosBillingScreen> {
     _tabs = [
       CartTab(id: 'tab_1', name: 'Bill #1', number: 1, items: {}),
     ];
-    _loadData();
     _loadBusinessType();
     BusinessVerticals.activeBusinessTypeNotifier.addListener(_onBusinessTypeChanged);
     FirestoreSyncService.instance.liveSyncCounter.addListener(_handleCloudSyncUpdate);
@@ -66,10 +65,13 @@ class _PosBillingScreenState extends State<PosBillingScreen> {
         BusinessVerticals.updateActiveBusinessType(profile.businessType);
       }
     } catch (_) {}
+    _loadData();
   }
 
   void _onBusinessTypeChanged() {
-    if (mounted) setState(() {});
+    if (mounted) {
+      _loadData();
+    }
   }
 
   @override
@@ -85,8 +87,9 @@ class _PosBillingScreenState extends State<PosBillingScreen> {
   }
 
   Future<void> _loadData() async {
-    final prods = await LocalDatabase.instance.getAllProducts();
-    final cats = await LocalDatabase.instance.getAllCategories();
+    final activeType = BusinessVerticals.activeBusinessTypeNotifier.value;
+    final prods = await LocalDatabase.instance.getAllProducts(businessType: activeType);
+    final cats = await LocalDatabase.instance.getAllCategories(businessType: activeType);
     final custs = await LocalDatabase.instance.getAllCustomers();
 
     if (mounted) {
@@ -130,7 +133,12 @@ class _PosBillingScreenState extends State<PosBillingScreen> {
     if (clean.length >= 2) {
       setState(() => _isSearchingMaster = true);
       try {
-        final results = await LocalDatabase.instance.searchMasterCatalog(clean, limit: 15);
+        final activeType = BusinessVerticals.activeBusinessTypeNotifier.value;
+        final results = await LocalDatabase.instance.searchMasterCatalog(
+          clean,
+          businessType: activeType,
+          limit: 15,
+        );
         final storeBarcodes = _allProducts.map((p) => p.barcode).whereType<String>().toSet();
         final storeNames = _allProducts.map((p) => p.name.toLowerCase().trim()).toSet();
         final nonDuplicates = results.where((m) {

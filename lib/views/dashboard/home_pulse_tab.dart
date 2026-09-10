@@ -62,13 +62,26 @@ class _HomePulseTabState extends State<HomePulseTab> {
   void initState() {
     super.initState();
     _loadLiveMetrics();
+    BusinessVerticals.activeBusinessTypeNotifier.addListener(_onVerticalChanged);
+  }
+
+  void _onVerticalChanged() {
+    if (mounted) _loadLiveMetrics();
+  }
+
+  @override
+  void dispose() {
+    BusinessVerticals.activeBusinessTypeNotifier.removeListener(_onVerticalChanged);
+    super.dispose();
   }
 
   Future<void> _loadLiveMetrics() async {
     try {
       final now = DateTime.now();
+      final activeType = BusinessVerticals.activeBusinessTypeNotifier.value;
       final sales = await LocalDatabase.instance.getAllSales(limit: 50);
-      final products = await LocalDatabase.instance.getAllProducts();
+      final products = await LocalDatabase.instance.getAllProducts(businessType: activeType);
+
 
       final todaySales = sales.where((s) =>
           !s.isRefunded &&

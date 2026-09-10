@@ -889,7 +889,33 @@ Comprehensive enterprise-grade retail UX upgrade suite aligned with PhonePe Busi
         - **Screen Integrations:**
           - `InventoryScreen` (`lib/views/inventory/inventory_screen.dart`): Added WhatsApp Reorder icon button in Hero Card and a dedicated 1-Tap Restock banner above the Reorder Radar items list.
           - `ProductsScreen` (`lib/views/products/products_screen.dart`): Added a responsive WhatsApp Reorder action banner whenever the low-stock filter (`_filterLowStockOnly`) is active.
-    - **Financial & Code Invariants:** Strict Integer Paise Math preserved app-wide (`mrp_paise`, `selling_price_paise`). 0 compile errors rule maintained. Zero extra APK bloat.
+      - **Phase 5: Business Vertical Strict Product & Category Isolation (COMPLETED & LOCKED):**
+        - **Problem Solved:** Previously, switching or testing vertical data allowed pharmacy products (Dolo 650, Cetirizine, Paracetamol, etc.) and categories to leak into grocery store view, POS billing search, and products screen because `products` and `categories` tables had no `business_type` column and `getAllProducts()`, `getAllCategories()`, and `searchMasterCatalog()` fetched all rows without filtering.
+        - **Architectural Solution & Schema Updates:**
+          - Added `business_type TEXT DEFAULT 'grocery'` to `products` and `categories` tables in SQLite (`LocalDatabase._createDB`, `_migrateToV2`, and `_ensureExtraTables`).
+          - Added `inferBusinessType(name, category)` heuristic fallback and `businessType` field to `CategoryModel` and `ProductModel` with full serialization (`toMap()`, `fromMap()`, and `copyWith()`).
+          - Included `businessType` propagation in `MasterProductModel.toProductModel()`.
+          - Implemented automatic SQLite data migration & backfill in `LocalDatabase._backfillBusinessVerticals()`:
+            - Accurately re-tags existing categories and products into `pharmacy`, `clothing`, `hardware`, `restaurant`, or `grocery`.
+            - Strict pharmaceutical keyword classifier ensures medicines (Dolo, Paracetamol, Cetirizine, Azithromycin, Cough Syrups, Ointments, Betadine, etc.) NEVER leak into Grocery view.
+          - Updated `LocalDatabase.getAllProducts({String? businessType})` and `getAllCategories({String? businessType})` to filter queries strictly by `business_type = ?`.
+          - Added `LocalDatabase.seedVerticalStarterData(String businessType)` to seed vertical-specific starter items from `kDefaultProductsByVertical` on first selection.
+          - In `pos_billing_screen.dart`:
+            - Filtered store products and categories using `BusinessVerticals.activeBusinessTypeNotifier.value`.
+            - Filtered Master Catalog dual-search results via `searchMasterCatalog(clean, businessType: activeType)`.
+            - Registered listener on `BusinessVerticals.activeBusinessTypeNotifier` to instantly reload data whenever business vertical changes.
+          - In `products_screen.dart`, `inventory_screen.dart`, `home_pulse_tab.dart`:
+            - Filtered all products and categories by active vertical.
+            - Added dynamic reload listener to `activeBusinessTypeNotifier`.
+          - In `add_product_modal.dart` and `signup_store_screen.dart`:
+            - Created products and categories are explicitly tagged with `businessType: activeType`.
+          - In `store_profile_screen.dart`:
+            - On business vertical switch, calls `seedVerticalStarterData(newType)` and updates `activeBusinessTypeNotifier`.
+        - **Testing & Verification:**
+          - Created `test/business_vertical_isolation_test.dart` (4 new tests).
+          - All 12 unit tests passing cleanly (`flutter test`).
+          - `flutter analyze` clean with 0 issues.
+
 
 
 

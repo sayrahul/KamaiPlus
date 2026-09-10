@@ -34,11 +34,23 @@ class _InventoryScreenState extends State<InventoryScreen> {
   void initState() {
     super.initState();
     _loadData();
+    BusinessVerticals.activeBusinessTypeNotifier.addListener(_onVerticalChanged);
+  }
+
+  void _onVerticalChanged() {
+    if (mounted) _loadData();
+  }
+
+  @override
+  void dispose() {
+    BusinessVerticals.activeBusinessTypeNotifier.removeListener(_onVerticalChanged);
+    super.dispose();
   }
 
   Future<void> _loadData() async {
     try {
-      final products = await LocalDatabase.instance.getAllProducts();
+      final activeType = BusinessVerticals.activeBusinessTypeNotifier.value;
+      final products = await LocalDatabase.instance.getAllProducts(businessType: activeType);
       final sales = await LocalDatabase.instance.getAllSales(limit: 50);
       final movements = await LocalDatabase.instance.getAllInventoryMovements(limit: 50);
       if (mounted) {
@@ -53,6 +65,7 @@ class _InventoryScreenState extends State<InventoryScreen> {
       if (mounted) setState(() => _isLoading = false);
     }
   }
+
 
   int get _totalValuationPaise => _products.fold(
       0, (sum, p) => sum + (p.purchasePricePaise * p.stockQuantity).round());

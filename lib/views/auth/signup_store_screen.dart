@@ -228,6 +228,7 @@ class _SignupStoreScreenState extends State<SignupStoreScreen> {
           id: catId,
           businessId: 'default',
           name: seed.categoryName,
+          businessType: businessTypeId,
         );
         await db.upsertCategory(cat);
         categoryIdMap[seed.categoryName] = catId;
@@ -247,8 +248,10 @@ class _SignupStoreScreenState extends State<SignupStoreScreen> {
         taxRate: seed.taxRate,
         isTaxInclusive: true,
         syncStatus: 'pending',
+        businessType: businessTypeId,
       );
       await db.upsertProduct(product);
+
     }
   }
 

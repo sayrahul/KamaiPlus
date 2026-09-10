@@ -402,7 +402,9 @@ class _StoreProfileScreenState extends State<StoreProfileScreen> {
     );
 
     await LocalDatabase.instance.saveStoreProfile(profile);
+    await LocalDatabase.instance.seedVerticalStarterData(_selectedBusinessType);
     BusinessVerticals.updateActiveBusinessType(_selectedBusinessType);
+
 
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString('business_type', _selectedBusinessType);

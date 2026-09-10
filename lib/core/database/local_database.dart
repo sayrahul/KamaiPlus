@@ -4,6 +4,8 @@ import 'package:uuid/uuid.dart';
 import '../../models/models.dart';
 import '../utils/money_formatter.dart';
 import '../constants/master_catalog_data.dart';
+import '../constants/default_products.dart';
+
 
 class LocalDatabase {
   static final LocalDatabase instance = LocalDatabase._init();
@@ -101,7 +103,14 @@ class LocalDatabase {
     try {
       await db.execute('ALTER TABLE products ADD COLUMN is_loose_item INTEGER DEFAULT 0');
     } catch (_) {}
+    try {
+      await db.execute('ALTER TABLE products ADD COLUMN business_type TEXT DEFAULT "grocery"');
+    } catch (_) {}
+    try {
+      await db.execute('ALTER TABLE categories ADD COLUMN business_type TEXT DEFAULT "grocery"');
+    } catch (_) {}
   }
+
 
   Future<void> _ensureExtraTables(Database db) async {
     await _migrateToV2(db);
@@ -235,6 +244,165 @@ class LocalDatabase {
     await db.execute('CREATE INDEX IF NOT EXISTS idx_master_biz_type ON master_catalog(business_type)');
 
     await _seedMasterCatalogIfEmpty(db);
+    await _backfillBusinessVerticals(db);
+  }
+
+  /// Automatic vertical isolation: classifies unassigned categories & products
+  /// into their correct business verticals so pharmacy/clothing/hardware items NEVER mix into grocery.
+  Future<void> _backfillBusinessVerticals(Database db) async {
+    try {
+      // 1. Classify categories
+      await db.execute('''
+        UPDATE categories SET business_type = 'pharmacy' 
+        WHERE id LIKE '%pharma%' OR id LIKE '%med%' 
+           OR name LIKE '%Pharma%' OR name LIKE '%Medicine%' 
+           OR name LIKE '%Tablets%' OR name LIKE '%Syrup%' 
+           OR name LIKE '%First Aid%' OR name LIKE '%Ayurvedic%' 
+           OR name LIKE '%Ointment%' OR name LIKE '%Generic%';
+      ''');
+      await db.execute('''
+        UPDATE categories SET business_type = 'clothing' 
+        WHERE id LIKE '%cloth%' OR name LIKE '%Men%' OR name LIKE '%Women%' 
+           OR name LIKE '%Kids%' OR name LIKE '%Wear%' OR name LIKE '%Apparel%'
+           OR name LIKE '%Saree%' OR name LIKE '%Shirt%' OR name LIKE '%Jeans%';
+      ''');
+      await db.execute('''
+        UPDATE categories SET business_type = 'hardware' 
+        WHERE id LIKE '%hard%' OR name LIKE '%Paint%' OR name LIKE '%Tool%' 
+           OR name LIKE '%Plumbing%' OR name LIKE '%Electrical%' OR name LIKE '%Pipe%'
+           OR name LIKE '%Sanitary%';
+      ''');
+      await db.execute('''
+        UPDATE categories SET business_type = 'restaurant' 
+        WHERE id LIKE '%rest%' OR name LIKE '%Starter%' OR name LIKE '%Beverage%' 
+           OR name LIKE '%Main Course%' OR name LIKE '%Curry%' OR name LIKE '%Roti%'
+           OR name LIKE '%Dessert%';
+      ''');
+      await db.execute('''
+        UPDATE categories SET business_type = 'grocery' 
+        WHERE business_type IS NULL OR business_type = '';
+      ''');
+
+      // 2. Sync products with their category's business_type
+      await db.execute('''
+        UPDATE products SET business_type = (
+          SELECT categories.business_type FROM categories WHERE categories.id = products.category_id
+        )
+        WHERE category_id IS NOT NULL AND (
+          SELECT categories.business_type FROM categories WHERE categories.id = products.category_id
+        ) IS NOT NULL;
+      ''');
+
+      // 3. Keyword-based strict classification for products (prevents cross-vertical mixing)
+      await db.execute('''
+        UPDATE products SET business_type = 'pharmacy'
+        WHERE (
+          name LIKE '%Dolo%' OR name LIKE '%Paracetamol%' OR name LIKE '%Cetirizine%' 
+          OR name LIKE '%Azithromycin%' OR name LIKE '%Pantoprazole%' OR name LIKE '%Syrup%' 
+          OR name LIKE '%Tablet%' OR name LIKE '%Capsule%' OR name LIKE '%Ointment%' 
+          OR name LIKE '%Vicks%' OR name LIKE '%Moov%' OR name LIKE '%Volini%' 
+          OR name LIKE '%Band-Aid%' OR name LIKE '%Crocin%' OR name LIKE '%Combiflam%' 
+          OR name LIKE '%Digene%' OR name LIKE '%Betadine%' OR name LIKE '%Strepsils%' 
+          OR name LIKE '%Disprin%' OR name LIKE '%Eno%' OR name LIKE '%Benadryl%'
+          OR name LIKE '%Ascoril%' OR name LIKE '%Inhaler%'
+        );
+      ''');
+
+      await db.execute('''
+        UPDATE products SET business_type = 'clothing'
+        WHERE (
+          name LIKE '%Shirt%' OR name LIKE '%T-Shirt%' OR name LIKE '%Jeans%' 
+          OR name LIKE '%Saree%' OR name LIKE '%Kurti%' OR name LIKE '%Trouser%'
+          OR name LIKE '%Suit%' OR name LIKE '%Dress%' OR name LIKE '%Legging%'
+          OR name LIKE '%Shoes%' OR name LIKE '%Sandals%' OR name LIKE '%Innerwear%'
+          OR name LIKE '%Dupatta%'
+        );
+      ''');
+
+      await db.execute('''
+        UPDATE products SET business_type = 'hardware'
+        WHERE (
+          name LIKE '%PVC Pipe%' OR name LIKE '%Hammer%' OR name LIKE '%Apex Emulsion%' 
+          OR name LIKE '%Wire%' OR name LIKE '%Switch%' OR name LIKE '%MCB%'
+          OR name LIKE '%Cement%' OR name LIKE '%Screwdriver%' OR name LIKE '%Nut Bolt%'
+          OR name LIKE '%Washbasin%' OR name LIKE '%LED Bulb%' OR name LIKE '%LED Batten%'
+        );
+      ''');
+
+      await db.execute('''
+        UPDATE products SET business_type = 'restaurant'
+        WHERE (
+          name LIKE '%Masala Chai%' OR name LIKE '%Cold Coffee%' OR name LIKE '%Samosa%' 
+          OR name LIKE '%Spring Roll%' OR name LIKE '%Paneer Butter%' OR name LIKE '%Dal Makhani%'
+          OR name LIKE '%Butter Naan%' OR name LIKE '%Jeera Rice%' OR name LIKE '%Burger%'
+          OR name LIKE '%Gulab Jamun%' OR name LIKE '%Kulfi%'
+        );
+      ''');
+
+      // 4. Default any remaining to grocery
+      await db.execute('''
+        UPDATE products SET business_type = 'grocery' WHERE business_type IS NULL OR business_type = '';
+      ''');
+    } catch (_) {}
+  }
+
+  /// Seeds default starter categories & products for a specific business vertical if not already present.
+  Future<void> seedVerticalStarterData(String businessType) async {
+    final cleanType = businessType.trim().toLowerCase();
+    final seeds = kDefaultProductsByVertical[cleanType];
+    if (seeds == null || seeds.isEmpty) return;
+
+    final db = await database;
+    final existingCount = Sqflite.firstIntValue(
+      await db.rawQuery('SELECT COUNT(*) FROM products WHERE business_type = ?', [cleanType]),
+    ) ?? 0;
+
+    if (existingCount > 0) return; // Already seeded for this vertical
+
+    final defaultBizId = 'biz_${cleanType}_store';
+    final Map<String, String> categoryMap = {};
+
+    for (final seed in seeds) {
+      if (!categoryMap.containsKey(seed.categoryName)) {
+        final catRows = await db.query(
+          'categories',
+          where: 'name = ? AND business_type = ?',
+          whereArgs: [seed.categoryName, cleanType],
+          limit: 1,
+        );
+
+        String catId;
+        if (catRows.isNotEmpty) {
+          catId = catRows.first['id'] as String;
+        } else {
+          catId = 'cat_${cleanType}_${_uuid.v4().substring(0, 8)}';
+          await db.insert('categories', {
+            'id': catId,
+            'business_id': defaultBizId,
+            'name': seed.categoryName,
+            'business_type': cleanType,
+          });
+        }
+        categoryMap[seed.categoryName] = catId;
+      }
+
+      final prodId = 'prod_${cleanType}_${_uuid.v4().substring(0, 8)}';
+      await db.insert('products', {
+        'id': prodId,
+        'business_id': defaultBizId,
+        'name': seed.name,
+        'category_id': categoryMap[seed.categoryName],
+        'selling_price_paise': seed.sellingPricePaise,
+        'mrp_paise': seed.mrpPaise,
+        'purchase_price_paise': seed.purchasePricePaise,
+        'stock_quantity': seed.stockQuantity,
+        'tax_rate': seed.taxRate,
+        'is_tax_inclusive': 1,
+        'unit': seed.unit,
+        'sync_status': 'synced',
+        'business_type': cleanType,
+      });
+    }
   }
 
   Future<void> _seedMasterCatalogIfEmpty(Database db) async {
@@ -255,12 +423,14 @@ class LocalDatabase {
     } catch (_) {}
   }
 
+
   Future _createDB(Database db, int version) async {
     await db.execute('''
       CREATE TABLE categories (
         id TEXT PRIMARY KEY,
         business_id TEXT NOT NULL,
-        name TEXT NOT NULL
+        name TEXT NOT NULL,
+        business_type TEXT DEFAULT 'grocery'
       )
     ''');
 
@@ -285,9 +455,11 @@ class LocalDatabase {
         imei_serial TEXT,
         hsn_code TEXT,
         is_loose_item INTEGER DEFAULT 0,
-        sync_status TEXT NOT NULL
+        sync_status TEXT NOT NULL,
+        business_type TEXT DEFAULT 'grocery'
       )
     ''');
+
 
     await db.execute('''
       CREATE TABLE customers (
@@ -365,10 +537,10 @@ class LocalDatabase {
 
     // Categories
     final categories = [
-      {'id': 'cat_grocery', 'business_id': defaultBizId, 'name': 'Grocery & Staples'},
-      {'id': 'cat_dairy', 'business_id': defaultBizId, 'name': 'Dairy & Bakery'},
-      {'id': 'cat_snacks', 'business_id': defaultBizId, 'name': 'Snacks & Beverages'},
-      {'id': 'cat_personal', 'business_id': defaultBizId, 'name': 'Personal Care'},
+      {'id': 'cat_grocery', 'business_id': defaultBizId, 'name': 'Grocery & Staples', 'business_type': 'grocery'},
+      {'id': 'cat_dairy', 'business_id': defaultBizId, 'name': 'Dairy & Bakery', 'business_type': 'grocery'},
+      {'id': 'cat_snacks', 'business_id': defaultBizId, 'name': 'Snacks & Beverages', 'business_type': 'grocery'},
+      {'id': 'cat_personal', 'business_id': defaultBizId, 'name': 'Personal Care', 'business_type': 'grocery'},
     ];
     for (var cat in categories) {
       await db.insert('categories', cat);
@@ -390,6 +562,7 @@ class LocalDatabase {
         'is_tax_inclusive': 1,
         'unit': 'bag',
         'sync_status': 'synced',
+        'business_type': 'grocery',
       },
       {
         'id': 'prod_2',
@@ -405,6 +578,7 @@ class LocalDatabase {
         'is_tax_inclusive': 1,
         'unit': 'pcs',
         'sync_status': 'synced',
+        'business_type': 'grocery',
       },
       {
         'id': 'prod_3',
@@ -420,6 +594,7 @@ class LocalDatabase {
         'is_tax_inclusive': 1,
         'unit': 'pkt',
         'sync_status': 'synced',
+        'business_type': 'grocery',
       },
       {
         'id': 'prod_4',
@@ -435,6 +610,7 @@ class LocalDatabase {
         'is_tax_inclusive': 1,
         'unit': 'pouch',
         'sync_status': 'synced',
+        'business_type': 'grocery',
       },
       {
         'id': 'prod_5',
@@ -450,6 +626,7 @@ class LocalDatabase {
         'is_tax_inclusive': 1,
         'unit': 'pcs',
         'sync_status': 'synced',
+        'business_type': 'grocery',
       },
       {
         'id': 'prod_6',
@@ -465,6 +642,7 @@ class LocalDatabase {
         'is_tax_inclusive': 1,
         'unit': 'pcs',
         'sync_status': 'synced',
+        'business_type': 'grocery',
       },
     ];
     for (var prod in products) {
@@ -507,17 +685,36 @@ class LocalDatabase {
   }
 
   // --- QUERY APIS ---
-  Future<List<ProductModel>> getAllProducts() async {
+  Future<List<ProductModel>> getAllProducts({String? businessType}) async {
     final db = await instance.database;
+    if (businessType != null && businessType.isNotEmpty) {
+      final result = await db.query(
+        'products',
+        where: 'business_type = ?',
+        whereArgs: [businessType],
+        orderBy: 'name ASC',
+      );
+      return result.map((json) => ProductModel.fromMap(json)).toList();
+    }
     final result = await db.query('products', orderBy: 'name ASC');
     return result.map((json) => ProductModel.fromMap(json)).toList();
   }
 
-  Future<List<CategoryModel>> getAllCategories() async {
+  Future<List<CategoryModel>> getAllCategories({String? businessType}) async {
     final db = await instance.database;
+    if (businessType != null && businessType.isNotEmpty) {
+      final result = await db.query(
+        'categories',
+        where: 'business_type = ?',
+        whereArgs: [businessType],
+        orderBy: 'name ASC',
+      );
+      return result.map((json) => CategoryModel.fromMap(json)).toList();
+    }
     final result = await db.query('categories', orderBy: 'name ASC');
     return result.map((json) => CategoryModel.fromMap(json)).toList();
   }
+
 
   Future<List<CustomerModel>> getAllCustomers() async {
     final db = await instance.database;

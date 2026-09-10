@@ -327,6 +327,7 @@ class _AddProductModalState extends State<AddProductModal> {
                     id: 'cat_${DateTime.now().millisecondsSinceEpoch}',
                     businessId: FirestoreSyncService.instance.activeBusinessId,
                     name: name,
+                    businessType: BusinessVerticals.activeBusinessTypeNotifier.value,
                   );
                   await LocalDatabase.instance.upsertCategory(newCat);
                   if (ctx.mounted) {
@@ -382,9 +383,11 @@ class _AddProductModalState extends State<AddProductModal> {
         color: _colorCtrl.text.trim().isNotEmpty ? _colorCtrl.text.trim() : widget.existingProduct?.color,
         imeiSerial: _imeiCtrl.text.trim().isNotEmpty ? _imeiCtrl.text.trim() : widget.existingProduct?.imeiSerial,
         syncStatus: 'synced',
+        businessType: widget.existingProduct?.businessType ?? BusinessVerticals.activeBusinessTypeNotifier.value,
       );
 
       await LocalDatabase.instance.upsertProduct(p);
+
       if (!mounted) return;
 
       Navigator.of(context).pop();
