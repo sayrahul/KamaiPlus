@@ -111,6 +111,70 @@ scope, tracked in **Known open issues** below.
 
 ---
 
+## 2026-09-11 (Phase 4 of the KamaiPlus Playbook, part 2) — Pharmacy FEFO expiry nudge, Clothing fit notes
+
+**Pharmacy — FEFO stock-rotation nudge.** `inventory_screen.dart` already had a
+"Near Expiry" radar (`_nearExpiryBatches`) with real date-parsing logic (ISO,
+`MM/YY`, `dd/MM/yyyy`) for pharmacy stock. That's a management-side view a shop
+owner checks periodically; it does nothing at the moment a cashier is actually
+choosing which pack of the same medicine to sell. Pulled that parsing logic out
+into a shared `lib/core/utils/expiry_utils.dart` (`parseProductExpiry`) so both
+call sites agree on what "near expiry" means, then wired it into
+`pos_billing_screen.dart`'s two product-picker widgets — the main grid
+(`_PosProductGridItem`) and the search-results list (`_buildStoreSearchItem`) —
+showing a "SELL FIRST · Nd" amber badge inside 30 days, or a red "EXPIRED" badge
+past it. Gated on `BusinessVerticals...toggles.showBatchExpiry`, the same toggle
+`inventory_screen.dart` already used, so this only ever appears for pharmacy.
+
+**Explicitly not a hard sale block.** A pharmacist may have a legitimate reason
+to bill an expired item (documented returns, disposal tracking) — this is
+advisory, the same posture `inventory_screen.dart`'s existing radar already
+takes.
+
+**Explicitly not true FEFO.** Real First-Expiry-First-Out tracks expiry per
+received *batch* — a shop could have three separate deliveries of the same
+medicine on the shelf with three different expiry dates, and a proper FEFO
+system tells the cashier which physical pack to reach for. `ProductModel` has
+exactly one `expiryDate` field per product row, not per batch, so this can only
+flag "this product's tracked expiry is close" — it can't distinguish between
+batches of the same product. Building real multi-batch tracking would need a
+new `product_batches` table (batch number, quantity, expiry, linked to
+`inventory_movements` at the point of each inward) and is out of scope for this
+lighter pass. Tracked in Known Open Issues below in case it's wanted later.
+
+**Clothing — fit notes.** Added a free-text `fitNotes` field to `ProductModel`
+(`lib/models/models.dart`) for guidance like "Runs small, order one size up" —
+distinct from the existing `size` field, which holds the actual size label
+("M", "40"). New nullable `fit_notes` column via schema `version: 4` /
+`_migrateToV4` (`lib/core/database/local_database.dart`), following the exact
+ALTER-TABLE-in-a-try/catch pattern Phase 1 already established for
+`sub_units_per_pack` — a fresh install gets the column from `CREATE TABLE`, an
+existing install gets it via the version-gated `onUpgrade` migration. Chose a
+free-text field over a real size chart (a size/measurement grid, possibly with
+a reference image) specifically to avoid a new image-picker dependency this
+phase doesn't need — the actual complaint (a customer picks the wrong size and
+returns it) is covered either way, since the merchant's own past experience
+("runs small") is exactly what a size chart would try to encode anyway.
+`add_product_modal.dart` shows the field inside the existing Clothing-only
+`showSizeVariants` section. Surfaced to the cashier in
+`pos_billing_screen.dart`'s search-result list as a small italic note under the
+price — the point where it's actually useful, when a customer is asking which
+size to buy.
+
+**Verification:** `flutter analyze` — 0 issues on all touched files. `flutter
+test` — 68/68 passing (was 60 before this entry's 8 new tests in
+`test/expiry_utils_test.dart`). `flutter build apk --debug` — succeeds. A full
+`flutter test` run once showed a single timeout/`database_closed` failure on
+`vertical_product_leak_test.dart` under parallel load; re-ran that file alone
+(passed in 37s) and the full suite again (passed clean) — confirmed flaky under
+system load, not a regression from this session's changes.
+
+**Not yet done in this session:** device-level testing of everything in Phase 4
+(parts 1 and 2) — deferred per user instruction to batch at the end. Phase 3
+(Admin Console) remains explicitly declined for now.
+
+---
+
 ## 2026-09-11 (Phase 2 of the KamaiPlus Playbook) — Master catalog depth expansion
 
 **Problem, quantified in the Playbook report:** `master_catalog_data.dart` — the
@@ -542,11 +606,14 @@ isolation. `flutter analyze` clean, full `flutter test` suite passes (28 tests t
   Phase 2 master-catalog-depth entry above — now 368 rows (Grocery 267, Pharmacy 78),
   plus larger Clothing/Hardware starter-seed lists. Left struck through rather than
   deleted per this file's "never delete old entries" rule.
-- Pharmacy FEFO (First-Expiry-First-Out) stock-rotation prompt — part of Phase 4
-  (vertical feature depth) scope, not yet implemented. Planned approach: a lighter
-  version than true multi-batch FEFO (which would need a schema change to track
-  per-batch expiry/quantity separately) — an expiry-warning badge/prompt at billing
-  time using the existing single `expiryDate` field already on `ProductModel`.
-- Clothing size-chart / fit-notes field — part of Phase 4 scope, not yet implemented.
-  Planned approach: a free-text field on the product (size/fit notes), avoiding a new
-  image-picker dependency a full visual size chart would require.
+- ~~Pharmacy FEFO stock-rotation prompt...~~ **PARTIALLY RESOLVED** by the 2026-09-11
+  Phase 4 part 2 entry above — a single-batch expiry nudge ("SELL FIRST · Nd" /
+  "EXPIRED" badges) now shows at billing. **Still open:** true multi-batch FEFO,
+  where the same medicine has multiple deliveries on the shelf with different
+  expiry dates and the app tells the cashier which physical batch to reach for.
+  Would need a new `product_batches` table (batch number, quantity, expiry, linked
+  to `inventory_movements` at each inward) — a real schema change, not attempted
+  in this lighter pass.
+- ~~Clothing size-chart / fit-notes field...~~ **RESOLVED** by the 2026-09-11
+  Phase 4 part 2 entry above — `ProductModel.fitNotes` free-text field, set in
+  Add Product, shown to the cashier at billing.

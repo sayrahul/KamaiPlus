@@ -8,6 +8,7 @@ import '../../core/state/data_bus_refresh.dart';
 import '../../models/models.dart';
 import '../../core/database/local_database.dart';
 import '../../core/utils/money_formatter.dart';
+import '../../core/utils/expiry_utils.dart';
 import '../../services/firestore_sync_service.dart';
 import '../../services/home_widget_service.dart';
 import '../../services/cloud_barcode_resolver_service.dart';
@@ -1195,6 +1196,12 @@ class _PosBillingScreenState extends State<PosBillingScreen> with DataBusRefresh
     final mrpStr = MoneyFormatter.formatINR(product.mrpPaise);
     final isUnlimited = product.isUnlimitedStock;
 
+    final vertToggles = BusinessVerticals.resolve(BusinessVerticals.activeBusinessTypeNotifier.value).toggles;
+    final expiryStatus = vertToggles.showBatchExpiry ? parseProductExpiry(product) : null;
+    final isExpired = expiryStatus?.isExpired ?? false;
+    final isExpiringSoon = expiryStatus?.isExpiringSoon ?? false;
+    final showFitNote = vertToggles.showSizeVariants && (product.fitNotes?.trim().isNotEmpty ?? false);
+
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
       decoration: BoxDecoration(
@@ -1226,7 +1233,11 @@ class _PosBillingScreenState extends State<PosBillingScreen> with DataBusRefresh
             ),
           ],
         ),
-        subtitle: Row(
+        subtitle: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Row(
           children: [
             Text(
               priceStr,
@@ -1263,6 +1274,47 @@ class _PosBillingScreenState extends State<PosBillingScreen> with DataBusRefresh
                 ),
               ),
             ),
+            if (isExpired || isExpiringSoon) ...[
+              const SizedBox(width: 6),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
+                decoration: BoxDecoration(
+                  color: isExpired ? const Color(0xFFFEE2E2) : const Color(0xFFFEF3C7),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Text(
+                  isExpired ? 'EXPIRED' : 'SELL FIRST · ${expiryStatus!.daysLeft}d',
+                  style: GoogleFonts.plusJakartaSans(
+                    fontSize: 9.5,
+                    fontWeight: FontWeight.w800,
+                    color: isExpired ? const Color(0xFFDC2626) : const Color(0xFF92400E),
+                  ),
+                ),
+              ),
+            ],
+          ],
+            ),
+            if (showFitNote) ...[
+              const SizedBox(height: 2),
+              Row(
+                children: [
+                  const Icon(Icons.straighten_rounded, size: 11, color: Color(0xFF7C3AED)),
+                  const SizedBox(width: 3),
+                  Expanded(
+                    child: Text(
+                      product.fitNotes!.trim(),
+                      style: GoogleFonts.plusJakartaSans(
+                        fontSize: 10.5,
+                        fontStyle: FontStyle.italic,
+                        color: const Color(0xFF7C3AED),
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
+              ),
+            ],
           ],
         ),
         trailing: inCartQty > 0
@@ -1720,6 +1772,14 @@ class _PosProductGridItemState extends State<_PosProductGridItem> {
     final effectiveStock = (widget.product.stockQuantity - widget.inCartQty);
     final isStockDepleted = !isUnlimited && effectiveStock <= 0;
 
+    // Pharmacy FEFO nudge (Phase 4, KamaiPlus Playbook): flag a near/past
+    // expiry item right on the billing tile so the cashier naturally reaches
+    // for it before newer stock of the same medicine.
+    final showExpiryBadges = BusinessVerticals.resolve(BusinessVerticals.activeBusinessTypeNotifier.value).toggles.showBatchExpiry;
+    final expiryStatus = showExpiryBadges ? parseProductExpiry(widget.product) : null;
+    final isExpired = expiryStatus?.isExpired ?? false;
+    final isExpiringSoon = expiryStatus?.isExpiringSoon ?? false;
+
     final stockLeftStr = isUnlimited
         ? '∞ Unlimited'
         : (effectiveStock <= 0 ? '0 left' : '${effectiveStock.toInt()} left');
@@ -1804,6 +1864,40 @@ class _PosProductGridItemState extends State<_PosProductGridItem> {
                             fontSize: 7.5,
                             fontWeight: FontWeight.w900,
                             color: const Color(0xFFDC2626),
+                          ),
+                        ),
+                      )
+                    else if (isExpired)
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFFEE2E2),
+                          borderRadius: BorderRadius.circular(4),
+                          border: Border.all(color: const Color(0xFFFCA5A5), width: 0.8),
+                        ),
+                        child: Text(
+                          'EXPIRED',
+                          style: GoogleFonts.plusJakartaSans(
+                            fontSize: 7.5,
+                            fontWeight: FontWeight.w900,
+                            color: const Color(0xFFDC2626),
+                          ),
+                        ),
+                      )
+                    else if (isExpiringSoon)
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFFEF3C7),
+                          borderRadius: BorderRadius.circular(4),
+                          border: Border.all(color: const Color(0xFFFDE68A), width: 0.8),
+                        ),
+                        child: Text(
+                          'SELL FIRST · ${expiryStatus!.daysLeft}d',
+                          style: GoogleFonts.plusJakartaSans(
+                            fontSize: 7.5,
+                            fontWeight: FontWeight.w900,
+                            color: const Color(0xFF92400E),
                           ),
                         ),
                       )

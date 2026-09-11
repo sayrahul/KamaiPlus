@@ -157,6 +157,11 @@ class ProductModel {
   /// unknown; quantity_config.dart falls back to whole/half-pack chips rather
   /// than assuming a count.
   final int? subUnitsPerPack;
+  /// Free-text fit/size-chart note for Clothing — e.g. "Runs small, order
+  /// one size up". Distinct from [size] (which holds the actual size label
+  /// like "M" or "40"); this is the merchant's own guidance to a customer
+  /// choosing between sizes.
+  final String? fitNotes;
 
   ProductModel({
     required this.id,
@@ -182,6 +187,7 @@ class ProductModel {
     this.syncStatus = 'synced',
     this.businessType = 'grocery',
     this.subUnitsPerPack,
+    this.fitNotes,
   });
 
   Map<String, dynamic> toMap() => {
@@ -208,6 +214,7 @@ class ProductModel {
     'sync_status': syncStatus,
     'business_type': businessType,
     'sub_units_per_pack': subUnitsPerPack,
+    'fit_notes': fitNotes,
   };
 
   factory ProductModel.fromMap(Map<String, dynamic> map) => ProductModel(
@@ -236,6 +243,7 @@ class ProductModel {
         ? map['business_type']
         : inferBusinessType(map['name'], map['category_id']),
     subUnitsPerPack: (map['sub_units_per_pack'] as num?)?.toInt(),
+    fitNotes: map['fit_notes'] as String?,
   );
 
   ProductModel copyWith({
@@ -260,6 +268,7 @@ class ProductModel {
     String? syncStatus,
     String? businessType,
     int? subUnitsPerPack,
+    String? fitNotes,
   }) => ProductModel(
     id: id,
     businessId: businessId,
@@ -284,6 +293,7 @@ class ProductModel {
     syncStatus: syncStatus ?? this.syncStatus,
     businessType: businessType ?? this.businessType,
     subUnitsPerPack: subUnitsPerPack ?? this.subUnitsPerPack,
+    fitNotes: fitNotes ?? this.fitNotes,
   );
 
 

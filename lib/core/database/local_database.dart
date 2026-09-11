@@ -67,7 +67,7 @@ class LocalDatabase {
 
     return await openDatabase(
       path,
-      version: 3,
+      version: 4,
       onCreate: _createDB,
       onUpgrade: (db, oldVersion, newVersion) async {
         if (oldVersion < 2) {
@@ -75,6 +75,9 @@ class LocalDatabase {
         }
         if (oldVersion < 3) {
           await _migrateToV3(db);
+        }
+        if (oldVersion < 4) {
+          await _migrateToV4(db);
         }
       },
       onOpen: (db) async {
@@ -131,6 +134,17 @@ class LocalDatabase {
       // Null means "unknown" — falls back to the existing whole/half-strip
       // chips in quantity_config.dart, never a crash or a wrong assumption.
       await db.execute('ALTER TABLE products ADD COLUMN sub_units_per_pack INTEGER');
+    } catch (_) {}
+  }
+
+  Future<void> _migrateToV4(Database db) async {
+    try {
+      // Clothing fit/size-chart notes (Phase 4 of the KamaiPlus Playbook) —
+      // e.g. "Runs small, order one size up" or "True to size". A free-text
+      // field rather than a structured size chart: avoids a new
+      // image-picker/table dependency this phase doesn't need, and covers
+      // the actual complaint (customers guessing sizes wrong) either way.
+      await db.execute('ALTER TABLE products ADD COLUMN fit_notes TEXT');
     } catch (_) {}
   }
 
@@ -522,7 +536,8 @@ class LocalDatabase {
         is_favorite INTEGER DEFAULT 0,
         sync_status TEXT NOT NULL,
         business_type TEXT DEFAULT 'grocery',
-        sub_units_per_pack INTEGER
+        sub_units_per_pack INTEGER,
+        fit_notes TEXT
       )
     ''');
 

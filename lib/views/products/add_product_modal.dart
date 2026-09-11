@@ -64,6 +64,7 @@ class _AddProductModalState extends State<AddProductModal> {
   late final TextEditingController _expiryDateCtrl;
   late final TextEditingController _sizeCtrl;
   late final TextEditingController _colorCtrl;
+  late final TextEditingController _fitNotesCtrl;
   late final TextEditingController _imeiCtrl;
   late final TextEditingController _warrantyCtrl;
 
@@ -119,6 +120,7 @@ class _AddProductModalState extends State<AddProductModal> {
     _expiryDateCtrl = TextEditingController(text: p?.expiryDate ?? '');
     _sizeCtrl = TextEditingController(text: p?.size ?? '');
     _colorCtrl = TextEditingController(text: p?.color ?? '');
+    _fitNotesCtrl = TextEditingController(text: p?.fitNotes ?? '');
     _imeiCtrl = TextEditingController(text: p?.imeiSerial ?? '');
     _warrantyCtrl = TextEditingController();
 
@@ -198,6 +200,7 @@ class _AddProductModalState extends State<AddProductModal> {
     _expiryDateCtrl.dispose();
     _sizeCtrl.dispose();
     _colorCtrl.dispose();
+    _fitNotesCtrl.dispose();
     _imeiCtrl.dispose();
     _warrantyCtrl.dispose();
     super.dispose();
@@ -554,6 +557,7 @@ class _AddProductModalState extends State<AddProductModal> {
         expiryDate: _expiryDateCtrl.text.trim().isNotEmpty ? _expiryDateCtrl.text.trim() : widget.existingProduct?.expiryDate,
         size: _sizeCtrl.text.trim().isNotEmpty ? _sizeCtrl.text.trim() : widget.existingProduct?.size,
         color: _colorCtrl.text.trim().isNotEmpty ? _colorCtrl.text.trim() : widget.existingProduct?.color,
+        fitNotes: _fitNotesCtrl.text.trim().isNotEmpty ? _fitNotesCtrl.text.trim() : widget.existingProduct?.fitNotes,
         imeiSerial: _imeiCtrl.text.trim().isNotEmpty ? _imeiCtrl.text.trim() : widget.existingProduct?.imeiSerial,
         isFavorite: _isFavorite,
         syncStatus: 'synced',
@@ -1342,6 +1346,14 @@ class _AddProductModalState extends State<AddProductModal> {
                               ),
                             ),
                           ],
+                        ),
+                        const SizedBox(height: 12),
+                        _buildLabel('Fit Notes (optional)'),
+                        const SizedBox(height: 4),
+                        TextFormField(
+                          controller: _fitNotesCtrl,
+                          style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w600),
+                          decoration: _buildInputDecoration('e.g. Runs small, order one size up'),
                         ),
                         const SizedBox(height: 12),
                       ],
