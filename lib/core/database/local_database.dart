@@ -67,11 +67,14 @@ class LocalDatabase {
 
     return await openDatabase(
       path,
-      version: 2,
+      version: 3,
       onCreate: _createDB,
       onUpgrade: (db, oldVersion, newVersion) async {
         if (oldVersion < 2) {
           await _migrateToV2(db);
+        }
+        if (oldVersion < 3) {
+          await _migrateToV3(db);
         }
       },
       onOpen: (db) async {
@@ -110,13 +113,26 @@ class LocalDatabase {
       await db.execute('ALTER TABLE products ADD COLUMN is_favorite INTEGER DEFAULT 0');
     } catch (_) {}
     try {
-      await db.execute('ALTER TABLE products ADD COLUMN business_type TEXT DEFAULT "grocery"');
+      // Single-quoted — a double-quoted DEFAULT is the same misfeature fixed
+      // elsewhere in this file for 'both' (see DEVELOPMENT_LOG.md): SQLite
+      // reads double quotes as an identifier reference on a strict build.
+      await db.execute("ALTER TABLE products ADD COLUMN business_type TEXT DEFAULT 'grocery'");
     } catch (_) {}
     try {
-      await db.execute('ALTER TABLE categories ADD COLUMN business_type TEXT DEFAULT "grocery"');
+      await db.execute("ALTER TABLE categories ADD COLUMN business_type TEXT DEFAULT 'grocery'");
     } catch (_) {}
   }
 
+  Future<void> _migrateToV3(Database db) async {
+    try {
+      // Lets a pharmacy strip know how many tablets it actually contains
+      // (10 / 15 / 20 / 30 all exist in the real world) so billing can sell
+      // a handful of tablets instead of only whole or half strips.
+      // Null means "unknown" — falls back to the existing whole/half-strip
+      // chips in quantity_config.dart, never a crash or a wrong assumption.
+      await db.execute('ALTER TABLE products ADD COLUMN sub_units_per_pack INTEGER');
+    } catch (_) {}
+  }
 
   Future<void> _ensureExtraTables(Database db) async {
     await _migrateToV2(db);
@@ -505,7 +521,8 @@ class LocalDatabase {
         is_loose_item INTEGER DEFAULT 0,
         is_favorite INTEGER DEFAULT 0,
         sync_status TEXT NOT NULL,
-        business_type TEXT DEFAULT 'grocery'
+        business_type TEXT DEFAULT 'grocery',
+        sub_units_per_pack INTEGER
       )
     ''');
 

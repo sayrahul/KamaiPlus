@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../core/database/local_database.dart';
 import '../../core/utils/money_formatter.dart';
+import '../../core/utils/quantity_config.dart';
 import '../../models/models.dart';
 import '../../services/firestore_sync_service.dart';
 
@@ -110,6 +111,11 @@ class _QuickStockUpdateModalState extends State<QuickStockUpdateModal> {
     return (_currentStock + _inwardDelta).clamp(0.0, 99999.0);
   }
 
+  QuantityUnitConfig get _quantityConfig => quantityConfigForUnit(
+        widget.product.unit,
+        subUnitsPerPack: widget.product.subUnitsPerPack,
+      );
+
   void _addInwardChip(double amount) {
     HapticFeedback.selectionClick();
     setState(() {
@@ -124,22 +130,16 @@ class _QuickStockUpdateModalState extends State<QuickStockUpdateModal> {
     final sellingPricePaise = (parsedRupees * 100).round();
     final newStock = _effectiveInwardStock;
 
-    final updated = ProductModel(
-      id: p.id,
-      businessId: p.businessId,
-      name: p.name,
-      barcode: p.barcode,
-      categoryId: p.categoryId,
+    // copyWith, not a field-by-field ProductModel(...) reconstruction — the
+    // old version here silently dropped businessType (defaulting every
+    // stock-updated product back to 'grocery', breaking the vertical
+    // isolation fixed elsewhere this session), plus size/color/imeiSerial/
+    // hsnCode/isFavorite/subUnitsPerPack. copyWith carries every field
+    // forward by default, so a future field added to ProductModel can't be
+    // silently lost here again the way this one already was.
+    final updated = p.copyWith(
       sellingPricePaise: sellingPricePaise,
-      mrpPaise: p.mrpPaise,
-      purchasePricePaise: p.purchasePricePaise,
       stockQuantity: newStock,
-      taxRate: p.taxRate,
-      isTaxInclusive: p.isTaxInclusive,
-      unit: p.unit,
-      batchNumber: p.batchNumber,
-      expiryDate: p.expiryDate,
-      isLooseItem: p.isLooseItem,
       syncStatus: 'pending',
     );
 
@@ -195,22 +195,10 @@ class _QuickStockUpdateModalState extends State<QuickStockUpdateModal> {
       newStock = (_currentStock - qty).clamp(0.0, 99999.0);
     }
 
-    final updated = ProductModel(
-      id: p.id,
-      businessId: p.businessId,
-      name: p.name,
-      barcode: p.barcode,
-      categoryId: p.categoryId,
-      sellingPricePaise: p.sellingPricePaise,
-      mrpPaise: p.mrpPaise,
-      purchasePricePaise: p.purchasePricePaise,
+    // See the same fix in _saveInward above — copyWith, not a fresh
+    // ProductModel(...), so businessType and every other field survive.
+    final updated = p.copyWith(
       stockQuantity: newStock,
-      taxRate: p.taxRate,
-      isTaxInclusive: p.isTaxInclusive,
-      unit: p.unit,
-      batchNumber: p.batchNumber,
-      expiryDate: p.expiryDate,
-      isLooseItem: p.isLooseItem,
       syncStatus: 'pending',
     );
 
@@ -409,9 +397,11 @@ class _QuickStockUpdateModalState extends State<QuickStockUpdateModal> {
 
               // TAB 0: RAPID INWARD / ADD STOCK
               if (_activeTab == 0) ...[
-                // Wholesale Rapid Inward Chips
+                // Quick-add chips, sized to how this product is actually sold —
+                // a kg-priced loose item (kaju, badam, atta) gets 10g-500g chips
+                // instead of the old fixed dozen/carton set that never fit it.
                 Text(
-                  'QUICK ADD QUANTITY (BOX / PETI)',
+                  'QUICK ADD QUANTITY (${p.unit.toUpperCase()})',
                   style: GoogleFonts.plusJakartaSans(
                     fontSize: 11,
                     fontWeight: FontWeight.w800,
@@ -423,13 +413,9 @@ class _QuickStockUpdateModalState extends State<QuickStockUpdateModal> {
                 Wrap(
                   spacing: 8,
                   runSpacing: 8,
-                  children: [
-                    _buildInwardChip('+6 Pcs', 6),
-                    _buildInwardChip('+12 (1 Dozen)', 12),
-                    _buildInwardChip('+24 (2 Dozen)', 24),
-                    _buildInwardChip('+48 (Carton)', 48),
-                    _buildInwardChip('+100', 100),
-                  ],
+                  children: _quantityConfig.chips
+                      .map((chip) => _buildInwardChip('+${chip.label}', chip.value))
+                      .toList(),
                 ),
                 const SizedBox(height: 16),
 
@@ -696,7 +682,11 @@ class _QuickStockUpdateModalState extends State<QuickStockUpdateModal> {
                 const SizedBox(height: 6),
                 TextField(
                   controller: _adjustQtyCtrl,
-                  keyboardType: TextInputType.number,
+                  // Decimal, not plain 'number' — a damaged/spilled loose item
+                  // (e.g. 0.25kg of kaju) needs the same fractional entry as
+                  // adding stock does, not just whole units.
+                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  onChanged: (_) => setState(() {}),
                   style: GoogleFonts.jetBrainsMono(
                     fontSize: 18,
                     fontWeight: FontWeight.w800,
@@ -717,6 +707,43 @@ class _QuickStockUpdateModalState extends State<QuickStockUpdateModal> {
                     ),
                   ),
                 ),
+                // Same unit-aware quick chips as the Inward tab — only for a
+                // deduction, not a physical recount (that's a direct total,
+                // not an increment, so a "+250g" chip wouldn't make sense there).
+                if (_movementType != 'ADJUSTMENT') ...[
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: _quantityConfig.chips.map((chip) {
+                      final chipValStr = chip.value % 1 == 0 ? chip.value.toInt().toString() : chip.value.toString();
+                      final isSelected = _adjustQtyCtrl.text == chipValStr;
+                      return InkWell(
+                        onTap: () {
+                          HapticFeedback.selectionClick();
+                          setState(() => _adjustQtyCtrl.text = chipValStr);
+                        },
+                        borderRadius: BorderRadius.circular(10),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                          decoration: BoxDecoration(
+                            color: isSelected ? const Color(0xFFFECACA) : const Color(0xFFFFF1F2),
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(color: const Color(0xFFFECDD3), width: 1.1),
+                          ),
+                          child: Text(
+                            chip.label,
+                            style: GoogleFonts.plusJakartaSans(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w800,
+                              color: const Color(0xFFB91C1C),
+                            ),
+                          ),
+                        ),
+                      );
+                    }).toList(),
+                  ),
+                ],
                 const SizedBox(height: 12),
 
                 // Optional Note

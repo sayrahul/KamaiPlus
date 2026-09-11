@@ -4,6 +4,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:uuid/uuid.dart';
 import '../../core/constants/business_vertical_config.dart';
 import '../../core/database/local_database.dart';
+import '../../core/utils/quantity_config.dart';
 import '../../models/models.dart';
 import '../../services/firestore_sync_service.dart';
 import '../../services/cloud_barcode_resolver_service.dart';
@@ -59,6 +60,7 @@ class _AddProductModalState extends State<AddProductModal> {
   late final TextEditingController _stockCtrl;
   late final TextEditingController _thresholdCtrl;
   late final TextEditingController _batchNumberCtrl;
+  late final TextEditingController _subUnitsPerPackCtrl;
   late final TextEditingController _expiryDateCtrl;
   late final TextEditingController _sizeCtrl;
   late final TextEditingController _colorCtrl;
@@ -113,6 +115,7 @@ class _AddProductModalState extends State<AddProductModal> {
     );
     _thresholdCtrl = TextEditingController(text: '5');
     _batchNumberCtrl = TextEditingController(text: p?.batchNumber ?? '');
+    _subUnitsPerPackCtrl = TextEditingController(text: p?.subUnitsPerPack?.toString() ?? '');
     _expiryDateCtrl = TextEditingController(text: p?.expiryDate ?? '');
     _sizeCtrl = TextEditingController(text: p?.size ?? '');
     _colorCtrl = TextEditingController(text: p?.color ?? '');
@@ -191,6 +194,7 @@ class _AddProductModalState extends State<AddProductModal> {
     _stockCtrl.dispose();
     _thresholdCtrl.dispose();
     _batchNumberCtrl.dispose();
+    _subUnitsPerPackCtrl.dispose();
     _expiryDateCtrl.dispose();
     _sizeCtrl.dispose();
     _colorCtrl.dispose();
@@ -204,6 +208,11 @@ class _AddProductModalState extends State<AddProductModal> {
     final cost = double.tryParse(_costPriceCtrl.text) ?? 0.0;
     return sell - cost;
   }
+
+  // Reacts live to _selectedUnit — a merchant picking "kg" for a new loose
+  // item (kaju, badam) sees opening-stock chips in grams, not the generic
+  // whole-count list every other unit fell back to before this.
+  QuantityUnitConfig get _quantityConfig => quantityConfigForUnit(_selectedUnit);
 
   Future<void> _pickExpiryDate() async {
     final now = DateTime.now();
@@ -549,6 +558,9 @@ class _AddProductModalState extends State<AddProductModal> {
         isFavorite: _isFavorite,
         syncStatus: 'synced',
         businessType: widget.existingProduct?.businessType ?? BusinessVerticals.activeBusinessTypeNotifier.value,
+        subUnitsPerPack: _selectedUnit == 'strip' && _subUnitsPerPackCtrl.text.trim().isNotEmpty
+            ? int.tryParse(_subUnitsPerPackCtrl.text.trim())
+            : (_selectedUnit == 'strip' ? widget.existingProduct?.subUnitsPerPack : null),
       );
 
       await LocalDatabase.instance.upsertProduct(p);
@@ -961,6 +973,33 @@ class _AddProductModalState extends State<AddProductModal> {
                         ],
                       ),
                       const SizedBox(height: 12),
+
+                      // Tablets/pieces per strip — only when the unit is actually
+                      // "strip". Real strips are 10, 15, 20 or 30 tablets, never
+                      // a fixed number, so billing can't sell "3 tablets"
+                      // correctly without knowing this. Left blank, quantity
+                      // entry falls back to whole/half-strip only.
+                      if (_selectedUnit == 'strip') ...[
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            _buildLabel('Tablets per Strip'),
+                            const SizedBox(height: 4),
+                            TextFormField(
+                              controller: _subUnitsPerPackCtrl,
+                              keyboardType: TextInputType.number,
+                              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                              style: GoogleFonts.robotoMono(fontSize: 13, fontWeight: FontWeight.w700),
+                              decoration: _buildInputDecoration('e.g. 10, 15, 20').copyWith(
+                                helperText: 'Lets billing sell an exact tablet count, not just a whole or half strip',
+                                helperMaxLines: 2,
+                                helperStyle: GoogleFonts.inter(fontSize: 10.5, color: const Color(0xFF94A3B8)),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 12),
+                      ],
 
                       // 3. Compact Pricing & Profit Margins Card
                       Container(
@@ -1509,7 +1548,10 @@ class _AddProductModalState extends State<AddProductModal> {
                                         ),
                                       )
                                     else
-                                      Row(
+                                      Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          Row(
                                         children: [
                                           Expanded(
                                             child: Column(
@@ -1519,7 +1561,10 @@ class _AddProductModalState extends State<AddProductModal> {
                                                 const SizedBox(height: 4),
                                                 TextFormField(
                                                   controller: _stockCtrl,
-                                                  keyboardType: TextInputType.number,
+                                                  // Decimal — a loose item priced per kg (kaju,
+                                                  // badam, atta) needs an opening stock like
+                                                  // 0.25 or 1.5, not just whole numbers.
+                                                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
                                                   style: GoogleFonts.robotoMono(fontSize: 13, fontWeight: FontWeight.w700),
                                                   decoration: _buildInputDecoration('e.g. 25'),
                                                   onChanged: (_) => setState(() {}),
@@ -1548,6 +1593,49 @@ class _AddProductModalState extends State<AddProductModal> {
                                                 ),
                                               ],
                                             ),
+                                          ),
+                                        ],
+                                      ),
+                                          const SizedBox(height: 8),
+                                          // Unit-aware quick fill — same config used by the
+                                          // POS billing cart-item editor and the Products
+                                          // screen's stock-update modal, so a kg-priced
+                                          // loose item sees gram chips here too, not just
+                                          // after it's already been saved once.
+                                          Wrap(
+                                            spacing: 8,
+                                            runSpacing: 8,
+                                            children: _quantityConfig.chips.map((chip) {
+                                              final chipValStr = chip.value % 1 == 0
+                                                  ? chip.value.toInt().toString()
+                                                  : chip.value.toString();
+                                              final isSelected = _stockCtrl.text == chipValStr;
+                                              return InkWell(
+                                                onTap: () {
+                                                  HapticFeedback.selectionClick();
+                                                  setState(() => _stockCtrl.text = chipValStr);
+                                                },
+                                                borderRadius: BorderRadius.circular(8),
+                                                child: Container(
+                                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                                  decoration: BoxDecoration(
+                                                    color: isSelected ? const Color(0xFFFBBF24) : const Color(0xFFF1F5F9),
+                                                    borderRadius: BorderRadius.circular(8),
+                                                    border: Border.all(
+                                                      color: isSelected ? const Color(0xFFF59E0B) : const Color(0xFFE2E8F0),
+                                                    ),
+                                                  ),
+                                                  child: Text(
+                                                    chip.label,
+                                                    style: GoogleFonts.plusJakartaSans(
+                                                      fontSize: 11.5,
+                                                      fontWeight: isSelected ? FontWeight.w800 : FontWeight.w600,
+                                                      color: isSelected ? const Color(0xFF0F172A) : const Color(0xFF334155),
+                                                    ),
+                                                  ),
+                                                ),
+                                              );
+                                            }).toList(),
                                           ),
                                         ],
                                       ),

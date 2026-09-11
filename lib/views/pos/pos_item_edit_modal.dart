@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import '../../core/utils/quantity_config.dart';
 import '../../models/models.dart';
 
 class PosItemEditModal extends StatefulWidget {
@@ -74,99 +75,6 @@ class _PosItemEditModalState extends State<PosItemEditModal> {
     super.dispose();
   }
 
-  Map<String, dynamic> _getQuantityConfig() {
-    final norm = _currentUnit;
-    if (norm == 'kg') {
-      return {
-        'unitLabel': 'Weight (Kilograms - kg)',
-        'decimalNotice': 'Decimals supported (Grams / Kg)',
-        'chips': [
-          {'label': '10g', 'val': '0.01'},
-          {'label': '25g', 'val': '0.025'},
-          {'label': '50g', 'val': '0.05'},
-          {'label': '100g', 'val': '0.1'},
-          {'label': '250g', 'val': '0.25'},
-          {'label': '500g', 'val': '0.5'},
-          {'label': '1 kg', 'val': '1'},
-          {'label': '2 kg', 'val': '2'},
-          {'label': '5 kg', 'val': '5'},
-        ],
-      };
-    } else if (norm == 'gram' || norm == 'g') {
-      return {
-        'unitLabel': 'Weight (Grams - g)',
-        'decimalNotice': 'Grams count',
-        'chips': [
-          {'label': '10g', 'val': '10'},
-          {'label': '25g', 'val': '25'},
-          {'label': '50g', 'val': '50'},
-          {'label': '100g', 'val': '100'},
-          {'label': '250g', 'val': '250'},
-          {'label': '500g', 'val': '500'},
-          {'label': '1000g', 'val': '1000'},
-        ],
-      };
-    } else if (norm == 'litre' || norm == 'l') {
-      return {
-        'unitLabel': 'Volume (Litres - L)',
-        'decimalNotice': 'Decimals supported (ml / Litres)',
-        'chips': [
-          {'label': '100ml', 'val': '0.1'},
-          {'label': '250ml', 'val': '0.25'},
-          {'label': '500ml', 'val': '0.5'},
-          {'label': '1 L', 'val': '1'},
-          {'label': '2 L', 'val': '2'},
-          {'label': '5 L', 'val': '5'},
-        ],
-      };
-    } else if (norm == 'strip') {
-      return {
-        'unitLabel': 'Quantity (Strips)',
-        'decimalNotice': 'Strip counts (0.5 for loose/half)',
-        'chips': [
-          {'label': '1 Strip', 'val': '1'},
-          {'label': '2 Strips', 'val': '2'},
-          {'label': '3 Strips', 'val': '3'},
-          {'label': '4 Strips', 'val': '4'},
-          {'label': '5 Strips', 'val': '5'},
-          {'label': '10 Strips', 'val': '10'},
-          {'label': '½ Strip', 'val': '0.5'},
-        ],
-      };
-    } else if (norm == 'dozen') {
-      return {
-        'unitLabel': 'Quantity (Dozen)',
-        'decimalNotice': 'Dozen count (0.5 = 6 pcs)',
-        'chips': [
-          {'label': '½ Dozen (6)', 'val': '0.5'},
-          {'label': '1 Dozen (12)', 'val': '1'},
-          {'label': '1.5 Dozen (18)', 'val': '1.5'},
-          {'label': '2 Dozen (24)', 'val': '2'},
-          {'label': '3 Dozen (36)', 'val': '3'},
-          {'label': '5 Dozen (60)', 'val': '5'},
-        ],
-      };
-    }
-
-    // Default: Packet, Piece, Box, Bottle, etc.
-    final displayUnitName = norm.isNotEmpty ? (norm[0].toUpperCase() + norm.substring(1)) : 'Packet';
-    return {
-      'unitLabel': 'Quantity ($displayUnitName)',
-      'decimalNotice': 'Whole count / Units',
-      'chips': [
-        {'label': '1', 'val': '1'},
-        {'label': '2', 'val': '2'},
-        {'label': '3', 'val': '3'},
-        {'label': '4', 'val': '4'},
-        {'label': '5', 'val': '5'},
-        {'label': '6', 'val': '6'},
-        {'label': '10', 'val': '10'},
-        {'label': '12', 'val': '12'},
-        {'label': '24', 'val': '24'},
-      ],
-    };
-  }
-
   void _handleSave() {
     final qty = double.tryParse(_qtyController.text) ?? 1.0;
     final price = double.tryParse(_priceController.text) ?? (widget.cartItem.product.sellingPricePaise / 100.0);
@@ -190,8 +98,11 @@ class _PosItemEditModalState extends State<PosItemEditModal> {
 
   @override
   Widget build(BuildContext context) {
-    final config = _getQuantityConfig();
-    final List<Map<String, String>> chips = List<Map<String, String>>.from(config['chips'] as List);
+    final config = quantityConfigForUnit(
+      _currentUnit,
+      subUnitsPerPack: widget.cartItem.product.subUnitsPerPack,
+    );
+    final chips = config.chips;
 
     final qty = double.tryParse(_qtyController.text) ?? 0.0;
     final unitPrice = double.tryParse(_priceController.text) ?? 0.0;
@@ -286,7 +197,7 @@ class _PosItemEditModalState extends State<PosItemEditModal> {
                 Row(
                   children: [
                     Text(
-                      config['unitLabel'] as String,
+                      config.unitLabel,
                       style: GoogleFonts.plusJakartaSans(
                         fontSize: 12,
                         fontWeight: FontWeight.w700,
@@ -312,7 +223,7 @@ class _PosItemEditModalState extends State<PosItemEditModal> {
                   ],
                 ),
                 Text(
-                  config['decimalNotice'] as String,
+                  config.decimalNotice,
                   style: GoogleFonts.plusJakartaSans(
                     fontSize: 11,
                     fontWeight: FontWeight.w500,
@@ -383,13 +294,14 @@ class _PosItemEditModalState extends State<PosItemEditModal> {
               scrollDirection: Axis.horizontal,
               child: Row(
                 children: chips.map((chip) {
-                  final isSelected = _qtyController.text == chip['val'];
+                  final chipValStr = chip.value % 1 == 0 ? chip.value.toInt().toString() : chip.value.toString();
+                  final isSelected = _qtyController.text == chipValStr;
                   return Padding(
                     padding: const EdgeInsets.only(right: 6),
                     child: InkWell(
                       onTap: () {
                         setState(() {
-                          _qtyController.text = chip['val']!;
+                          _qtyController.text = chipValStr;
                         });
                       },
                       borderRadius: BorderRadius.circular(8),
@@ -403,7 +315,7 @@ class _PosItemEditModalState extends State<PosItemEditModal> {
                           ),
                         ),
                         child: Text(
-                          chip['label']!,
+                          chip.label,
                           style: GoogleFonts.plusJakartaSans(
                             fontSize: 12,
                             fontWeight: isSelected ? FontWeight.w800 : FontWeight.w600,

@@ -152,6 +152,11 @@ class ProductModel {
   final bool isFavorite;
   final String syncStatus;
   final String businessType;
+  /// How many sellable sub-units make up one pack of this product's [unit] —
+  /// e.g. 15 tablets in a pharmacy strip, 10 pieces in a box. Null means
+  /// unknown; quantity_config.dart falls back to whole/half-pack chips rather
+  /// than assuming a count.
+  final int? subUnitsPerPack;
 
   ProductModel({
     required this.id,
@@ -176,6 +181,7 @@ class ProductModel {
     this.isFavorite = false,
     this.syncStatus = 'synced',
     this.businessType = 'grocery',
+    this.subUnitsPerPack,
   });
 
   Map<String, dynamic> toMap() => {
@@ -201,6 +207,7 @@ class ProductModel {
     'is_favorite': isFavorite ? 1 : 0,
     'sync_status': syncStatus,
     'business_type': businessType,
+    'sub_units_per_pack': subUnitsPerPack,
   };
 
   factory ProductModel.fromMap(Map<String, dynamic> map) => ProductModel(
@@ -228,6 +235,7 @@ class ProductModel {
     businessType: (map['business_type'] != null && map['business_type'].toString().isNotEmpty)
         ? map['business_type']
         : inferBusinessType(map['name'], map['category_id']),
+    subUnitsPerPack: (map['sub_units_per_pack'] as num?)?.toInt(),
   );
 
   ProductModel copyWith({
@@ -251,6 +259,7 @@ class ProductModel {
     bool? isFavorite,
     String? syncStatus,
     String? businessType,
+    int? subUnitsPerPack,
   }) => ProductModel(
     id: id,
     businessId: businessId,
@@ -274,6 +283,7 @@ class ProductModel {
     isFavorite: isFavorite ?? this.isFavorite,
     syncStatus: syncStatus ?? this.syncStatus,
     businessType: businessType ?? this.businessType,
+    subUnitsPerPack: subUnitsPerPack ?? this.subUnitsPerPack,
   );
 
 
