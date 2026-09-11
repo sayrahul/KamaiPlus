@@ -14,6 +14,8 @@ import '../pos/barcode_scanner_view.dart';
 import '../../services/firestore_sync_service.dart';
 import '../../services/cloud_barcode_resolver_service.dart';
 import '../../core/constants/business_vertical_config.dart';
+import '../../core/state/app_data_bus.dart';
+import '../../core/state/data_bus_refresh.dart';
 
 
 class ProductsScreen extends StatefulWidget {
@@ -24,7 +26,17 @@ class ProductsScreen extends StatefulWidget {
   State<ProductsScreen> createState() => _ProductsScreenState();
 }
 
-class _ProductsScreenState extends State<ProductsScreen> {
+class _ProductsScreenState extends State<ProductsScreen> with DataBusRefresh<ProductsScreen> {
+  // Stock moves whenever a bill is rung up on the Billing tab, so this must follow
+  // productsRevision and not just its own edits.
+  @override
+  List<ValueNotifier<int>> get dataBusSignals => [
+        AppDataBus.instance.productsRevision,
+      ];
+
+  @override
+  void onDataBusChanged() => _loadData();
+
   List<ProductModel> _products = [];
   List<CategoryModel> _categories = [];
   bool _isLoading = true;
@@ -418,8 +430,12 @@ class _ProductsScreenState extends State<ProductsScreen> {
     return Scaffold(
       backgroundColor: const Color(0xFFF8FAFC),
       appBar: const PwaTopBar(),
-      body: SingleChildScrollView(
-        physics: const BouncingScrollPhysics(),
+      // Manual fallback alongside the AppDataBus listener, matching the Home tab.
+      body: RefreshIndicator(
+        onRefresh: _loadData,
+        color: const Color(0xFF059669),
+        child: SingleChildScrollView(
+        physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
         padding: const EdgeInsets.fromLTRB(14, 12, 14, 28),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -470,6 +486,7 @@ class _ProductsScreenState extends State<ProductsScreen> {
                 itemBuilder: (ctx, i) => _buildProductCard(filtered[i]),
               ),
           ],
+        ),
         ),
       ),
     );

@@ -6,6 +6,7 @@ import '../utils/money_formatter.dart';
 import '../utils/gst_helper.dart';
 import '../constants/master_catalog_data.dart';
 import '../constants/default_products.dart';
+import '../state/app_data_bus.dart';
 
 
 class LocalDatabase {
@@ -742,22 +743,36 @@ class LocalDatabase {
     if (businessType != null && businessType.isNotEmpty) {
       final result = await db.query(
         'products',
-        where: 'business_type = ? OR business_type = "both"',
+        where: "business_type = ? OR business_type = 'both'",
         whereArgs: [businessType],
         orderBy: 'is_favorite DESC, name ASC',
       );
       if (result.isNotEmpty) {
         return result.map((json) => ProductModel.fromMap(json)).toList();
       }
-      // Resilient fallback: if no products match the vertical, check if the store has any products
-      final allResult = await db.query('products', orderBy: 'is_favorite DESC, name ASC');
-      if (allResult.isNotEmpty) {
-        return allResult.map((json) => ProductModel.fromMap(json)).toList();
-      }
-      // If store is completely empty, auto-seed starter products for this vertical!
+      // Nothing tagged for this vertical yet — seed its starter catalog (only inserts
+      // rows tagged with this exact businessType) and re-check.
       await seedVerticalStarterData(businessType);
-      final seeded = await db.query('products', orderBy: 'is_favorite DESC, name ASC');
-      return seeded.map((json) => ProductModel.fromMap(json)).toList();
+      final seeded = await db.query(
+        'products',
+        where: "business_type = ? OR business_type = 'both'",
+        whereArgs: [businessType],
+        orderBy: 'is_favorite DESC, name ASC',
+      );
+      if (seeded.isNotEmpty) {
+        return seeded.map((json) => ProductModel.fromMap(json)).toList();
+      }
+      // Still nothing (a custom vertical with no starter catalog, e.g.). Fall back
+      // ONLY to genuinely unclassified rows (pre-dating the vertical feature) —
+      // never to another vertical's tagged products. This is the fix for products
+      // from one store type (e.g. Apparel) leaking into a different one (e.g.
+      // Electronics) whenever the active vertical had few or zero matches.
+      final unclassified = await db.query(
+        'products',
+        where: "business_type IS NULL OR business_type = ''",
+        orderBy: 'is_favorite DESC, name ASC',
+      );
+      return unclassified.map((json) => ProductModel.fromMap(json)).toList();
     }
     final allResult = await db.query('products', orderBy: 'is_favorite DESC, name ASC');
     if (allResult.isEmpty) {
@@ -775,17 +790,25 @@ class LocalDatabase {
     if (businessType != null && businessType.isNotEmpty) {
       final result = await db.query(
         'categories',
-        where: 'business_type = ? OR business_type = "both"',
+        where: "business_type = ? OR business_type = 'both'",
         whereArgs: [businessType],
         orderBy: 'name ASC',
       );
       if (result.isNotEmpty) {
         return result.map((json) => CategoryModel.fromMap(json)).toList();
       }
-      final allCats = await db.query('categories', orderBy: 'name ASC');
-      if (allCats.isNotEmpty) {
-        return allCats.map((json) => CategoryModel.fromMap(json)).toList();
+      // Same fix as getAllProducts: never fall back to another vertical's categories.
+      final unclassified = await db.query(
+        'categories',
+        where: "business_type IS NULL OR business_type = ''",
+        orderBy: 'name ASC',
+      );
+      if (unclassified.isNotEmpty) {
+        return unclassified.map((json) => CategoryModel.fromMap(json)).toList();
       }
+      // A vertical was explicitly requested and genuinely has nothing — an empty
+      // category list is correct here, not every other vertical's categories.
+      return [];
     }
     final allCats = await db.query('categories', orderBy: 'name ASC');
     return allCats.map((json) => CategoryModel.fromMap(json)).toList();
@@ -824,7 +847,7 @@ class LocalDatabase {
     String whereClause = 'barcode = ?';
     List<dynamic> whereArgs = [cleanBarcode];
     if (businessType != null && businessType.isNotEmpty) {
-      whereClause += ' AND (business_type = ? OR business_type = "both")';
+      whereClause += " AND (business_type = ? OR business_type = 'both')";
       whereArgs.add(businessType);
     }
     var result = await db.query(
@@ -866,7 +889,7 @@ class LocalDatabase {
     List<dynamic> whereArgs = ['%$cleanQuery%', '%$cleanQuery%'];
 
     if (businessType != null && businessType.isNotEmpty) {
-      whereClause += ' AND (business_type = ? OR business_type = "both")';
+      whereClause += " AND (business_type = ? OR business_type = 'both')";
       whereArgs.add(businessType);
     }
 
@@ -1132,6 +1155,18 @@ class LocalDatabase {
       }
     });
 
+    // Tell every other screen the bill landed: sales + stock always, khata when the
+    // bill carries credit, cash drawer when money physically came in.
+    final bool touchedCustomer = customer != null &&
+        (paymentMethod == 'credit' ||
+            (paymentMethod == 'split' && splitCreditPaise > 0));
+    final bool touchedCash =
+        paymentMethod == 'cash' || (paymentMethod == 'split' && splitCashPaise > 0);
+    AppDataBus.instance.bumpSaleCompleted(
+      affectsCustomer: touchedCustomer,
+      affectsCash: touchedCash,
+    );
+
     return sale;
   }
 
@@ -1248,6 +1283,9 @@ class LocalDatabase {
         await txn.insert('expenses', refundExpense.toMap());
       }
     });
+
+    // A return can touch all four: sale status, restocked items, udhar reversal, cash out.
+    AppDataBus.instance.bumpSaleCompleted(affectsCustomer: true, affectsCash: true);
   }
 
   Future<void> upsertProduct(ProductModel product) async {
@@ -1257,11 +1295,13 @@ class LocalDatabase {
       product.toMap(),
       conflictAlgorithm: ConflictAlgorithm.replace,
     );
+    AppDataBus.instance.bumpProducts();
   }
 
   Future<void> deleteProduct(String id) async {
     final db = await instance.database;
     await db.delete('products', where: 'id = ?', whereArgs: [id]);
+    AppDataBus.instance.bumpProducts();
   }
 
   Future<void> toggleProductFavorite(String id, bool isFavorite) async {
@@ -1272,6 +1312,7 @@ class LocalDatabase {
       where: 'id = ?',
       whereArgs: [id],
     );
+    AppDataBus.instance.bumpProducts();
   }
 
   Future<void> upsertCategory(CategoryModel category) async {
@@ -1281,6 +1322,8 @@ class LocalDatabase {
       category.toMap(),
       conflictAlgorithm: ConflictAlgorithm.replace,
     );
+    // Category pills are rendered by the product screens, so they reload on this too.
+    AppDataBus.instance.bumpProducts();
   }
 
   Future<void> upsertCustomer(CustomerModel customer) async {
@@ -1290,6 +1333,7 @@ class LocalDatabase {
       customer.toMap(),
       conflictAlgorithm: ConflictAlgorithm.replace,
     );
+    AppDataBus.instance.bumpCustomers();
   }
 
   Future<void> toggleCustomerVip(String id, bool isVip) async {
@@ -1300,6 +1344,7 @@ class LocalDatabase {
       where: 'id = ?',
       whereArgs: [id],
     );
+    AppDataBus.instance.bumpCustomers();
   }
 
   Future<void> deleteCustomer(String id) async {
@@ -1308,6 +1353,7 @@ class LocalDatabase {
       await txn.delete('ledger_transactions', where: 'customer_id = ?', whereArgs: [id]);
       await txn.delete('customers', where: 'id = ?', whereArgs: [id]);
     });
+    AppDataBus.instance.bumpCustomers();
   }
 
   Future<List<SaleModel>> getAllSales({int limit = 100}) async {
@@ -1386,6 +1432,10 @@ class LocalDatabase {
       );
       await txn.insert('ledger_transactions', ledgerEntry.toMap());
     });
+
+    AppDataBus.instance.bumpCustomers();
+    // A Jama/Udhar entry taken in cash physically changes the drawer.
+    AppDataBus.instance.bumpCash();
   }
 
   Future<void> settleCustomerSaleBill({
@@ -1425,6 +1475,11 @@ class LocalDatabase {
       );
       await txn.insert('ledger_transactions', ledgerEntry.toMap());
     });
+
+    // Sale status changed, customer balance changed, and cash may have come in.
+    AppDataBus.instance.bumpSales();
+    AppDataBus.instance.bumpCustomers();
+    AppDataBus.instance.bumpCash();
   }
 
   Future<void> settleMultipleCustomerSaleBills({
@@ -1466,6 +1521,10 @@ class LocalDatabase {
       );
       await txn.insert('ledger_transactions', ledgerEntry.toMap());
     });
+
+    AppDataBus.instance.bumpSales();
+    AppDataBus.instance.bumpCustomers();
+    AppDataBus.instance.bumpCash();
   }
 
   Future<void> markSaleSynced(String saleId) async {
@@ -1487,6 +1546,7 @@ class LocalDatabase {
   Future<void> addExpense(ExpenseModel expense) async {
     final db = await instance.database;
     await db.insert('expenses', expense.toMap(), conflictAlgorithm: ConflictAlgorithm.replace);
+    AppDataBus.instance.bumpCash();
   }
 
   Future<List<ExpenseModel>> getAllExpenses() async {
@@ -1523,6 +1583,7 @@ class LocalDatabase {
   Future<void> deleteExpense(String id) async {
     final db = await instance.database;
     await db.delete('expenses', where: 'id = ?', whereArgs: [id]);
+    AppDataBus.instance.bumpCash();
   }
 
   Future<void> _ensureStoreProfileTable(Database db) async {
@@ -1652,6 +1713,8 @@ class LocalDatabase {
   Future<void> recordInventoryMovement(InventoryMovementModel movement) async {
     final db = await instance.database;
     await db.insert('inventory_movements', movement.toMap());
+    // The Inventory screen's audit trail reads this table.
+    AppDataBus.instance.bumpProducts();
   }
 
   Future<List<InventoryMovementModel>> getAllInventoryMovements({int limit = 100}) async {
@@ -1722,6 +1785,7 @@ class LocalDatabase {
   Future<void> saveCashRegisterShift(CashRegisterShiftModel shift) async {
     final db = await instance.database;
     await db.insert('cash_register_shifts', shift.toMap(), conflictAlgorithm: ConflictAlgorithm.replace);
+    AppDataBus.instance.bumpCash();
   }
 
   Future<CashRegisterShiftModel?> getLatestCashRegisterShift() async {

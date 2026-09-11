@@ -1,0 +1,14 @@
+# Release signing credentials for KamaiPlus.
+#
+# Copy this file to `android/key.properties` and fill in the real values.
+# `android/key.properties` is gitignored and must NEVER be committed.
+#
+# When this file is absent the release build falls back to the debug keystore,
+# so the project still compiles on a fresh clone or in CI.
+#
+# storeFile is resolved relative to the `android/app/` directory.
+
+storeFile=kamai-release-key.jks
+storePassword=CHANGE_ME
+keyAlias=kamaiplus
+keyPassword=CHANGE_ME

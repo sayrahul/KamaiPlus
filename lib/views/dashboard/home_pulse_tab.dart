@@ -18,6 +18,8 @@ import '../reports/gst_reports_screen.dart';
 import '../tools/barcode_studio_screen.dart';
 import '../settings/bluetooth_printer_dialog.dart';
 import '../../core/constants/business_vertical_config.dart';
+import '../../core/state/app_data_bus.dart';
+import '../../core/state/data_bus_refresh.dart';
 import '../../services/firestore_sync_service.dart';
 
 class HomePulseTab extends StatefulWidget {
@@ -36,7 +38,19 @@ class HomePulseTab extends StatefulWidget {
   State<HomePulseTab> createState() => _HomePulseTabState();
 }
 
-class _HomePulseTabState extends State<HomePulseTab> {
+class _HomePulseTabState extends State<HomePulseTab> with DataBusRefresh<HomePulseTab> {
+  // The Home KPIs summarise everything, so this tab watches every signal.
+  @override
+  List<ValueNotifier<int>> get dataBusSignals => [
+        AppDataBus.instance.salesRevision,
+        AppDataBus.instance.productsRevision,
+        AppDataBus.instance.customersRevision,
+        AppDataBus.instance.cashRevision,
+      ];
+
+  @override
+  void onDataBusChanged() => _loadLiveMetrics();
+
   bool _isProfitHidden = true;
   bool _isLoading = true;
   bool _isLedgerExpanded = true;

@@ -4,6 +4,8 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../core/database/local_database.dart';
+import '../../core/state/app_data_bus.dart';
+import '../../core/state/data_bus_refresh.dart';
 import '../../core/utils/datetime_utils.dart';
 import '../../core/utils/money_formatter.dart';
 import '../../models/models.dart';
@@ -21,7 +23,15 @@ class TransactionsScreen extends StatefulWidget {
   State<TransactionsScreen> createState() => _TransactionsScreenState();
 }
 
-class _TransactionsScreenState extends State<TransactionsScreen> {
+class _TransactionsScreenState extends State<TransactionsScreen> with DataBusRefresh<TransactionsScreen> {
+  @override
+  List<ValueNotifier<int>> get dataBusSignals => [
+        AppDataBus.instance.salesRevision,
+      ];
+
+  @override
+  void onDataBusChanged() => _loadSales();
+
   List<SaleModel> _sales = [];
   bool _isLoading = true;
   bool _isPro = false;

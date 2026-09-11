@@ -3,6 +3,8 @@ import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import '../../core/constants/business_vertical_config.dart';
+import '../../core/state/app_data_bus.dart';
+import '../../core/state/data_bus_refresh.dart';
 import '../../core/database/local_database.dart';
 import '../../core/utils/money_formatter.dart';
 import '../../models/models.dart';
@@ -21,7 +23,15 @@ class InventoryScreen extends StatefulWidget {
   State<InventoryScreen> createState() => _InventoryScreenState();
 }
 
-class _InventoryScreenState extends State<InventoryScreen> {
+class _InventoryScreenState extends State<InventoryScreen> with DataBusRefresh<InventoryScreen> {
+  @override
+  List<ValueNotifier<int>> get dataBusSignals => [
+        AppDataBus.instance.productsRevision,
+      ];
+
+  @override
+  void onDataBusChanged() => _loadData();
+
   List<ProductModel> _products = [];
   List<SaleModel> _sales = [];
   List<InventoryMovementModel> _movements = [];

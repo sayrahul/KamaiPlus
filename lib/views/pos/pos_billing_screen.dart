@@ -3,6 +3,8 @@ import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import '../../core/constants/business_vertical_config.dart';
+import '../../core/state/app_data_bus.dart';
+import '../../core/state/data_bus_refresh.dart';
 import '../../models/models.dart';
 import '../../core/database/local_database.dart';
 import '../../core/utils/money_formatter.dart';
@@ -28,7 +30,19 @@ class PosBillingScreen extends StatefulWidget {
   State<PosBillingScreen> createState() => _PosBillingScreenState();
 }
 
-class _PosBillingScreenState extends State<PosBillingScreen> {
+class _PosBillingScreenState extends State<PosBillingScreen> with DataBusRefresh<PosBillingScreen> {
+  // A price or stock edit made on the Products tab must reach the billing grid,
+  // otherwise the cashier rings up a stale price and the out-of-stock guard
+  // works off stock loaded at startup.
+  @override
+  List<ValueNotifier<int>> get dataBusSignals => [
+        AppDataBus.instance.productsRevision,
+        AppDataBus.instance.customersRevision,
+      ];
+
+  @override
+  void onDataBusChanged() => _loadData();
+
   final currencyFormat = NumberFormat.currency(locale: 'en_IN', symbol: '₹', decimalDigits: 2);
 
   List<ProductModel> _allProducts = [];

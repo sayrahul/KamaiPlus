@@ -5,6 +5,8 @@ import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:uuid/uuid.dart';
 import '../../core/constants/business_vertical_config.dart';
+import '../../core/state/app_data_bus.dart';
+import '../../core/state/data_bus_refresh.dart';
 import '../../core/database/local_database.dart';
 import '../../core/utils/app_validators.dart';
 import '../../core/utils/datetime_utils.dart';
@@ -26,7 +28,19 @@ class KhataScreen extends StatefulWidget {
   State<KhataScreen> createState() => _KhataScreenState();
 }
 
-class _KhataScreenState extends State<KhataScreen> {
+class _KhataScreenState extends State<KhataScreen> with DataBusRefresh<KhataScreen> {
+  // A credit bill rung up on the Billing tab changes a customer's balance and adds a
+  // pending bill; both must show here without restarting the app.
+  @override
+  List<ValueNotifier<int>> get dataBusSignals => [
+        AppDataBus.instance.customersRevision,
+        AppDataBus.instance.salesRevision,
+      ];
+
+  // _loadData already refreshes the open customer's ledger, so this is enough.
+  @override
+  void onDataBusChanged() => _loadData();
+
   List<CustomerModel> _customers = [];
   bool _isLoading = true;
   String _searchQuery = '';

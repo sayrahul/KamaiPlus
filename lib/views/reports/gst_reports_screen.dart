@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../core/database/local_database.dart';
+import '../../core/state/app_data_bus.dart';
+import '../../core/state/data_bus_refresh.dart';
 import '../../core/utils/money_formatter.dart';
 import '../../models/models.dart';
 import '../../services/firestore_sync_service.dart';
@@ -18,7 +20,15 @@ class GstReportsScreen extends StatefulWidget {
   State<GstReportsScreen> createState() => _GstReportsScreenState();
 }
 
-class _GstReportsScreenState extends State<GstReportsScreen> {
+class _GstReportsScreenState extends State<GstReportsScreen> with DataBusRefresh<GstReportsScreen> {
+  @override
+  List<ValueNotifier<int>> get dataBusSignals => [
+        AppDataBus.instance.salesRevision,
+      ];
+
+  @override
+  void onDataBusChanged() => _loadAllData();
+
   String _selectedPeriod = 'This Month';
   final List<String> _periods = [
     'This Month',

@@ -6,6 +6,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:uuid/uuid.dart';
 import '../../core/database/local_database.dart';
+import '../../core/state/app_data_bus.dart';
+import '../../core/state/data_bus_refresh.dart';
 import '../../core/utils/money_formatter.dart';
 import '../../models/models.dart';
 import '../common/kamai_bottom_nav.dart';
@@ -20,7 +22,18 @@ class CashRegisterScreen extends StatefulWidget {
   State<CashRegisterScreen> createState() => _CashRegisterScreenState();
 }
 
-class _CashRegisterScreenState extends State<CashRegisterScreen> {
+class _CashRegisterScreenState extends State<CashRegisterScreen> with DataBusRefresh<CashRegisterScreen> {
+  // Cash sales are derived from the sales table, and khata cash collections and
+  // expenses both move the drawer — so watch both signals.
+  @override
+  List<ValueNotifier<int>> get dataBusSignals => [
+        AppDataBus.instance.cashRevision,
+        AppDataBus.instance.salesRevision,
+      ];
+
+  @override
+  void onDataBusChanged() => _loadRegisterData();
+
   bool _isDrawerOpen = true;
   bool _maskAmounts = false;
   int _openingFloatPaise = 200000; // ₹2,000 default morning float

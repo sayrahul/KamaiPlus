@@ -1,7 +1,21 @@
+import java.io.FileInputStream
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     id("dev.flutter.flutter-gradle-plugin")
     id("com.google.gms.google-services")
+}
+
+// Release signing credentials live in android/key.properties, which is gitignored.
+// When the file is absent (fresh clone, CI, contributor machine) the release build
+// falls back to the debug keystore so the project still builds.
+val keystorePropertiesFile = rootProject.file("key.properties")
+val hasReleaseKeystore = keystorePropertiesFile.exists()
+val keystoreProperties = Properties().apply {
+    if (hasReleaseKeystore) {
+        FileInputStream(keystorePropertiesFile).use { load(it) }
+    }
 }
 
 android {
@@ -16,13 +30,15 @@ android {
     }
 
     signingConfigs {
-        create("release") {
-            keyAlias = "kamaiplus"
-            keyPassword = "kamaiplus2026"
-            storeFile = file("kamai-release-key.jks")
-            storePassword = "kamaiplus2026"
-            enableV1Signing = true
-            enableV2Signing = true
+        if (hasReleaseKeystore) {
+            create("release") {
+                keyAlias = keystoreProperties.getProperty("keyAlias")
+                keyPassword = keystoreProperties.getProperty("keyPassword")
+                storeFile = file(keystoreProperties.getProperty("storeFile"))
+                storePassword = keystoreProperties.getProperty("storePassword")
+                enableV1Signing = true
+                enableV2Signing = true
+            }
         }
     }
 
@@ -39,10 +55,12 @@ android {
 
     buildTypes {
         debug {
-            signingConfig = signingConfigs.getByName("release")
+            // Uses the standard debug keystore that Android Studio / Flutter generate.
         }
         release {
-            signingConfig = signingConfigs.getByName("release")
+            signingConfig = signingConfigs.getByName(
+                if (hasReleaseKeystore) "release" else "debug"
+            )
             isMinifyEnabled = false
             isShrinkResources = false
         }

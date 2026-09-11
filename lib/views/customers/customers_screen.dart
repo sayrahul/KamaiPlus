@@ -5,6 +5,8 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:uuid/uuid.dart';
 import '../../core/constants/business_vertical_config.dart';
 import '../../core/database/local_database.dart';
+import '../../core/state/app_data_bus.dart';
+import '../../core/state/data_bus_refresh.dart';
 import '../../core/utils/app_validators.dart';
 import '../../core/utils/money_formatter.dart';
 import '../../models/models.dart';
@@ -21,7 +23,15 @@ class CustomersScreen extends StatefulWidget {
   State<CustomersScreen> createState() => _CustomersScreenState();
 }
 
-class _CustomersScreenState extends State<CustomersScreen> {
+class _CustomersScreenState extends State<CustomersScreen> with DataBusRefresh<CustomersScreen> {
+  @override
+  List<ValueNotifier<int>> get dataBusSignals => [
+        AppDataBus.instance.customersRevision,
+      ];
+
+  @override
+  void onDataBusChanged() => _loadCustomers();
+
   List<CustomerModel> _customers = [];
   bool _isLoading = true;
   bool _isPro = false;
