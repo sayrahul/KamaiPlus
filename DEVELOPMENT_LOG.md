@@ -47,6 +47,71 @@ drives `LocalDatabase` through a real (in-memory FFI) SQLite database and assert
 
 ---
 
+## 2026-09-11 (Phase 2 of the KamaiPlus Playbook) — Master catalog depth expansion
+
+**Problem, quantified in the Playbook report:** `master_catalog_data.dart` — the
+background list `searchMasterCatalog`/`findMasterProductByBarcode` search and
+auto-fill against — had only 165 rows total: 135 grocery, 7 pharmacy, 0 clothing,
+0 hardware, 0 restaurant. The scan/search/auto-fill mechanism itself was already
+fully built and correct (see the Playbook); this was purely a content-depth gap.
+
+**What was added, and why each vertical got different treatment (per the
+Playbook's own reasoning, not re-litigated here):**
+- **Grocery: 135 → 267 rows, Pharmacy: 7 → 78 rows** in `master_catalog_data.dart`.
+  These are the two verticals where real, barcoded FMCG/pharma products genuinely
+  exist, so a barcode-keyed master catalog is the right model. Generated with a
+  small script (not hand-typed) to guarantee every new barcode is a well-formed,
+  unique, checksum-valid EAN-13 — this class of dataset is exactly where manual
+  entry silently introduces duplicates or malformed keys. New barcodes use the
+  reserved prefix `89077` (890 = India GS1, matching the file's existing
+  convention; `77` is a manufacturer block reserved for this generated batch only,
+  chosen so it can never collide with a real brand's actual prefix already used by
+  the pre-existing 165 rows).
+- **Clothing and Hardware: NOT added to `master_catalog_data.dart`.** These
+  verticals' real-world stock is inherently store-specific (no universal barcode
+  a merchant's actual inventory would match) — a fabricated barcode there would be
+  actively misleading, not just unhelpful. Instead, `default_products.dart`'s
+  starter-seed lists grew (Clothing 10→16, Hardware 10→18): generic template
+  *names* only, no barcodes, matching what that file already does.
+- **Restaurant: untouched.** Already covered by the same session's menu-scan
+  feature, which doesn't need a barcode catalog at all.
+
+**A real mistake found and fixed by the existing test suite, not by review:**
+`cloud_barcode_resolver_test.dart` already asserted that every Dettol/Vicks/Eno
+item in the catalog is tagged `businessType: 'both'` — these are genuine
+crossover products stocked by both grocery/kirana shops and pharmacies in India
+(see `cloud_barcode_resolver_service.dart`'s own doc comment). The generated
+pharmacy batch tagged its Dettol/Vicks/Eno entries plain `'pharmacy'`, failing
+that test immediately. Fixed by re-tagging those specific rows `'both'`, and,
+checking further, found the same gap on three more new rows sharing an
+already-'both' brand with a matching pre-existing product (Lifebuoy soap, Moov
+spray, Iodex balm — each already has a 'both'-tagged sibling elsewhere in the
+file). **Not** blanket-applied to every product sharing a 'both' brand, though
+— e.g. Dabur Amla Hair Oil's pre-existing 100ml row is deliberately `'grocery'`
+only, so the new 275ml variant added this session was kept `'grocery'` too, to
+match that existing precedent rather than overriding it on brand-name alone.
+Genuine pharmacy-only medicines sharing a brand with a 'both' item (Benadryl
+cough syrup, Betnovate cream, Digene tablets, Calpol — all made by companies
+that also make 'both'-tagged consumer products) were deliberately left
+`'pharmacy'` — the crossover test is about whether the specific *product* is
+realistically grocery-shelf material, not about brand ownership.
+
+**New regression test, `test/master_catalog_integrity_test.dart`, guards this
+dataset going forward:** uniqueness, 13-digit shape, a scoped EAN-13 checksum
+check (only the `89077`-prefixed batch — the pre-existing 165 rows were never
+checksum-validated to begin with, a pre-existing gap this change didn't
+introduce and the app itself never checks anyway), non-empty names, positive
+prices, and a floor on the grocery/pharmacy counts so a future edit can't
+silently shrink this back down.
+
+**Verified:** `flutter analyze` (0 new issues), `flutter test` (59 pass, 8 new
+in `test/master_catalog_integrity_test.dart`), `flutter build apk --debug`
+(succeeds). **Not installed/tested on a physical device this pass** — per this
+session's instruction, device testing is being batched to the end rather than
+done after every change.
+
+---
+
 ## 2026-09-11 (device testing) — Google Sign-In broke on debug builds; root cause was two different debug keystores
 
 **Symptom:** after installing a freshly built debug APK on a physical device (Redmi 6,
