@@ -47,6 +47,93 @@ drives `LocalDatabase` through a real (in-memory FFI) SQLite database and assert
 
 ---
 
+## 2026-09-11 (later same day) — Restaurant "Scan Menu Photo" feature
+
+**User's request, paraphrased:** scanning a product should auto-fill its name from the
+internet; typing in Billing should surface a large background catalog to add from; a
+restaurant should be able to add its whole menu by photographing the menu card, since
+restaurants only have ~50-100 items and no barcodes.
+
+**First step was investigation, not code:** read the existing Add Product barcode-scan
+flow (`add_product_modal.dart:_lookupAndAutofillBarcode`), the POS billing barcode-scan
+flow (`pos_billing_screen.dart:_openCameraBarcodeScanner`), and the typed dual-search
+(`pos_billing_screen.dart:_performSearch`, `LocalDatabase.searchMasterCatalog`). **All of
+this already existed and matched the request almost exactly** — three-tier lookup (own
+store → local `master_catalog` table → cloud via `CloudBarcodeResolverService`), and
+typed search against the background master catalog with one-tap import into both the
+cart and the permanent product list (`LocalDatabase.importMasterProductToStore`,
+`initialStock = 99999.0` — "unlimited by default", also already the code's own words).
+The only real gaps: `master_catalog` only has 165 rows (135 grocery, 7 pharmacy, 0 for
+clothing/hardware/restaurant — see Known open issues below), and no menu-photo-to-catalog
+feature existed yet, though the underlying AI infrastructure for it did (see below).
+
+**What was built:** a menu-photo-to-catalog flow specific to the Restaurant vertical.
+
+- `lib/services/gemini_ai_service.dart` — added `ExtractedMenuItem` and
+  `GeminiAiService.extractMenuItemsFromImage()`, purely additive (no existing method
+  touched). Deliberately a **separate prompt/method** from the existing
+  `extractItemsFromImage` (used for supplier purchase-bill photos): a menu has no
+  supplier, bill number, cost price, or quantity received, and reusing the bill prompt
+  would have misread a dish's selling price as a wholesale cost to mark up. Shares the
+  existing quota tracking, API key resolution, and multi-model fallback — draws on the
+  same monthly free-scan allowance as bill scanning, which is correct (one shared budget).
+- `lib/views/products/menu_scan_sheet.dart` (new) — entry sheet: camera/gallery picker →
+  calls the new Gemini method → loading dialog → opens the review sheet. Mirrors
+  `ai_inward_sheet.dart`'s existing UI pattern for visual consistency.
+- `lib/views/products/menu_item_review_sheet.dart` (new) — editable review (dish name,
+  price, category) before anything is saved. Deliberately **not** a reuse of
+  `bill_scan_review_sheet.dart`: that screen's save path creates a Supplier record and
+  labels inventory movements `'PURCHASE'`, which is wrong for a menu addition (a dish was
+  never bought from a supplier). Confirmed via reading its `_saveInwardToStock` before
+  deciding — the supplier-creation branch is harmlessly skipped when no supplier name is
+  given, but the `'PURCHASE'` label would still misrepresent the audit trail
+  (`inventory_screen.dart:1172` reads that field), so a smaller dedicated sheet was
+  built instead, using `movementType: 'ADJUSTMENT'`. New dishes default to unlimited
+  stock (99999) and unit `'plate'`, matching the existing convention for a manually
+  added restaurant dish. Re-scanning the same menu updates prices instead of duplicating
+  dishes — reuses the exact case-insensitive name-match pattern already proven in
+  `bill_scan_review_sheet.dart:_findMatch`.
+- `lib/core/database/local_database.dart` — added `findOrCreateCategoryId()`, a small
+  additive helper (find a category by name+vertical, case-insensitive, or create one).
+  `importMasterProductToStore` has its own older inline copy of this same lookup-or-create
+  pattern — left untouched rather than refactored, to avoid risking a working flow for a
+  cosmetic consolidation.
+- `lib/core/constants/business_vertical_config.dart` — added
+  `aiBulkAddButtonLabel` getter ("Scan Menu" for restaurant, "Inward with AI" for
+  everyone else — unchanged default, so every other vertical's button text is
+  byte-identical to before).
+- `lib/views/products/products_screen.dart` — the **only** existing file with a real
+  logic change: `_openAiInwardSheet()` now branches on
+  `BusinessVerticals.activeBusinessTypeNotifier.value == 'restaurant'` before opening the
+  wholesale-purchase `AiInwardModal`. For the other four verticals this branch is never
+  taken, so their behavior is unchanged. Restaurant already had `hasBillScan == false` in
+  `business_vertical_config.dart` (used by `purchases_screen.dart` to hide the *wholesale*
+  AI Bill Scan option there) — this change gives restaurant a working replacement on the
+  Products screen instead of just a gap.
+
+**A real bug this caught, worth remembering the shape of:** the first version of
+`ExtractedMenuItem.fromJson`'s rupee→paise fallback parsed `"₹180.50"` by stripping
+non-digits to `"180.50"`, `double.tryParse` → `180.5`, then called `.round()` on that
+**rupee** value before multiplying by 100 — rounding ₹180.50 to ₹181 and returning 18100
+paise instead of 18050. The bug was in code written this session, and the new test
+(`test/menu_scan_test.dart`, written before the bug was noticed) caught it immediately.
+Fixed by reusing `MoneyFormatter.parseRupeesToPaise` (the same tested utility
+`money_math_test.dart` already covers) instead of writing a second, subtly different
+rupee-parsing path. **The lesson matches the case study above, one level earlier**: don't
+write a new money-parsing routine when a tested one already exists in the codebase — reuse
+it, specifically so bugs like this can't happen at all rather than relying on a test to
+catch them after the fact.
+
+**Verified:** `flutter analyze` (0 new issues), `flutter test` (36 pass, 8 new in
+`test/menu_scan_test.dart` — `ExtractedMenuItem.fromJson` paise/rupee/currency-string
+parsing, and `findOrCreateCategoryId` reuse-not-duplicate and vertical-isolation
+behavior against a real in-memory SQLite via `sqflite_common_ffi`), `flutter build apk
+--debug` (succeeds). **Not yet verified on a physical device** — needs the Gemini API key
+flow and an actual menu photo tested end-to-end; the code path from image → Gemini →
+review → saved dish has not been exercised against the real network API in this session.
+
+---
+
 ## 2026-09-11 — Cross-screen wiring + business-vertical product leak
 
 **Reported by user:** (1) "incomplete workflow, things not interconnected properly" —
@@ -189,3 +276,14 @@ isolation. `flutter analyze` clean, full `flutter test` suite passes (28 tests t
   store's data (see `switchUser` in `local_database.dart`, which gives each signed-in
   user/email their own db file), but worth tightening if a single-device multi-store mode
   is ever planned.
+- `master_catalog` table has only 165 rows total (135 grocery, 7 pharmacy, 0 clothing,
+  0 hardware, 0 restaurant). The scan/search/auto-fill *mechanism* the user asked about
+  (see the 2026-09-11 Menu Photo entry above) is fully built and working — this is a
+  content-depth gap, not a missing feature. The online cloud-barcode fallback
+  (`cloud_barcode_resolver_service.dart`, backed by Open Food Facts) only covers
+  FMCG/grocery/beauty-type barcoded goods by nature of that data source, so it will never
+  meaningfully help Clothing, Hardware, or Restaurant — those verticals need a different
+  content strategy (a larger curated seed list for Grocery/Pharmacy; generic template
+  names rather than a full SKU list for Clothing/Hardware, since those aren't
+  standardized products; the new menu-scan feature already covers Restaurant's
+  equivalent need without requiring a master catalog at all).
