@@ -89,6 +89,28 @@ QuantityUnitConfig quantityConfigForUnit(String unit, {int? subUnitsPerPack}) {
     );
   }
 
+  if (norm == 'sqft') {
+    // Hardware items sold by area (tiles, marble, plywood sheets, glass) —
+    // Phase 4 of the KamaiPlus Playbook. A tile job is rarely a whole
+    // number of sq.ft, so half/quarter increments matter here the same
+    // way grams matter for a kg-priced loose item.
+    return const QuantityUnitConfig(
+      unitLabel: 'Area (Square Feet - sq.ft)',
+      decimalNotice: 'Decimals supported (e.g. 2.5 sq.ft)',
+      chips: [
+        QuantityChip('¼ sq.ft', 0.25),
+        QuantityChip('½ sq.ft', 0.5),
+        QuantityChip('1 sq.ft', 1),
+        QuantityChip('2 sq.ft', 2),
+        QuantityChip('5 sq.ft', 5),
+        QuantityChip('10 sq.ft', 10),
+        QuantityChip('25 sq.ft', 25),
+        QuantityChip('50 sq.ft', 50),
+        QuantityChip('100 sq.ft', 100),
+      ],
+    );
+  }
+
   if (norm == 'strip') {
     // A real strip's pack size is known (10 / 15 / 20 / 30 tablets are all
     // common) — offer per-tablet chips so a customer buying 3 out of a

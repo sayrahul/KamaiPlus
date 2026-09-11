@@ -11,6 +11,7 @@ import '../../core/utils/app_validators.dart';
 import '../../services/soundbox_service.dart';
 import '../../services/firestore_sync_service.dart';
 import '../../services/app_printer_service.dart';
+import '../../services/thermal_printer_service.dart';
 import '../../core/utils/money_formatter.dart';
 import '../../core/constants/business_vertical_config.dart';
 import 'pos_item_edit_modal.dart';
@@ -1031,6 +1032,18 @@ class _PosCheckoutModalState extends State<PosCheckoutModal> {
           showToast: false,
         );
       }
+
+      // Kitchen Order Ticket — restaurant only (Phase 4, KamaiPlus Playbook).
+      // Reuses the same auto-print toggle as the customer receipt rather than
+      // adding a second settings switch; a KOT always needs a thermal
+      // printer (never the A4 path AppPrinterService.printSale can choose),
+      // so this calls ThermalPrinterService directly.
+      if (autoPrint && BusinessVerticals.activeBusinessTypeNotifier.value == 'restaurant') {
+        final address = prefs.getString('kot_printer_mac_address') ?? prefs.getString('printer_mac_address');
+        if (address != null && address.isNotEmpty) {
+          await ThermalPrinterService.printKOT(sale: sale, printerMacAddress: address);
+        }
+      }
     } catch (_) {}
   }
 
@@ -1708,6 +1721,28 @@ class _PosCheckoutModalState extends State<PosCheckoutModal> {
                                       ),
                                     ],
                                   ),
+                                  if (item.notes.trim().isNotEmpty) ...[
+                                    const SizedBox(height: 3),
+                                    Row(
+                                      children: [
+                                        const Icon(Icons.edit_note_rounded, size: 13, color: Color(0xFFB45309)),
+                                        const SizedBox(width: 3),
+                                        Expanded(
+                                          child: Text(
+                                            item.notes,
+                                            style: GoogleFonts.plusJakartaSans(
+                                              fontSize: 10.5,
+                                              fontWeight: FontWeight.w600,
+                                              color: const Color(0xFFB45309),
+                                              fontStyle: FontStyle.italic,
+                                            ),
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ],
                                   const SizedBox(height: 4),
                                   Row(
                                     mainAxisAlignment: MainAxisAlignment.spaceBetween,

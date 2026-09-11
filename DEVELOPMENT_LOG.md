@@ -47,6 +47,70 @@ drives `LocalDatabase` through a real (in-memory FFI) SQLite database and assert
 
 ---
 
+## 2026-09-11 (Phase 4 of the KamaiPlus Playbook, part 1) — Vertical feature depth: Hardware sq.ft pricing, Restaurant dish modifiers + KOT
+
+**Context:** user explicitly declined Phase 3 (Admin Console — a separate project) for now
+and asked to jump straight to Phase 4 ("Nahi, Phase 4 par jao (vertical feature depth)"),
+and separately asked to keep implementing phase-by-phase without pausing for device
+testing after each one ("hum testing aur indtalltion vaggire sab end me karenge.. bass
+abhi implentation karke complete kardo") — so this entry, like Phase 2's, is verified via
+`flutter analyze` / `flutter test` / `flutter build apk --debug` only; physical-device and
+real-thermal-printer verification is deferred until the user asks for it.
+
+**Hardware — per-sq.ft pricing.** Tiles, marble, plywood sheets, glass — a hardware
+shop rarely sells a whole number of square feet. Added an `sqft` branch to the existing
+`quantityConfigForUnit` (`lib/core/utils/quantity_config.dart`, the same shared function
+Phase 1 built for kg/strip granularity — see feature #58 in `APP_FEATURE_MEMORY.md`):
+¼/½/1/2/5/10/25/50/100 sq.ft chips plus decimal entry. Because every quantity-entry
+screen (POS cart editor, Products pencil-edit, Add Product opening stock) already calls
+this one function, no screen-level wiring was needed — this is exactly the payoff of
+having centralized that logic in Phase 1. Covered by a new test in
+`test/quantity_config_test.dart`.
+
+**Restaurant — dish modifiers (cart notes).** `CartItemModel` (`lib/models/models.dart`)
+gained a `notes` field — free text like "less spicy" / "no onion" — included in
+`toMap()` only when non-empty (so every other vertical's sales rows are byte-identical
+to before). `pos_item_edit_modal.dart` shows a notes section gated on
+`BusinessVerticals.activeBusinessTypeNotifier.value == 'restaurant'`: a free-text field
+plus 5 preset toggle chips (Less Spicy, No Onion, No Garlic, Extra Cheese, Extra Spicy).
+`pos_checkout_modal.dart`'s cart-item row renders the note in italic amber text with an
+edit-note icon, directly under the item name, only when non-empty.
+
+**Restaurant — Kitchen Order Ticket (KOT) printing.** Added `ThermalPrinterService
+.printKOT()` / `.generateKOTBytes()` (`lib/services/thermal_printer_service.dart`),
+modelled on the existing `printReceipt`/`generateReceiptBytes` ESC/POS pattern but
+deliberately a **separate** method, not a flag on the receipt printer: a KOT must never
+show prices (kitchen staff shouldn't see them, and it invites confusion with the
+customer's bill), and puts modifier notes front-and-centre as bold `>> note` lines —
+the opposite emphasis of a receipt. Table number prints large if the sale has one,
+else "PARCEL / TAKEAWAY".
+
+Wired into `pos_checkout_modal.dart`'s existing `_autoPrintReceipt(SaleModel sale)` —
+the single auto-print-on-completion hook (confirmed by grepping all 5 callers of
+`AppPrinterService.printSale`; the other 4 are manual reprint-from-history call sites in
+`payment_modal.dart`, `sale_completed_modal.dart`, `sale_detail_modal.dart`, and
+`transactions_screen.dart`, which intentionally were NOT touched — KOT auto-print should
+only fire once, at the moment of sale, not on every later reprint). The KOT fires when
+the active vertical is `restaurant` AND the existing `auto_print_on_checkout`
+`SharedPreferences` toggle is on, using `kot_printer_mac_address` if the user has set a
+dedicated kitchen printer, else falling back to the single `printer_mac_address`.
+**Deliberately reused the existing toggle instead of adding a new settings switch** — a
+restaurant with one printer gets both documents from flipping on the one auto-print
+setting they already know about; a dedicated KOT-only toggle can be added later if a real
+need for splitting control between receipt and KOT shows up (e.g. a shop with a printer
+at the counter and a separate one in the kitchen wanting the receipt without the KOT).
+
+**Verification:** `flutter analyze` — 0 issues on the 5 touched files, and the pre-existing
+2 `deprecated_member_use` infos elsewhere (unrelated `Share`/`shareXFiles` API in
+`gst_export_service.dart`) unchanged. `flutter test` — 60/60 passing (was 59 before the
+new sqft test). `flutter build apk --debug` — succeeds.
+
+**Not yet done in this session:** Pharmacy FEFO (First-Expiry-First-Out) stock-rotation
+prompt, and a Clothing size-chart/fit-notes field — both still pending from the Phase 4
+scope, tracked in **Known open issues** below.
+
+---
+
 ## 2026-09-11 (Phase 2 of the KamaiPlus Playbook) — Master catalog depth expansion
 
 **Problem, quantified in the Playbook report:** `master_catalog_data.dart` — the
@@ -474,14 +538,15 @@ isolation. `flutter analyze` clean, full `flutter test` suite passes (28 tests t
   store's data (see `switchUser` in `local_database.dart`, which gives each signed-in
   user/email their own db file), but worth tightening if a single-device multi-store mode
   is ever planned.
-- `master_catalog` table has only 165 rows total (135 grocery, 7 pharmacy, 0 clothing,
-  0 hardware, 0 restaurant). The scan/search/auto-fill *mechanism* the user asked about
-  (see the 2026-09-11 Menu Photo entry above) is fully built and working — this is a
-  content-depth gap, not a missing feature. The online cloud-barcode fallback
-  (`cloud_barcode_resolver_service.dart`, backed by Open Food Facts) only covers
-  FMCG/grocery/beauty-type barcoded goods by nature of that data source, so it will never
-  meaningfully help Clothing, Hardware, or Restaurant — those verticals need a different
-  content strategy (a larger curated seed list for Grocery/Pharmacy; generic template
-  names rather than a full SKU list for Clothing/Hardware, since those aren't
-  standardized products; the new menu-scan feature already covers Restaurant's
-  equivalent need without requiring a master catalog at all).
+- ~~`master_catalog` table has only 165 rows total...~~ **RESOLVED** by the 2026-09-11
+  Phase 2 master-catalog-depth entry above — now 368 rows (Grocery 267, Pharmacy 78),
+  plus larger Clothing/Hardware starter-seed lists. Left struck through rather than
+  deleted per this file's "never delete old entries" rule.
+- Pharmacy FEFO (First-Expiry-First-Out) stock-rotation prompt — part of Phase 4
+  (vertical feature depth) scope, not yet implemented. Planned approach: a lighter
+  version than true multi-batch FEFO (which would need a schema change to track
+  per-batch expiry/quantity separately) — an expiry-warning badge/prompt at billing
+  time using the existing single `expiryDate` field already on `ProductModel`.
+- Clothing size-chart / fit-notes field — part of Phase 4 scope, not yet implemented.
+  Planned approach: a free-text field on the product (size/fit notes), avoiding a new
+  image-picker dependency a full visual size chart would require.

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import '../../core/constants/business_vertical_config.dart';
 import '../../core/utils/quantity_config.dart';
 import '../../models/models.dart';
 
@@ -37,6 +38,7 @@ class _PosItemEditModalState extends State<PosItemEditModal> {
   late TextEditingController _qtyController;
   late TextEditingController _priceController;
   late TextEditingController _discountController;
+  late TextEditingController _notesController;
 
   late String _discountType; // 'flat' or 'percentage'
   late String _currentUnit;
@@ -65,6 +67,7 @@ class _PosItemEditModalState extends State<PosItemEditModal> {
     );
 
     _currentUnit = (item.product.unit.isNotEmpty ? item.product.unit : 'packet').toLowerCase();
+    _notesController = TextEditingController(text: item.notes);
   }
 
   @override
@@ -72,6 +75,7 @@ class _PosItemEditModalState extends State<PosItemEditModal> {
     _qtyController.dispose();
     _priceController.dispose();
     _discountController.dispose();
+    _notesController.dispose();
     super.dispose();
   }
 
@@ -91,6 +95,7 @@ class _PosItemEditModalState extends State<PosItemEditModal> {
     widget.cartItem.unitPricePaise = (price * 100).round();
     widget.cartItem.discountType = _discountType;
     widget.cartItem.discountValue = disc;
+    widget.cartItem.notes = _notesController.text.trim();
 
     widget.onUpdate(widget.cartItem);
     Navigator.of(context).pop();
@@ -579,6 +584,74 @@ class _PosItemEditModalState extends State<PosItemEditModal> {
                 ],
               ),
             ),
+
+            // Dish modifiers / kitchen instructions — restaurant only.
+            // Free-text, not a fixed preset list: "less spicy", "no onion",
+            // "extra cheese" are common but a cashier needs to type anything.
+            if (BusinessVerticals.activeBusinessTypeNotifier.value == 'restaurant') ...[
+              const SizedBox(height: 16),
+              Text(
+                'Special Instructions (optional)',
+                style: GoogleFonts.plusJakartaSans(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                  color: const Color(0xFF334155),
+                ),
+              ),
+              const SizedBox(height: 6),
+              TextField(
+                controller: _notesController,
+                maxLines: 2,
+                style: GoogleFonts.plusJakartaSans(fontSize: 13),
+                decoration: InputDecoration(
+                  hintText: 'e.g. Less spicy, no onion, extra cheese',
+                  hintStyle: GoogleFonts.plusJakartaSans(fontSize: 12, color: const Color(0xFF94A3B8)),
+                  filled: true,
+                  fillColor: const Color(0xFFF8FAFC),
+                  contentPadding: const EdgeInsets.all(10),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    borderSide: const BorderSide(color: Color(0xFFCBD5E1)),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 6),
+              Wrap(
+                spacing: 6,
+                runSpacing: 6,
+                children: ['Less Spicy', 'No Onion', 'No Garlic', 'Extra Cheese', 'Extra Spicy'].map((preset) {
+                  return InkWell(
+                    onTap: () {
+                      final current = _notesController.text.trim();
+                      final parts = current.isEmpty ? <String>[] : current.split(', ');
+                      setState(() {
+                        if (parts.contains(preset)) {
+                          parts.remove(preset);
+                        } else {
+                          parts.add(preset);
+                        }
+                        _notesController.text = parts.join(', ');
+                      });
+                    },
+                    borderRadius: BorderRadius.circular(8),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: _notesController.text.contains(preset) ? const Color(0xFFFBBF24) : const Color(0xFFF1F5F9),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(
+                          color: _notesController.text.contains(preset) ? const Color(0xFFF59E0B) : const Color(0xFFE2E8F0),
+                        ),
+                      ),
+                      child: Text(
+                        preset,
+                        style: GoogleFonts.plusJakartaSans(fontSize: 11, fontWeight: FontWeight.w700, color: const Color(0xFF334155)),
+                      ),
+                    ),
+                  );
+                }).toList(),
+              ),
+            ],
             const SizedBox(height: 20),
 
             // 5. Action Buttons (Cancel & Update Line Item)

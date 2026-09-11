@@ -28,6 +28,14 @@ void main() {
       expect(ml500.value, 0.5);
     });
 
+    test('sqft (hardware per-area pricing, Phase 4) offers fractional area chips', () {
+      final config = quantityConfigForUnit('sqft');
+      final quarter = config.chips.firstWhere((c) => c.label == '¼ sq.ft');
+      expect(quarter.value, 0.25);
+      final hundred = config.chips.firstWhere((c) => c.label == '100 sq.ft');
+      expect(hundred.value, 100);
+    });
+
     test('an unrecognised unit falls back to a safe whole-count list, never crashes', () {
       final config = quantityConfigForUnit('quintal');
       expect(config.chips, isNotEmpty);

@@ -463,6 +463,11 @@ class CartItemModel {
   int unitPricePaise;
   String discountType; // 'flat' | 'percentage'
   double discountValue; // in rupees for flat, or 0..100 for percentage
+  /// Free-text dish modifiers / kitchen instructions — "less spicy",
+  /// "no onion", "extra cheese". Restaurant-specific (Phase 4, KamaiPlus
+  /// Playbook); empty for every other vertical. Printed on the KOT and
+  /// shown in the cart so the cashier can confirm it before billing.
+  String notes;
 
   CartItemModel({
     required this.product,
@@ -471,6 +476,7 @@ class CartItemModel {
     this.discountType = 'flat',
     this.discountValue = 0.0,
     double? discountPercent,
+    this.notes = '',
   }) : unitPricePaise = unitPricePaise ?? product.sellingPricePaise {
     if (discountPercent != null && discountPercent > 0) {
       discountType = 'percentage';
@@ -506,6 +512,7 @@ class CartItemModel {
     'is_tax_inclusive': product.isTaxInclusive ? 1 : 0,
     'discount_type': discountType,
     'discount_value': discountValue,
+    if (notes.trim().isNotEmpty) 'notes': notes.trim(),
   };
 }
 
