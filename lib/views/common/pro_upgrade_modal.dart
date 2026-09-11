@@ -1,10 +1,12 @@
 import 'dart:ui';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../core/database/local_database.dart';
+import '../../core/utils/money_formatter.dart';
 import '../../models/models.dart';
 import '../settings/pro_membership_screen.dart';
 import '../../services/razorpay_service.dart';
@@ -31,10 +33,22 @@ class _ProUpgradeModalState extends State<ProUpgradeModal> {
   bool _isLoading = false;
   StoreProfileModel _profile = StoreProfileModel();
 
+  final _couponCtrl = TextEditingController();
+  bool _isApplyingCoupon = false;
+  String? _couponError;
+  String? _appliedCouponCode;
+  int? _appliedDiscountPaise;
+
   @override
   void initState() {
     super.initState();
     _loadProfile();
+  }
+
+  @override
+  void dispose() {
+    _couponCtrl.dispose();
+    super.dispose();
   }
 
   Future<void> _loadProfile() async {
@@ -42,6 +56,100 @@ class _ProUpgradeModalState extends State<ProUpgradeModal> {
       final p = await LocalDatabase.instance.getStoreProfile();
       if (mounted) setState(() => _profile = p);
     } catch (_) {}
+  }
+
+  int get _basePricePaise => _isAnnual ? 149900 : 19900;
+
+  /// A minimum floor so a misconfigured or malicious coupon document can
+  /// never bring the charge to ₹0 — this hits Razorpay's live key, so the
+  /// amount actually charged must always stay sane regardless of what a
+  /// `coupons/{CODE}` Firestore document says.
+  static const int _minChargeablePaise = 100;
+
+  int get _finalPricePaise {
+    if (_appliedDiscountPaise == null) return _basePricePaise;
+    final discounted = _basePricePaise - _appliedDiscountPaise!;
+    return discounted < _minChargeablePaise ? _minChargeablePaise : discounted;
+  }
+
+  /// Re-applies the same coupon's discount rule when the annual/monthly
+  /// toggle changes, so a percent-off coupon still applies correctly to
+  /// whichever plan is now selected rather than silently clearing.
+  Future<void> _applyCoupon() async {
+    final code = _couponCtrl.text.trim().toUpperCase();
+    if (code.isEmpty) return;
+
+    setState(() {
+      _isApplyingCoupon = true;
+      _couponError = null;
+    });
+
+    try {
+      final doc = await FirebaseFirestore.instance.collection('coupons').doc(code).get();
+      if (!doc.exists) {
+        setState(() {
+          _couponError = 'Invalid coupon code';
+          _appliedCouponCode = null;
+          _appliedDiscountPaise = null;
+        });
+        return;
+      }
+      final data = doc.data()!;
+      final isActive = data['active'] == true;
+      final validTillStr = data['valid_till'] as String?;
+      final validTill = validTillStr != null ? DateTime.tryParse(validTillStr) : null;
+      final isExpired = validTill != null && DateTime.now().isAfter(validTill);
+
+      if (!isActive || isExpired) {
+        setState(() {
+          _couponError = isExpired ? 'This coupon has expired' : 'This coupon is no longer active';
+          _appliedCouponCode = null;
+          _appliedDiscountPaise = null;
+        });
+        return;
+      }
+
+      final discountPercent = (data['discount_percent'] as num?)?.toDouble();
+      final flatOffPaise = (data['flat_off_paise'] as num?)?.toInt();
+
+      int discountPaise;
+      if (discountPercent != null && discountPercent > 0) {
+        discountPaise = (_basePricePaise * (discountPercent.clamp(0, 100) / 100)).round();
+      } else if (flatOffPaise != null && flatOffPaise > 0) {
+        discountPaise = flatOffPaise;
+      } else {
+        setState(() {
+          _couponError = 'This coupon has no valid discount configured';
+          _appliedCouponCode = null;
+          _appliedDiscountPaise = null;
+        });
+        return;
+      }
+
+      setState(() {
+        _appliedCouponCode = code;
+        _appliedDiscountPaise = discountPaise;
+        _couponError = null;
+      });
+      HapticFeedback.mediumImpact();
+    } catch (e) {
+      setState(() {
+        _couponError = 'Could not verify coupon — check your connection';
+        _appliedCouponCode = null;
+        _appliedDiscountPaise = null;
+      });
+    } finally {
+      if (mounted) setState(() => _isApplyingCoupon = false);
+    }
+  }
+
+  void _removeCoupon() {
+    setState(() {
+      _appliedCouponCode = null;
+      _appliedDiscountPaise = null;
+      _couponError = null;
+      _couponCtrl.clear();
+    });
   }
 
   void _handleUpgrade() {
@@ -52,6 +160,8 @@ class _ProUpgradeModalState extends State<ProUpgradeModal> {
     RazorpayService.instance.openCheckout(
       plan: plan,
       profile: _profile,
+      overrideAmountPaise: _appliedDiscountPaise != null ? _finalPricePaise : null,
+      couponCode: _appliedCouponCode,
       onSuccess: (response) {
         if (!mounted) return;
         setState(() => _isLoading = false);
@@ -439,6 +549,100 @@ class _ProUpgradeModalState extends State<ProUpgradeModal> {
                         ),
                         const SizedBox(height: 16),
 
+                        // Coupon Code — validated against Firestore
+                        // `coupons/{CODE}` (admin-managed today via Firebase
+                        // Console, same pattern as the existing broadcast/
+                        // global_config docs; a future admin panel writes to
+                        // the same collection without needing an app update).
+                        if (_appliedCouponCode == null) ...[
+                          Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Expanded(
+                                child: TextField(
+                                  controller: _couponCtrl,
+                                  textCapitalization: TextCapitalization.characters,
+                                  style: GoogleFonts.robotoMono(fontSize: 13, fontWeight: FontWeight.w700, color: Colors.white),
+                                  decoration: InputDecoration(
+                                    hintText: 'Coupon code (optional)',
+                                    hintStyle: GoogleFonts.inter(fontSize: 12, color: Colors.white.withValues(alpha: 0.4)),
+                                    filled: true,
+                                    fillColor: Colors.white.withValues(alpha: 0.06),
+                                    isDense: true,
+                                    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                                    border: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(12),
+                                      borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.15)),
+                                    ),
+                                    enabledBorder: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(12),
+                                      borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.15)),
+                                    ),
+                                    focusedBorder: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(12),
+                                      borderSide: const BorderSide(color: Color(0xFFFBBF24), width: 1.4),
+                                    ),
+                                  ),
+                                  onSubmitted: (_) => _applyCoupon(),
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              SizedBox(
+                                height: 44,
+                                child: ElevatedButton(
+                                  onPressed: _isApplyingCoupon ? null : _applyCoupon,
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: Colors.white.withValues(alpha: 0.1),
+                                    foregroundColor: Colors.white,
+                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                    elevation: 0,
+                                  ),
+                                  child: _isApplyingCoupon
+                                      ? const SizedBox(
+                                          width: 16,
+                                          height: 16,
+                                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                                        )
+                                      : Text('Apply', style: GoogleFonts.outfit(fontWeight: FontWeight.w800, fontSize: 13)),
+                                ),
+                              ),
+                            ],
+                          ),
+                          if (_couponError != null) ...[
+                            const SizedBox(height: 6),
+                            Text(
+                              _couponError!,
+                              style: GoogleFonts.inter(fontSize: 11, color: const Color(0xFFFCA5A5), fontWeight: FontWeight.w600),
+                            ),
+                          ],
+                        ] else ...[
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF059669).withValues(alpha: 0.15),
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(color: const Color(0xFF059669).withValues(alpha: 0.4)),
+                            ),
+                            child: Row(
+                              children: [
+                                const Icon(Icons.local_offer_rounded, size: 16, color: Color(0xFF34D399)),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    '"$_appliedCouponCode" applied — you save ${MoneyFormatter.formatINR(_appliedDiscountPaise ?? 0)}',
+                                    style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w700, color: const Color(0xFF6EE7B7)),
+                                  ),
+                                ),
+                                InkWell(
+                                  onTap: _removeCoupon,
+                                  child: const Icon(Icons.close_rounded, size: 16, color: Color(0xFF6EE7B7)),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                        const SizedBox(height: 16),
+
                         // Upgrade CTA Button
                         Material(
                           color: Colors.transparent,
@@ -476,7 +680,9 @@ class _ProUpgradeModalState extends State<ProUpgradeModal> {
                                         mainAxisAlignment: MainAxisAlignment.center,
                                         children: [
                                           Text(
-                                            'Upgrade to Kamai+ Pro • ₹$priceAmount $periodText',
+                                            _appliedDiscountPaise != null
+                                                ? 'Upgrade to Kamai+ Pro • ${MoneyFormatter.formatINR(_finalPricePaise)} $periodText'
+                                                : 'Upgrade to Kamai+ Pro • ₹$priceAmount $periodText',
                                             style: GoogleFonts.outfit(
                                               fontSize: 14.5,
                                               fontWeight: FontWeight.w900,

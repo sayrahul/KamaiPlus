@@ -22,6 +22,7 @@ class RazorpayService {
   Function(PaymentFailureResponse)? _onErrorCallback;
   Function(ExternalWalletResponse)? _onWalletCallback;
   String _pendingPlan = 'annual';
+  String? _pendingCouponCode;
 
   void init() {
     if (_razorpay != null) return;
@@ -38,22 +39,31 @@ class RazorpayService {
 
   /// Open Razorpay Standard Checkout for Pro Upgrade
   /// [plan]: 'annual' (₹1499/year) or 'monthly' (₹199/month)
+  /// [overrideAmountPaise]: coupon-discounted amount, when a valid coupon is
+  /// applied (see `pro_upgrade_modal.dart`) — the caller has already floored
+  /// this to a sane minimum, so it's trusted as-is here.
+  /// [couponCode]: recorded in the Razorpay order notes and the Firestore
+  /// activation doc purely for reconciliation — it does not affect pricing
+  /// on this end beyond [overrideAmountPaise].
   Future<void> openCheckout({
     required String plan,
     required StoreProfileModel profile,
     required Function(PaymentSuccessResponse) onSuccess,
     required Function(PaymentFailureResponse) onError,
     Function(ExternalWalletResponse)? onWallet,
+    int? overrideAmountPaise,
+    String? couponCode,
   }) async {
     init();
     _pendingPlan = plan;
+    _pendingCouponCode = couponCode;
     _onSuccessCallback = onSuccess;
     _onErrorCallback = onError;
     _onWalletCallback = onWallet;
 
     final isAnnual = plan == 'annual';
     // Strict integer paise: ₹1499 = 149900 paise, ₹199 = 19900 paise
-    final int amountPaise = isAnnual ? 149900 : 19900;
+    final int amountPaise = overrideAmountPaise ?? (isAnnual ? 149900 : 19900);
     final String planName = isAnnual ? 'Kamai+ Pro Business (1 Year)' : 'Kamai+ Pro Business (1 Month)';
 
     final options = {
@@ -71,6 +81,7 @@ class RazorpayService {
         'plan': plan,
         'store_name': profile.storeName,
         'merchant_phone': profile.phone,
+        if (couponCode != null && couponCode.isNotEmpty) 'coupon_code': couponCode,
       },
       'theme': {
         'color': '#059669', // Emerald brand theme
@@ -116,6 +127,7 @@ class RazorpayService {
         'pro_expiry': expiryDate.toIso8601String(),
         'razorpay_payment_id': paymentId,
         'pro_activated_at': FieldValue.serverTimestamp(),
+        if (_pendingCouponCode != null && _pendingCouponCode!.isNotEmpty) 'coupon_code_used': _pendingCouponCode,
       }, SetOptions(merge: true));
     } catch (e) {
       debugPrint('Cloud pro status update notice: $e');

@@ -7,7 +7,7 @@ import '../../core/database/local_database.dart';
 import '../common/pwa_top_bar.dart';
 import '../common/owner_privacy_modal.dart';
 import 'ai_inward_modal.dart';
-import 'menu_scan_sheet.dart';
+import 'restaurant_inward_options_sheet.dart';
 import 'add_product_modal.dart';
 import 'quick_stock_update_modal.dart';
 import '../inventory/low_stock_reorder_modal.dart';
@@ -144,10 +144,16 @@ class _ProductsScreenState extends State<ProductsScreen> with DataBusRefresh<Pro
   void _openAiInwardSheet() {
     // Restaurant has no wholesale supplier bills to scan (hasBillScan == false,
     // same flag purchases_screen.dart already checks) — a menu photo isn't a
-    // purchase invoice, so it gets its own dedicated flow instead of
-    // AiInwardModal's cost-price/supplier-oriented one.
+    // purchase invoice, so it gets its own options sheet instead of
+    // AiInwardModal's cost-price/supplier-oriented one. That sheet still
+    // offers a barcode-based option (packaged drinks/snacks) and a manual
+    // add, so a dish can always be added even without a Gemini API key.
     if (BusinessVerticals.activeBusinessTypeNotifier.value == 'restaurant') {
-      MenuScanSheet.show(context, onMenuAddSuccess: () => _loadData());
+      RestaurantInwardOptionsSheet.show(
+        context,
+        onMenuAddSuccess: () => _loadData(),
+        onSelectManual: () => _openAddProductSheet(),
+      );
       return;
     }
     AiInwardModal.show(

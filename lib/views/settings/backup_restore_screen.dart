@@ -471,9 +471,13 @@ class _BackupRestoreScreenState extends State<BackupRestoreScreen> {
                   iconBg: const Color(0xFFFFFBEB),
                   title: 'Tally Prime XML',
                   subtitle: 'Vouchers, Sales & Sundry Debtors import',
-                  badge: 'TALLY ERP 9',
-                  buttonLabel: 'Export XML',
+                  badge: _isPro ? 'TALLY ERP 9' : 'PRO',
+                  buttonLabel: _isPro ? 'Export XML' : '🔒 Upgrade',
                   onTap: () {
+                    if (!_isPro) {
+                      ProUpgradeModal.show(context).then((_) => _loadStats());
+                      return;
+                    }
                     ScaffoldMessenger.of(context).showSnackBar(
                       const SnackBar(content: Text('Tally Prime XML vouchers compiled in Downloads/tally_vouchers.xml')),
                     );
@@ -486,14 +490,30 @@ class _BackupRestoreScreenState extends State<BackupRestoreScreen> {
                   iconBg: const Color(0xFFEEF2FF),
                   title: 'CA Master Sales Register',
                   subtitle: 'GSTR-1 Excel / CSV Table for CA Audit',
-                  badge: 'CA FORMAT',
-                  buttonLabel: 'Export CSV',
+                  badge: _isPro ? 'CA FORMAT' : 'PRO',
+                  buttonLabel: _isPro ? 'Export CSV' : '🔒 Upgrade',
                   onTap: () {
+                    if (!_isPro) {
+                      ProUpgradeModal.show(context).then((_) => _loadStats());
+                      return;
+                    }
                     ScaffoldMessenger.of(context).showSnackBar(
                       const SnackBar(content: Text('CA Master CSV exported to Downloads/kamai_ca_register.csv')),
                     );
                   },
                 ),
+                if (!_isPro) ...[
+                  const SizedBox(height: 10),
+                  const ProLockedCard(
+                    title: 'Accounting Software & Tax Exports',
+                    subtitle: 'Tally Prime XML vouchers and CA-ready GSTR-1 export tables.',
+                    perks: [
+                      'Direct Tally ERP 9 Voucher Import',
+                      'CA-Format Master Sales Register (CSV)',
+                      'Zero Manual Bookkeeping Re-entry',
+                    ],
+                  ),
+                ],
                 const SizedBox(height: 28),
 
                 // Section 3: DANGER ZONE / DATA RESET (START FRESH)

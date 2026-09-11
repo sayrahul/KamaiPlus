@@ -47,6 +47,150 @@ drives `LocalDatabase` through a real (in-memory FFI) SQLite database and assert
 
 ---
 
+## 2026-09-11 — Batch of 14 targeted fixes across Products, Billing, Settings, Pro upgrade
+
+**Context:** user request list, not phase-numbered — a batch of small-to-medium fixes/
+features gathered from real usage. Implemented and verified via `flutter analyze` /
+`flutter test` / `flutter build apk --debug` only, no device testing this session
+(consistent with the standing instruction to batch device testing at the end).
+
+**1+2. Restaurant "Inward with AI" was a Gemini-only dead end.** `products_screen.dart`'s
+`_openAiInwardSheet()` sent restaurant straight into `MenuScanSheet` (Gemini Vision only,
+no fallback). If no API key was configured, tapping the most prominent "add item" button
+on the whole screen produced a red SnackBar and nothing else — reads as "dish add nahi ho
+rahi". New `lib/views/products/restaurant_inward_options_sheet.dart` gives restaurant the
+same "pick how you want to add" pattern grocery/pharmacy/clothing/hardware already get via
+`AiInwardModal`: Scan Menu Photo (existing), **Add Dish Manually** (plain form, needs no AI
+key at all), and **Rapid Barcode Inward** (for packaged drinks/snacks with real EAN
+barcodes — satisfies "barcode ke sath product add hona chahiye same as grocery"). Restaurant
+no longer has a single point of failure for adding a menu item.
+
+**3. New products now default to Unlimited Stock in every vertical**, not just restaurant.
+`add_product_modal.dart:102` — `_isUnlimitedStock` was `vert.id == 'restaurant'`, now `true`
+unconditionally for a new product (editing an existing product still reflects its real
+saved state). Matches how most shopkeepers actually work — exact counts get turned on later
+per-product via the same toggle, not required up front.
+
+**4. Dummy/demo data removed from Purchases & Cash Register.** `local_database.dart`'s
+`getAllSuppliers()` used to silently insert three fabricated wholesalers ("Metro Cash &
+Carry India" etc.) with fake outstanding balances (₹18,600 / ₹3,400 "owed") into every real
+merchant's Purchases & Restock screen the first time it was opened — indistinguishable from
+genuine data. Same bug class, worse blast radius, as the already-documented
+`getAllExpenses()` demo-expense seeding (see Known Open Issues, now resolved below). Both
+now just return an empty list when the table is empty.
+
+**5. Clothing/Hardware barcode scans could resolve to a Grocery/Pharmacy product.**
+`findMasterProductByBarcode()` had a "fallback: lookup by exact barcode regardless of
+vertical" — since `master_catalog` deliberately has zero Clothing/Hardware rows (Phase 2
+decision: those verticals' stock isn't barcode-standardized), any barcode scan in those
+verticals that happened to match an existing Grocery/Pharmacy row by pure barcode number
+would import that unrelated product. Removed the fallback entirely — exact same isolation
+bug class already fixed once for `getAllProducts`/`getAllCategories` (see this file's case
+study at the top). A non-matching barcode now correctly falls through to "new barcode, add
+manually" instead of a wrong cross-vertical match. Checked `kDefaultProductsByVertical` for
+dedicated per-vertical starter catalogs while investigating this — Clothing already has 24
+items (including 5 footwear-specific ones) and Hardware 28, both already well past the
+15-20 the user asked for; no count change needed there.
+
+**6. "Accounting Software & Tax Exports" was unlocked for free users.**
+`backup_restore_screen.dart` — the Tally Prime XML and CA Master Sales Register export
+buttons had no Pro gate at all, unlike every other Pro feature on that screen (Cloud Backup
+right above them does gate correctly). Now both check `_isPro` first and open
+`ProUpgradeModal` if not, matching the Cloud Backup card's exact pattern, plus a
+`ProLockedCard` explainer underneath when locked.
+
+**7. Home "Today's Business Pulse" KPI cards only had a tiny tappable link.**
+`home_pulse_tab.dart`'s `_buildMetricCard` wrapped only the small "Bills →" / "Report →" /
+"Khata →" text in a `GestureDetector` — tapping the big number, title, or badge (i.e. most
+of the card) did nothing. Wrapped the whole card in `InkWell` instead, so the entire box is
+one tap target to its respective page (Transactions for Sales/Bills, Khata for Market
+Udhar; Est. Profit's tap remains its existing show/hide toggle, which is correct behavior
+for that card, not a navigation bug).
+
+**8. UPI Standee Share/Print/PDF were fake.** `upi_standee_modal.dart`'s three action
+buttons each just showed a SnackBar claiming success ("PDF downloaded!") without generating
+anything. Added `pdf: ^3.11.3` and `printing: ^5.13.4` (pure-Dart packages, no native code —
+deliberately not reusing the native `pdf_engine` MethodChannel behind the invoice-PDF flow,
+since that's tightly coupled to `SaleModel`/tax-invoice fields and not a generic document
+renderer). New `lib/services/upi_standee_pdf_service.dart` builds a real one-page A5 PDF
+from the same QR bitmap the on-screen preview renders (via `QrPainter.toImageData`, the
+same technique `invoice_pdf_service.dart` already uses). Print opens the native OS print
+dialog (`Printing.layoutPdf`); Share and PDF both hand the real file to the OS share sheet
+(`Printing.sharePdf`, and `share_plus`'s `Share.shareXFiles` matching this codebase's
+existing file-share convention in `gst_export_service.dart`).
+
+**9. New: daily "yesterday's sales" notification.** New `lib/services/daily_summary_service.dart`
+— checks once per calendar day (SharedPreferences date-flag, checked in
+`home_dashboard_screen.dart`'s `initState`) whether the day's recap has been shown yet; if
+not, sums yesterday's sales (cash vs UPI, using both direct and split-payment cash/UPI
+shares) and fires one native notification via a new `NativeNotificationService.
+notifyDailySummary()` — same real-Android-notification channel the existing
+"WhatsApp Receipt Dispatched" notification already uses. Deliberately **not** a WorkManager
+alarm fired at a fixed clock time — Android has no reliable way to do that without
+exact-alarm permissions and battery-optimization fights, and checking on app-open needs no
+extra permission while still landing "first thing the owner opens the app that day", which
+is what was actually asked for.
+
+**10. Unlimited→tracked stock conversion silently saved ~99999, not 0.**
+`quick_stock_update_modal.dart`'s `_effectiveInwardStock` computed
+`(_currentStock + _inwardDelta).clamp(0, 99999)`, where `_currentStock` is the product's
+raw `stockQuantity` — for a product that WAS unlimited (stored as `999999.0`), unticking
+"Unlimited Stock" without adding any stock clamped straight down to `99999`, which still
+reads as unlimited everywhere else in the app (`ProductModel.isUnlimitedStock`'s `>= 99990`
+threshold) — the untick silently didn't work. Added a `_baseStock` getter that treats a
+previously-unlimited product's starting point as `0`, not its placeholder value, so
+unticking with no additions now genuinely saves `0`.
+
+**11. Profile email field was editable with an "(Optional)" label; phone already
+compulsory.** `store_profile_screen.dart` — Store Mobile Number already had `*` and a
+required validator (confirmed correct, no change needed). Email Address is the Firebase
+Auth login identity, not something changing it here would actually update — now `readOnly:
+true` with a lock icon and the "(Optional)" wording dropped from the label.
+
+**12. New: coupon code field in the Pro upgrade screen.** `pro_upgrade_modal.dart` — a code
+input + Apply button sits above the "Upgrade to Kamai+ Pro" CTA. Validates against Firestore
+`coupons/{CODE}` (`active`, optional `valid_till`, and either `discount_percent` or
+`flat_off_paise`) — the same "admin edits Firestore directly, no dashboard needed yet"
+pattern this app already uses for `platform_settings/broadcast` and `global_config` (see
+the Playbook's Admin Panel section); a future admin console would write to the same
+collection with zero app changes. `razorpay_service.dart`'s `openCheckout` gained optional
+`overrideAmountPaise`/`couponCode` params — the discounted amount is what Razorpay actually
+charges (this hits the **live** Razorpay key, so a hard floor of ₹1 / 100 paise stops any
+misconfigured or malicious coupon doc from bringing a charge to ₹0), and the coupon code is
+recorded in both the Razorpay order notes and the Firestore Pro-activation document for
+reconciliation.
+
+**13. NOT IMPLEMENTED — UPI WhatsApp links aren't clickable.** User asked for the
+`upi://pay?...` links embedded in WhatsApp share text (8 call sites: `pos_checkout_modal.dart`,
+`transactions_screen.dart`, `sale_completed_modal.dart`, `sale_detail_modal.dart`, and 4 in
+`khata_screen.dart` — all distinct from the several *other* `upi://` usages in this codebase
+that are QR-code payloads and must stay as raw URIs) to be `https://` so WhatsApp renders
+them as tappable links. The only way to bridge a custom URI scheme into something WhatsApp
+auto-links is a real HTTP(S) redirector; this app has no backend of its own for that, and
+attempting to wrap the link via a public shortener (TinyURL's free create-link endpoint) was
+blocked by this session's own safety tooling as an external network call carrying payment
+data. Left unimplemented — needs the user's explicit decision on how to proceed (see
+Known Open Issues below).
+
+**14. Menu-scan photo feature — investigated, found and fixed a real gap (not the AI
+pipeline itself).** Traced `GeminiAiService.extractMenuItemsFromImage` end-to-end against
+the already-proven `extractItemsFromImage` (bill-scan) — same endpoint, same model list,
+same parsing, no code-level bug found. The real gap: when no Gemini API key is configured,
+the error message says `'Tap "Settings" below'`, but `menu_scan_sheet.dart`'s failure
+SnackBar had no such control — genuinely impossible to act on from that screen. Extracted
+`ai_inward_sheet.dart`'s private `_showApiKeyDialog` into a shared
+`lib/views/common/gemini_api_key_dialog.dart` (`GeminiApiKeyDialog.show(context)`), wired a
+"Settings" `SnackBarAction` into the menu-scan failure path, and added a proactive key icon
+button to the sheet's header (mirroring `ai_inward_sheet.dart`'s own header). `ai_inward_sheet.dart`
+now calls the shared dialog too, instead of keeping its own copy that could drift.
+
+**Verification:** `flutter analyze` — 0 issues (same 2 pre-existing `deprecated_member_use`
+infos in unrelated `gst_export_service.dart`, unchanged). `flutter test` — 68/68 passing
+(unchanged count; no test relied on the removed dummy-data seeding). `flutter build apk
+--debug` — succeeds, including the two newly-added `pdf`/`printing` dependencies.
+
+---
+
 ## 2026-09-11 (Phase 4 of the KamaiPlus Playbook, part 1) — Vertical feature depth: Hardware sq.ft pricing, Restaurant dish modifiers + KOT
 
 **Context:** user explicitly declined Phase 3 (Admin Console — a separate project) for now
@@ -589,9 +733,20 @@ isolation. `flutter analyze` clean, full `flutter test` suite passes (28 tests t
 
 ## Known open issues (not fixed this session — out of scope, noted so they aren't lost)
 
-- `local_database.dart`, `getAllExpenses()` — re-inserts two demo expenses
-  (`'Morning Chai & Snacks for Staff'`, `'Carry Bags & Packaging Tape'`) whenever the
-  expenses table is empty. Deleting them brings them back.
+- ~~`local_database.dart`, `getAllExpenses()` — re-inserts two demo expenses...~~
+  **RESOLVED** by the 2026-09-11 "Batch of 14 fixes" entry above, alongside the same bug
+  in `getAllSuppliers()` (three fabricated wholesalers with fake balances). Both now just
+  return an empty list when their table is empty.
+- **UPI WhatsApp links aren't clickable** — the `upi://pay?...` links sent in WhatsApp
+  share text (8 call sites — see the 2026-09-11 "Batch of 14 fixes" entry, item 13) sit
+  inert in the chat because WhatsApp only auto-links `http(s)://` text. Fixing this needs
+  a real HTTP(S) redirector bridging to the `upi://` scheme; this app has no backend of its
+  own for that, and wrapping the link via a public shortener (e.g. TinyURL) was blocked by
+  this session's safety tooling as an external call carrying payment data. **Needs the
+  user's decision**: authorize a specific third-party shortener, stand up a small first-party
+  redirector (e.g. on Firebase Hosting, which this project already uses), or accept leaving
+  the raw `upi://` link as-is (still works — the customer just has to copy it manually, or
+  use the QR code shown alongside it, which is unaffected by this issue).
 - `splash_screen.dart` / `MainActivity.java` — a `test_screen` SharedPreferences key
   bypasses the login/session check and deep-links directly into any screen. It is now
   load-bearing for the home-screen widgets and launcher shortcuts (`QuickPosWidgetProvider`,

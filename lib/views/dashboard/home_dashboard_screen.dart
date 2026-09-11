@@ -6,6 +6,7 @@ import '../khata/khata_screen.dart';
 import '../products/products_screen.dart';
 import '../menu/menu_screen.dart';
 import '../../services/app_control_service.dart';
+import '../../services/daily_summary_service.dart';
 import '../common/kamai_bottom_nav.dart';
 
 class HomeDashboardScreen extends StatefulWidget {
@@ -95,6 +96,10 @@ class HomeDashboardScreenState extends State<HomeDashboardScreen> {
       ),
       const KhataScreen(),
     ];
+
+    // Fire-and-forget: shows yesterday's sales recap once per calendar day,
+    // the first time the dashboard is opened that day.
+    DailySummaryService.checkAndNotify();
 
     if (widget.initialIndex == 4) {
       WidgetsBinding.instance.addPostFrameCallback((_) {

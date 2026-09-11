@@ -4,6 +4,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
 import '../../core/constants/business_vertical_config.dart';
 import '../../services/gemini_ai_service.dart';
+import '../common/gemini_api_key_dialog.dart';
 import 'menu_item_review_sheet.dart';
 
 /// Entry point for Restaurant vertical: "Scan Menu Photo" → AI extracts dish
@@ -197,11 +198,20 @@ class MenuScanSheet extends StatelessWidget {
             if (!context.mounted) return;
 
             if (result == null || !result.success) {
+              final needsApiKey = (result?.errorMessage ?? '').contains('API Key');
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(
                   content: Text(result?.errorMessage ?? 'Could not read the menu photo.'),
                   backgroundColor: Colors.red,
                   behavior: SnackBarBehavior.floating,
+                  duration: const Duration(seconds: 6),
+                  action: needsApiKey
+                      ? SnackBarAction(
+                          label: 'Settings',
+                          textColor: Colors.white,
+                          onPressed: () => GeminiApiKeyDialog.show(context),
+                        )
+                      : null,
                 ),
               );
               return;
@@ -271,17 +281,26 @@ class MenuScanSheet extends StatelessWidget {
                     ),
                   ],
                 ),
-                Material(
-                  color: Colors.transparent,
-                  child: InkWell(
-                    onTap: () => Navigator.of(context).pop(),
-                    borderRadius: BorderRadius.circular(16),
-                    child: Container(
-                      padding: const EdgeInsets.all(5),
-                      decoration: const BoxDecoration(color: Color(0xFFF1F5F9), shape: BoxShape.circle),
-                      child: const Icon(Icons.close_rounded, size: 16, color: Color(0xFF64748B)),
+                Row(
+                  children: [
+                    IconButton(
+                      icon: const Icon(Icons.key_rounded, size: 20, color: Color(0xFF64748B)),
+                      tooltip: 'Configure Gemini API Key',
+                      onPressed: () => GeminiApiKeyDialog.show(context),
                     ),
-                  ),
+                    Material(
+                      color: Colors.transparent,
+                      child: InkWell(
+                        onTap: () => Navigator.of(context).pop(),
+                        borderRadius: BorderRadius.circular(16),
+                        child: Container(
+                          padding: const EdgeInsets.all(5),
+                          decoration: const BoxDecoration(color: Color(0xFFF1F5F9), shape: BoxShape.circle),
+                          child: const Icon(Icons.close_rounded, size: 16, color: Color(0xFF64748B)),
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ],
             ),

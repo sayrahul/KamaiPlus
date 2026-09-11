@@ -106,9 +106,16 @@ class _QuickStockUpdateModalState extends State<QuickStockUpdateModal> {
   }
 
   double get _currentStock => widget.product.stockQuantity;
+  // If this product WAS unlimited before this modal opened, its raw
+  // stockQuantity is a huge placeholder (≥99999) with no real count behind
+  // it. Switching to a tracked count should start counting from 0, not from
+  // that placeholder — otherwise unticking "Unlimited" without adding any
+  // stock silently saves ~99999 units, which still reads as unlimited
+  // everywhere else in the app (ProductModel.isUnlimitedStock threshold).
+  double get _baseStock => widget.product.isUnlimitedStock ? 0.0 : _currentStock;
   double get _effectiveInwardStock {
     if (_isUnlimitedStock) return 99999.0;
-    return (_currentStock + _inwardDelta).clamp(0.0, 99999.0);
+    return (_baseStock + _inwardDelta).clamp(0.0, 99999.0);
   }
 
   QuantityUnitConfig get _quantityConfig => quantityConfigForUnit(
@@ -452,7 +459,7 @@ class _QuickStockUpdateModalState extends State<QuickStockUpdateModal> {
                             ),
                             if (!_isUnlimitedStock && _inwardDelta > 0)
                               Text(
-                                '(${_currentStock.toInt()} existing + ${_inwardDelta.toInt()} added)',
+                                '(${_baseStock.toInt()} existing + ${_inwardDelta.toInt()} added)',
                                 style: GoogleFonts.plusJakartaSans(
                                   fontSize: 11,
                                   color: const Color(0xFF059669),

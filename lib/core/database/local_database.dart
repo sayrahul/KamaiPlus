@@ -882,7 +882,7 @@ class LocalDatabase {
       whereClause += " AND (business_type = ? OR business_type = 'both')";
       whereArgs.add(businessType);
     }
-    var result = await db.query(
+    final result = await db.query(
       'master_catalog',
       where: whereClause,
       whereArgs: whereArgs,
@@ -891,18 +891,13 @@ class LocalDatabase {
     if (result.isNotEmpty) {
       return MasterProductModel.fromMap(result.first);
     }
-    // Fallback: lookup by exact barcode regardless of vertical
-    if (businessType != null && businessType.isNotEmpty) {
-      result = await db.query(
-        'master_catalog',
-        where: 'barcode = ?',
-        whereArgs: [cleanBarcode],
-        limit: 1,
-      );
-      if (result.isNotEmpty) {
-        return MasterProductModel.fromMap(result.first);
-      }
-    }
+    // No cross-vertical fallback: a barcode scanned in Clothing/Hardware
+    // (where master_catalog deliberately has no entries — see the Phase 2
+    // catalog-depth decision) must never resolve to a Grocery/Pharmacy row
+    // that happens to share the same barcode. That was exactly the same
+    // isolation bug already fixed once for getAllProducts/getAllCategories
+    // (see DEVELOPMENT_LOG.md's case study) — returning null here lets the
+    // caller fall through to its "new barcode, add manually" flow instead.
     return null;
   }
 
@@ -1617,30 +1612,10 @@ class LocalDatabase {
   Future<List<ExpenseModel>> getAllExpenses() async {
     final db = await instance.database;
     final result = await db.query('expenses', orderBy: 'created_at DESC');
-    if (result.isEmpty && _activeDbName == 'kamaiplus_local.db') {
-      final now = DateTime.now();
-      final demo1 = ExpenseModel(
-        id: 'exp_demo_1',
-        businessId: 'biz_default_retail',
-        title: 'Morning Chai & Snacks for Staff',
-        amountPaise: 6000,
-        category: 'Tea / Snacks',
-        createdAt: now.subtract(const Duration(hours: 3)),
-        note: 'Staff tea & biscuits',
-      );
-      final demo2 = ExpenseModel(
-        id: 'exp_demo_2',
-        businessId: 'biz_default_retail',
-        title: 'Carry Bags & Packaging Tape',
-        amountPaise: 12000,
-        category: 'Packaging',
-        createdAt: now.subtract(const Duration(hours: 1)),
-        note: 'Plastic carry bags bundle',
-      );
-      await addExpense(demo1);
-      await addExpense(demo2);
-      return [demo2, demo1];
-    }
+    // Deliberately no demo-expense seeding here. This used to insert two
+    // fabricated expense rows into every real merchant's Cash Register the
+    // first time the expenses table was empty — indistinguishable from a
+    // real entry. An empty result means no expenses have been logged yet.
     return result.map((m) => ExpenseModel.fromMap(m)).toList();
   }
 
@@ -1798,39 +1773,11 @@ class LocalDatabase {
   Future<List<SupplierModel>> getAllSuppliers() async {
     final db = await instance.database;
     final result = await db.query('suppliers', orderBy: 'name ASC');
-    if (result.isEmpty) {
-      // Seed default suppliers if empty
-      final defaultSuppliers = [
-        SupplierModel(
-          id: 'sup_1',
-          businessId: 'biz_starter_pos',
-          name: 'Metro Cash & Carry India',
-          phone: '+919820011223',
-          category: 'FMCG & Staples Wholesale',
-          currentBalancePaise: 0,
-        ),
-        SupplierModel(
-          id: 'sup_2',
-          businessId: 'biz_starter_pos',
-          name: 'Hindustan Unilever Distributor',
-          phone: '+919819922334',
-          category: 'Personal & Home Care',
-          currentBalancePaise: 1860000,
-        ),
-        SupplierModel(
-          id: 'sup_3',
-          businessId: 'biz_starter_pos',
-          name: 'Parle & Britannia Agencies',
-          phone: '+919867733445',
-          category: 'Biscuits & Confectionery',
-          currentBalancePaise: 340000,
-        ),
-      ];
-      for (final s in defaultSuppliers) {
-        await db.insert('suppliers', s.toMap(), conflictAlgorithm: ConflictAlgorithm.replace);
-      }
-      return defaultSuppliers;
-    }
+    // Deliberately no demo-supplier seeding here. This used to insert three
+    // fabricated wholesalers with fake outstanding balances (₹18,600 /
+    // ₹3,400 owed) into every real merchant's Purchases & Restock screen on
+    // first open — indistinguishable from genuine data. An empty result
+    // means the store genuinely has no suppliers yet.
     return result.map((m) => SupplierModel.fromMap(m)).toList();
   }
 

@@ -1,8 +1,14 @@
+import 'dart:typed_data';
+import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:qr_flutter/qr_flutter.dart';
+import 'package:share_plus/share_plus.dart';
+import 'package:path_provider/path_provider.dart';
+import 'dart:io';
 import '../../core/database/local_database.dart';
 import '../../models/models.dart';
+import '../../services/upi_standee_pdf_service.dart';
 
 class UpiStandeeModal extends StatefulWidget {
   const UpiStandeeModal({super.key});
@@ -23,11 +29,109 @@ class UpiStandeeModal extends StatefulWidget {
 class _UpiStandeeModalState extends State<UpiStandeeModal> {
   StoreProfileModel _profile = StoreProfileModel();
   bool _audioVoiceAlert = true;
+  bool _isBusy = false;
 
   @override
   void initState() {
     super.initState();
     _loadProfile();
+  }
+
+  /// Renders the same QR payload the on-screen preview shows into PNG bytes,
+  /// the same technique `invoice_pdf_service.dart` already uses for its
+  /// on-bill UPI QR — needed because the PDF/print/share document is built
+  /// independently of the widget tree.
+  Future<Uint8List?> _renderQrPng(String qrData) async {
+    if (qrData.isEmpty) return null;
+    final painter = QrPainter(
+      data: qrData,
+      version: QrVersions.auto,
+      gapless: true,
+      dataModuleStyle: const QrDataModuleStyle(
+        dataModuleShape: QrDataModuleShape.square,
+        color: ui.Color(0xFF0F172A),
+      ),
+      eyeStyle: const QrEyeStyle(
+        eyeShape: QrEyeShape.square,
+        color: ui.Color(0xFF0F172A),
+      ),
+    );
+    final pic = await painter.toImageData(480, format: ui.ImageByteFormat.png);
+    return pic?.buffer.asUint8List();
+  }
+
+  Future<Uint8List?> _generateStandeePdfBytes(String storeName, String upiId, String qrData) async {
+    final qrBytes = await _renderQrPng(qrData);
+    if (qrBytes == null) return null;
+    return UpiStandeePdfService.generatePdfBytes(
+      storeName: storeName,
+      upiId: upiId,
+      qrPngBytes: qrBytes,
+    );
+  }
+
+  Future<void> _handleShare(String storeName, String upiId, String qrData) async {
+    if (_isBusy) return;
+    setState(() => _isBusy = true);
+    try {
+      final bytes = await _generateStandeePdfBytes(storeName, upiId, qrData);
+      if (bytes == null) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Set a UPI ID in Store Profile first.'), backgroundColor: Colors.red),
+          );
+        }
+        return;
+      }
+      final dir = await getTemporaryDirectory();
+      final file = File('${dir.path}/UPI_Standee_$storeName.pdf');
+      await file.writeAsBytes(bytes, flush: true);
+      await SharePlus.instance.share(ShareParams(
+        files: [XFile(file.path)],
+        text: 'Scan & pay $storeName via UPI — $upiId',
+        subject: 'UPI Standee - $storeName',
+      ));
+    } finally {
+      if (mounted) setState(() => _isBusy = false);
+    }
+  }
+
+  Future<void> _handlePrint(String storeName, String upiId, String qrData) async {
+    if (_isBusy) return;
+    setState(() => _isBusy = true);
+    try {
+      final bytes = await _generateStandeePdfBytes(storeName, upiId, qrData);
+      if (bytes == null) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Set a UPI ID in Store Profile first.'), backgroundColor: Colors.red),
+          );
+        }
+        return;
+      }
+      await UpiStandeePdfService.printStandee(bytes, storeName: storeName);
+    } finally {
+      if (mounted) setState(() => _isBusy = false);
+    }
+  }
+
+  Future<void> _handleDownloadPdf(String storeName, String upiId, String qrData) async {
+    if (_isBusy) return;
+    setState(() => _isBusy = true);
+    try {
+      final bytes = await _generateStandeePdfBytes(storeName, upiId, qrData);
+      if (bytes == null) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Set a UPI ID in Store Profile first.'), backgroundColor: Colors.red),
+          );
+        }
+        return;
+      }
+      await UpiStandeePdfService.shareStandee(bytes, storeName: storeName);
+    } finally {
+      if (mounted) setState(() => _isBusy = false);
+    }
   }
 
   Future<void> _loadProfile() async {
@@ -361,55 +465,34 @@ class _UpiStandeeModalState extends State<UpiStandeeModal> {
                           Expanded(
                             child: _buildActionBtn(
                               icon: Icons.share_outlined,
-                              label: 'Share',
+                              label: _isBusy ? '...' : 'Share',
                               bgColor: Colors.white,
                               textColor: const Color(0xFF0F172A),
                               borderColor: const Color(0xFFCBD5E1),
-                              onTap: () {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(
-                                    content: Text('UPI QR Standee link copied & ready to share!'),
-                                    behavior: SnackBarBehavior.floating,
-                                  ),
-                                );
-                              },
+                              onTap: () => _handleShare(storeName, upiId, qrData),
                             ),
                           ),
                           const SizedBox(width: 8),
                           Expanded(
                             child: _buildActionBtn(
                               icon: Icons.print_outlined,
-                              label: 'Print',
+                              label: _isBusy ? '...' : 'Print',
                               bgColor: Colors.white,
                               textColor: const Color(0xFF0F172A),
                               borderColor: const Color(0xFFCBD5E1),
-                              onTap: () {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(
-                                    content: Text('Sending UPI Standee to Thermal / A4 Printer...'),
-                                    behavior: SnackBarBehavior.floating,
-                                  ),
-                                );
-                              },
+                              onTap: () => _handlePrint(storeName, upiId, qrData),
                             ),
                           ),
                           const SizedBox(width: 8),
                           Expanded(
                             child: _buildActionBtn(
                               icon: Icons.file_download_outlined,
-                              label: 'PDF',
+                              label: _isBusy ? '...' : 'PDF',
                               bgColor: const Color(0xFF0F172A),
                               textColor: Colors.white,
                               iconColor: const Color(0xFFFBBF24),
                               borderColor: const Color(0xFF0F172A),
-                              onTap: () {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(
-                                    content: Text('Official UPI Standee PDF downloaded!'),
-                                    behavior: SnackBarBehavior.floating,
-                                  ),
-                                );
-                              },
+                              onTap: () => _handleDownloadPdf(storeName, upiId, qrData),
                             ),
                           ),
                         ],

@@ -415,7 +415,7 @@ class _HomePulseTabState extends State<HomePulseTab> with DataBusRefresh<HomePul
     required Color borderColor,
     VoidCallback? onActionTap,
   }) {
-    return Container(
+    final card = Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
       decoration: BoxDecoration(
         gradient: LinearGradient(
@@ -511,20 +511,29 @@ class _HomePulseTabState extends State<HomePulseTab> with DataBusRefresh<HomePul
                 ),
               ),
               const SizedBox(width: 4),
-              GestureDetector(
-                onTap: onActionTap,
-                child: Text(
-                  actionLabel,
-                  style: GoogleFonts.outfit(
-                    fontSize: 10.5,
-                    fontWeight: FontWeight.w700,
-                    color: actionColor,
-                  ),
+              Text(
+                actionLabel,
+                style: GoogleFonts.outfit(
+                  fontSize: 10.5,
+                  fontWeight: FontWeight.w700,
+                  color: actionColor,
                 ),
               ),
             ],
           ),
         ],
+      ),
+    );
+
+    // The whole card is tappable, not just the small "Bills →" style link —
+    // that link used to be the only hit target on the card, which was easy
+    // to miss and made the KPI cards feel inert.
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onActionTap,
+        borderRadius: BorderRadius.circular(14),
+        child: card,
       ),
     );
   }

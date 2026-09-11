@@ -99,7 +99,11 @@ class _AddProductModalState extends State<AddProductModal> {
     }).toList();
 
     _isFavorite = p?.isFavorite ?? false;
-    _isUnlimitedStock = p != null ? (p.stockQuantity >= 99999) : (vert.id == 'restaurant');
+    // New products default to unlimited stock across every vertical — most
+    // shopkeepers don't track exact counts from day one, and this matches
+    // rapid barcode inward's no-friction philosophy. Editing an existing
+    // product still reflects its real saved state.
+    _isUnlimitedStock = p != null ? (p.stockQuantity >= 99999) : true;
     _nameCtrl = TextEditingController(text: p?.name ?? '');
     _barcodeCtrl = TextEditingController(text: p?.barcode ?? '');
     _sellPriceCtrl = TextEditingController(

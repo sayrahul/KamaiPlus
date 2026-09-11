@@ -1125,15 +1125,20 @@ class _StoreProfileScreenState extends State<StoreProfileScreen> {
               ),
               const SizedBox(height: 16),
 
-              // Email Address (Optional)
-              _buildFieldLabel('Email Address (Optional)'),
+              // Email Address — this is the login identity (Firebase Auth),
+              // so it's read-only here rather than editable-but-ignored.
+              _buildFieldLabel('Email Address'),
               const SizedBox(height: 6),
               TextFormField(
                 controller: _emailCtrl,
+                readOnly: true,
                 keyboardType: TextInputType.emailAddress,
                 validator: (v) => AppValidators.validateEmail(v),
-                style: GoogleFonts.inter(fontSize: 14),
-                decoration: _fieldInputDecoration(hint: 'iamdivyaang@gmail.com'),
+                style: GoogleFonts.inter(fontSize: 14, color: const Color(0xFF64748B)),
+                decoration: _fieldInputDecoration(hint: 'iamdivyaang@gmail.com').copyWith(
+                  fillColor: const Color(0xFFF1F5F9),
+                  suffixIcon: const Icon(Icons.lock_outline_rounded, size: 16, color: Color(0xFF94A3B8)),
+                ),
               ),
               const SizedBox(height: 16),
 
