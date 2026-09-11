@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../dashboard/home_dashboard_screen.dart';
 import '../menu/menu_screen.dart';
+import '../../core/constants/business_vertical_config.dart';
 
 class KamaiBottomNav extends StatelessWidget {
   final int currentIndex;
@@ -53,28 +54,40 @@ class KamaiBottomNav extends StatelessWidget {
         ],
       ),
       child: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceAround,
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              // 0: Home
-              _buildNavItem(context, 0, Icons.home_rounded, Icons.home_outlined, 'Home'),
+        child: ValueListenableBuilder<String>(
+          valueListenable: BusinessVerticals.activeBusinessTypeNotifier,
+          builder: (context, activeType, _) {
+            final vert = BusinessVerticals.resolve(activeType);
+            return Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceAround,
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  // 0: Home
+                  _buildNavItem(context, 0, Icons.home_rounded, Icons.home_outlined, 'Home'),
 
-              // 1: Product
-              _buildNavItem(context, 1, Icons.inventory_2_rounded, Icons.inventory_2_outlined, 'Product'),
+                  // 1: Dynamic Product / Menu / Medicines / Apparel / Items
+                  _buildNavItem(
+                    context,
+                    1,
+                    vert.navActiveIcon,
+                    vert.navInactiveIcon,
+                    vert.bottomNavLabel,
+                  ),
 
-              // 2: Center Billing
-              _buildCenterBillingButton(context),
+                  // 2: Center Billing
+                  _buildCenterBillingButton(context),
 
-              // 3: Khata
-              _buildNavItem(context, 3, Icons.menu_book_rounded, Icons.menu_book_outlined, 'Khata'),
+                  // 3: Khata
+                  _buildNavItem(context, 3, Icons.menu_book_rounded, Icons.menu_book_outlined, 'Khata'),
 
-              // 4: Menu
-              _buildNavItem(context, 4, Icons.grid_view_rounded, Icons.grid_view_outlined, 'Menu'),
-            ],
-          ),
+                  // 4: Menu
+                  _buildNavItem(context, 4, Icons.grid_view_rounded, Icons.grid_view_outlined, 'Menu'),
+                ],
+              ),
+            );
+          },
         ),
       ),
     );

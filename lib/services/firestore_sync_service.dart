@@ -16,6 +16,10 @@ class FirestoreSyncService {
   final ValueNotifier<SyncState> syncState = ValueNotifier<SyncState>(SyncState.offline);
   final ValueNotifier<int> liveSyncCounter = ValueNotifier<int>(0);
 
+  // Global Reactive Pro Notifiers (Immediately updates UI when Pro changes in Cloud/Admin)
+  static final ValueNotifier<bool> isProNotifier = ValueNotifier<bool>(false);
+  static final ValueNotifier<String> proPlanNotifier = ValueNotifier<String>('free');
+
   bool _isInitialized = false;
   String _activeBusinessId = 'biz_starter_pos';
   StreamSubscription? _productsSub;
@@ -35,8 +39,11 @@ class FirestoreSyncService {
     try {
       service.syncState.value = SyncState.syncing;
 
+      final currentUid = FirebaseAuth.instance.currentUser?.uid;
       if (businessId != null && businessId.isNotEmpty) {
         service._activeBusinessId = businessId;
+      } else if (service._activeBusinessId == 'biz_starter_pos' && currentUid != null && currentUid.isNotEmpty) {
+        service._activeBusinessId = 'biz_$currentUid';
       }
 
       if (!service._isInitialized) {
@@ -50,9 +57,53 @@ class FirestoreSyncService {
       final profile = await LocalDatabase.instance.getStoreProfile();
       final prefs = await SharedPreferences.getInstance();
       final fcmToken = prefs.getString('fcm_token');
-      final currentUid = FirebaseAuth.instance.currentUser?.uid ?? '';
 
-      await firestore.collection('businesses').doc(bizId).set({
+      // Check Cloud Firestore first so we NEVER overwrite an active Admin-granted Pro status!
+      bool isProFromCloud = false;
+      String cloudProPlan = '';
+      String cloudProExpiry = '';
+      try {
+        final cloudDoc = await firestore.collection('businesses').doc(bizId).get();
+        if (cloudDoc.exists) {
+          final cd = cloudDoc.data();
+          if (cd != null) {
+            final isProCloud = (cd['is_pro'] == true ||
+                cd['is_pro'] == 1 ||
+                cd['subscription_tier'] == 'pro' ||
+                cd['subscription_tier'] == 'annual' ||
+                cd['subscription_tier'] == 'monthly');
+            final rawExp = cd['pro_expiry']?.toString();
+            final rawSubExp = cd['subscription_expires_at']?.toString();
+            final rawValid = cd['subscription_valid_until']?.toString();
+            final expStr = (rawExp != null && rawExp.isNotEmpty)
+                ? rawExp
+                : ((rawSubExp != null && rawSubExp.isNotEmpty)
+                    ? rawSubExp
+                    : ((rawValid != null && rawValid.isNotEmpty) ? rawValid : null));
+            final expDate = expStr != null ? DateTime.tryParse(expStr) : null;
+            if (isProCloud && (expDate == null || !DateTime.now().isAfter(expDate))) {
+              isProFromCloud = true;
+              cloudProPlan = cd['pro_plan']?.toString() ?? cd['subscription_tier']?.toString() ?? 'pro';
+              cloudProExpiry = expStr ?? DateTime.now().add(const Duration(days: 365)).toIso8601String();
+              await LocalDatabase.instance.activateProMembership(
+                plan: cloudProPlan,
+                paymentId: cd['razorpay_payment_id']?.toString() ?? 'admin_granted',
+                expiryDate: expDate ?? DateTime.now().add(const Duration(days: 365)),
+              );
+              await prefs.setBool('is_pro', true);
+              await prefs.setString('pro_plan', cloudProPlan);
+              isProNotifier.value = true;
+              proPlanNotifier.value = cloudProPlan;
+            }
+          }
+        }
+      } catch (_) {}
+
+      final effectiveIsPro = isProFromCloud || profile.isProEffective;
+      final effectivePlan = isProFromCloud ? cloudProPlan : (profile.proPlan.isNotEmpty ? profile.proPlan : 'pro');
+      final effectiveExpiry = isProFromCloud ? cloudProExpiry : profile.proExpiry;
+
+      final bizPayload = <String, dynamic>{
         'id': bizId,
         'business_id': bizId,
         'name': profile.storeName,
@@ -61,7 +112,7 @@ class FirestoreSyncService {
         'store_name': profile.storeName,
         'tagline': profile.tagline,
         'owner_name': profile.ownerName,
-        'owner_uid': currentUid,
+        'owner_uid': currentUid ?? '',
         'phone': profile.phone,
         'email': profile.email,
         'upi_vpa': profile.upiVpa,
@@ -72,22 +123,31 @@ class FirestoreSyncService {
         'city': profile.pincode,
         'gstin': profile.gstin,
         'fssai': profile.fssai,
-        'is_pro': profile.isPro,
-        'pro_plan': profile.proPlan,
-        'pro_expiry': profile.proExpiry,
-        'subscription_tier': profile.isPro ? (profile.proPlan.isNotEmpty ? profile.proPlan : 'pro') : 'free',
-        'subscription_expires_at': profile.proExpiry,
-        'razorpay_payment_id': profile.razorpayPaymentId,
         'fcm_token': fcmToken,
         'last_synced_at': FieldValue.serverTimestamp(),
         'platform': 'android_native',
-      }, SetOptions(merge: true));
+      };
+
+      // Only push Pro subscription fields if merchant is Pro (protecting Admin grants)
+      if (effectiveIsPro) {
+        bizPayload['is_pro'] = true;
+        bizPayload['pro_plan'] = effectivePlan;
+        bizPayload['pro_expiry'] = effectiveExpiry;
+        bizPayload['subscription_tier'] = effectivePlan;
+        bizPayload['subscription_expires_at'] = effectiveExpiry;
+        bizPayload['subscription_valid_until'] = effectiveExpiry;
+        if (profile.razorpayPaymentId.isNotEmpty) {
+          bizPayload['razorpay_payment_id'] = profile.razorpayPaymentId;
+        }
+      }
+
+      await firestore.collection('businesses').doc(bizId).set(bizPayload, SetOptions(merge: true));
 
       // Also mirror to merchants collection for Admin Portal fast lookup (both by bizId and by owner UID)
       try {
-        final merchantPayload = {
-          'id': currentUid.isNotEmpty ? currentUid : bizId,
-          'uid': currentUid,
+        final merchantPayload = <String, dynamic>{
+          'id': (currentUid != null && currentUid.isNotEmpty) ? currentUid : bizId,
+          'uid': currentUid ?? '',
           'business_id': bizId,
           'name': profile.ownerName.isNotEmpty ? profile.ownerName : profile.storeName,
           'owner_name': profile.ownerName,
@@ -95,14 +155,18 @@ class FirestoreSyncService {
           'phone': profile.phone,
           'email': profile.email,
           'role': 'admin',
-          'is_pro': profile.isPro,
-          'subscription_tier': profile.isPro ? (profile.proPlan.isNotEmpty ? profile.proPlan : 'pro') : 'free',
-          'subscription_expires_at': profile.proExpiry,
           'createdAt': DateTime.now().toIso8601String(),
           'lastSyncedAt': DateTime.now().toIso8601String(),
           'updated_at': FieldValue.serverTimestamp(),
         };
-        if (currentUid.isNotEmpty) {
+
+        if (effectiveIsPro) {
+          merchantPayload['is_pro'] = true;
+          merchantPayload['subscription_tier'] = effectivePlan;
+          merchantPayload['subscription_expires_at'] = effectiveExpiry;
+        }
+
+        if (currentUid != null && currentUid.isNotEmpty) {
           await firestore.collection('merchants').doc(currentUid).set(merchantPayload, SetOptions(merge: true));
         }
         await firestore.collection('merchants').doc(bizId).set(merchantPayload, SetOptions(merge: true));
@@ -141,8 +205,11 @@ class FirestoreSyncService {
 
   /// Initialize Cloud Firestore connection and background listeners
   Future<void> initialize({String? businessId}) async {
+    final currentUid = FirebaseAuth.instance.currentUser?.uid;
     if (businessId != null && businessId.isNotEmpty) {
       _activeBusinessId = businessId;
+    } else if (currentUid != null && currentUid.isNotEmpty) {
+      _activeBusinessId = 'biz_$currentUid';
     }
 
     try {
@@ -285,7 +352,15 @@ class FirestoreSyncService {
 
           final plan = d['pro_plan']?.toString() ?? d['subscription_tier']?.toString() ?? 'annual';
           final paymentId = d['razorpay_payment_id']?.toString() ?? 'admin_granted';
-          final expiryStr = (d['pro_expiry'] ?? d['subscription_expires_at'] ?? d['subscription_valid_until'])?.toString();
+          
+          final rawExp = d['pro_expiry']?.toString();
+          final rawSubExp = d['subscription_expires_at']?.toString();
+          final rawValid = d['subscription_valid_until']?.toString();
+          final expiryStr = (rawExp != null && rawExp.isNotEmpty)
+              ? rawExp
+              : ((rawSubExp != null && rawSubExp.isNotEmpty)
+                  ? rawSubExp
+                  : ((rawValid != null && rawValid.isNotEmpty) ? rawValid : null));
           final expiry = expiryStr != null ? DateTime.tryParse(expiryStr) : null;
           final isExpired = expiry != null && DateTime.now().isAfter(expiry);
 
@@ -297,12 +372,16 @@ class FirestoreSyncService {
             );
             await prefs.setBool('is_pro', true);
             await prefs.setString('pro_plan', plan);
+            isProNotifier.value = true;
+            proPlanNotifier.value = plan;
             debugPrint('Live sync: Pro membership active ($plan)');
           } else if (isExpired || (currentIsPro && (d['subscription_tier'] == 'free' || d['is_pro'] == false))) {
             // Revert / Downgrade to Free tier if expired or revoked by Super Admin
             await LocalDatabase.instance.deactivateProMembership();
             await prefs.setBool('is_pro', false);
             await prefs.remove('pro_plan');
+            isProNotifier.value = false;
+            proPlanNotifier.value = 'free';
             debugPrint('Live sync: Subscription expired or downgraded to Free');
           }
         }

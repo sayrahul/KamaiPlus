@@ -36,6 +36,8 @@ dependencies:
   home_widget: ^0.9.4
   workmanager: ^0.10.10
   in_app_update: ^5.0.0
+  share_plus: ^13.3.0
+  path_provider: ^2.1.6
 
 dev_dependencies:
   flutter_test:

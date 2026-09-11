@@ -192,179 +192,249 @@ class SaleDetailModal extends StatelessWidget {
         ? sale.totalAmountPaise
         : (sale.paymentMethod == 'split' ? sale.splitCreditPaise : 0);
     final isUdhar = creditDue > 0;
+    final pinController = TextEditingController();
+    String? pinError;
 
     if (!context.mounted) return;
     showDialog(
       context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: Colors.white,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: const Color(0xFFFEE2E2),
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: const Icon(Icons.replay_rounded, color: Color(0xFFDC2626), size: 22),
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Text(
-                'Sales Return (Refund)?',
-                style: GoogleFonts.plusJakartaSans(fontSize: 16, fontWeight: FontWeight.w800),
-              ),
-            ),
-          ],
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Invoice #${sale.invoiceNumber} ke sabhi items inventory me wapas add honge:',
-              style: GoogleFonts.inter(fontSize: 12.5, color: const Color(0xFF475569)),
-            ),
-            const SizedBox(height: 10),
-            Container(
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                color: const Color(0xFFF8FAFC),
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: const Color(0xFFEEF2F6)),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  ...sale.items.map((it) {
-                    final name = it['product_name'] ?? it['name'] ?? 'Item';
-                    final qty = it['quantity'] ?? it['qty'] ?? 1;
-                    return Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 2),
-                      child: Row(
-                        children: [
-                          const Icon(Icons.arrow_right_rounded, size: 18, color: Color(0xFF059669)),
-                          Expanded(
-                            child: Text(
-                              '$name (+$qty stock)',
-                              style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w600, color: const Color(0xFF1E293B)),
-                            ),
-                          ),
-                        ],
-                      ),
-                    );
-                  }),
-                ],
-              ),
-            ),
-            const SizedBox(height: 12),
-            if (isUdhar) ...[
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          backgroundColor: Colors.white,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: Row(
+            children: [
               Container(
-                padding: const EdgeInsets.all(10),
+                padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
-                  color: const Color(0xFFFEF2F2),
+                  color: const Color(0xFFFEE2E2),
                   borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: const Color(0xFFFCA5A5)),
                 ),
-                child: Row(
+                child: const Icon(Icons.shield_outlined, color: Color(0xFFDC2626), size: 22),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Icon(Icons.account_balance_wallet_outlined, size: 18, color: Color(0xFFDC2626)),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        'Customer ${sale.customerName ?? ""} ka Udhar ${MoneyFormatter.formatINR(creditDue)} turant reverse ho jayega.',
-                        style: GoogleFonts.inter(fontSize: 11.5, fontWeight: FontWeight.w600, color: const Color(0xFF991B1B)),
-                      ),
+                    Text(
+                      'Security PIN & Refund',
+                      style: GoogleFonts.plusJakartaSans(fontSize: 16, fontWeight: FontWeight.w800),
                     ),
-                  ],
-                ),
-              ),
-            ] else ...[
-              Container(
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFFFFBEB),
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: const Color(0xFFFDE68A)),
-                ),
-                child: Row(
-                  children: [
-                    const Icon(Icons.payments_outlined, size: 18, color: Color(0xFFD97706)),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        'Customer ko ${MoneyFormatter.formatINR(sale.totalAmountPaise)} (${sale.paymentMethod.toUpperCase()}) refund karein.',
-                        style: GoogleFonts.inter(fontSize: 11.5, fontWeight: FontWeight.w600, color: const Color(0xFF92400E)),
-                      ),
+                    Text(
+                      'Authorized return & stock reversal',
+                      style: GoogleFonts.inter(fontSize: 11, color: const Color(0xFF64748B)),
                     ),
                   ],
                 ),
               ),
             ],
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: Text('Cancel', style: GoogleFonts.inter(fontWeight: FontWeight.w600, color: const Color(0xFF64748B))),
           ),
-          ElevatedButton.icon(
-            onPressed: () async {
-              Navigator.pop(ctx);
-              HapticFeedback.heavyImpact();
-
-              try {
-                await LocalDatabase.instance.processSalesReturn(sale: sale);
-
-                await NativeNotificationService.showNotification(
-                  title: '↩️ Sales Return Done: #${sale.invoiceNumber}',
-                  body: 'Stock restored to inventory & ${isUdhar ? "Udhar reversed" : "Refund recorded"}.',
-                );
-
-                if (context.mounted) {
-                  Navigator.pop(context);
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Row(
-                        children: [
-                          const Icon(Icons.check_circle_rounded, color: Colors.white, size: 20),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Text(
-                              '✓ Invoice #${sale.invoiceNumber} returned! Stock restocked & ${isUdhar ? "Udhar reversed" : "Refund completed"}.',
-                              style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700),
-                            ),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Invoice #${sale.invoiceNumber} ke sabhi items inventory me wapas add honge:',
+                  style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF475569)),
+                ),
+                const SizedBox(height: 8),
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF8FAFC),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: const Color(0xFFEEF2F6)),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      ...sale.items.map((it) {
+                        final name = it['product_name'] ?? it['name'] ?? 'Item';
+                        final qty = it['quantity'] ?? it['qty'] ?? 1;
+                        return Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 2),
+                          child: Row(
+                            children: [
+                              const Icon(Icons.arrow_right_rounded, size: 18, color: Color(0xFF059669)),
+                              Expanded(
+                                child: Text(
+                                  '$name (+$qty stock)',
+                                  style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w600, color: const Color(0xFF1E293B)),
+                                ),
+                              ),
+                            ],
                           ),
-                        ],
-                      ),
-                      backgroundColor: const Color(0xFF059669),
-                      behavior: SnackBarBehavior.floating,
-                      duration: const Duration(seconds: 3),
+                        );
+                      }),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 10),
+                if (isUdhar) ...[
+                  Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFFEF2F2),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: const Color(0xFFFCA5A5)),
                     ),
-                  );
-                }
-                onVoidOrRefund?.call();
-              } catch (e) {
-                if (context.mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text('Return error: $e'),
-                      backgroundColor: const Color(0xFFDC2626),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.account_balance_wallet_outlined, size: 18, color: Color(0xFFDC2626)),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            'Customer ${sale.customerName ?? ""} ka Udhar ${MoneyFormatter.formatINR(creditDue)} turant reverse ho jayega.',
+                            style: GoogleFonts.inter(fontSize: 11.5, fontWeight: FontWeight.w600, color: const Color(0xFF991B1B)),
+                          ),
+                        ),
+                      ],
                     ),
-                  );
-                }
-              }
-            },
-            icon: const Icon(Icons.replay_rounded, size: 16, color: Colors.white),
-            label: Text('Confirm 1-Tap Return', style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w800, color: Colors.white)),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFFDC2626),
-              elevation: 0,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  ),
+                ] else ...[
+                  Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFFFFBEB),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: const Color(0xFFFDE68A)),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.payments_outlined, size: 18, color: Color(0xFFD97706)),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            'Customer ko ${MoneyFormatter.formatINR(sale.totalAmountPaise)} (${sale.paymentMethod.toUpperCase()}) refund karein.',
+                            style: GoogleFonts.inter(fontSize: 11.5, fontWeight: FontWeight.w600, color: const Color(0xFF92400E)),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+                const SizedBox(height: 14),
+
+                // PIN Input field
+                Text(
+                  'ENTER OWNER / MANAGER PIN *',
+                  style: GoogleFonts.inter(fontSize: 10.5, fontWeight: FontWeight.w800, color: const Color(0xFF475569), letterSpacing: 0.5),
+                ),
+                const SizedBox(height: 6),
+                TextField(
+                  controller: pinController,
+                  keyboardType: TextInputType.number,
+                  obscureText: true,
+                  maxLength: 4,
+                  textAlign: TextAlign.center,
+                  style: GoogleFonts.outfit(fontSize: 22, fontWeight: FontWeight.w800, letterSpacing: 8),
+                  decoration: InputDecoration(
+                    hintText: '••••',
+                    hintStyle: GoogleFonts.outfit(fontSize: 22, color: const Color(0xFF94A3B8), letterSpacing: 8),
+                    counterText: '',
+                    errorText: pinError,
+                    contentPadding: const EdgeInsets.symmetric(vertical: 10, horizontal: 16),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: const BorderSide(color: Color(0xFFDC2626), width: 1.8),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  '🔒 Default PIN: 1234 • Action will be logged to Audit Trail',
+                  style: GoogleFonts.inter(fontSize: 10.5, color: const Color(0xFF64748B)),
+                ),
+              ],
             ),
           ),
-        ],
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: Text('Cancel', style: GoogleFonts.inter(fontWeight: FontWeight.w600, color: const Color(0xFF64748B))),
+            ),
+            ElevatedButton.icon(
+              onPressed: () async {
+                final enteredPin = pinController.text.trim();
+                // Validate PIN (Default 1234 or 0000)
+                if (enteredPin.length < 4) {
+                  setDialogState(() => pinError = 'Enter 4-digit PIN (Default: 1234)');
+                  HapticFeedback.heavyImpact();
+                  return;
+                }
+                if (enteredPin != '1234' && enteredPin != '0000') {
+                  setDialogState(() => pinError = 'Wrong PIN! Default Master PIN is 1234');
+                  HapticFeedback.heavyImpact();
+                  return;
+                }
+
+                Navigator.pop(ctx);
+                HapticFeedback.heavyImpact();
+
+                try {
+                  // 1. Record in Security Audit Logs
+                  await LocalDatabase.instance.logAuditAction(
+                    action: 'SALES_RETURN_REFUND',
+                    details: 'Invoice #${sale.invoiceNumber} returned (${sale.items.length} items). Reason: Customer Refund/Return.',
+                    amountPaise: sale.totalAmountPaise,
+                    userPin: enteredPin,
+                  );
+
+                  // 2. Process Sales Return
+                  await LocalDatabase.instance.processSalesReturn(sale: sale);
+
+                  await NativeNotificationService.showNotification(
+                    title: '↩️ Sales Return Done: #${sale.invoiceNumber}',
+                    body: 'Stock restored to inventory & ${isUdhar ? "Udhar reversed" : "Refund recorded"}.',
+                  );
+
+                  if (context.mounted) {
+                    Navigator.pop(context);
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Row(
+                          children: [
+                            const Icon(Icons.check_circle_rounded, color: Colors.white, size: 20),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                '✓ Invoice #${sale.invoiceNumber} returned! Stock restocked & audit log saved.',
+                                style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700),
+                              ),
+                            ),
+                          ],
+                        ),
+                        backgroundColor: const Color(0xFF059669),
+                        behavior: SnackBarBehavior.floating,
+                        duration: const Duration(seconds: 3),
+                      ),
+                    );
+                  }
+                  onVoidOrRefund?.call();
+                } catch (e) {
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text('Return error: $e'),
+                        backgroundColor: const Color(0xFFDC2626),
+                      ),
+                    );
+                  }
+                }
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFFDC2626),
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              ),
+              icon: const Icon(Icons.lock_open_rounded, size: 16),
+              label: Text('Authorize & Return', style: GoogleFonts.inter(fontWeight: FontWeight.w700)),
+            ),
+          ],
+        ),
       ),
     );
   }

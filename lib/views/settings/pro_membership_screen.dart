@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../core/database/local_database.dart';
 import '../../models/models.dart';
+import '../../services/firestore_sync_service.dart';
 import '../../services/razorpay_service.dart';
 
 class ProMembershipScreen extends StatefulWidget {
@@ -93,6 +94,13 @@ class _ProMembershipScreenState extends State<ProMembershipScreen> {
   void initState() {
     super.initState();
     _loadStoreProfile();
+    FirestoreSyncService.isProNotifier.addListener(_loadStoreProfile);
+  }
+
+  @override
+  void dispose() {
+    FirestoreSyncService.isProNotifier.removeListener(_loadStoreProfile);
+    super.dispose();
   }
 
   Future<void> _loadStoreProfile() async {
@@ -329,6 +337,12 @@ class _ProMembershipScreenState extends State<ProMembershipScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // ACTIVE PRO BANNER (Displayed if user is a verified Pro Member)
+            if (_profile.isProEffective) ...[
+              _buildActiveProBanner(),
+              const SizedBox(height: 16),
+            ],
+
             // 1. HERO FINTECH CARD
             _buildHeroFintechCard(priceStr, billingCycle, monthlyBreakdown),
             const SizedBox(height: 16),
@@ -1118,10 +1132,103 @@ class _ProMembershipScreenState extends State<ProMembershipScreen> {
     );
   }
 
+  Widget _buildActiveProBanner() {
+    final expiryFormatted = _profile.proExpiry.length >= 10
+        ? _profile.proExpiry.substring(0, 10)
+        : 'Lifetime Active';
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [Color(0xFF065F46), Color(0xFF047857), Color(0xFF059669)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFF10B981).withValues(alpha: 0.35),
+            blurRadius: 16,
+            offset: const Offset(0, 6),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4.5),
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.2),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: Colors.white.withValues(alpha: 0.3)),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.verified_rounded, size: 14, color: Colors.white),
+                    const SizedBox(width: 5),
+                    Text(
+                      'ACTIVE PRO SUITE',
+                      style: GoogleFonts.plusJakartaSans(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w900,
+                        letterSpacing: 0.6,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3.5),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF34D399),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(
+                  '● ACTIVATED',
+                  style: GoogleFonts.jetBrainsMono(
+                    fontSize: 9.5,
+                    fontWeight: FontWeight.w900,
+                    color: const Color(0xFF064E3B),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Text(
+            'You are a Verified Pro Member! 🎉',
+            style: GoogleFonts.plusJakartaSans(
+              fontSize: 18,
+              fontWeight: FontWeight.w900,
+              color: Colors.white,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Your ${_profile.proPlan.toUpperCase()} plan is fully active ($expiryFormatted). All 16 retail speed, printer, WhatsApp CRM and cloud sync tools are unlocked.',
+            style: GoogleFonts.inter(
+              fontSize: 12,
+              color: const Color(0xFFD1FAE5),
+              height: 1.35,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   // =========================================================================
   // 9. STICKY BOTTOM BAR
   // =========================================================================
   Widget _buildBottomStickyBar(String price, String cycle) {
+    final isPro = _profile.isProEffective;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       decoration: BoxDecoration(
@@ -1143,15 +1250,15 @@ class _ProMembershipScreenState extends State<ProMembershipScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  _profile.isPro ? 'Pro Active' : '$price $cycle',
+                  isPro ? '★ Pro Active' : '$price $cycle',
                   style: GoogleFonts.plusJakartaSans(
                     fontSize: 16.5,
                     fontWeight: FontWeight.w900,
-                    color: _profile.isPro ? const Color(0xFF059669) : const Color(0xFF0F172A),
+                    color: isPro ? const Color(0xFF059669) : const Color(0xFF0F172A),
                   ),
                 ),
                 Text(
-                  _profile.isPro
+                  isPro
                       ? (_profile.proExpiry.isNotEmpty ? 'Renews: ${_profile.proExpiry.substring(0, 10)}' : 'License Active')
                       : '100% Tax Deductible (GST)',
                   style: GoogleFonts.inter(fontSize: 10, color: const Color(0xFF059669), fontWeight: FontWeight.w700),
@@ -1163,7 +1270,7 @@ class _ProMembershipScreenState extends State<ProMembershipScreen> {
               child: ElevatedButton(
                 onPressed: _isLoading ? null : _handleSubscribe,
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: _profile.isPro ? const Color(0xFF059669) : const Color(0xFF0F172A),
+                  backgroundColor: isPro ? const Color(0xFF059669) : const Color(0xFF0F172A),
                   foregroundColor: Colors.white,
                   elevation: 0,
                   minimumSize: const Size.fromHeight(48),
@@ -1179,13 +1286,13 @@ class _ProMembershipScreenState extends State<ProMembershipScreen> {
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
                           Icon(
-                            _profile.isPro ? Icons.verified_rounded : Icons.stars_rounded,
-                            color: const Color(0xFFFBBF24),
+                            isPro ? Icons.verified_rounded : Icons.stars_rounded,
+                            color: isPro ? Colors.white : const Color(0xFFFBBF24),
                             size: 18,
                           ),
                           const SizedBox(width: 6),
                           Text(
-                            _profile.isPro ? 'Extend Pro via Razorpay' : 'Upgrade via Razorpay',
+                            isPro ? 'Extend Pro Validity' : 'Upgrade via Razorpay',
                             style: GoogleFonts.plusJakartaSans(fontSize: 13.5, fontWeight: FontWeight.w800),
                           ),
                         ],

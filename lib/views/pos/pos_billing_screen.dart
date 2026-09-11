@@ -255,7 +255,8 @@ class _PosBillingScreenState extends State<PosBillingScreen> {
       return;
     }
 
-    HapticFeedback.lightImpact();
+    // Subtle tactile mechanical "tick" feel on add to cart
+    HapticFeedback.selectionClick();
     setState(() {
       if (_cart.containsKey(product.id)) {
         _cart[product.id]!.quantity += 1;
@@ -266,7 +267,7 @@ class _PosBillingScreenState extends State<PosBillingScreen> {
   }
 
   void _updateItemQuantity(CartItemModel item, int newQty) {
-    HapticFeedback.lightImpact();
+    HapticFeedback.selectionClick();
     setState(() {
       if (newQty <= 0) {
         _cart.remove(item.product.id);

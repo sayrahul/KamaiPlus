@@ -88,12 +88,18 @@ The Bottom Navigation Bar has 5 items. The navigation contract is strictly defin
 * Table 12 HSN-wise Sales Summary with live search bar.
 * Has persistent `KamaiBottomNav()`.
 
-### 10. 🎨 Invoice Themes & Design (`lib/views/settings/invoice_themes_screen.dart`)
-* 7 circular brand color palettes.
-* 4 heading pills (*TAX INVOICE*, *RETAIL INVOICE*, *CASH MEMO*, *ESTIMATE / BILL*).
-* Display options checklist with PRO badges.
-* Platform Branding strip & editable Terms & Footer notes.
-* Live Interactive pixel-accurate A4 invoice paper card with QR code, items table, subtotal, and grand total.
+### 10. 🎨 Invoice Themes & Statutory GST Tax Invoices (`lib/views/settings/invoice_themes_screen.dart`, `MainActivity.java`, `InvoicePdfService.dart`)
+* Full Statutory Indian GST Tax Invoice architecture:
+  - Seller Header: Store Name, Address, Phone, Seller GSTIN, and State Code (e.g. `27 Maharashtra`).
+  - Heading: `TAX INVOICE`, Invoice #, Date, Payment Mode (`PAID - UPI / CASH`), and Place of Supply (POS).
+  - B2B Buyer Card: Customer Name, Phone, Address, Buyer GSTIN, and Place of Supply State Code.
+  - Items Table: `#`, `ITEM DESCRIPTION`, `HSN/SAC`, `QTY`, `UNIT RATE`, `TAXABLE VAL`, `GST (CGST+SGST)`, `TOTAL (₹)`.
+  - Amount in Words box (Indian Currency Words format offline).
+  - Statutory GST Tax Slab Breakup Table: HSN/SAC (Rate), Taxable Value, CGST Rate & Amt, SGST Rate & Amt, Total Tax.
+  - Bottom Two-Column Split: Dynamic UPI QR Card & Terms on left; Totals (Taxable, Discount, CGST, SGST, Round Off, Grand Total) & Authorised Signatory box on right.
+  - Multi-Page Pagination (`MainActivity.java`): Intelligent page calculation preventing any overflow; Page 1 gets header + items; Continuation pages get continuation header + items; Final page gets remaining items + summary tables, totals, UPI QR, and signatory.
+  - Official Kamai+ Platform Branding Strip on every page: `⚡ KAMAI+ POS` with app logo bitmap, "India's #1 Retail POS & GST Billing App • www.kamaiplus.com", and Page Number footer ("Page X of Y").
+  - Live Interactive A4 preview in `InvoiceThemesScreen` matches 1:1 with generated PDF.
 * Has persistent `KamaiBottomNav()`.
 
 ### 11. 🚚 Purchases & Restock Orders (`lib/views/purchases/purchases_screen.dart`)
@@ -987,3 +993,96 @@ Comprehensive enterprise-grade retail UX upgrade suite aligned with PhonePe Busi
         - `TransactionsScreen` (invoice row print action)
         - `SaleDetailModal` ("Print Receipt" button)
       - When Direct Print is enabled, tapping print immediately sends ESC/POS bytes or opens the Android print spooler without asking redundant questions.
+
+53. **Verified Pro Merchant Recognition, Emerald Active Indicators & 100% Real GST/CA Exporter (LOCKED):**
+    - **No Paywalls or Upgrade Modals for Pro Users:**
+      - If user is already a Pro subscriber (`_profile.isProEffective == true` or `FirestoreSyncService.isProNotifier.value == true`), `ProUpgradeModal` NEVER shows the ₹1,499 upgrade payment screen.
+      - Instead, renders a prestigious emerald green VIP card (`_buildAlreadyProDialog`):
+        - Active Plan Name (`ANNUAL VIP LICENSE` / `MONTHLY PRO`)
+        - Formatted Expiry Date via `DateFormat('dd MMMM yyyy')`
+        - 4 verified checklist features with green badges
+        - 1-Tap Direct WhatsApp VIP Support button
+        - Clean "Done" dismiss button.
+      - In `ProMembershipScreen`, displays `_buildActiveProBanner` at the top and replaces the "Upgrade via Razorpay" button with an active emerald green `[ ★ Pro Active (Extend Validity) ]` button.
+    - **Emerald Green Pro Badges Throughout App:**
+      - Replaced generic/locked amber indicators with vibrant emerald green (`Color(0xFF059669)` / `Color(0xFF10B981)`) wherever Pro status is represented:
+        - `PwaTopBar` (Home top bar): Reactive emerald gradient `[ ★ Pro Active ]` pill.
+        - `StoreProfileScreen` top bar: Reactive emerald gradient `[ ★ Pro Active ]` badge.
+        - `MenuScreen`: Menu items with `isLocked: true` (Barcode Studio, WhatsApp Growth, GSTR-1 & CA Pack) display emerald green `[ ★ PRO ]` badges when user is Pro and unlock immediately.
+        - `MenuScreen._buildProStatusBanner`: Glowing emerald gradient card with `👑 PRO STORE ACTIVE • All 16 Features Unlocked` and `[ Manage License ]` button.
+    - **100% Real & Accurate GST Reports & CA Tax Filing (`GstReportsScreen` & `GstExportService`):**
+      - Removed all hardcoded dummy data (Maggi, Edible Oil, dummy lists, fallback ₹237.50).
+      - Table 12 HSN Summary is dynamically aggregated from real SQLite sales and store products with integer paise precision (`GstExportService.generateHsnSummary`).
+      - Supports real period filtering (`This Month`, `Last Month`, `Q1`, `Q2`, `Q3`).
+      - Real B2B Wholesale Register and B2C Retail Invoices tables.
+      - Real compliance export generators:
+        1. **CA Excel (CSV):** Full GSTR-1 Table 12 HSN outward supplies, detailed invoices register, and integer paise tax computation breakdown.
+        2. **Tally Prime XML:** Standard Tally ERP 9 / Tally Prime XML sales vouchers import schema.
+        3. **GSTR-1 JSON:** Official GST Portal offline tool JSON format.
+      - **100% Real "Share with CA":** Dispatches real `.csv`, `.xml`, or `.json` files via `SharePlus` system chooser / WhatsApp with formatted compliance figures text and attached audit files.
+    - **Cloud Sync & Admin Pro Grant Protection:**
+      - Android app now queries Cloud Firestore *before* pushing local profile, preserving Admin-granted Pro status and updating local SQLite database.
+      - Global reactive notifier `FirestoreSyncService.isProNotifier` updates the entire UI in real time without requiring app restarts.
+
+54. **7 Retail Counter UX Micro-Enhancements (LOCKED):**
+    - **1. Subtle Haptic "Tick" on Add to Cart (Tactile Feel):**
+      - Integrated `HapticFeedback.selectionClick()` inside `PosBillingScreen._addToCart` and `_updateItemQuantity`.
+      - Provides crisp, subtle mechanical click feedback on physical barcode scan and product card tap.
+    - **2. English Relative Time Formatter (`DateTimeUtils`):**
+      - Created `lib/core/utils/datetime_utils.dart` converting timestamps into clean, professional English relative labels:
+        - "Just now", "X mins ago", "Today, h:mm a", "Yesterday", "X days ago", and for credit dues > 15 days "X days ago • Overdue".
+      - Replaced raw calendar strings across `KhataScreen` (customer ledger transactions, bills list) and `TransactionsScreen` (sale invoice cards).
+    - **3. 2-Modes WhatsApp Reminder (Friendly vs Formal):**
+      - Replaced single static message dispatch in `KhataScreen` with an interactive bottom sheet modal (`_showWhatsAppReminderSelector`):
+        - 🟢 **Friendly (Apnapan):** Warm, relationship-first Hindi greeting with store name, amount, UPI link, and polite counter settlement request ("Jab bhi aana ho, aaram se clear kar dena").
+        - 🔵 **Formal (Business / Official):** Structured, professional reminder for commercial & wholesale buyers ("Dear [Name], reminder regarding outstanding dues...").
+        - Automatically bundles UPI payment link (`upi://pay?pa=...`) and attached A4 PDF Khata Statement.
+    - **4. Khata Settlement Quick Chips (Aadha / Poora Paisa):**
+      - In `KhataScreen._showReceiveJamaModal`:
+        - Dynamically calculates outstanding dues and injects `Poora (₹X)` highlighted in emerald green (`isHighlighted: true`).
+        - If due > ₹1, offers `Aadha (₹Y)` 50% split chip.
+        - Provides standard round amount chips (`₹100`, `₹500`, `₹1,000`, `₹2,000`) with tactile haptic response.
+    - **5. Security PIN Authorization & Audit Logging for High-Impact Actions:**
+      - Added SQLite table `audit_logs` (`id`, `business_id`, `action`, `details`, `amount_paise`, `user_pin`, `created_at`) with indexed queries.
+      - In `SaleDetailModal` (Sales Return / Bill Refund), cashiers are prompted with a secure 4-digit PIN dialog (Default Master PIN: `1234`).
+      - Every authorized return is permanently recorded in `audit_logs` before restocking inventory and reversing customer dues.
+    - **6. Tabular Monospace Financial Figures:**
+      - Added `MoneyFormatter.tabularFeatures` (`FontFeature.tabularFigures()`) and `MoneyFormatter.tabularStyle()`.
+      - Applied to customer ledger balances, revenue summary banner, and invoice transaction lists so numerical digits align in fixed-width columns without jitter.
+55. **Store-Type Dynamic UI Adaptations (Vertical Awareness) (LOCKED):**
+    - **Single Source of Truth:** `BusinessVerticals` & `BusinessVerticalProfile` in `lib/core/constants/business_vertical_config.dart`.
+    - **Reactive Notifier:** `BusinessVerticals.activeBusinessTypeNotifier` drives live, instant reactive updates across all components without app reload.
+    - **5 Canonical Verticals:**
+      1. `grocery` (Kirana & Grocery) — Default: Products, Weight units, Barcode scan, Mandi restock.
+      2. `pharmacy` (Medical & Pharmacy): Medicines, Strips/Boxes, Batch No & Expiry tracking, Doctor Rx selector in checkout.
+      3. `clothing` (Apparel & Footwear): Apparel, Size & Color variants, Exchange policy invoice terms.
+      4. `hardware` (Hardware, Electrical & Sanitary): Items & Tools, Metric/Area units, Serial/IMEI & Warranty tracking.
+      5. `restaurant` (Restaurant, Cafe & Fast Food): Food Menu, Dishes, Plates/Portions, Dine-In / Parcel toggle (replaces barcode camera), Table selection in checkout, Barcode scanner & Barcode Studio hidden, Dish stock defaults to Unlimited.
+    - **Dynamic Bottom Navigation Bar (Tab 1):**
+      - `KamaiBottomNav` listens to `BusinessVerticals.activeBusinessTypeNotifier`.
+      - Automatically renders vertical label and icon (e.g. `Menu` + `restaurant_menu` for Restaurant, `Medicines` + `medication` for Pharmacy, `Apparel` + `checkroom` for Clothing, `Items` + `construction` for Hardware, `Product` + `inventory_2` for Grocery).
+    - **Products Master Screen (`ProductsScreen`):**
+      - Dynamic Header Card: Title (`Menu Items & Dishes`, `Medicines & Drugs`, etc.), subtitle description, and "+ Add" button (`+ Add Dish`, `+ Add Medicine`, etc.).
+      - Dynamic Search Bar: Placeholder (`Touch category or type Chai, Paneer...`, `Type medicine name...`, etc.).
+      - Barcode scanner button hidden for Restaurant.
+      - Batch/Expiry filter button shown only for Pharmacy.
+      - Empty state button adopts `vert.addProductButtonLabel`.
+    - **Add / Edit Product Modal (`AddProductModal`):**
+      - Modal header and subtitle adapt per vertical.
+      - Item name field dynamically labeled (`Dish / Food Item Name *`, `Medicine Name & Strength *`, etc.).
+      - Barcode field and scanner hidden for Restaurant dishes.
+      - Stock defaults to Unlimited (`_isUnlimitedStock = true`, 99999) for new Restaurant dishes.
+      - Wholesale bill scan banner hidden for Restaurant dish creation.
+    - **POS Billing & Checkout:**
+      - Dine-In / Parcel toggle dynamically replaces camera barcode button on POS top bar for Restaurant.
+      - Table selection chips appear in `PosCheckoutModal` for Restaurant.
+      - Doctor Rx selector chips appear in `PosCheckoutModal` for Pharmacy.
+      - Customer search hint in checkout adapts to vertical.
+      - Digital invoice WhatsApp share note dynamically uses vertical `invoiceFooterNote`.
+    - **Menu Screen Modal (`MenuScreen`):**
+      - Tab 1 catalog tile icon and title dynamically adapt (`Menu Items`, `Medicines & Stock`, etc.).
+      - Barcode Studio tile automatically hidden when vertical `showBarcode == false` (Restaurant).
+    - **Strict Data & Math Integrity:**
+      - Zero schema migrations needed (existing nullable SQLite columns utilized).
+      - Strict integer paise math maintained throughout (`1 INR = 100 paise`).
+

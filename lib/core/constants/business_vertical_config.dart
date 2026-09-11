@@ -1,4 +1,4 @@
-import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
 
 class VerticalFeatureToggles {
   final bool showBarcode;
@@ -70,6 +70,118 @@ class BusinessVerticalProfile {
     required this.purchasesMenuTitle,
     required this.purchasesMenuSubtitle,
   });
+
+  /// Dynamic bottom nav label for Tab 1
+  String get bottomNavLabel {
+    switch (id) {
+      case 'restaurant':
+        return 'Menu';
+      case 'pharmacy':
+        return 'Medicines';
+      case 'clothing':
+        return 'Apparel';
+      case 'hardware':
+        return 'Items';
+      default:
+        return 'Product';
+    }
+  }
+
+  /// Dynamic bottom nav active icon for Tab 1
+  IconData get navActiveIcon {
+    switch (id) {
+      case 'restaurant':
+        return Icons.restaurant_menu_rounded;
+      case 'pharmacy':
+        return Icons.medication_rounded;
+      case 'clothing':
+        return Icons.checkroom_rounded;
+      case 'hardware':
+        return Icons.construction_rounded;
+      default:
+        return Icons.inventory_2_rounded;
+    }
+  }
+
+  /// Dynamic bottom nav inactive icon for Tab 1
+  IconData get navInactiveIcon {
+    switch (id) {
+      case 'restaurant':
+        return Icons.restaurant_menu_outlined;
+      case 'pharmacy':
+        return Icons.medication_outlined;
+      case 'clothing':
+        return Icons.checkroom_outlined;
+      case 'hardware':
+        return Icons.construction_outlined;
+      default:
+        return Icons.inventory_2_outlined;
+    }
+  }
+
+  /// Master header title on Products screen
+  String get productsScreenTitle {
+    switch (id) {
+      case 'restaurant':
+        return 'Menu Items & Dishes';
+      case 'pharmacy':
+        return 'Medicines & Drugs';
+      case 'clothing':
+        return 'Apparel & Footwear';
+      case 'hardware':
+        return 'Hardware & Tools';
+      default:
+        return 'Products Master & Items';
+    }
+  }
+
+  /// "+ Add Product" button label
+  String get addProductButtonLabel {
+    switch (id) {
+      case 'restaurant':
+        return 'Add Dish';
+      case 'pharmacy':
+        return 'Add Medicine';
+      case 'clothing':
+        return 'Add Apparel';
+      case 'hardware':
+        return 'Add Item';
+      default:
+        return 'Add Product';
+    }
+  }
+
+  /// Field label for item name in add/edit modal
+  String get itemFieldLabel {
+    switch (id) {
+      case 'restaurant':
+        return 'Dish / Food Item Name *';
+      case 'pharmacy':
+        return 'Medicine Name & Strength *';
+      case 'clothing':
+        return 'Apparel / Style Name *';
+      case 'hardware':
+        return 'Item / Part Name *';
+      default:
+        return 'Product / Item Full Name *';
+    }
+  }
+
+  /// Subtitle description for products screen header
+  String getCatalogDescription(int count) {
+    switch (id) {
+      case 'restaurant':
+        return '$count registered food & beverage items with quick dining category filters';
+      case 'pharmacy':
+        return '$count registered medicines with strip packaging, batch expiry & barcodes';
+      case 'clothing':
+        return '$count registered apparel items with sizes, colors & price tags';
+      case 'hardware':
+        return '$count registered hardware & electrical items with warranty tracking';
+      default:
+        return '$count registered products with barcodes, batch expiry & instant stock tracking';
+    }
+  }
 }
 
 class BusinessVerticals {

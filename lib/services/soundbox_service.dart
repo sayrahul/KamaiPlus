@@ -1,9 +1,25 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
+class SoundboxEvent {
+  final int paise;
+  final String paymentMethod;
+  final DateTime timestamp;
+
+  SoundboxEvent({
+    required this.paise,
+    required this.paymentMethod,
+    DateTime? timestamp,
+  }) : timestamp = timestamp ?? DateTime.now();
+}
 
 class SoundboxService {
   static final SoundboxService instance = SoundboxService._init();
   static const MethodChannel _channel = MethodChannel('com.kamaiplus.pos/soundbox');
+
+  /// Real-time notifier for visual soundbox ripple wave UI banner
+  final ValueNotifier<SoundboxEvent?> activeAnnouncementNotifier = ValueNotifier<SoundboxEvent?>(null);
 
   bool _isAudioEnabled = true;
   bool get isAudioEnabled => _isAudioEnabled;
@@ -27,7 +43,14 @@ class SoundboxService {
     } catch (_) {}
   }
 
+  void dismissAnnouncement() {
+    activeAnnouncementNotifier.value = null;
+  }
+
   Future<void> announceHindiPayment(int paise, {String paymentMethod = 'UPI'}) async {
+    // Trigger visual wave ripple overlay immediately
+    activeAnnouncementNotifier.value = SoundboxEvent(paise: paise, paymentMethod: paymentMethod);
+
     if (!_isAudioEnabled) return;
     try {
       final int rupees = paise ~/ 100;
@@ -39,6 +62,9 @@ class SoundboxService {
   }
 
   Future<void> announceEnglishPayment(int paise, {String paymentMethod = 'UPI'}) async {
+    // Trigger visual wave ripple overlay immediately
+    activeAnnouncementNotifier.value = SoundboxEvent(paise: paise, paymentMethod: paymentMethod);
+
     if (!_isAudioEnabled) return;
     try {
       final int rupees = paise ~/ 100;

@@ -13,6 +13,7 @@ import 'services/share_target_service.dart';
 import 'services/home_widget_service.dart';
 import 'services/workmanager_sync_service.dart';
 import 'services/in_app_update_service.dart';
+import 'views/common/soundbox_wave_overlay.dart';
 import 'views/splash/splash_screen.dart';
 
 final GlobalKey<NavigatorState> rootNavigatorKey = GlobalKey<NavigatorState>();
@@ -91,6 +92,14 @@ class KamaiPlusApp extends StatelessWidget {
       darkTheme: AppTheme.darkTheme,
       themeMode: ThemeMode.light,
       home: const SplashScreen(),
+      builder: (context, child) {
+        return Stack(
+          children: [
+            ?child,
+            const SoundboxWaveOverlay(),
+          ],
+        );
+      },
     );
   }
 }

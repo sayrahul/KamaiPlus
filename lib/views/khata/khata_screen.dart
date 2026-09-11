@@ -7,6 +7,7 @@ import 'package:uuid/uuid.dart';
 import '../../core/constants/business_vertical_config.dart';
 import '../../core/database/local_database.dart';
 import '../../core/utils/app_validators.dart';
+import '../../core/utils/datetime_utils.dart';
 import '../../core/utils/money_formatter.dart';
 import '../../models/models.dart';
 import '../../services/firestore_sync_service.dart';
@@ -114,7 +115,191 @@ class _KhataScreenState extends State<KhataScreen> {
     }).toList();
   }
 
-  void _sendWhatsAppReminder(CustomerModel customer) async {
+  void _sendWhatsAppReminder(CustomerModel customer) {
+    _showWhatsAppReminderSelector(customer);
+  }
+
+  /// 2-Modes WhatsApp Reminder (Friendly vs Formal)
+  void _showWhatsAppReminderSelector(CustomerModel customer) {
+    HapticFeedback.selectionClick();
+    final int rupees = customer.currentBalancePaise ~/ 100;
+    final storeName = _storeProfile.storeName.isNotEmpty ? _storeProfile.storeName : 'KamaiPlus Store';
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (ctx) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Image.asset('assets/images/whatsapp_logo.png', width: 28, height: 28),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Send WhatsApp Reminder',
+                            style: GoogleFonts.outfit(fontSize: 18, fontWeight: FontWeight.w800, color: const Color(0xFF0F172A)),
+                          ),
+                          Text(
+                            'Customer: ${customer.name} • Due: ${MoneyFormatter.formatINR(customer.currentBalancePaise)}',
+                            style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF64748B)),
+                          ),
+                        ],
+                      ),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.close_rounded, color: Color(0xFF64748B)),
+                      onPressed: () => Navigator.pop(ctx),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  'CHOOSE REMINDER TONE',
+                  style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w800, color: const Color(0xFF475569), letterSpacing: 0.5),
+                ),
+                const SizedBox(height: 10),
+
+                // 1. Friendly Mode (Apnapan)
+                InkWell(
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    _dispatchWhatsAppReminder(customer, isFriendly: true);
+                  },
+                  borderRadius: BorderRadius.circular(16),
+                  child: Container(
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFECFDF5),
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: const Color(0xFFA7F3D0), width: 1.4),
+                    ),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF10B981),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: const Icon(Icons.favorite_rounded, color: Colors.white, size: 20),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  Text(
+                                    'Friendly (Apnapan)',
+                                    style: GoogleFonts.outfit(fontSize: 15, fontWeight: FontWeight.w800, color: const Color(0xFF065F46)),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
+                                    decoration: BoxDecoration(
+                                      color: const Color(0xFF059669),
+                                      borderRadius: BorderRadius.circular(6),
+                                    ),
+                                    child: Text(
+                                      'Recommended',
+                                      style: GoogleFonts.inter(fontSize: 9.5, fontWeight: FontWeight.w700, color: Colors.white),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                '"Namaste ${customer.name} ji! 🙏 $storeName par ₹$rupees ka hisaab hai. Jab bhi aana ho, aaram se clear kar dena."',
+                                style: GoogleFonts.inter(fontSize: 11.5, color: const Color(0xFF047857), fontStyle: FontStyle.italic),
+                              ),
+                              const SizedBox(height: 6),
+                              Text(
+                                '• Polite & relationship-first for regular neighborhood customers',
+                                style: GoogleFonts.inter(fontSize: 10.5, color: const Color(0xFF059669), fontWeight: FontWeight.w600),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 12),
+
+                // 2. Formal Mode (Business / Official)
+                InkWell(
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    _dispatchWhatsAppReminder(customer, isFriendly: false);
+                  },
+                  borderRadius: BorderRadius.circular(16),
+                  child: Container(
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF8FAFC),
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: const Color(0xFFCBD5E1), width: 1.4),
+                    ),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF334155),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: const Icon(Icons.business_center_rounded, color: Colors.white, size: 20),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Formal (Official / Business)',
+                                style: GoogleFonts.outfit(fontSize: 15, fontWeight: FontWeight.w800, color: const Color(0xFF0F172A)),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                '"Dear ${customer.name}, reminder regarding outstanding dues of ₹$rupees at $storeName. Kindly settle via counter or UPI."',
+                                style: GoogleFonts.inter(fontSize: 11.5, color: const Color(0xFF475569), fontStyle: FontStyle.italic),
+                              ),
+                              const SizedBox(height: 6),
+                              Text(
+                                '• Professional & structured for commercial, wholesale, or corporate clients',
+                                style: GoogleFonts.inter(fontSize: 10.5, color: const Color(0xFF64748B), fontWeight: FontWeight.w600),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  void _dispatchWhatsAppReminder(CustomerModel customer, {required bool isFriendly}) async {
     HapticFeedback.lightImpact();
     final int rupees = customer.currentBalancePaise ~/ 100;
     final totalRupeesStr = (customer.currentBalancePaise / 100.0).toStringAsFixed(2);
@@ -123,9 +308,16 @@ class _KhataScreenState extends State<KhataScreen> {
     final upiPayLink = upiId.isNotEmpty ? 'upi://pay?pa=$upiId&pn=${Uri.encodeComponent(storeName)}&am=$totalRupeesStr&cu=INR' : '';
 
     final buffer = StringBuffer();
-    buffer.writeln('Namaste ${customer.name} ji! 🙏\n');
-    buffer.writeln('$storeName par aapka baki hisaab ₹$rupees hai.');
-    buffer.writeln('Kripya samay par chukta karein.\n');
+    if (isFriendly) {
+      buffer.writeln('Namaste ${customer.name} ji! 🙏\n');
+      buffer.writeln('$storeName par aapka baki hisaab ₹$rupees hai.');
+      buffer.writeln('Jab bhi counter ki taraf aana ho, aaram se clear kar dena.\n');
+    } else {
+      buffer.writeln('Dear ${customer.name},\n');
+      buffer.writeln('This is a gentle payment reminder regarding your outstanding balance of ₹$rupees at $storeName.');
+      buffer.writeln('Kindly clear the dues at your earliest convenience via cash counter or instant UPI.\n');
+    }
+
     if (upiPayLink.isNotEmpty) {
       buffer.writeln('📲 *Instant UPI Pay:* $upiPayLink');
       buffer.writeln('📌 UPI ID: $upiId\n');
@@ -799,7 +991,7 @@ class _KhataScreenState extends State<KhataScreen> {
                             : hasAdvance
                                 ? const Color(0xFF059669)
                                 : const Color(0xFF475569),
-                      ),
+                      ).copyWith(fontFeatures: MoneyFormatter.tabularFeatures),
                     ),
                     const SizedBox(height: 2),
                     Container(
@@ -1372,7 +1564,7 @@ class _KhataScreenState extends State<KhataScreen> {
                   fontSize: 17,
                   fontWeight: FontWeight.w900,
                   color: isUdhar ? const Color(0xFFDC2626) : const Color(0xFF059669),
-                ),
+                ).copyWith(fontFeatures: MoneyFormatter.tabularFeatures),
               ),
             ],
           ),
@@ -1432,14 +1624,25 @@ class _KhataScreenState extends State<KhataScreen> {
           ],
           const SizedBox(height: 8),
 
-          // Date & Time
+          // Date & Time (English Relative Time)
           Row(
             children: [
-              const Icon(Icons.calendar_today_outlined, size: 12, color: Color(0xFF94A3B8)),
+              const Icon(Icons.access_time_rounded, size: 12, color: Color(0xFF94A3B8)),
               const SizedBox(width: 4),
               Text(
-                dateStr,
-                style: GoogleFonts.inter(fontSize: 11, color: const Color(0xFF64748B)),
+                DateTimeUtils.formatRelativeTime(tx.createdAt, isCredit: isUdhar),
+                style: GoogleFonts.inter(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                  color: isUdhar && DateTime.now().difference(tx.createdAt).inDays >= 15
+                      ? const Color(0xFFDC2626)
+                      : const Color(0xFF64748B),
+                ),
+              ),
+              const SizedBox(width: 6),
+              Text(
+                '• $dateStr',
+                style: GoogleFonts.inter(fontSize: 10, color: const Color(0xFF94A3B8)),
               ),
             ],
           ),
@@ -1457,7 +1660,7 @@ class _KhataScreenState extends State<KhataScreen> {
                   fontSize: 11.5,
                   fontWeight: FontWeight.w600,
                   color: const Color(0xFF475569),
-                ),
+                ).copyWith(fontFeatures: MoneyFormatter.tabularFeatures),
               ),
               Row(
                 children: [
@@ -1785,14 +1988,25 @@ class _KhataScreenState extends State<KhataScreen> {
           ),
           const SizedBox(height: 6),
 
-          // Date
+          // Date (English Relative Time)
           Row(
             children: [
-              const Icon(Icons.calendar_today_outlined, size: 12, color: Color(0xFF94A3B8)),
+              const Icon(Icons.access_time_rounded, size: 12, color: Color(0xFF94A3B8)),
               const SizedBox(width: 4),
               Text(
-                dateStr,
-                style: GoogleFonts.inter(fontSize: 11, color: const Color(0xFF64748B)),
+                DateTimeUtils.formatRelativeTime(bill.createdAt, isCredit: !isSettled),
+                style: GoogleFonts.inter(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                  color: !isSettled && DateTime.now().difference(bill.createdAt).inDays >= 15
+                      ? const Color(0xFFDC2626)
+                      : const Color(0xFF64748B),
+                ),
+              ),
+              const SizedBox(width: 6),
+              Text(
+                '• $dateStr',
+                style: GoogleFonts.inter(fontSize: 10, color: const Color(0xFF94A3B8)),
               ),
             ],
           ),
@@ -1841,7 +2055,11 @@ class _KhataScreenState extends State<KhataScreen> {
                   ),
                   Text(
                     MoneyFormatter.formatINR(bill.totalAmountPaise),
-                    style: GoogleFonts.outfit(fontSize: 15, fontWeight: FontWeight.w800, color: const Color(0xFF0F172A)),
+                    style: GoogleFonts.outfit(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w800,
+                      color: const Color(0xFF0F172A),
+                    ).copyWith(fontFeatures: MoneyFormatter.tabularFeatures),
                   ),
                 ],
               ),
@@ -1858,7 +2076,7 @@ class _KhataScreenState extends State<KhataScreen> {
                       fontSize: 16,
                       fontWeight: FontWeight.w900,
                       color: isSettled ? const Color(0xFF059669) : const Color(0xFFDC2626),
-                    ),
+                    ).copyWith(fontFeatures: MoneyFormatter.tabularFeatures),
                   ),
                 ],
               ),
@@ -2345,13 +2563,27 @@ class _KhataScreenState extends State<KhataScreen> {
                   ),
                   const SizedBox(height: 10),
 
-                  // Quick Tender Chips
+                  // Quick Tender Chips (Poora / Aadha Paisa)
                   SingleChildScrollView(
                     scrollDirection: Axis.horizontal,
                     child: Row(
                       children: [
-                        if (defaultRupees > 0)
-                          _buildQuickChip('Full: ₹$defaultRupees', defaultRupees.toString(), amountCtrl, setModalState),
+                        if (defaultRupees > 0) ...[
+                          _buildQuickChip(
+                            'Poora (₹$defaultRupees)',
+                            defaultRupees.toString(),
+                            amountCtrl,
+                            setModalState,
+                            isHighlighted: true,
+                          ),
+                          if (defaultRupees > 1)
+                            _buildQuickChip(
+                              'Aadha (₹${(defaultRupees / 2).round()})',
+                              ((defaultRupees / 2).round()).toString(),
+                              amountCtrl,
+                              setModalState,
+                            ),
+                        ],
                         _buildQuickChip('₹100', '100', amountCtrl, setModalState),
                         _buildQuickChip('₹500', '500', amountCtrl, setModalState),
                         _buildQuickChip('₹1,000', '1000', amountCtrl, setModalState),
@@ -2604,13 +2836,29 @@ class _KhataScreenState extends State<KhataScreen> {
   );
 }
 
-  Widget _buildQuickChip(String label, String value, TextEditingController ctrl, StateSetter setModalState) {
+  Widget _buildQuickChip(
+    String label,
+    String value,
+    TextEditingController ctrl,
+    StateSetter setModalState, {
+    bool isHighlighted = false,
+  }) {
     return Padding(
       padding: const EdgeInsets.only(right: 6),
       child: ActionChip(
-        label: Text(label, style: GoogleFonts.outfit(fontSize: 11.5, fontWeight: FontWeight.w700, color: const Color(0xFF334155))),
-        backgroundColor: const Color(0xFFF1F5F9),
-        side: const BorderSide(color: Color(0xFFCBD5E1)),
+        label: Text(
+          label,
+          style: GoogleFonts.outfit(
+            fontSize: 11.5,
+            fontWeight: FontWeight.w800,
+            color: isHighlighted ? const Color(0xFF065F46) : const Color(0xFF334155),
+          ),
+        ),
+        backgroundColor: isHighlighted ? const Color(0xFFECFDF5) : const Color(0xFFF1F5F9),
+        side: BorderSide(
+          color: isHighlighted ? const Color(0xFF059669) : const Color(0xFFCBD5E1),
+          width: isHighlighted ? 1.4 : 1.0,
+        ),
         onPressed: () {
           HapticFeedback.selectionClick();
           setModalState(() => ctrl.text = value);

@@ -373,6 +373,8 @@ class CustomerModel {
   final String name;
   final String phone;
   final String? address;
+  final String? gstin;
+  final String? stateCode;
   final int currentBalancePaise; // Positive = customer owes money (Udhar)
   final int creditLimitPaise;
   final String syncStatus;
@@ -384,6 +386,8 @@ class CustomerModel {
     required this.name,
     required this.phone,
     this.address,
+    this.gstin,
+    this.stateCode,
     this.currentBalancePaise = 0,
     this.creditLimitPaise = 500000, // Default ₹5,000 limit
     this.syncStatus = 'synced',
@@ -396,6 +400,8 @@ class CustomerModel {
     'name': name,
     'phone': phone,
     'address': address,
+    'gstin': gstin,
+    'state_code': stateCode,
     'current_balance_paise': currentBalancePaise,
     'credit_limit_paise': creditLimitPaise,
     'sync_status': syncStatus,
@@ -408,6 +414,8 @@ class CustomerModel {
     name: map['name'] ?? '',
     phone: map['phone'] ?? '',
     address: map['address'],
+    gstin: map['gstin'],
+    stateCode: map['state_code'],
     currentBalancePaise: map['current_balance_paise'] ?? 0,
     creditLimitPaise: map['credit_limit_paise'] ?? 500000,
     syncStatus: map['sync_status'] ?? 'pending',
@@ -418,6 +426,8 @@ class CustomerModel {
     String? name,
     String? phone,
     String? address,
+    String? gstin,
+    String? stateCode,
     int? currentBalancePaise,
     int? creditLimitPaise,
     String? syncStatus,
@@ -428,6 +438,8 @@ class CustomerModel {
     name: name ?? this.name,
     phone: phone ?? this.phone,
     address: address ?? this.address,
+    gstin: gstin ?? this.gstin,
+    stateCode: stateCode ?? this.stateCode,
     currentBalancePaise: currentBalancePaise ?? this.currentBalancePaise,
     creditLimitPaise: creditLimitPaise ?? this.creditLimitPaise,
     syncStatus: syncStatus ?? this.syncStatus,
@@ -530,6 +542,8 @@ class SaleModel {
   final String? customerId;
   final String? customerName;
   final String? customerPhone;
+  final String? customerGstin;
+  final String? placeOfSupply;
   final String? doctorName;
   final String? tableNumber;
   final int subtotalPaise;
@@ -552,6 +566,8 @@ class SaleModel {
     this.customerId,
     this.customerName,
     this.customerPhone,
+    this.customerGstin,
+    this.placeOfSupply,
     this.doctorName,
     this.tableNumber,
     required this.subtotalPaise,
@@ -575,6 +591,8 @@ class SaleModel {
     'customer_id': customerId,
     'customer_name': customerName,
     'customer_phone': customerPhone,
+    'customer_gstin': customerGstin,
+    'place_of_supply': placeOfSupply,
     'doctor_name': doctorName,
     'table_number': tableNumber,
     'subtotal_paise': subtotalPaise,
@@ -606,6 +624,8 @@ class SaleModel {
       customerId: map['customer_id'],
       customerName: map['customer_name'],
       customerPhone: map['customer_phone'],
+      customerGstin: map['customer_gstin'],
+      placeOfSupply: map['place_of_supply'],
       doctorName: map['doctor_name'],
       tableNumber: map['table_number'],
       subtotalPaise: map['subtotal_paise'] ?? 0,
@@ -787,6 +807,8 @@ class StoreProfileModel {
     this.proExpiry = '',
     this.razorpayPaymentId = '',
   });
+
+  factory StoreProfileModel.empty() => StoreProfileModel();
 
   /// True only when user has actively completed store setup
   bool get isConfigured =>

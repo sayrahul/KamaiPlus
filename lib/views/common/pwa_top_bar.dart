@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../core/database/local_database.dart';
 import '../../models/models.dart';
+import '../../services/firestore_sync_service.dart';
 import '../settings/store_profile_screen.dart';
 
 class PwaTopBar extends StatefulWidget implements PreferredSizeWidget {
@@ -90,45 +91,59 @@ class _PwaTopBarState extends State<PwaTopBar> {
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
               // 1. Pro Badge
-              Material(
-                color: Colors.transparent,
-                child: InkWell(
-                  onTap: () => ProUpgradeModal.show(context),
-                  borderRadius: BorderRadius.circular(8),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
-                    decoration: BoxDecoration(
-                      gradient: const LinearGradient(
-                        colors: [Color(0xFFFBBF24), Color(0xFFF59E0B)],
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                      ),
+              ValueListenableBuilder<bool>(
+                valueListenable: FirestoreSyncService.isProNotifier,
+                builder: (context, isProLive, _) {
+                  final isPro = _profile.isProEffective || isProLive;
+                  return Material(
+                    color: Colors.transparent,
+                    child: InkWell(
+                      onTap: () => ProUpgradeModal.show(context).then((_) => _loadProfile()),
                       borderRadius: BorderRadius.circular(8),
-                      boxShadow: [
-                        BoxShadow(
-                          color: const Color(0xFFF59E0B).withValues(alpha: 0.25),
-                          blurRadius: 4,
-                          offset: const Offset(0, 1.5),
-                        ),
-                      ],
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const Icon(Icons.stars_rounded, size: 13, color: Color(0xFF0F172A)),
-                        const SizedBox(width: 3),
-                        Text(
-                          'Pro',
-                          style: GoogleFonts.outfit(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w800,
-                            color: const Color(0xFF0F172A),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            colors: isPro
+                                ? const [Color(0xFF059669), Color(0xFF10B981)]
+                                : const [Color(0xFFFBBF24), Color(0xFFF59E0B)],
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
                           ),
+                          borderRadius: BorderRadius.circular(8),
+                          boxShadow: [
+                            BoxShadow(
+                              color: isPro
+                                  ? const Color(0xFF10B981).withValues(alpha: 0.3)
+                                  : const Color(0xFFF59E0B).withValues(alpha: 0.25),
+                              blurRadius: 4,
+                              offset: const Offset(0, 1.5),
+                            ),
+                          ],
                         ),
-                      ],
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              isPro ? Icons.verified_rounded : Icons.stars_rounded,
+                              size: 13,
+                              color: isPro ? Colors.white : const Color(0xFF0F172A),
+                            ),
+                            const SizedBox(width: 3.5),
+                            Text(
+                              isPro ? '★ Pro' : 'Pro',
+                              style: GoogleFonts.outfit(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w800,
+                                color: isPro ? Colors.white : const Color(0xFF0F172A),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
                     ),
-                  ),
-                ),
+                  );
+                },
               ),
               const SizedBox(width: 6),
 

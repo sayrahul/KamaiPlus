@@ -2,10 +2,13 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:intl/intl.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../core/database/local_database.dart';
 import '../../models/models.dart';
 import '../settings/pro_membership_screen.dart';
 import '../../services/razorpay_service.dart';
+import '../../services/firestore_sync_service.dart';
 
 class ProUpgradeModal extends StatefulWidget {
   const ProUpgradeModal({super.key});
@@ -89,6 +92,10 @@ class _ProUpgradeModalState extends State<ProUpgradeModal> {
 
   @override
   Widget build(BuildContext context) {
+    if (_profile.isProEffective || FirestoreSyncService.isProNotifier.value) {
+      return _buildAlreadyProDialog(context);
+    }
+
     final businessTitle = _profile.storeName.isNotEmpty
         ? _profile.storeName
         : (_profile.ownerName.isNotEmpty ? _profile.ownerName : 'Retail Merchant');
@@ -568,6 +575,316 @@ class _ProUpgradeModalState extends State<ProUpgradeModal> {
           ),
         ),
       ],
+    );
+  }
+
+  Widget _buildAlreadyProDialog(BuildContext context) {
+    final businessTitle = _profile.storeName.isNotEmpty
+        ? _profile.storeName
+        : (_profile.ownerName.isNotEmpty ? _profile.ownerName : 'Retail Merchant');
+
+    DateTime? expiryDate;
+    if (_profile.proExpiry.isNotEmpty) {
+      expiryDate = DateTime.tryParse(_profile.proExpiry);
+    }
+    final formattedExpiry = expiryDate != null
+        ? DateFormat('dd MMMM yyyy').format(expiryDate)
+        : 'Active / 1-Year License';
+
+    final planTitle = _profile.proPlan.isNotEmpty && _profile.proPlan != 'free'
+        ? 'KAMAI+ ${_profile.proPlan.toUpperCase()} TIER'
+        : 'KAMAI+ PRO BUSINESS TIER';
+
+    return Dialog(
+      backgroundColor: Colors.transparent,
+      insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 14, sigmaY: 14),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 420),
+          child: Container(
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                colors: [
+                  Color(0xF5064E3B), // Emerald 900 glass
+                  Color(0xF5022C22), // Deep Forest glass
+                  Color(0xF50F172A), // Slate 900
+                ],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+              borderRadius: BorderRadius.circular(28),
+              border: Border.all(
+                color: const Color(0xFF10B981).withValues(alpha: 0.35),
+                width: 1.5,
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: const Color(0xFF10B981).withValues(alpha: 0.25),
+                  blurRadius: 36,
+                  spreadRadius: -4,
+                  offset: const Offset(0, 12),
+                ),
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.5),
+                  blurRadius: 24,
+                  offset: const Offset(0, 8),
+                ),
+              ],
+            ),
+            clipBehavior: Clip.antiAlias,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Top Close Bar
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 16, 16, 0),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4.5),
+                        decoration: BoxDecoration(
+                          gradient: const LinearGradient(
+                            colors: [Color(0xFF10B981), Color(0xFF059669)],
+                          ),
+                          borderRadius: BorderRadius.circular(20),
+                          boxShadow: [
+                            BoxShadow(
+                              color: const Color(0xFF10B981).withValues(alpha: 0.4),
+                              blurRadius: 8,
+                              offset: const Offset(0, 2),
+                            ),
+                          ],
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(Icons.verified_rounded, size: 13, color: Colors.white),
+                            const SizedBox(width: 5),
+                            Text(
+                              'VERIFIED PRO',
+                              style: GoogleFonts.outfit(
+                                fontSize: 10.5,
+                                fontWeight: FontWeight.w900,
+                                letterSpacing: 0.8,
+                                color: Colors.white,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      Material(
+                        color: Colors.transparent,
+                        child: InkWell(
+                          onTap: () => Navigator.of(context).pop(),
+                          borderRadius: BorderRadius.circular(20),
+                          child: Container(
+                            width: 32,
+                            height: 32,
+                            decoration: BoxDecoration(
+                              color: Colors.white.withValues(alpha: 0.1),
+                              shape: BoxShape.circle,
+                              border: Border.all(color: Colors.white.withValues(alpha: 0.15)),
+                            ),
+                            child: const Icon(
+                              Icons.close_rounded,
+                              size: 18,
+                              color: Colors.white,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+
+                // Hero Center Badge
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 16, 20, 12),
+                  child: Column(
+                    children: [
+                      Container(
+                        width: 72,
+                        height: 72,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          gradient: const LinearGradient(
+                            colors: [Color(0xFF34D399), Color(0xFF059669)],
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                          ),
+                          boxShadow: [
+                            BoxShadow(
+                              color: const Color(0xFF10B981).withValues(alpha: 0.45),
+                              blurRadius: 20,
+                              offset: const Offset(0, 6),
+                            ),
+                          ],
+                        ),
+                        child: const Center(
+                          child: Icon(
+                            Icons.workspace_premium_rounded,
+                            size: 40,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 14),
+                      Text(
+                        'You are a Pro Member! 🎉',
+                        style: GoogleFonts.outfit(
+                          fontSize: 20,
+                          fontWeight: FontWeight.w900,
+                          color: Colors.white,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Aapka store $businessTitle full power par chal raha hai. Sabhi premium retail features 100% unlocked hain.',
+                        style: GoogleFonts.inter(
+                          fontSize: 12,
+                          color: const Color(0xFFCBD5E1),
+                          height: 1.4,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                    ],
+                  ),
+                ),
+
+                // License Card
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 20),
+                  child: Container(
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.07),
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: const Color(0xFF10B981).withValues(alpha: 0.25)),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text(
+                              planTitle,
+                              style: GoogleFonts.outfit(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w800,
+                                color: const Color(0xFF34D399),
+                              ),
+                            ),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF065F46),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Text(
+                                '● ACTIVE',
+                                style: GoogleFonts.inter(
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w800,
+                                  color: const Color(0xFF6EE7B7),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        Row(
+                          children: [
+                            const Icon(Icons.event_available_rounded, size: 14, color: Color(0xFF94A3B8)),
+                            const SizedBox(width: 6),
+                            Text(
+                              'Valid until: $formattedExpiry',
+                              style: GoogleFonts.inter(fontSize: 11.5, color: const Color(0xFFE2E8F0)),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+
+                const SizedBox(height: 14),
+
+                // 4 Unlocked Feature Badges Grid
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 20),
+                  child: Column(
+                    children: [
+                      _buildGlassFeature('Unlimited Counter Billing & Parallel Hold Tabs'),
+                      const SizedBox(height: 8),
+                      _buildGlassFeature('Bluetooth Thermal (58/80mm) & Auto Cash Drawer'),
+                      const SizedBox(height: 8),
+                      _buildGlassFeature('Official GSTR-1, Tally XML & Real CA Audit Pack'),
+                      const SizedBox(height: 8),
+                      _buildGlassFeature('Real-time Encrypted Cloud Sync & WhatsApp Ledger'),
+                    ],
+                  ),
+                ),
+
+                const SizedBox(height: 18),
+
+                // Action Buttons Row
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+                  child: Row(
+                    children: [
+                      // WhatsApp Priority Support
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          onPressed: () async {
+                            HapticFeedback.lightImpact();
+                            final uri = Uri.parse('https://wa.me/919595997711?text=Hello%20KamaiPlus%20Team%2C%20I%20am%20a%20Pro%20Subscriber%20for%20store%20$businessTitle');
+                            try {
+                              await launchUrl(uri, mode: LaunchMode.externalApplication);
+                            } catch (_) {}
+                          },
+                          icon: Image.asset('assets/images/whatsapp_logo.png', width: 16, height: 16),
+                          label: Text(
+                            'VIP Support',
+                            style: GoogleFonts.outfit(fontSize: 13, fontWeight: FontWeight.w700, color: Colors.white),
+                          ),
+                          style: OutlinedButton.styleFrom(
+                            side: BorderSide(color: Colors.white.withValues(alpha: 0.2)),
+                            padding: const EdgeInsets.symmetric(vertical: 13),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+
+                      // Primary Close Button
+                      Expanded(
+                        child: ElevatedButton(
+                          onPressed: () => Navigator.of(context).pop(),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFF10B981),
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(vertical: 13),
+                            elevation: 0,
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                          ),
+                          child: Text(
+                            'Done',
+                            style: GoogleFonts.outfit(fontSize: 14, fontWeight: FontWeight.w800),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
     );
   }
 }

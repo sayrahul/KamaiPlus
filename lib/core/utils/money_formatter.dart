@@ -1,8 +1,32 @@
+import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 /// Sacred Financial Invariant: Zero-Drift Integer Paise Math Engine
 /// All money is stored, computed, and passed in integer paise (1 INR = 100 paise).
 class MoneyFormatter {
+  /// FontFeatures for aligned financial columns in ledgers, cart, and invoices
+  static const List<FontFeature> tabularFeatures = [
+    FontFeature.tabularFigures(),
+  ];
+
+  /// Convenient helper to create tabular figures text style
+  static TextStyle tabularStyle({
+    double? fontSize,
+    FontWeight? fontWeight,
+    Color? color,
+    double? letterSpacing,
+    TextDecoration? decoration,
+  }) {
+    return TextStyle(
+      fontSize: fontSize,
+      fontWeight: fontWeight,
+      color: color,
+      letterSpacing: letterSpacing,
+      decoration: decoration,
+      fontFeatures: tabularFeatures,
+    );
+  }
+
   static final NumberFormat _inrFormatter = NumberFormat.currency(
     locale: 'en_IN',
     symbol: '₹',

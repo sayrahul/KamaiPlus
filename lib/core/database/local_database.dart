@@ -3,6 +3,7 @@ import 'package:path/path.dart' as p;
 import 'package:uuid/uuid.dart';
 import '../../models/models.dart';
 import '../utils/money_formatter.dart';
+import '../utils/gst_helper.dart';
 import '../constants/master_catalog_data.dart';
 import '../constants/default_products.dart';
 
@@ -199,7 +200,19 @@ class LocalDatabase {
       await db.execute('ALTER TABLE customers ADD COLUMN address TEXT');
     } catch (_) {}
     try {
+      await db.execute('ALTER TABLE customers ADD COLUMN gstin TEXT');
+    } catch (_) {}
+    try {
+      await db.execute('ALTER TABLE customers ADD COLUMN state_code TEXT');
+    } catch (_) {}
+    try {
       await db.execute('ALTER TABLE customers ADD COLUMN is_vip INTEGER DEFAULT 0');
+    } catch (_) {}
+    try {
+      await db.execute('ALTER TABLE sales ADD COLUMN customer_gstin TEXT');
+    } catch (_) {}
+    try {
+      await db.execute('ALTER TABLE sales ADD COLUMN place_of_supply TEXT');
     } catch (_) {}
     try {
       await db.execute('ALTER TABLE sales ADD COLUMN split_cash_paise INTEGER DEFAULT 0');
@@ -246,6 +259,20 @@ class LocalDatabase {
     await db.execute('CREATE INDEX IF NOT EXISTS idx_master_name ON master_catalog(name)');
     await db.execute('CREATE INDEX IF NOT EXISTS idx_master_category ON master_catalog(category)');
     await db.execute('CREATE INDEX IF NOT EXISTS idx_master_biz_type ON master_catalog(business_type)');
+
+    // Security Audit Log Table for High-Impact Actions (Refunds, Stock Overrides, Deletions)
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS audit_logs (
+        id TEXT PRIMARY KEY,
+        business_id TEXT,
+        action TEXT NOT NULL,
+        details TEXT NOT NULL,
+        amount_paise INTEGER DEFAULT 0,
+        user_pin TEXT,
+        created_at TEXT NOT NULL
+      )
+    ''');
+    await db.execute('CREATE INDEX IF NOT EXISTS idx_audit_created ON audit_logs(created_at)');
 
     await _seedMasterCatalogIfEmpty(db);
     await _backfillBusinessVerticals(db);
@@ -1027,6 +1054,8 @@ class LocalDatabase {
       customerId: customer?.id,
       customerName: customer?.name,
       customerPhone: customer?.phone,
+      customerGstin: customer?.gstin,
+      placeOfSupply: customer?.stateCode ?? (customer?.gstin != null ? GstHelper.getStateFromGstin(customer!.gstin) : null),
       doctorName: doctorName,
       tableNumber: tableNumber,
       subtotalPaise: subtotalPaise,
@@ -1796,5 +1825,42 @@ class LocalDatabase {
   Future<void> deleteDoctor(String id) async {
     final db = await instance.database;
     await db.delete('doctors', where: 'id = ?', whereArgs: [id]);
+  }
+
+  // --- SECURITY & AUDIT LOGS ---
+  /// Logs a critical security / store action (e.g. Sales Return, Stock Delta, Bill Deletion)
+  Future<void> logAuditAction({
+    required String action,
+    required String details,
+    int amountPaise = 0,
+    String? userPin,
+  }) async {
+    try {
+      final db = await instance.database;
+      final profile = await getStoreProfile();
+      await db.insert('audit_logs', {
+        'id': _uuid.v4(),
+        'business_id': profile.phone.isNotEmpty ? profile.phone : 'default_biz',
+        'action': action,
+        'details': details,
+        'amount_paise': amountPaise,
+        'user_pin': userPin ?? '',
+        'created_at': DateTime.now().toIso8601String(),
+      });
+    } catch (_) {}
+  }
+
+  /// Retrieves recent audit logs
+  Future<List<Map<String, dynamic>>> getAuditLogs({int limit = 100}) async {
+    try {
+      final db = await instance.database;
+      return await db.query(
+        'audit_logs',
+        orderBy: 'created_at DESC',
+        limit: limit,
+      );
+    } catch (_) {
+      return [];
+    }
   }
 }

@@ -14,6 +14,7 @@ import '../../services/app_printer_service.dart';
 import '../common/store_logo_avatar.dart';
 import '../common/in_app_notification.dart';
 import '../../core/utils/app_validators.dart';
+import '../../core/constants/business_vertical_config.dart';
 
 class SaleCompletedModal extends StatefulWidget {
   final SaleModel sale;
@@ -116,9 +117,10 @@ class _SaleCompletedModalState extends State<SaleCompletedModal> {
 
     final upiLine = upiPayLink.isNotEmpty ? '📲 *Instant UPI Pay / Receipt:* $upiPayLink\n' : '';
 
+    final vert = BusinessVerticals.resolve(BusinessVerticals.activeBusinessTypeNotifier.value);
     final message = '''
 Namaste ${widget.sale.customerName ?? 'Valued Customer'}! 🙏
-Thank you for shopping at *$_storeName*. Here is your digital tax invoice:
+Here is your digital tax invoice from *$_storeName*:
 
 🧾 *Invoice No:* #${widget.sale.invoiceNumber}
 📅 *Date:* $dateStr
@@ -129,7 +131,7 @@ $itemLines
 
 💰 *Total Amount:* *$amountStr*
 $upiLine
-Have a wonderful day! Visit us again soon.
+${vert.placeholders.invoiceFooterNote}
 ''';
 
     // 1. Generate the exact styled A4 PDF matching Invoice Themes preview

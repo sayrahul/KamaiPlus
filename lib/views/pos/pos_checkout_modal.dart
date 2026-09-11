@@ -1407,7 +1407,7 @@ class _PosCheckoutModalState extends State<PosCheckoutModal> {
                                       decoration: InputDecoration(
                                         hintText: isCustomerCompulsoryMissing
                                             ? 'Select or add customer for Credit (Udhar)...'
-                                            : 'Search or tap to choose customer...',
+                                            : BusinessVerticals.resolve(BusinessVerticals.activeBusinessTypeNotifier.value).placeholders.customerSearch,
                                         hintStyle: GoogleFonts.plusJakartaSans(
                                           fontSize: 12,
                                           color: isCustomerCompulsoryMissing ? const Color(0xFFEF4444) : const Color(0xFF94A3B8),

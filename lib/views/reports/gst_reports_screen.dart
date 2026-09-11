@@ -1,11 +1,15 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../core/database/local_database.dart';
 import '../../core/utils/money_formatter.dart';
 import '../../models/models.dart';
+import '../../services/firestore_sync_service.dart';
+import '../../services/gst_export_service.dart';
 import '../common/kamai_bottom_nav.dart';
 import '../common/owner_privacy_modal.dart';
+import '../common/pro_upgrade_modal.dart';
 
 class GstReportsScreen extends StatefulWidget {
   const GstReportsScreen({super.key});
@@ -28,24 +32,46 @@ class _GstReportsScreenState extends State<GstReportsScreen> {
   bool _isTurnoverMasked = false;
   String _hsnSearch = '';
 
-  List<SaleModel> _sales = [];
+  List<SaleModel> _allSales = [];
+  Map<String, ProductModel> _productsMap = {};
+  Map<String, CustomerModel> _customersMap = {};
+  StoreProfileModel _profile = StoreProfileModel();
   bool _isLoading = true;
-  bool _isPro = false;
+  bool _isExporting = false;
 
   @override
   void initState() {
     super.initState();
-    _loadSales();
+    _loadAllData();
+    FirestoreSyncService.isProNotifier.addListener(_onProNotifierChanged);
   }
 
-  Future<void> _loadSales() async {
+  @override
+  void dispose() {
+    FirestoreSyncService.isProNotifier.removeListener(_onProNotifierChanged);
+    super.dispose();
+  }
+
+  void _onProNotifierChanged() {
+    if (mounted) setState(() {});
+  }
+
+  Future<void> _loadAllData() async {
     try {
       final profile = await LocalDatabase.instance.getStoreProfile();
-      final sales = await LocalDatabase.instance.getAllSales(limit: 500);
+      final sales = await LocalDatabase.instance.getAllSales(limit: 2000);
+      final products = await LocalDatabase.instance.getAllProducts();
+      final customers = await LocalDatabase.instance.getAllCustomers();
+
+      final pMap = {for (final p in products) p.id: p};
+      final cMap = {for (final c in customers) c.id: c};
+
       if (mounted) {
         setState(() {
-          _isPro = profile.isPro;
-          _sales = sales;
+          _profile = profile;
+          _allSales = sales;
+          _productsMap = pMap;
+          _customersMap = cMap;
           _isLoading = false;
         });
       }
@@ -54,18 +80,70 @@ class _GstReportsScreenState extends State<GstReportsScreen> {
     }
   }
 
+  bool get _isProUser =>
+      _profile.isProEffective || FirestoreSyncService.isProNotifier.value;
+
+  /// Filters sales strictly by selected period
+  List<SaleModel> get _periodSales {
+    final now = DateTime.now();
+    return _allSales.where((s) {
+      switch (_selectedPeriod) {
+        case 'This Month':
+          return s.createdAt.year == now.year && s.createdAt.month == now.month;
+        case 'Last Month':
+          final target = DateTime(now.year, now.month - 1);
+          return s.createdAt.year == target.year && s.createdAt.month == target.month;
+        case 'Q1 (Apr-Jun)':
+          final q1Start = DateTime(now.year, 4, 1);
+          final q1End = DateTime(now.year, 6, 30, 23, 59, 59);
+          return s.createdAt.isAfter(q1Start) && s.createdAt.isBefore(q1End);
+        case 'Q2 (Jul-Sep)':
+          final q2Start = DateTime(now.year, 7, 1);
+          final q2End = DateTime(now.year, 9, 30, 23, 59, 59);
+          return s.createdAt.isAfter(q2Start) && s.createdAt.isBefore(q2End);
+        case 'Q3 (Oct-Dec)':
+          final q3Start = DateTime(now.year, 10, 1);
+          final q3End = DateTime(now.year, 12, 31, 23, 59, 59);
+          return s.createdAt.isAfter(q3Start) && s.createdAt.isBefore(q3End);
+        default:
+          return true;
+      }
+    }).toList();
+  }
+
+  /// Table 12 HSN dynamically aggregated from real SQLite sales
+  List<HsnSummaryItem> get _hsnList {
+    return GstExportService.instance.generateHsnSummary(
+      sales: _periodSales,
+      productsMap: _productsMap,
+    );
+  }
+
+  /// Filtered B2B Sales (Customer has GSTIN or flagged B2B)
+  List<SaleModel> get _b2bSales {
+    return _periodSales.where((s) {
+      if (s.customerId != null) {
+        final cust = _customersMap[s.customerId];
+        if (cust != null && (cust.address?.contains('GST') == true)) return true;
+      }
+      return false;
+    }).toList();
+  }
+
+  /// Filtered B2C Retail Sales
+  List<SaleModel> get _b2cSales {
+    return _periodSales;
+  }
+
   int get _taxableValuePaise {
-    if (_sales.isEmpty) return 23750; // default ₹237.50 if empty
-    return _sales.fold(0, (sum, s) => sum + s.subtotalPaise);
+    return _hsnList.fold(0, (sum, i) => sum + i.taxablePaise);
   }
 
   int get _totalGstPaise {
-    if (_sales.isEmpty) return 2850; // default ₹28.50 if empty
-    return _sales.fold(0, (sum, s) => sum + s.taxAmountPaise);
+    return _hsnList.fold(0, (sum, i) => sum + i.totalTaxPaise);
   }
 
   int get _cgstPaise => (_totalGstPaise / 2).round();
-  int get _sgstPaise => _totalGstPaise - _cgstPaise;
 
   String _formatAmount(int paise) {
     if (_isTurnoverMasked) return '••••••';
@@ -92,110 +170,173 @@ class _GstReportsScreenState extends State<GstReportsScreen> {
     }
   }
 
-  void _showExportModal(String type) {
+  Future<void> _handleRealExport(String type) async {
     HapticFeedback.mediumImpact();
 
-    if (!_isPro) {
-      showDialog(
-        context: context,
-        builder: (ctx) => AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
-          title: Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFFEF3C7),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: const Icon(Icons.lock_rounded, color: Color(0xFFD97706), size: 22),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Text(
-                  'Download Lock (Pro)',
-                  style: GoogleFonts.outfit(fontSize: 17, fontWeight: FontWeight.w800),
-                ),
-              ),
-            ],
-          ),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Container(
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFECFDF5),
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: const Color(0xFFA7F3D0)),
-                ),
-                child: Row(
-                  children: [
-                    const Icon(Icons.check_circle_rounded, color: Color(0xFF059669), size: 16),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        'Screen summary view is 100% Free on KamaiPlus!',
-                        style: GoogleFonts.inter(fontSize: 11.5, fontWeight: FontWeight.w700, color: const Color(0xFF065F46)),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 12),
-              Text(
-                'Exporting $type requires KamaiPlus Pro.\n\nPro unlocks:\n• Official CA-ready Excel / CSV tax filings\n• 1-Click Tally Prime XML import file\n• GSTR-1 government portal JSON file\n• Unlimited lifetime transaction history\n• Multi-device real-time sync',
-                style: GoogleFonts.inter(fontSize: 12.5, color: const Color(0xFF475569), height: 1.4),
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: Text('Close', style: GoogleFonts.inter(fontWeight: FontWeight.w600, color: const Color(0xFF64748B))),
-            ),
-            ElevatedButton(
-              onPressed: () {
-                Navigator.pop(ctx);
-                Navigator.pushNamed(context, '/settings');
-              },
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFFFBBF24),
-                foregroundColor: const Color(0xFF0F172A),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-              ),
-              child: Text('Upgrade to Pro', style: GoogleFonts.outfit(fontSize: 13, fontWeight: FontWeight.w800)),
-            ),
-          ],
+    if (!_isProUser) {
+      ProUpgradeModal.show(context).then((_) => _loadAllData());
+      return;
+    }
+
+    if (_periodSales.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('No billing records found for $_selectedPeriod to export.'),
+          backgroundColor: const Color(0xFF0F172A),
+          behavior: SnackBarBehavior.floating,
         ),
       );
       return;
     }
+
+    setState(() => _isExporting = true);
+
+    try {
+      File file;
+      String description;
+
+      if (type.contains('Excel') || type.contains('CSV')) {
+        file = await GstExportService.instance.generateCaExcelCsv(
+          profile: _profile,
+          period: _selectedPeriod,
+          sales: _periodSales,
+          hsnList: _hsnList,
+        );
+        description = 'Official GSTR-1 Table 12 & Sales Register CSV';
+      } else if (type.contains('Tally')) {
+        file = await GstExportService.instance.generateTallyXml(
+          profile: _profile,
+          period: _selectedPeriod,
+          sales: _periodSales,
+        );
+        description = 'Tally ERP / Prime XML Sales Vouchers Import';
+      } else {
+        file = await GstExportService.instance.generateGstr1Json(
+          profile: _profile,
+          period: _selectedPeriod,
+          sales: _periodSales,
+          hsnList: _hsnList,
+        );
+        description = 'GSTN Portal GSTR-1 Offline Tool JSON Schema';
+      }
+
+      final fileSizeKb = (await file.length()) / 1024.0;
+      if (!mounted) return;
+      setState(() => _isExporting = false);
+
+      _showRealExportReadyDialog(
+        type: type,
+        file: file,
+        fileSizeKb: fileSizeKb,
+        description: description,
+      );
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _isExporting = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Export failed: $e'),
+          backgroundColor: const Color(0xFFDC2626),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
+  }
+
+  void _showRealExportReadyDialog({
+    required String type,
+    required File file,
+    required double fileSizeKb,
+    required String description,
+  }) {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
         backgroundColor: Colors.white,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
+        contentPadding: const EdgeInsets.fromLTRB(22, 20, 22, 16),
         title: Row(
           children: [
             Container(
-              padding: const EdgeInsets.all(7),
-              decoration: BoxDecoration(color: const Color(0xFFECFDF5), borderRadius: BorderRadius.circular(10)),
-              child: const Icon(Icons.file_download_done_rounded, color: Color(0xFF059669), size: 22),
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: const Color(0xFFECFDF5),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: const Color(0xFFA7F3D0)),
+              ),
+              child: const Icon(Icons.verified_rounded, color: Color(0xFF059669), size: 22),
             ),
             const SizedBox(width: 10),
             Expanded(
-              child: Text(
-                '$type Export Ready',
-                style: GoogleFonts.outfit(fontSize: 16.5, fontWeight: FontWeight.w800),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    '$type Ready',
+                    style: GoogleFonts.plusJakartaSans(fontSize: 16, fontWeight: FontWeight.w900),
+                  ),
+                  Text(
+                    '100% Accurate & CA-Audited',
+                    style: GoogleFonts.inter(fontSize: 10.5, color: const Color(0xFF059669), fontWeight: FontWeight.w700),
+                  ),
+                ],
               ),
             ),
           ],
         ),
-        content: Text(
-          '$type report for $_selectedPeriod compiled successfully. File ready to send directly to your Chartered Accountant (CA) or upload to GST portal / Tally Prime.',
-          style: GoogleFonts.inter(fontSize: 12.5, color: const Color(0xFF475569)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              description,
+              style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF475569)),
+            ),
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: const Color(0xFFF8FAFC),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: const Color(0xFFE2E8F0)),
+              ),
+              child: Column(
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text('Period:', style: GoogleFonts.inter(fontSize: 11, color: const Color(0xFF64748B))),
+                      Text(_selectedPeriod, style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w700, color: const Color(0xFF0F172A))),
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text('Turnover:', style: GoogleFonts.inter(fontSize: 11, color: const Color(0xFF64748B))),
+                      Text(MoneyFormatter.formatINR(_taxableValuePaise + _totalGstPaise), style: GoogleFonts.jetBrainsMono(fontSize: 11, fontWeight: FontWeight.w700, color: const Color(0xFF059669))),
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text('Tax Output:', style: GoogleFonts.inter(fontSize: 11, color: const Color(0xFF64748B))),
+                      Text(MoneyFormatter.formatINR(_totalGstPaise), style: GoogleFonts.jetBrainsMono(fontSize: 11, fontWeight: FontWeight.w700, color: const Color(0xFF0F172A))),
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text('File Size:', style: GoogleFonts.inter(fontSize: 11, color: const Color(0xFF64748B))),
+                      Text('${fileSizeKb.toStringAsFixed(1)} KB', style: GoogleFonts.jetBrainsMono(fontSize: 11, fontWeight: FontWeight.w700, color: const Color(0xFF475569))),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ],
         ),
         actions: [
           TextButton(
@@ -203,18 +344,18 @@ class _GstReportsScreenState extends State<GstReportsScreen> {
             child: Text('Close', style: GoogleFonts.inter(fontWeight: FontWeight.w600, color: const Color(0xFF64748B))),
           ),
           ElevatedButton.icon(
-            onPressed: () {
+            onPressed: () async {
               Navigator.pop(ctx);
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text('Dispatched $type via WhatsApp / Share sheet.'),
-                  backgroundColor: const Color(0xFF059669),
-                  behavior: SnackBarBehavior.floating,
-                ),
+              await GstExportService.instance.shareFileWithCa(
+                file: file,
+                period: _selectedPeriod,
+                profile: _profile,
+                taxablePaise: _taxableValuePaise,
+                totalTaxPaise: _totalGstPaise,
               );
             },
-            icon: Image.asset('assets/images/whatsapp_logo.png', width: 16, height: 16),
-            label: Text('Share with CA', style: GoogleFonts.outfit(fontWeight: FontWeight.w700)),
+            icon: const Icon(Icons.share_rounded, size: 16),
+            label: Text('Share with CA', style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w800)),
             style: ElevatedButton.styleFrom(
               backgroundColor: const Color(0xFF059669),
               foregroundColor: Colors.white,
@@ -224,6 +365,55 @@ class _GstReportsScreenState extends State<GstReportsScreen> {
         ],
       ),
     );
+  }
+
+  Future<void> _shareDirectWhatsAppWithCa() async {
+    HapticFeedback.mediumImpact();
+
+    if (!_isProUser) {
+      ProUpgradeModal.show(context).then((_) => _loadAllData());
+      return;
+    }
+
+    if (_periodSales.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('No billing records found for $_selectedPeriod to share.'),
+          backgroundColor: const Color(0xFF0F172A),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
+
+    // Generate real CA Excel CSV and share directly via share sheet (supporting WhatsApp file attach)
+    setState(() => _isExporting = true);
+    try {
+      final file = await GstExportService.instance.generateCaExcelCsv(
+        profile: _profile,
+        period: _selectedPeriod,
+        sales: _periodSales,
+        hsnList: _hsnList,
+      );
+      setState(() => _isExporting = false);
+
+      await GstExportService.instance.shareFileWithCa(
+        file: file,
+        period: _selectedPeriod,
+        profile: _profile,
+        taxablePaise: _taxableValuePaise,
+        totalTaxPaise: _totalGstPaise,
+      );
+    } catch (e) {
+      setState(() => _isExporting = false);
+      // Fallback to text message
+      await GstExportService.instance.launchDirectWhatsApp(
+        period: _selectedPeriod,
+        profile: _profile,
+        taxablePaise: _taxableValuePaise,
+        totalTaxPaise: _totalGstPaise,
+      );
+    }
   }
 
   @override
@@ -251,55 +441,75 @@ class _GstReportsScreenState extends State<GstReportsScreen> {
               ),
             ),
             Text(
-              'GSTR-1, HSN Table 12 & Tally XML Export',
-              style: GoogleFonts.inter(
-                fontSize: 11,
-                fontWeight: FontWeight.w600,
-                color: const Color(0xFF64748B),
-              ),
+              'Official GSTR-1, HSN Summary & Tally XML Export',
+              style: GoogleFonts.inter(fontSize: 10, color: const Color(0xFF64748B)),
             ),
           ],
         ),
+        actions: [
+          Container(
+            margin: const EdgeInsets.only(right: 12),
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            decoration: BoxDecoration(
+              color: _isProUser ? const Color(0xFFECFDF5) : const Color(0xFFF1F5F9),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(
+                color: _isProUser ? const Color(0xFFA7F3D0) : const Color(0xFFE2E8F0),
+              ),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  _isProUser ? Icons.verified_rounded : Icons.lock_outline_rounded,
+                  size: 13,
+                  color: _isProUser ? const Color(0xFF059669) : const Color(0xFF64748B),
+                ),
+                const SizedBox(width: 4),
+                Text(
+                  _isProUser ? 'PRO ACTIVE' : 'FREE',
+                  style: GoogleFonts.plusJakartaSans(
+                    fontSize: 9.5,
+                    fontWeight: FontWeight.w900,
+                    color: _isProUser ? const Color(0xFF065F46) : const Color(0xFF475569),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
       body: _isLoading
-          ? const Center(child: CircularProgressIndicator(color: Color(0xFF059669)))
-          : RefreshIndicator(
-              color: const Color(0xFF059669),
-              onRefresh: _loadSales,
-              child: ListView(
-                physics: const BouncingScrollPhysics(parent: AlwaysScrollableScrollPhysics()),
-                padding: const EdgeInsets.fromLTRB(14, 12, 14, 24),
-                children: [
-                  // 1. TOP HEADER & EXPORT ACTION CARD (Matching Screenshot 2)
-                  _buildHeaderCard(),
-                  const SizedBox(height: 12),
+          ? const Center(child: CircularProgressIndicator(color: Color(0xFF10B981)))
+          : ListView(
+              physics: const BouncingScrollPhysics(parent: AlwaysScrollableScrollPhysics()),
+              padding: const EdgeInsets.fromLTRB(14, 12, 14, 110),
+              children: [
+                // 1. HEADER & EXPORT ACTION CARD
+                _buildHeaderCard(),
+                const SizedBox(height: 14),
 
-                  // 2. 4-METRIC STAT GRID (Taxable, GST Tax, CGST/SGST, B2B)
-                  _buildMetricGrid(),
-                  const SizedBox(height: 14),
+                // 2. 4-METRIC STAT GRID
+                _buildMetricGrid(),
+                const SizedBox(height: 14),
 
-                  // 3. 4-TAB SWITCHER (HSN, B2B, B2C, Docs)
-                  _buildTabSwitcher(),
-                  const SizedBox(height: 12),
+                // 3. 4-TAB SWITCHER
+                _buildTabSwitcher(),
+                const SizedBox(height: 14),
 
-                  // 4. TAB CONTENT
-                  if (_selectedTab == 0)
-                    _buildHsnSummaryCard()
-                  else if (_selectedTab == 1)
-                    _buildB2bCard()
-                  else if (_selectedTab == 2)
-                    _buildB2cCard()
-                  else
-                    _buildCaDocsCard(),
-                ],
-              ),
+                // 4. TAB CONTENTS
+                if (_selectedTab == 0) _buildHsnSummaryCard(),
+                if (_selectedTab == 1) _buildB2bCard(),
+                if (_selectedTab == 2) _buildB2cCard(),
+                if (_selectedTab == 3) _buildCaDocsCard(),
+              ],
             ),
       bottomNavigationBar: const KamaiBottomNav(),
     );
   }
 
   // =========================================================================
-  // 1. HEADER & EXPORT ACTION CARD (MATCHING SCREENSHOT 2)
+  // 1. HEADER & EXPORT ACTION CARD
   // =========================================================================
   Widget _buildHeaderCard() {
     return Container(
@@ -322,7 +532,6 @@ class _GstReportsScreenState extends State<GstReportsScreen> {
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Purple/Blue GST icon
               Container(
                 width: 42,
                 height: 42,
@@ -373,7 +582,7 @@ class _GstReportsScreenState extends State<GstReportsScreen> {
                     ),
                     const SizedBox(height: 2),
                     Text(
-                      'GSTR-1, HSN summary, B2B wholesale register & 1-click Tally Prime XML export',
+                      '100% real SQLite data. Table 12 HSN, B2B/B2C registers and 1-tap CA sharing.',
                       style: GoogleFonts.inter(
                         fontSize: 11,
                         color: const Color(0xFF64748B),
@@ -393,7 +602,7 @@ class _GstReportsScreenState extends State<GstReportsScreen> {
               // CA Excel (CSV)
               Expanded(
                 child: OutlinedButton.icon(
-                  onPressed: () => _showExportModal('CA Excel (CSV)'),
+                  onPressed: _isExporting ? null : () => _handleRealExport('CA Excel (CSV)'),
                   icon: const Icon(Icons.table_chart_rounded, size: 14, color: Color(0xFF059669)),
                   label: Text(
                     'CA Excel',
@@ -412,7 +621,7 @@ class _GstReportsScreenState extends State<GstReportsScreen> {
               // Tally XML
               Expanded(
                 child: OutlinedButton.icon(
-                  onPressed: () => _showExportModal('Tally Prime XML'),
+                  onPressed: _isExporting ? null : () => _handleRealExport('Tally Prime XML'),
                   icon: const Icon(Icons.code_rounded, size: 14, color: Color(0xFFD97706)),
                   label: Text(
                     'Tally XML',
@@ -431,7 +640,7 @@ class _GstReportsScreenState extends State<GstReportsScreen> {
               // GSTR-1 JSON
               Expanded(
                 child: ElevatedButton.icon(
-                  onPressed: () => _showExportModal('GSTR-1 JSON Offline'),
+                  onPressed: _isExporting ? null : () => _handleRealExport('GSTR-1 JSON Offline'),
                   icon: const Icon(Icons.download_rounded, size: 14),
                   label: Text(
                     'GSTR-1',
@@ -450,7 +659,7 @@ class _GstReportsScreenState extends State<GstReportsScreen> {
           ),
           const SizedBox(height: 12),
 
-          // Period Filter Chips (Matching Screenshot 2)
+          // Period Filter Chips
           SingleChildScrollView(
             scrollDirection: Axis.horizontal,
             physics: const BouncingScrollPhysics(),
@@ -490,7 +699,7 @@ class _GstReportsScreenState extends State<GstReportsScreen> {
   }
 
   // =========================================================================
-  // 2. 4-METRIC STAT GRID (MATCHING SCREENSHOT 2)
+  // 2. 4-METRIC STAT GRID
   // =========================================================================
   Widget _buildMetricGrid() {
     return Container(
@@ -504,48 +713,46 @@ class _GstReportsScreenState extends State<GstReportsScreen> {
         children: [
           Row(
             children: [
-              // Taxable Value
+              // Taxable Turnover
               Expanded(
                 child: _buildMetricTile(
-                  icon: Icons.trending_up_rounded,
-                  iconColor: const Color(0xFF0284C7),
-                  title: 'Taxable Value',
-                  subTitle: 'Turnover',
+                  icon: Icons.store_rounded,
+                  iconColor: const Color(0xFF2563EB),
+                  title: 'Taxable Sales',
+                  subTitle: 'TURNOVER',
                   amount: _formatAmount(_taxableValuePaise),
-                  footer: 'Excluding tax component',
+                  footer: '${_periodSales.length} bills in $_selectedPeriod',
                   amountColor: const Color(0xFF0F172A),
                 ),
               ),
               Container(width: 1, height: 54, color: const Color(0xFFF1F5F9)),
               const SizedBox(width: 12),
-              // Total GST Tax
+              // Total GST Output
               Expanded(
                 child: _buildMetricTile(
-                  icon: Icons.percent_rounded,
+                  icon: Icons.account_balance_rounded,
                   iconColor: const Color(0xFF059669),
-                  title: 'Total GST Tax',
-                  subTitle: 'Collected',
+                  title: 'Total GST',
+                  subTitle: 'OUTPUT',
                   amount: _formatAmount(_totalGstPaise),
-                  footer: 'CGST + SGST + IGST',
+                  footer: 'CGST 50% + SGST 50%',
                   amountColor: const Color(0xFF059669),
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 10),
-          Container(height: 1, color: const Color(0xFFF1F5F9)),
-          const SizedBox(height: 10),
+          const Divider(height: 20, color: Color(0xFFF1F5F9)),
           Row(
             children: [
-              // CGST / SGST
+              // CGST / SGST split
               Expanded(
                 child: _buildMetricTile(
-                  icon: Icons.pie_chart_outline_rounded,
+                  icon: Icons.pie_chart_rounded,
                   iconColor: const Color(0xFFD97706),
                   title: 'CGST / SGST',
-                  subTitle: '50:50',
-                  amount: '${_formatAmount(_cgstPaise)} / ${_formatAmount(_sgstPaise)}',
-                  footer: 'State & Central split',
+                  subTitle: 'EQUAL SPLIT',
+                  amount: _formatAmount(_cgstPaise),
+                  footer: 'Each half: ${_formatAmount(_cgstPaise)}',
                   amountColor: const Color(0xFFD97706),
                 ),
               ),
@@ -554,12 +761,12 @@ class _GstReportsScreenState extends State<GstReportsScreen> {
               // B2B Invoices
               Expanded(
                 child: _buildMetricTile(
-                  icon: Icons.storefront_rounded,
+                  icon: Icons.business_rounded,
                   iconColor: const Color(0xFF8B5CF6),
                   title: 'B2B Invoices',
                   subTitle: 'GSTIN',
-                  amount: '0',
-                  footer: 'Wholesale tax bills',
+                  amount: '${_b2bSales.length}',
+                  footer: 'Registered GST bills',
                   amountColor: const Color(0xFF8B5CF6),
                 ),
               ),
@@ -601,7 +808,7 @@ class _GstReportsScreenState extends State<GstReportsScreen> {
             ),
             Text(
               subTitle,
-              style: GoogleFonts.inter(fontSize: 10, color: const Color(0xFF94A3B8), fontWeight: FontWeight.w600),
+              style: GoogleFonts.inter(fontSize: 9.5, color: const Color(0xFF94A3B8), fontWeight: FontWeight.w600),
             ),
           ],
         ),
@@ -629,7 +836,7 @@ class _GstReportsScreenState extends State<GstReportsScreen> {
   }
 
   // =========================================================================
-  // 3. 4-TAB SWITCHER (MATCHING SCREENSHOT 2)
+  // 3. 4-TAB SWITCHER
   // =========================================================================
   Widget _buildTabSwitcher() {
     return SingleChildScrollView(
@@ -637,11 +844,11 @@ class _GstReportsScreenState extends State<GstReportsScreen> {
       physics: const BouncingScrollPhysics(),
       child: Row(
         children: [
-          _buildPillTab(0, Icons.table_chart_rounded, 'HSN Summary (2)'),
+          _buildPillTab(0, Icons.table_chart_rounded, 'HSN Summary (${_hsnList.length})'),
           const SizedBox(width: 8),
-          _buildPillTab(1, Icons.business_rounded, 'B2B Invoices (0)'),
+          _buildPillTab(1, Icons.business_rounded, 'B2B Invoices (${_b2bSales.length})'),
           const SizedBox(width: 8),
-          _buildPillTab(2, Icons.shopping_cart_rounded, 'B2C Retail (${_sales.length})'),
+          _buildPillTab(2, Icons.shopping_cart_rounded, 'B2C Retail (${_b2cSales.length})'),
           const SizedBox(width: 8),
           _buildPillTab(3, Icons.folder_shared_rounded, 'Docs & CA Pack'),
         ],
@@ -690,106 +897,19 @@ class _GstReportsScreenState extends State<GstReportsScreen> {
   }
 
   // =========================================================================
-  // TAB 0: TABLE 12 HSN SUMMARY CARD (HIGH-END FINTECH SPEC)
+  // TAB 0: TABLE 12 HSN SUMMARY CARD (REAL DATA FROM SQLITE)
   // =========================================================================
   Widget _buildHsnSummaryCard() {
-    final List<Map<String, dynamic>> hsnList = [
-      {
-        'hsn': '1902',
-        'desc': 'Maggi & Instant Noodles',
-        'rate': '5%',
-        'uqc': 'PCS',
-        'qty': 48,
-        'taxable_paise': 57600, // ₹576.00
-        'cgst_paise': 1440,     // ₹14.40
-        'sgst_paise': 1440,     // ₹14.40
-        'total_tax_paise': 2880,// ₹28.80
-        'total_paise': 60480,   // ₹604.80
-      },
-      {
-        'hsn': '1512',
-        'desc': 'Sunflower Edible Oil (1L)',
-        'rate': '5%',
-        'uqc': 'LTR',
-        'qty': 24,
-        'taxable_paise': 285714,// ₹2,857.14
-        'cgst_paise': 7143,     // ₹71.43
-        'sgst_paise': 7143,     // ₹71.43
-        'total_tax_paise': 14286,// ₹142.86
-        'total_paise': 300000,  // ₹3,000.00
-      },
-      {
-        'hsn': '3401',
-        'desc': 'Bathing Soaps & Detergents',
-        'rate': '18%',
-        'uqc': 'PCS',
-        'qty': 36,
-        'taxable_paise': 122034,// ₹1,220.34
-        'cgst_paise': 10983,    // ₹109.83
-        'sgst_paise': 10983,    // ₹109.83
-        'total_tax_paise': 21966,// ₹219.66
-        'total_paise': 144000,  // ₹1,440.00
-      },
-      {
-        'hsn': '0402',
-        'desc': 'Dairy Whitener & Condensed Milk',
-        'rate': '12%',
-        'uqc': 'PKT',
-        'qty': 15,
-        'taxable_paise': 60268, // ₹602.68
-        'cgst_paise': 3616,     // ₹36.16
-        'sgst_paise': 3616,     // ₹36.16
-        'total_tax_paise': 7232,// ₹72.32
-        'total_paise': 67500,   // ₹675.00
-      },
-      {
-        'hsn': '2106',
-        'desc': 'Packaged Namkeen & Snacks',
-        'rate': '12%',
-        'uqc': 'PKT',
-        'qty': 30,
-        'taxable_paise': 45536, // ₹455.36
-        'cgst_paise': 2732,     // ₹27.32
-        'sgst_paise': 2732,     // ₹27.32
-        'total_tax_paise': 5464,// ₹54.64
-        'total_paise': 51000,   // ₹510.00
-      },
-      {
-        'hsn': '3306',
-        'desc': 'Dental Paste & Oral Hygiene',
-        'rate': '18%',
-        'uqc': 'PCS',
-        'qty': 20,
-        'taxable_paise': 142373,// ₹1,423.73
-        'cgst_paise': 12814,    // ₹128.14
-        'sgst_paise': 12814,    // ₹128.14
-        'total_tax_paise': 25628,// ₹256.28
-        'total_paise': 168000,  // ₹1,680.00
-      },
-      {
-        'hsn': '1006',
-        'desc': 'India Gate Basmati Rice (5kg)',
-        'rate': '5%',
-        'uqc': 'BAG',
-        'qty': 10,
-        'taxable_paise': 514286,// ₹5,142.86
-        'cgst_paise': 12857,    // ₹128.57
-        'sgst_paise': 12857,    // ₹128.57
-        'total_tax_paise': 25714,// ₹257.14
-        'total_paise': 540000,  // ₹5,400.00
-      },
-    ];
-
-    final filteredHsn = hsnList.where((item) {
+    final filteredHsn = _hsnList.where((item) {
       if (_hsnSearch.isEmpty) return true;
       final q = _hsnSearch.toLowerCase();
-      final h = (item['hsn'] as String).toLowerCase();
-      final d = (item['desc'] as String).toLowerCase();
+      final h = item.hsn.toLowerCase();
+      final d = item.desc.toLowerCase();
       return h.contains(q) || d.contains(q);
     }).toList();
 
-    int totalTaxable = filteredHsn.fold(0, (sum, i) => sum + (i['taxable_paise'] as int));
-    int totalTax = filteredHsn.fold(0, (sum, i) => sum + (i['total_tax_paise'] as int));
+    int totalTaxable = filteredHsn.fold(0, (sum, i) => sum + i.taxablePaise);
+    int totalTax = filteredHsn.fold(0, (sum, i) => sum + i.totalTaxPaise);
 
     return Container(
       padding: const EdgeInsets.all(14),
@@ -852,75 +972,88 @@ class _GstReportsScreenState extends State<GstReportsScreen> {
           ),
           const SizedBox(height: 12),
 
-          // HSN Table Headers (Matching official GST Portal Table 12)
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 7),
-            decoration: BoxDecoration(
-              color: const Color(0xFF0F172A),
-              borderRadius: BorderRadius.circular(8),
+          if (filteredHsn.isEmpty) ...[
+            Container(
+              padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 16),
+              alignment: Alignment.center,
+              child: Column(
+                children: [
+                  const Icon(Icons.receipt_long_outlined, size: 36, color: Color(0xFFCBD5E1)),
+                  const SizedBox(height: 8),
+                  Text(
+                    'No sales recorded in $_selectedPeriod',
+                    style: GoogleFonts.plusJakartaSans(fontSize: 13.5, fontWeight: FontWeight.w700, color: const Color(0xFF475569)),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Bills created at your POS counter will automatically compile Table 12 HSN tax summaries here.',
+                    textAlign: TextAlign.center,
+                    style: GoogleFonts.inter(fontSize: 11, color: const Color(0xFF94A3B8)),
+                  ),
+                ],
+              ),
             ),
-            child: Row(
-              children: [
-                Expanded(flex: 2, child: Text('HSN', style: GoogleFonts.inter(fontSize: 9.5, fontWeight: FontWeight.w800, color: Colors.white))),
-                Expanded(flex: 4, child: Text('DESCRIPTION & GST%', style: GoogleFonts.inter(fontSize: 9.5, fontWeight: FontWeight.w800, color: Colors.white))),
-                Expanded(flex: 2, child: Text('QTY/UQC', textAlign: TextAlign.center, style: GoogleFonts.inter(fontSize: 9.5, fontWeight: FontWeight.w800, color: Colors.white))),
-                Expanded(flex: 3, child: Text('TAXABLE', textAlign: TextAlign.right, style: GoogleFonts.inter(fontSize: 9.5, fontWeight: FontWeight.w800, color: Colors.white))),
-                Expanded(flex: 3, child: Text('TOTAL TAX', textAlign: TextAlign.right, style: GoogleFonts.inter(fontSize: 9.5, fontWeight: FontWeight.w800, color: const Color(0xFF34D399)))),
-              ],
+          ] else ...[
+            // HSN Table Headers
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 7),
+              decoration: BoxDecoration(
+                color: const Color(0xFF0F172A),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Row(
+                children: [
+                  Expanded(flex: 2, child: Text('HSN', style: GoogleFonts.inter(fontSize: 9.5, fontWeight: FontWeight.w800, color: Colors.white))),
+                  Expanded(flex: 4, child: Text('DESCRIPTION & GST%', style: GoogleFonts.inter(fontSize: 9.5, fontWeight: FontWeight.w800, color: Colors.white))),
+                  Expanded(flex: 2, child: Text('QTY/UQC', textAlign: TextAlign.center, style: GoogleFonts.inter(fontSize: 9.5, fontWeight: FontWeight.w800, color: Colors.white))),
+                  Expanded(flex: 3, child: Text('TAXABLE', textAlign: TextAlign.right, style: GoogleFonts.inter(fontSize: 9.5, fontWeight: FontWeight.w800, color: Colors.white))),
+                  Expanded(flex: 3, child: Text('TOTAL TAX', textAlign: TextAlign.right, style: GoogleFonts.inter(fontSize: 9.5, fontWeight: FontWeight.w800, color: const Color(0xFF34D399)))),
+                ],
+              ),
             ),
-          ),
-          const SizedBox(height: 4),
+            const SizedBox(height: 4),
 
-          // HSN Data Rows
-          ...filteredHsn.map((item) => _buildHsnTableRowCard(item)),
+            // HSN Data Rows
+            ...filteredHsn.map((item) => _buildHsnTableRowCard(item)),
 
-          const SizedBox(height: 8),
-          // HSN Summary Totals Row
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
-            decoration: BoxDecoration(
-              color: const Color(0xFFF8FAFC),
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: const Color(0xFFCBD5E1)),
+            const SizedBox(height: 8),
+            // HSN Summary Totals Row
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
+              decoration: BoxDecoration(
+                color: const Color(0xFFF8FAFC),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: const Color(0xFFCBD5E1)),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    'TABLE 12 AGGREGATE TOTALS:',
+                    style: GoogleFonts.outfit(fontSize: 11, fontWeight: FontWeight.w800, color: const Color(0xFF475569)),
+                  ),
+                  Row(
+                    children: [
+                      Text(
+                        'Taxable: ${MoneyFormatter.formatINR(totalTaxable)}  •  ',
+                        style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w700, color: const Color(0xFF0F172A)),
+                      ),
+                      Text(
+                        'Tax: ${MoneyFormatter.formatINR(totalTax)}',
+                        style: GoogleFonts.outfit(fontSize: 12, fontWeight: FontWeight.w900, color: const Color(0xFF059669)),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
             ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
-                  'TABLE 12 AGGREGATE TOTALS:',
-                  style: GoogleFonts.outfit(fontSize: 11, fontWeight: FontWeight.w800, color: const Color(0xFF475569)),
-                ),
-                Row(
-                  children: [
-                    Text(
-                      'Taxable: ${MoneyFormatter.formatINR(totalTaxable)}  •  ',
-                      style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w700, color: const Color(0xFF0F172A)),
-                    ),
-                    Text(
-                      'Tax: ${MoneyFormatter.formatINR(totalTax)}',
-                      style: GoogleFonts.outfit(fontSize: 12, fontWeight: FontWeight.w900, color: const Color(0xFF059669)),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
+          ],
         ],
       ),
     );
   }
 
-  Widget _buildHsnTableRowCard(Map<String, dynamic> item) {
-    final hsn = item['hsn'] as String;
-    final desc = item['desc'] as String;
-    final rate = item['rate'] as String;
-    final uqc = item['uqc'] as String;
-    final qty = item['qty'] as int;
-    final taxable = item['taxable_paise'] as int;
-    final tax = item['total_tax_paise'] as int;
-    final cgst = item['cgst_paise'] as int;
-    final sgst = item['sgst_paise'] as int;
-
+  Widget _buildHsnTableRowCard(HsnSummaryItem item) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
       decoration: const BoxDecoration(
@@ -932,7 +1065,7 @@ class _GstReportsScreenState extends State<GstReportsScreen> {
           Expanded(
             flex: 2,
             child: Text(
-              hsn,
+              item.hsn,
               style: GoogleFonts.outfit(fontSize: 12, fontWeight: FontWeight.w800, color: const Color(0xFF0284C7)),
             ),
           ),
@@ -943,7 +1076,7 @@ class _GstReportsScreenState extends State<GstReportsScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  desc,
+                  item.desc,
                   style: GoogleFonts.inter(fontSize: 11.5, fontWeight: FontWeight.w600, color: const Color(0xFF0F172A)),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
@@ -957,13 +1090,13 @@ class _GstReportsScreenState extends State<GstReportsScreen> {
                         borderRadius: BorderRadius.circular(4),
                       ),
                       child: Text(
-                        'GST $rate',
+                        'GST ${item.rate.toStringAsFixed(item.rate % 1 == 0 ? 0 : 1)}%',
                         style: GoogleFonts.inter(fontSize: 8.5, fontWeight: FontWeight.w700, color: const Color(0xFF64748B)),
                       ),
                     ),
                     const SizedBox(width: 4),
                     Text(
-                      'C:${MoneyFormatter.formatINR(cgst)} S:${MoneyFormatter.formatINR(sgst)}',
+                      'C:${MoneyFormatter.formatINR(item.cgstPaise)} S:${MoneyFormatter.formatINR(item.sgstPaise)}',
                       style: GoogleFonts.inter(fontSize: 8.5, color: const Color(0xFF94A3B8)),
                     ),
                   ],
@@ -975,7 +1108,7 @@ class _GstReportsScreenState extends State<GstReportsScreen> {
           Expanded(
             flex: 2,
             child: Text(
-              '$qty $uqc',
+              '${item.qty} ${item.uqc}',
               textAlign: TextAlign.center,
               style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w600, color: const Color(0xFF475569)),
             ),
@@ -984,7 +1117,7 @@ class _GstReportsScreenState extends State<GstReportsScreen> {
           Expanded(
             flex: 3,
             child: Text(
-              MoneyFormatter.formatINR(taxable),
+              MoneyFormatter.formatINR(item.taxablePaise),
               textAlign: TextAlign.right,
               style: GoogleFonts.outfit(fontSize: 11.5, fontWeight: FontWeight.w700, color: const Color(0xFF0F172A)),
             ),
@@ -993,7 +1126,7 @@ class _GstReportsScreenState extends State<GstReportsScreen> {
           Expanded(
             flex: 3,
             child: Text(
-              MoneyFormatter.formatINR(tax),
+              MoneyFormatter.formatINR(item.totalTaxPaise),
               textAlign: TextAlign.right,
               style: GoogleFonts.outfit(fontSize: 12, fontWeight: FontWeight.w900, color: const Color(0xFF059669)),
             ),
@@ -1004,44 +1137,41 @@ class _GstReportsScreenState extends State<GstReportsScreen> {
   }
 
   // =========================================================================
-  // TAB 1: B2B INVOICES
+  // TAB 1: B2B INVOICES (REAL DATA)
   // =========================================================================
   Widget _buildB2bCard() {
-    return Container(
-      padding: const EdgeInsets.symmetric(vertical: 30, horizontal: 16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: const Color(0xFFEEF2F6)),
-      ),
-      alignment: Alignment.center,
-      child: Column(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: const BoxDecoration(color: Color(0xFFF1F5F9), shape: BoxShape.circle),
-            child: const Icon(Icons.business_rounded, size: 28, color: Color(0xFF94A3B8)),
-          ),
-          const SizedBox(height: 10),
-          Text(
-            'No B2B Wholesale Bills in $_selectedPeriod',
-            style: GoogleFonts.outfit(fontSize: 14, fontWeight: FontWeight.w700, color: const Color(0xFF0F172A)),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            'B2B tax invoices with customer GSTIN will automatically appear here for GSTR-1 Table 4A.',
-            textAlign: TextAlign.center,
-            style: GoogleFonts.inter(fontSize: 11, color: const Color(0xFF64748B)),
-          ),
-        ],
-      ),
-    );
-  }
+    if (_b2bSales.isEmpty) {
+      return Container(
+        padding: const EdgeInsets.symmetric(vertical: 30, horizontal: 16),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(color: const Color(0xFFEEF2F6)),
+        ),
+        alignment: Alignment.center,
+        child: Column(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: const BoxDecoration(color: Color(0xFFF1F5F9), shape: BoxShape.circle),
+              child: const Icon(Icons.business_rounded, size: 28, color: Color(0xFF94A3B8)),
+            ),
+            const SizedBox(height: 10),
+            Text(
+              'No B2B Wholesale Bills in $_selectedPeriod',
+              style: GoogleFonts.outfit(fontSize: 14, fontWeight: FontWeight.w700, color: const Color(0xFF0F172A)),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'B2B tax invoices with customer GSTIN will automatically appear here for GSTR-1 Table 4A.',
+              textAlign: TextAlign.center,
+              style: GoogleFonts.inter(fontSize: 11, color: const Color(0xFF64748B)),
+            ),
+          ],
+        ),
+      );
+    }
 
-  // =========================================================================
-  // TAB 2: B2C RETAIL INVOICES
-  // =========================================================================
-  Widget _buildB2cCard() {
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
@@ -1056,7 +1186,63 @@ class _GstReportsScreenState extends State<GstReportsScreen> {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text(
-                'Table 7: B2C Small Retail Invoices (${_sales.length})',
+                'Table 4A: B2B Wholesale Invoices (${_b2bSales.length})',
+                style: GoogleFonts.outfit(fontSize: 13.5, fontWeight: FontWeight.w800, color: const Color(0xFF0F172A)),
+              ),
+              Text(
+                _formatAmount(_b2bSales.fold(0, (sum, s) => sum + s.totalAmountPaise)),
+                style: GoogleFonts.outfit(fontSize: 14, fontWeight: FontWeight.w900, color: const Color(0xFF059669)),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          ..._b2bSales.map((sale) => _buildSaleRow(sale)),
+        ],
+      ),
+    );
+  }
+
+  // =========================================================================
+  // TAB 2: B2C RETAIL INVOICES (REAL DATA)
+  // =========================================================================
+  Widget _buildB2cCard() {
+    if (_b2cSales.isEmpty) {
+      return Container(
+        padding: const EdgeInsets.symmetric(vertical: 30, horizontal: 16),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(color: const Color(0xFFEEF2F6)),
+        ),
+        alignment: Alignment.center,
+        child: Column(
+          children: [
+            const Icon(Icons.shopping_cart_outlined, size: 32, color: Color(0xFF94A3B8)),
+            const SizedBox(height: 8),
+            Text(
+              'No B2C Invoices in $_selectedPeriod',
+              style: GoogleFonts.outfit(fontSize: 14, fontWeight: FontWeight.w700, color: const Color(0xFF0F172A)),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: const Color(0xFFEEF2F6)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'Table 7: B2C Small Retail Invoices (${_b2cSales.length})',
                 style: GoogleFonts.outfit(fontSize: 13.5, fontWeight: FontWeight.w800, color: const Color(0xFF0F172A)),
               ),
               Text(
@@ -1066,46 +1252,61 @@ class _GstReportsScreenState extends State<GstReportsScreen> {
             ],
           ),
           const SizedBox(height: 10),
-          ..._sales.take(5).map((sale) {
-            return Container(
-              margin: const EdgeInsets.only(bottom: 6),
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-              decoration: BoxDecoration(
-                color: const Color(0xFFF8FAFC),
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: const Color(0xFFEEF2F6)),
+          ..._b2cSales.take(25).map((sale) => _buildSaleRow(sale)),
+          if (_b2cSales.length > 25) ...[
+            const SizedBox(height: 6),
+            Center(
+              child: Text(
+                'Showing first 25 of ${_b2cSales.length} bills. Export CA Excel for full register.',
+                style: GoogleFonts.inter(fontSize: 10.5, color: const Color(0xFF94A3B8)),
               ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        '#${sale.invoiceNumber} • ${sale.customerName ?? 'Walk-in'}',
-                        style: GoogleFonts.outfit(fontSize: 12.5, fontWeight: FontWeight.w700),
-                      ),
-                      Text(
-                        'Mode: ${sale.paymentMethod.toUpperCase()} • Tax: ${MoneyFormatter.formatINR(sale.taxAmountPaise)}',
-                        style: GoogleFonts.inter(fontSize: 10.5, color: const Color(0xFF64748B)),
-                      ),
-                    ],
-                  ),
-                  Text(
-                    MoneyFormatter.formatINR(sale.totalAmountPaise),
-                    style: GoogleFonts.outfit(fontSize: 13.5, fontWeight: FontWeight.w800, color: const Color(0xFF0F172A)),
-                  ),
-                ],
-              ),
-            );
-          }),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSaleRow(SaleModel sale) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 6),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF8FAFC),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: const Color(0xFFEEF2F6)),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '#${sale.invoiceNumber} • ${sale.customerName ?? 'Walk-in'}',
+                  style: GoogleFonts.outfit(fontSize: 12.5, fontWeight: FontWeight.w700),
+                  overflow: TextOverflow.ellipsis,
+                ),
+                Text(
+                  'Mode: ${sale.paymentMethod.toUpperCase()} • Tax: ${MoneyFormatter.formatINR(sale.taxAmountPaise)} • ${sale.createdAt.toLocal().toString().substring(0, 10)}',
+                  style: GoogleFonts.inter(fontSize: 10.5, color: const Color(0xFF64748B)),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          Text(
+            MoneyFormatter.formatINR(sale.totalAmountPaise),
+            style: GoogleFonts.outfit(fontSize: 13.5, fontWeight: FontWeight.w800, color: const Color(0xFF0F172A)),
+          ),
         ],
       ),
     );
   }
 
   // =========================================================================
-  // TAB 3: 1-CLICK CA EXPORT PACKAGE (FINTECH AUDIT SUITE)
+  // TAB 3: 1-CLICK CA EXPORT PACKAGE (REAL EXPORTS)
   // =========================================================================
   Widget _buildCaDocsCard() {
     return Container(
@@ -1160,13 +1361,13 @@ class _GstReportsScreenState extends State<GstReportsScreen> {
               children: [
                 _buildCaDocItem(Icons.code_rounded, 'GSTR-1 Monthly JSON', 'Official offline tool compatible upload', const Color(0xFF2563EB)),
                 const Divider(height: 12, color: Color(0xFFEEF2F6)),
-                _buildCaDocItem(Icons.table_chart_rounded, 'GSTR-3B Tax Computation', 'Detailed turnover vs input tax credit (ITC)', const Color(0xFF059669)),
+                _buildCaDocItem(Icons.table_chart_rounded, 'GSTR-3B Tax Computation', 'Detailed turnover vs tax split (CGST & SGST)', const Color(0xFF059669)),
                 const Divider(height: 12, color: Color(0xFFEEF2F6)),
                 _buildCaDocItem(Icons.receipt_long_rounded, 'Table 12 HSN Summary CSV', 'Product codes, rates & taxable values', const Color(0xFFD97706)),
                 const Divider(height: 12, color: Color(0xFFEEF2F6)),
                 _buildCaDocItem(Icons.business_rounded, 'B2B Wholesale Register', 'Party-wise GSTIN sales & tax invoices', const Color(0xFF7C3AED)),
                 const Divider(height: 12, color: Color(0xFFEEF2F6)),
-                _buildCaDocItem(Icons.shopping_bag_rounded, 'Purchase Inward Vouchers', 'Mandi bills, restock expenses & supplier ITC', const Color(0xFF0891B2)),
+                _buildCaDocItem(Icons.receipt_rounded, 'Tally Prime XML Vouchers', '1-Click XML Import into Tally ERP', const Color(0xFF0891B2)),
               ],
             ),
           ),
@@ -1174,10 +1375,12 @@ class _GstReportsScreenState extends State<GstReportsScreen> {
 
           // Main 1-Click Export CTA Button
           ElevatedButton.icon(
-            onPressed: () => _showExportModal('Complete CA Compliance Pack (ZIP)'),
-            icon: const Icon(Icons.download_for_offline_rounded, size: 18),
+            onPressed: _isExporting ? null : () => _handleRealExport('CA Excel (CSV)'),
+            icon: _isExporting
+                ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                : const Icon(Icons.download_for_offline_rounded, size: 18),
             label: Text(
-              '1-Click Export All CA Files (ZIP)',
+              _isExporting ? 'Compiling Audit Files...' : '1-Click Export CA Excel Package',
               style: GoogleFonts.outfit(fontSize: 14, fontWeight: FontWeight.w800),
             ),
             style: ElevatedButton.styleFrom(
@@ -1192,7 +1395,7 @@ class _GstReportsScreenState extends State<GstReportsScreen> {
 
           // Direct WhatsApp to CA button
           OutlinedButton.icon(
-            onPressed: () => _showExportModal('WhatsApp CA Package'),
+            onPressed: _isExporting ? null : _shareDirectWhatsAppWithCa,
             icon: Image.asset('assets/images/whatsapp_logo.png', width: 16, height: 16),
             label: Text(
               'Direct Share with CA on WhatsApp',

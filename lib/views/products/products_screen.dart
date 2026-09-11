@@ -477,17 +477,18 @@ class _ProductsScreenState extends State<ProductsScreen> {
 
 
   Widget _buildHeaderCard() {
+    final vert = BusinessVerticals.resolve(BusinessVerticals.activeBusinessTypeNotifier.value);
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(20),
         border: Border.all(color: const Color(0xFFEEF2F6), width: 1.2),
-        boxShadow: [
+        boxShadow: const [
           BoxShadow(
-            color: const Color(0x080F172A),
+            color: Color(0x080F172A),
             blurRadius: 10,
-            offset: const Offset(0, 2),
+            offset: Offset(0, 2),
           ),
         ],
       ),
@@ -497,7 +498,7 @@ class _ProductsScreenState extends State<ProductsScreen> {
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Package Icon
+              // Dynamic Vertical Icon
               Container(
                 width: 44,
                 height: 44,
@@ -505,10 +506,10 @@ class _ProductsScreenState extends State<ProductsScreen> {
                   color: const Color(0xFFFEF3C7),
                   borderRadius: BorderRadius.circular(14),
                 ),
-                child: const Icon(
-                  Icons.inventory_2_outlined,
+                child: Icon(
+                  vert.navActiveIcon,
                   size: 22,
-                  color: Color(0xFFD97706),
+                  color: const Color(0xFFD97706),
                 ),
               ),
               const SizedBox(width: 10),
@@ -521,7 +522,7 @@ class _ProductsScreenState extends State<ProductsScreen> {
                     Row(
                       children: [
                         Text(
-                          'Products Master & Items',
+                          vert.productsScreenTitle,
                           style: GoogleFonts.outfit(
                             fontSize: 16.5,
                             fontWeight: FontWeight.w900,
@@ -549,7 +550,7 @@ class _ProductsScreenState extends State<ProductsScreen> {
                     ),
                     const SizedBox(height: 2),
                     Text(
-                      '${_products.length} registered products with barcodes, batch expiry & instant stock tracking',
+                      vert.getCatalogDescription(_products.length),
                       style: GoogleFonts.inter(
                         fontSize: 10.5,
                         color: const Color(0xFF64748B),
@@ -603,7 +604,7 @@ class _ProductsScreenState extends State<ProductsScreen> {
               ),
               const SizedBox(width: 8),
 
-              // + Add Product
+              // + Dynamic Add Button
               Expanded(
                 child: Material(
                   color: Colors.transparent,
@@ -629,7 +630,7 @@ class _ProductsScreenState extends State<ProductsScreen> {
                           const Icon(Icons.add_rounded, size: 16, color: Colors.white),
                           const SizedBox(width: 4),
                           Text(
-                            'Add Product',
+                            vert.addProductButtonLabel,
                             style: GoogleFonts.outfit(
                               fontSize: 12,
                               fontWeight: FontWeight.w800,
@@ -794,6 +795,7 @@ class _ProductsScreenState extends State<ProductsScreen> {
   }
 
   Widget _buildSearchToolbar() {
+    final vert = BusinessVerticals.resolve(BusinessVerticals.activeBusinessTypeNotifier.value);
     return Container(
       padding: const EdgeInsets.all(5),
       decoration: BoxDecoration(
@@ -823,7 +825,7 @@ class _ProductsScreenState extends State<ProductsScreen> {
                       onChanged: (v) => setState(() => _searchQuery = v),
                       style: GoogleFonts.inter(fontSize: 11.5, color: const Color(0xFF0F172A)),
                       decoration: InputDecoration(
-                        hintText: 'Search by product name, barcode, HSN...',
+                        hintText: vert.placeholders.searchProduct,
                         hintStyle: GoogleFonts.inter(fontSize: 11, color: const Color(0xFF94A3B8)),
                         border: InputBorder.none,
                         isDense: true,
@@ -845,15 +847,17 @@ class _ProductsScreenState extends State<ProductsScreen> {
           ),
           const SizedBox(width: 6),
 
-          // Barcode Button ||||| (Screenshot 5)
-          _buildToolbarButton(
-            icon: Icons.qr_code_scanner_rounded,
-            iconColor: const Color(0xFF2563EB),
-            bgColor: const Color(0xFFEFF6FF),
-            borderColor: const Color(0xFFBFDBFE),
-            onTap: _openBarcodeScanner,
-          ),
-          const SizedBox(width: 4),
+          // Barcode Button (Hidden for Restaurant)
+          if (vert.toggles.showBarcode) ...[
+            _buildToolbarButton(
+              icon: Icons.qr_code_scanner_rounded,
+              iconColor: const Color(0xFF2563EB),
+              bgColor: const Color(0xFFEFF6FF),
+              borderColor: const Color(0xFFBFDBFE),
+              onTap: _openBarcodeScanner,
+            ),
+            const SizedBox(width: 4),
+          ],
 
           // Low Stock Alert Filter Toggle
           _buildToolbarButton(
@@ -865,15 +869,17 @@ class _ProductsScreenState extends State<ProductsScreen> {
           ),
           const SizedBox(width: 4),
 
-          // Expiring Filter Toggle
-          _buildToolbarButton(
-            icon: Icons.access_time_rounded,
-            iconColor: const Color(0xFFD97706),
-            bgColor: _filterExpiringOnly ? const Color(0xFFFEF3C7) : const Color(0xFFFFFBEB),
-            borderColor: _filterExpiringOnly ? const Color(0xFFD97706) : const Color(0xFFFDE68A),
-            onTap: () => setState(() => _filterExpiringOnly = !_filterExpiringOnly),
-          ),
-          const SizedBox(width: 4),
+          // Expiring Filter Toggle (Only for verticals with Batch/Expiry e.g. Pharmacy)
+          if (vert.toggles.showBatchExpiry) ...[
+            _buildToolbarButton(
+              icon: Icons.access_time_rounded,
+              iconColor: const Color(0xFFD97706),
+              bgColor: _filterExpiringOnly ? const Color(0xFFFEF3C7) : const Color(0xFFFFFBEB),
+              borderColor: _filterExpiringOnly ? const Color(0xFFD97706) : const Color(0xFFFDE68A),
+              onTap: () => setState(() => _filterExpiringOnly = !_filterExpiringOnly),
+            ),
+            const SizedBox(width: 4),
+          ],
 
           // Instant Grid / List Toggle
           _buildToolbarButton(
@@ -1498,7 +1504,10 @@ class _ProductsScreenState extends State<ProductsScreen> {
           ElevatedButton.icon(
             onPressed: () => _openAddProductSheet(),
             icon: const Icon(Icons.add_rounded, size: 16, color: Colors.white),
-            label: Text('Add New Product SKU', style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.white)),
+            label: Text(
+              BusinessVerticals.resolve(BusinessVerticals.activeBusinessTypeNotifier.value).addProductButtonLabel,
+              style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.white),
+            ),
             style: ElevatedButton.styleFrom(
               backgroundColor: const Color(0xFF0F172A),
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),

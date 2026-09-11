@@ -138,49 +138,75 @@ class _InvoiceThemesScreenState extends State<InvoiceThemesScreen> {
   }
 
   Future<void> _generateSamplePdf() async {
-    HapticFeedback.selectionClick();
+    HapticFeedback.mediumImpact();
     _saveSettings();
+    StoreProfileModel profile = StoreProfileModel.empty();
+    try {
+      profile = await LocalDatabase.instance.getStoreProfile();
+    } catch (_) {}
+
     final sampleSale = SaleModel(
-      id: 'SAMPLE_${DateTime.now().millisecondsSinceEpoch}',
-      businessId: 'sample_store',
-      invoiceNumber: 'INV-SAMPLE-01',
-      totalAmountPaise: 99500,
-      subtotalPaise: 99500,
+      id: 'SAMPLE-GST-01',
+      businessId: 'default',
+      invoiceNumber: 'INV-2026-0842',
+      subtotalPaise: 1392050,
+      totalAmountPaise: 1499000,
+      taxAmountPaise: 106950,
       discountPaise: 0,
-      taxAmountPaise: 4975,
       paymentMethod: 'upi',
       status: 'completed',
-      customerName: 'Sunil Verma',
-      customerPhone: '9823456789',
+      customerName: 'Arihant Retail Traders Pvt Ltd',
+      customerPhone: '9890198765',
+      customerGstin: '27AAACA1234F1Z8',
+      placeOfSupply: '27 (Maharashtra)',
       createdAt: DateTime.now(),
       items: [
         {
-          'product_name': 'Aashirvaad Shudh Chakki Atta (5kg)',
-          'quantity': 2,
-          'unit_price_paise': 25500,
-          'gross_total_paise': 51000,
+          'product_name': 'Aashirvaad Shudh Chakki Atta (10kg)',
+          'hsn_code': '1101',
+          'quantity': 10,
+          'unit_price_paise': 42000,
+          'gross_total_paise': 420000,
+          'tax_rate': 5.0,
+          'is_tax_inclusive': true,
         },
         {
-          'product_name': 'Fortune Sunlite Sunflower Oil (1L)',
-          'quantity': 2,
-          'unit_price_paise': 14500,
-          'gross_total_paise': 29000,
+          'product_name': 'Fortune Sunlite Sunflower Oil (15L Tin)',
+          'hsn_code': '1512',
+          'quantity': 4,
+          'unit_price_paise': 185000,
+          'gross_total_paise': 740000,
+          'tax_rate': 5.0,
+          'is_tax_inclusive': true,
         },
         {
-          'product_name': 'Loose Basmati Rice Premium (1.5 kg)',
-          'quantity': 1.5,
-          'unit_price_paise': 13000,
-          'gross_total_paise': 19500,
+          'product_name': 'Dettol Antiseptic Liquid (500ml)',
+          'hsn_code': '3004',
+          'quantity': 12,
+          'unit_price_paise': 19500,
+          'gross_total_paise': 234000,
+          'tax_rate': 18.0,
+          'is_tax_inclusive': true,
+        },
+        {
+          'product_name': 'Cadbury Dairy Milk Silk Chocolate (Pack)',
+          'hsn_code': '1806',
+          'quantity': 6,
+          'unit_price_paise': 17500,
+          'gross_total_paise': 105000,
+          'tax_rate': 18.0,
+          'is_tax_inclusive': true,
         },
       ],
     );
 
     final path = await InvoicePdfService.generateAndDownloadPdf(
       sale: sampleSale,
-      storeName: 'Shrama Pharmacy Store',
-      storePhone: '9595997711',
-      storeAddress: 'Shop 4, Market Road, Pune',
-      customerPhone: '9823456789',
+      storeName: profile.storeName.isNotEmpty ? profile.storeName : 'Shree Ganesh Enterprises',
+      storePhone: profile.phone.isNotEmpty ? profile.phone : '9822012345',
+      storeAddress: profile.address.isNotEmpty ? profile.address : 'Shop 12-14, Market Yard, Pune',
+      gstin: profile.gstin.isNotEmpty ? profile.gstin : '27AAAAA0000A1Z5',
+      customerPhone: '9890198765',
     );
 
     if (path != null && mounted) {
@@ -774,13 +800,13 @@ class _InvoiceThemesScreenState extends State<InvoiceThemesScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // 1. Theme-colored Header Block (Screenshot 4)
+              // 1. Theme-colored Header Block (Statutory GST Store Banner)
               Container(
                 width: double.infinity,
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
                   color: activeColor,
-                  borderRadius: BorderRadius.circular(14),
+                  borderRadius: BorderRadius.circular(12),
                 ),
                 child: Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -791,7 +817,7 @@ class _InvoiceThemesScreenState extends State<InvoiceThemesScreen> {
                         height: 38,
                         decoration: BoxDecoration(
                           color: Colors.white.withValues(alpha: 0.2),
-                          borderRadius: BorderRadius.circular(10),
+                          borderRadius: BorderRadius.circular(8),
                         ),
                         alignment: Alignment.center,
                         child: const Icon(Icons.storefront_rounded, color: Colors.white, size: 22),
@@ -803,19 +829,23 @@ class _InvoiceThemesScreenState extends State<InvoiceThemesScreen> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            'Shrama Pharmacy Store',
-                            style: GoogleFonts.outfit(fontSize: 15, fontWeight: FontWeight.w800, color: Colors.white),
+                            'Shree Ganesh Enterprises',
+                            style: GoogleFonts.outfit(fontSize: 14.5, fontWeight: FontWeight.w800, color: Colors.white),
                           ),
                           if (_showTagline)
                             Text(
-                              'Complete Kirana & FMCG Store',
-                              style: GoogleFonts.inter(fontSize: 10, color: Colors.white.withValues(alpha: 0.85)),
+                              'Complete Kirana, FMCG & Wholesale Store',
+                              style: GoogleFonts.inter(fontSize: 9.5, color: Colors.white.withValues(alpha: 0.85)),
                             ),
                           if (_showOwnerPhone)
                             Text(
-                              'Rahul Jadhav • 9595997711',
-                              style: GoogleFonts.inter(fontSize: 9.5, color: Colors.white.withValues(alpha: 0.9)),
+                              'Ph: +91 98220 12345 • Pune, Maharashtra',
+                              style: GoogleFonts.inter(fontSize: 9, color: Colors.white.withValues(alpha: 0.9)),
                             ),
+                          Text(
+                            'GSTIN: 27AAAAA0000A1Z5 (27 Maharashtra)',
+                            style: GoogleFonts.inter(fontSize: 9, fontWeight: FontWeight.w700, color: Colors.white),
+                          ),
                         ],
                       ),
                     ),
@@ -830,37 +860,47 @@ class _InvoiceThemesScreenState extends State<InvoiceThemesScreen> {
                           ),
                           child: Text(
                             _selectedHeading,
-                            style: GoogleFonts.outfit(fontSize: 10.5, fontWeight: FontWeight.w800, color: Colors.white),
+                            style: GoogleFonts.outfit(fontSize: 10, fontWeight: FontWeight.w800, color: Colors.white),
                           ),
                         ),
                         const SizedBox(height: 4),
-                        Text('#INV-SAMPLE-01', style: GoogleFonts.outfit(fontSize: 10.5, fontWeight: FontWeight.w700, color: Colors.white)),
-                        Text('06 Sept 2026', style: GoogleFonts.inter(fontSize: 9.5, color: Colors.white.withValues(alpha: 0.8))),
+                        Text('#INV-2026-0842', style: GoogleFonts.outfit(fontSize: 10, fontWeight: FontWeight.w700, color: Colors.white)),
+                        Text('11 Sep 2026', style: GoogleFonts.inter(fontSize: 9, color: Colors.white.withValues(alpha: 0.8))),
+                        Text('POS: 27 (MH)', style: GoogleFonts.inter(fontSize: 8.5, color: Colors.white.withValues(alpha: 0.8))),
                       ],
                     ),
                   ],
                 ),
               ),
-              const SizedBox(height: 10),
+              const SizedBox(height: 8),
 
-              // 2. Billed To Card (Screenshot 4)
+              // 2. Billed To Card (B2B Buyer Details)
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
                 decoration: BoxDecoration(
                   color: const Color(0xFFF8FAFC),
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: const Color(0xFFEEF2F6)),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: const Color(0xFFE2E8F0)),
                 ),
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text('BILLED TO:', style: GoogleFonts.inter(fontSize: 9, fontWeight: FontWeight.w800, color: const Color(0xFF64748B))),
-                        Text('Sunil Verma', style: GoogleFonts.outfit(fontSize: 12.5, fontWeight: FontWeight.w800, color: const Color(0xFF0F172A))),
-                        Text('+91 98234 56789 • Shop 4, Market Road', style: GoogleFonts.inter(fontSize: 9.5, color: const Color(0xFF64748B))),
-                      ],
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('BILLED TO (BUYER / CUSTOMER):', style: GoogleFonts.inter(fontSize: 8.5, fontWeight: FontWeight.w800, color: const Color(0xFF64748B))),
+                          Text('Arihant Retail Traders Pvt Ltd', style: GoogleFonts.outfit(fontSize: 12, fontWeight: FontWeight.w800, color: const Color(0xFF0F172A))),
+                          Text('Mob: +91 98901 98765 • MIDC Industrial Area, Pune', style: GoogleFonts.inter(fontSize: 9, color: const Color(0xFF475569))),
+                          Row(
+                            children: [
+                              Text('Buyer GSTIN: ', style: GoogleFonts.inter(fontSize: 9, color: const Color(0xFF64748B))),
+                              Text('27AAACA1234F1Z8', style: GoogleFonts.inter(fontSize: 9, fontWeight: FontWeight.w800, color: activeColor)),
+                              Text(' • State: 27 (MH)', style: GoogleFonts.inter(fontSize: 9, color: const Color(0xFF475569))),
+                            ],
+                          ),
+                        ],
+                      ),
                     ),
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3.5),
@@ -869,64 +909,114 @@ class _InvoiceThemesScreenState extends State<InvoiceThemesScreen> {
                         borderRadius: BorderRadius.circular(6),
                         border: Border.all(color: const Color(0xFFA7F3D0)),
                       ),
-                      child: Text('PAID (UPI)', style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.w800, color: const Color(0xFF059669))),
+                      child: Text('PAID (UPI)', style: GoogleFonts.inter(fontSize: 9.5, fontWeight: FontWeight.w800, color: const Color(0xFF059669))),
                     ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 8),
+
+              // 3. Table Header Bar (Statutory GST Columns)
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 5),
+                decoration: BoxDecoration(
+                  color: activeColor,
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Row(
+                  children: [
+                    Expanded(flex: 4, child: Text('ITEM DESCRIPTION', style: GoogleFonts.inter(fontSize: 8.5, fontWeight: FontWeight.w800, color: Colors.white))),
+                    Expanded(flex: 2, child: Text('HSN', textAlign: TextAlign.center, style: GoogleFonts.inter(fontSize: 8.5, fontWeight: FontWeight.w800, color: Colors.white))),
+                    Expanded(flex: 2, child: Text('QTY', textAlign: TextAlign.center, style: GoogleFonts.inter(fontSize: 8.5, fontWeight: FontWeight.w800, color: Colors.white))),
+                    Expanded(flex: 2, child: Text('RATE', textAlign: TextAlign.right, style: GoogleFonts.inter(fontSize: 8.5, fontWeight: FontWeight.w800, color: Colors.white))),
+                    Expanded(flex: 2, child: Text('TAXABLE', textAlign: TextAlign.right, style: GoogleFonts.inter(fontSize: 8.5, fontWeight: FontWeight.w800, color: Colors.white))),
+                    Expanded(flex: 2, child: Text('GST', textAlign: TextAlign.right, style: GoogleFonts.inter(fontSize: 8.5, fontWeight: FontWeight.w800, color: Colors.white))),
+                    Expanded(flex: 2, child: Text('TOTAL', textAlign: TextAlign.right, style: GoogleFonts.inter(fontSize: 8.5, fontWeight: FontWeight.w800, color: Colors.white))),
+                  ],
+                ),
+              ),
+
+              // 4. Sample Item Rows with GST Details
+              _buildInvoicePreviewRow('Aashirvaad Shudh Atta (10kg)', '1101', '10 Bg', '₹420.00', '₹4,000.00', '₹200.00', '₹4,200.00'),
+              _buildInvoicePreviewRow('Fortune Sunlite Oil (15L)', '1512', '4 Tin', '₹1,850.00', '₹7,047.62', '₹352.38', '₹7,400.00'),
+              _buildInvoicePreviewRow('Dettol Antiseptic (500ml)', '3004', '12 Pc', '₹195.00', '₹1,983.05', '₹356.95', '₹2,340.00'),
+              _buildInvoicePreviewRow('Cadbury Silk Pack', '1806', '6 Pc', '₹175.00', '₹889.83', '₹160.17', '₹1,050.00'),
+              const Divider(height: 12),
+
+              // 5. Amount in Words Box
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF1F5F9),
+                  borderRadius: BorderRadius.circular(5),
+                  border: Border.all(color: const Color(0xFFE2E8F0)),
+                ),
+                child: Text(
+                  'Amount in Words: Indian Rupees Fourteen Thousand Nine Hundred Ninety Only.',
+                  style: GoogleFonts.inter(fontSize: 8.5, fontWeight: FontWeight.w600, color: const Color(0xFF334155)),
+                ),
+              ),
+              const SizedBox(height: 8),
+
+              // 6. Mini GST Tax Slab Breakup Table
+              Container(
+                padding: const EdgeInsets.all(6),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF8FAFC),
+                  borderRadius: BorderRadius.circular(6),
+                  border: Border.all(color: const Color(0xFFE2E8F0)),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('TAX SLAB BREAKUP (GST SUMMARY)', style: GoogleFonts.inter(fontSize: 7.5, fontWeight: FontWeight.w800, color: const Color(0xFF64748B))),
+                    const SizedBox(height: 4),
+                    Row(
+                      children: [
+                        Expanded(flex: 3, child: Text('HSN (RATE)', style: GoogleFonts.inter(fontSize: 7.5, fontWeight: FontWeight.w700, color: const Color(0xFF475569)))),
+                        Expanded(flex: 2, child: Text('TAXABLE', textAlign: TextAlign.right, style: GoogleFonts.inter(fontSize: 7.5, fontWeight: FontWeight.w700, color: const Color(0xFF475569)))),
+                        Expanded(flex: 2, child: Text('CGST', textAlign: TextAlign.right, style: GoogleFonts.inter(fontSize: 7.5, fontWeight: FontWeight.w700, color: const Color(0xFF475569)))),
+                        Expanded(flex: 2, child: Text('SGST', textAlign: TextAlign.right, style: GoogleFonts.inter(fontSize: 7.5, fontWeight: FontWeight.w700, color: const Color(0xFF475569)))),
+                        Expanded(flex: 2, child: Text('TOTAL TAX', textAlign: TextAlign.right, style: GoogleFonts.inter(fontSize: 7.5, fontWeight: FontWeight.w700, color: const Color(0xFF475569)))),
+                      ],
+                    ),
+                    const Divider(height: 6),
+                    _buildGstSummaryRow('1101, 1512 (5%)', '₹11,047.62', '₹276.19', '₹276.19', '₹552.38'),
+                    _buildGstSummaryRow('3004, 1806 (18%)', '₹2,872.88', '₹258.56', '₹258.56', '₹517.12'),
                   ],
                 ),
               ),
               const SizedBox(height: 10),
 
-              // 3. Table Header Bar (Theme Colored - Screenshot 4)
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-                decoration: BoxDecoration(
-                  color: activeColor,
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Row(
-                  children: [
-                    Expanded(flex: 5, child: Text('ITEM DESCRIPTION', style: GoogleFonts.inter(fontSize: 9.5, fontWeight: FontWeight.w800, color: Colors.white))),
-                    Expanded(flex: 2, child: Text('QTY', textAlign: TextAlign.center, style: GoogleFonts.inter(fontSize: 9.5, fontWeight: FontWeight.w800, color: Colors.white))),
-                    Expanded(flex: 3, child: Text('PRICE', textAlign: TextAlign.right, style: GoogleFonts.inter(fontSize: 9.5, fontWeight: FontWeight.w800, color: Colors.white))),
-                    Expanded(flex: 3, child: Text('AMOUNT', textAlign: TextAlign.right, style: GoogleFonts.inter(fontSize: 9.5, fontWeight: FontWeight.w800, color: Colors.white))),
-                  ],
-                ),
-              ),
-
-              // 4. Sample Item Rows (Screenshot 4)
-              _buildInvoicePreviewRow('Aashirvaad Shudh Chakki Atta (5kg)', '2', '₹255.00', '₹510.00'),
-              _buildInvoicePreviewRow('Fortune Sunlite Sunflower Oil (1L)', '2', '₹145.00', '₹290.00'),
-              _buildInvoicePreviewRow('Loose Basmati Rice Premium (1.5 kg)', '1.5', '₹130.00', '₹195.00'),
-              const Divider(height: 14),
-
-              // 5. Payment Details & QR Code (Screenshot 5)
+              // 7. Payment Details & Totals Grid
               Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   if (_showDynamicUpiQr)
                     Expanded(
                       child: Container(
-                        padding: const EdgeInsets.all(8),
+                        padding: const EdgeInsets.all(6),
                         decoration: BoxDecoration(
                           color: const Color(0xFFF8FAFC),
-                          borderRadius: BorderRadius.circular(10),
+                          borderRadius: BorderRadius.circular(8),
                           border: Border.all(color: const Color(0xFFEEF2F6)),
                         ),
                         child: Row(
                           children: [
                             QrImageView(
-                              data: 'upi://pay?pa=store@upi&pn=SampleStore&am=1044.75&cu=INR',
+                              data: 'upi://pay?pa=store@upi&pn=SampleStore&am=14990.00&cu=INR',
                               version: QrVersions.auto,
-                              size: 42,
+                              size: 38,
                             ),
-                            const SizedBox(width: 8),
+                            const SizedBox(width: 6),
                             Expanded(
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  Text('Primary Shop QR', style: GoogleFonts.outfit(fontSize: 10.5, fontWeight: FontWeight.w700)),
-                                  Text('store@upi', style: GoogleFonts.inter(fontSize: 9, color: const Color(0xFF64748B))),
-                                  Text('Zero transaction charges', style: GoogleFonts.inter(fontSize: 8, color: const Color(0xFF94A3B8))),
+                                  Text('Instant UPI Pay', style: GoogleFonts.outfit(fontSize: 9.5, fontWeight: FontWeight.w800)),
+                                  Text('ganeshent@icici', style: GoogleFonts.inter(fontSize: 8.5, color: const Color(0xFF64748B))),
+                                  Text('✓ Verified Merchant', style: GoogleFonts.inter(fontSize: 7.5, color: const Color(0xFF059669), fontWeight: FontWeight.w700)),
                                 ],
                               ),
                             ),
@@ -934,7 +1024,7 @@ class _InvoiceThemesScreenState extends State<InvoiceThemesScreen> {
                         ),
                       ),
                     ),
-                  const SizedBox(width: 10),
+                  const SizedBox(width: 8),
                   // Totals Column
                   Column(
                     crossAxisAlignment: CrossAxisAlignment.end,
@@ -942,81 +1032,81 @@ class _InvoiceThemesScreenState extends State<InvoiceThemesScreen> {
                       Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Text('Subtotal: ', style: GoogleFonts.inter(fontSize: 10.5, color: const Color(0xFF64748B))),
-                          Text('₹995.00', style: GoogleFonts.outfit(fontSize: 11.5, fontWeight: FontWeight.w700)),
+                          Text('Taxable Value: ', style: GoogleFonts.inter(fontSize: 9, color: const Color(0xFF64748B))),
+                          Text('₹13,920.50', style: GoogleFonts.outfit(fontSize: 10, fontWeight: FontWeight.w700)),
                         ],
                       ),
-                      const SizedBox(height: 4),
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text('Total GST: ', style: GoogleFonts.inter(fontSize: 9, color: const Color(0xFF64748B))),
+                          Text('₹1,069.50', style: GoogleFonts.outfit(fontSize: 10, fontWeight: FontWeight.w700)),
+                        ],
+                      ),
+                      const SizedBox(height: 3),
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                         decoration: BoxDecoration(
                           color: activeColor,
-                          borderRadius: BorderRadius.circular(8),
+                          borderRadius: BorderRadius.circular(6),
                         ),
                         child: Text(
-                          'Grand Total: ₹1,044.75',
-                          style: GoogleFonts.outfit(fontSize: 12, fontWeight: FontWeight.w900, color: Colors.white),
+                          'Grand Total: ₹14,990.00',
+                          style: GoogleFonts.outfit(fontSize: 11, fontWeight: FontWeight.w900, color: Colors.white),
                         ),
                       ),
                     ],
                   ),
                 ],
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: 10),
 
-              // 6. Platform Promotion Strip (Screenshot 5)
+              // 8. Platform Promotion Strip (Kamai+ Branding)
               Container(
                 width: double.infinity,
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
                 decoration: BoxDecoration(
-                  color: activeColor,
-                  borderRadius: BorderRadius.circular(8),
+                  color: const Color(0xFFF8FAFC),
+                  borderRadius: BorderRadius.circular(6),
+                  border: Border.all(color: const Color(0xFFE2E8F0)),
                 ),
                 child: Row(
                   children: [
-                    const Icon(Icons.bolt_rounded, size: 14, color: Color(0xFFFDE68A)),
-                    const SizedBox(width: 4),      
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Billed with KamaiPlus POS • Free Retail Invoicing',
-                            style: GoogleFonts.inter(fontSize: 9.5, fontWeight: FontWeight.w700, color: Colors.white),
-                          ),
-                          Text(
-                            'Get your free GST billing app • kamaiplus.proventure.in',
-                            style: GoogleFonts.inter(fontSize: 8, color: Colors.white.withValues(alpha: 0.8)),
-                          ),
-                        ],
-                      ),  
-                    ),
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                      decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.25), borderRadius: BorderRadius.circular(4)),
-                      child: Text('KAMAI+', style: GoogleFonts.outfit(fontSize: 9, fontWeight: FontWeight.w900, color: Colors.white)),
+                      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                      decoration: BoxDecoration(color: activeColor, borderRadius: BorderRadius.circular(4)),
+                      child: Text('⚡ KAMAI+ POS', style: GoogleFonts.outfit(fontSize: 8, fontWeight: FontWeight.w900, color: Colors.white)),
+                    ),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Text(
+                        "India's #1 Retail POS & GST Billing App",
+                        style: GoogleFonts.inter(fontSize: 8, fontWeight: FontWeight.w600, color: const Color(0xFF475569)),
+                      ),
+                    ),
+                    Text(
+                      'www.kamaiplus.com',
+                      style: GoogleFonts.inter(fontSize: 8, fontWeight: FontWeight.w800, color: activeColor),
                     ),
                   ],
                 ),
               ),
-              const SizedBox(height: 10),
+              const SizedBox(height: 6),
 
-              // 7. Footer Thank You & Signatory (Screenshot 5)
+              // 9. Footer Terms & Signatory
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Text(
-                    _footerCtrl.text.isNotEmpty ? _footerCtrl.text : 'Thank you for your business!',
-                    style: GoogleFonts.inter(fontSize: 9.5, fontStyle: FontStyle.italic, color: const Color(0xFF64748B)),
+                    _footerCtrl.text.isNotEmpty ? _footerCtrl.text : 'Thank you for shopping with us! Visit again.',
+                    style: GoogleFonts.inter(fontSize: 8.5, fontStyle: FontStyle.italic, color: const Color(0xFF64748B)),
                   ),
                   if (_showSignatory)
                     Column(
+                      crossAxisAlignment: CrossAxisAlignment.end,
                       children: [
-                        Text('-----------------------------', style: GoogleFonts.inter(fontSize: 8, color: const Color(0xFFCBD5E1))),
-                        Text(
-                          'AUTHORISED SIGNATORY',
-                          style: GoogleFonts.inter(fontSize: 8, fontWeight: FontWeight.w800, color: const Color(0xFF64748B)),
-                        ),
+                        Text('For SHREE GANESH ENT.', style: GoogleFonts.inter(fontSize: 7.5, fontWeight: FontWeight.w700, color: const Color(0xFF334155))),
+                        Text('AUTHORISED SIGNATORY', style: GoogleFonts.inter(fontSize: 7, fontWeight: FontWeight.w800, color: const Color(0xFF64748B))),
                       ],
                     ),
                 ],
@@ -1028,15 +1118,33 @@ class _InvoiceThemesScreenState extends State<InvoiceThemesScreen> {
     );
   }
 
-  Widget _buildInvoicePreviewRow(String name, String qty, String price, String amount) {
+  Widget _buildInvoicePreviewRow(String name, String hsn, String qty, String rate, String taxable, String gst, String total) {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4.5),
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3.5),
       child: Row(
         children: [
-          Expanded(flex: 5, child: Text(name, style: GoogleFonts.inter(fontSize: 10.5, fontWeight: FontWeight.w600, color: const Color(0xFF0F172A)), maxLines: 1, overflow: TextOverflow.ellipsis)),
-          Expanded(flex: 2, child: Text(qty, textAlign: TextAlign.center, style: GoogleFonts.inter(fontSize: 10.5, color: const Color(0xFF64748B)))),
-          Expanded(flex: 3, child: Text(price, textAlign: TextAlign.right, style: GoogleFonts.inter(fontSize: 10.5, color: const Color(0xFF475569)))),
-          Expanded(flex: 3, child: Text(amount, textAlign: TextAlign.right, style: GoogleFonts.outfit(fontSize: 11, fontWeight: FontWeight.w700, color: const Color(0xFF0F172A)))),
+          Expanded(flex: 4, child: Text(name, style: GoogleFonts.inter(fontSize: 8.5, fontWeight: FontWeight.w600, color: const Color(0xFF0F172A)), maxLines: 1, overflow: TextOverflow.ellipsis)),
+          Expanded(flex: 2, child: Text(hsn, textAlign: TextAlign.center, style: GoogleFonts.inter(fontSize: 8, color: const Color(0xFF64748B)))),
+          Expanded(flex: 2, child: Text(qty, textAlign: TextAlign.center, style: GoogleFonts.inter(fontSize: 8, color: const Color(0xFF64748B)))),
+          Expanded(flex: 2, child: Text(rate, textAlign: TextAlign.right, style: GoogleFonts.inter(fontSize: 8, color: const Color(0xFF475569)))),
+          Expanded(flex: 2, child: Text(taxable, textAlign: TextAlign.right, style: GoogleFonts.inter(fontSize: 8, color: const Color(0xFF475569)))),
+          Expanded(flex: 2, child: Text(gst, textAlign: TextAlign.right, style: GoogleFonts.inter(fontSize: 8, color: const Color(0xFF64748B)))),
+          Expanded(flex: 2, child: Text(total, textAlign: TextAlign.right, style: GoogleFonts.outfit(fontSize: 8.5, fontWeight: FontWeight.w700, color: const Color(0xFF0F172A)))),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildGstSummaryRow(String slab, String taxable, String cgst, String sgst, String total) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 1.5),
+      child: Row(
+        children: [
+          Expanded(flex: 3, child: Text(slab, style: GoogleFonts.inter(fontSize: 7.5, color: const Color(0xFF334155)))),
+          Expanded(flex: 2, child: Text(taxable, textAlign: TextAlign.right, style: GoogleFonts.inter(fontSize: 7.5, color: const Color(0xFF334155)))),
+          Expanded(flex: 2, child: Text(cgst, textAlign: TextAlign.right, style: GoogleFonts.inter(fontSize: 7.5, color: const Color(0xFF334155)))),
+          Expanded(flex: 2, child: Text(sgst, textAlign: TextAlign.right, style: GoogleFonts.inter(fontSize: 7.5, color: const Color(0xFF334155)))),
+          Expanded(flex: 2, child: Text(total, textAlign: TextAlign.right, style: GoogleFonts.outfit(fontSize: 7.5, fontWeight: FontWeight.w700, color: const Color(0xFF0F172A)))),
         ],
       ),
     );

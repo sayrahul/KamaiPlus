@@ -96,7 +96,7 @@ class _AddProductModalState extends State<AddProductModal> {
     }).toList();
 
     _isFavorite = p?.isFavorite ?? false;
-    _isUnlimitedStock = p != null && p.stockQuantity >= 99999;
+    _isUnlimitedStock = p != null ? (p.stockQuantity >= 99999) : (vert.id == 'restaurant');
     _nameCtrl = TextEditingController(text: p?.name ?? '');
     _barcodeCtrl = TextEditingController(text: p?.barcode ?? '');
     _sellPriceCtrl = TextEditingController(
@@ -109,7 +109,7 @@ class _AddProductModalState extends State<AddProductModal> {
       text: p != null ? (p.purchasePricePaise / 100).toStringAsFixed(2) : '',
     );
     _stockCtrl = TextEditingController(
-      text: p != null ? (_isUnlimitedStock ? '' : p.stockQuantity.toInt().toString()) : '0',
+      text: p != null ? (_isUnlimitedStock ? '' : p.stockQuantity.toInt().toString()) : (_isUnlimitedStock ? '' : '0'),
     );
     _thresholdCtrl = TextEditingController(text: '5');
     _batchNumberCtrl = TextEditingController(text: p?.batchNumber ?? '');
@@ -680,7 +680,9 @@ class _AddProductModalState extends State<AddProductModal> {
                       ),
                       const SizedBox(width: 6),
                       Text(
-                        isEditing ? 'Edit Catalog Item' : 'Add New Item to Catalog',
+                        isEditing
+                            ? 'Edit ${vert.bottomNavLabel} Item'
+                            : 'Add New ${vert.bottomNavLabel} Item',
                         style: GoogleFonts.outfit(
                           fontSize: 17,
                           fontWeight: FontWeight.w900,
@@ -712,7 +714,9 @@ class _AddProductModalState extends State<AddProductModal> {
               child: Align(
                 alignment: Alignment.centerLeft,
                 child: Text(
-                  'Enter product details, barcode, selling price, and initial stock.',
+                  vert.id == 'restaurant'
+                      ? 'Enter dish name, category, selling price, and food GST tax.'
+                      : 'Enter product details, barcode, selling price, and initial stock.',
                   style: GoogleFonts.inter(
                     fontSize: 11.5,
                     color: const Color(0xFF64748B),
@@ -732,8 +736,8 @@ class _AddProductModalState extends State<AddProductModal> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // Wholesale AI Inward Suggestion Banner
-                      if (!isEditing) ...[
+                      // Wholesale AI Inward Suggestion Banner (Hidden for restaurant dishes)
+                      if (!isEditing && vert.id != 'restaurant') ...[
                         Container(
                           padding: const EdgeInsets.all(12),
                           decoration: BoxDecoration(
@@ -837,8 +841,8 @@ class _AddProductModalState extends State<AddProductModal> {
                         const SizedBox(height: 14),
                       ],
 
-                      // 1. Product Full Name *
-                      _buildLabel('Product / Item Full Name *'),
+                      // 1. Dynamic Item Name *
+                      _buildLabel(vert.itemFieldLabel),
                       const SizedBox(height: 5),
                       TextFormField(
                         controller: _nameCtrl,

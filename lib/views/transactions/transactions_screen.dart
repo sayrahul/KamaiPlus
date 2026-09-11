@@ -4,6 +4,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../core/database/local_database.dart';
+import '../../core/utils/datetime_utils.dart';
 import '../../core/utils/money_formatter.dart';
 import '../../models/models.dart';
 import '../../services/invoice_pdf_service.dart';
@@ -684,7 +685,7 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
                   fontWeight: FontWeight.w900,
                   color: Colors.white,
                   letterSpacing: -0.5,
-                ),
+                ).copyWith(fontFeatures: MoneyFormatter.tabularFeatures),
               ),
             ],
           ),
@@ -1120,7 +1121,7 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
                           ),
                           const SizedBox(height: 2),
                           Text(
-                            '${sale.customerName != null && sale.customerName!.isNotEmpty ? sale.customerName! : "Walk-in Customer"} • $dateStr',
+                            '${sale.customerName != null && sale.customerName!.isNotEmpty ? sale.customerName! : "Walk-in Customer"} • ${DateTimeUtils.formatRelativeTime(sale.createdAt)} • $dateStr',
                             style: GoogleFonts.inter(fontSize: 11, color: const Color(0xFF64748B)),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
@@ -1143,7 +1144,7 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
                             color: isRefunded
                                 ? const Color(0xFF94A3B8)
                                 : (isUdhar ? const Color(0xFFDC2626) : const Color(0xFF0F172A)),
-                          ),
+                          ).copyWith(fontFeatures: MoneyFormatter.tabularFeatures),
                         ),
                         const SizedBox(height: 2),
                         Container(

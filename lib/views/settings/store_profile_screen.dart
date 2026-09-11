@@ -48,6 +48,7 @@ class _StoreProfileScreenState extends State<StoreProfileScreen> {
   String _selectedCategory = 'Grocery / Kirana';
   String _selectedBusinessType = 'grocery';
   String _logoUrl = '';
+  StoreProfileModel _profile = StoreProfileModel();
 
   final List<Map<String, String>> _businessTypes = [
     {'type': 'grocery', 'label': 'Grocery / Kirana 🛒'},
@@ -136,6 +137,7 @@ class _StoreProfileScreenState extends State<StoreProfileScreen> {
   Future<void> _loadProfile() async {
     try {
       final profile = await LocalDatabase.instance.getStoreProfile();
+      _profile = profile;
       _storeNameCtrl.text = profile.storeName;
       _taglineCtrl.text = profile.tagline;
       _ownerNameCtrl.text = profile.ownerName;
@@ -627,39 +629,53 @@ class _StoreProfileScreenState extends State<StoreProfileScreen> {
                 const SizedBox(width: 4),
 
                 // Pro Badge
-                GestureDetector(
-                  onTap: () => ProUpgradeModal.show(context),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                    decoration: BoxDecoration(
-                      gradient: const LinearGradient(
-                        colors: [Color(0xFFF59E0B), Color(0xFFD97706)],
-                      ),
-                      borderRadius: BorderRadius.circular(10),
-                      boxShadow: [
-                        BoxShadow(
-                          color: const Color(0xFFF59E0B).withValues(alpha: 0.3),
-                          blurRadius: 6,
-                          offset: const Offset(0, 2),
-                        ),
-                      ],
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const Icon(Icons.stars_rounded, size: 14, color: Colors.white),
-                        const SizedBox(width: 4),
-                        Text(
-                          'Pro',
-                          style: GoogleFonts.outfit(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w800,
-                            color: Colors.white,
+                ValueListenableBuilder<bool>(
+                  valueListenable: FirestoreSyncService.isProNotifier,
+                  builder: (context, isProLive, _) {
+                    final isPro = _profile.isProEffective || isProLive;
+                    return GestureDetector(
+                      onTap: () => ProUpgradeModal.show(context).then((_) => _loadProfile()),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            colors: isPro
+                                ? const [Color(0xFF059669), Color(0xFF10B981)]
+                                : const [Color(0xFFF59E0B), Color(0xFFD97706)],
                           ),
+                          borderRadius: BorderRadius.circular(10),
+                          boxShadow: [
+                            BoxShadow(
+                              color: isPro
+                                  ? const Color(0xFF10B981).withValues(alpha: 0.3)
+                                  : const Color(0xFFF59E0B).withValues(alpha: 0.3),
+                              blurRadius: 6,
+                              offset: const Offset(0, 2),
+                            ),
+                          ],
                         ),
-                      ],
-                    ),
-                  ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              isPro ? Icons.verified_rounded : Icons.stars_rounded,
+                              size: 14,
+                              color: Colors.white,
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              isPro ? '★ Pro Active' : 'Pro',
+                              style: GoogleFonts.outfit(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w800,
+                                color: Colors.white,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
+                  },
                 ),
                 const SizedBox(width: 8),
 
