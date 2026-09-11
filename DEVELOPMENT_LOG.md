@@ -47,6 +47,111 @@ drives `LocalDatabase` through a real (in-memory FFI) SQLite database and assert
 
 ---
 
+## 2026-09-11 — New: KamaiPlus Admin Console (`admin_console/`), and a critical Firestore rules fix found along the way
+
+**Context:** user's existing admin webapp (`kamaiplus.proventure.in/admin`, apparently a
+separate Next.js/Vercel deployment — `kamai-kappa.vercel.app` is also an authorized Firebase
+Auth domain on this project) was "bahut jyada dikkat deta hai" (a lot of trouble). Rather than
+debug that codebase (not present in this repo), built a fresh Flutter Web admin console from
+scratch, deployed separately, with the old one left completely untouched so nothing about the
+user's current setup was put at risk while the new one was proven out.
+
+**Discovery that changed the whole plan:** `firestore_sync_service.dart` (the mobile app) was
+*already* dual-syncing `sales`/`products`/`customers` to root-level Firestore collections
+specifically "for Web Admin Portal", and writing live aggregate counters
+(`total_sales_count`, `total_revenue_paise` via `FieldValue.increment`) to `businesses`/
+`merchants` docs — all wrapped in silently-swallowed try/catch blocks. The deployed
+`firestore.rules` (found at the repo root, pre-existing, not previously known to this log)
+default-denied every collection except `businesses`/`merchants` — meaning **all of this
+dual-sync traffic, and the `coupons/{CODE}` read the previous session's Pro-upgrade coupon
+feature depends on, had been failing silently the whole time.** This is very likely a real
+component of "dikkat" with the existing admin panel: it may never have been getting fresh
+data. Fixed by extending `firestore.rules` with properly-scoped rules for the new collections
+(see below) — deployed immediately, since it only ever *adds* access and this was blocking
+already-shipped functionality.
+
+**Admin access model:** a new `admins/{uid}` collection — existence of a document is the sole
+source of admin power (`isAdmin()` in `firestore.rules`), checked server-side on every
+protected read/write. Deliberately **not** Firebase Auth custom claims (would need a Cloud
+Function / Admin SDK just to grant the very first admin — real infra for a one-person
+bootstrap problem) and **not** a client-side role field anywhere. `admins/{uid}` is
+`allow write: if false` unconditionally — the only way to add or remove an admin is direct
+Firebase Console/CLI access to the `kamaiplus` project. First admin
+(`rahuljadhav44@gmail.com`, confirmed with the user — their Firebase Auth UID was not
+derivable from anything already known, since it's a different identity than any email seen
+elsewhere in this session) bootstrapped via one manual Firestore REST write using this
+session's existing `gcloud`/Firebase Management API access (same pattern used earlier this
+project for SHA-1 fingerprint registration). Matches this project's existing convention of
+"a trusted person edits Firestore directly" already used for `platform_settings/broadcast`
+and (as of last session) `coupons/{CODE}`.
+
+**CRITICAL — a real, severe vulnerability found by adversarial review before this ever
+shipped, in code that predates this session:** the pre-existing `isBusinessOwner()` helper
+(used by every rule protecting `businesses/{id}` and its subcollections, and `merchants/{id}`)
+OR'd in an unconditional clause — `request.resource.data.owner_uid == request.auth.uid` —
+with no requirement that this be a genuine *create*, and no check tying it back to the
+`businessId` path being written to. Since `request.resource.data` is entirely
+attacker-controlled (it's the write payload itself), **any authenticated Firebase user could
+hijack or inject data into *any other merchant's* business profile or any subcollection
+(products, categories, customers, sales, inward_orders) — including forging their own Pro
+status — simply by including `owner_uid: <their own uid>` in an update payload**, regardless
+of whose businessId path it lived under. A parallel bug was independently (re)introduced in
+this session's own new `ownsRootDoc()` helper (written for the new root `sales`/`products`/
+`customers` mirror collections) — same OR-instead-of-branch mistake, letting an attacker
+"relabel" someone else's sale/product/customer doc as their own via an update, then legally
+delete it. Found by a dedicated adversarial-review workflow phase specifically because the
+stakes here are real (admin = a lot of control, per explicit user instruction) — not by
+manual reading, which missed it during the initial rules edit. **Fixed**: `isBusinessOwner()`
+no longer has an unconditional new-value clause at all (clauses matching the `businessId` path
+convention or the *existing* document's owner already cover every real write this app makes —
+there was no legitimate case the removed clause was needed for). `ownsRootDoc()` now branches
+explicitly on `resource == null` (create: new payload's `business_id` must be the caller's) vs
+`resource != null` (update/delete: ownership decided by the document's *existing*
+`business_id`, never by what the caller is trying to change it to). **Redeployed immediately**
+— the flawed version was live, even if only briefly, so this was not optional. **Do not
+re-add an unconditional "the write payload claims to be mine" clause to any ownership check in
+this file without also proving it's a genuine create** — see the inline comments left in
+`firestore.rules` at both helper functions.
+
+**A second, non-security finding from the same review, also fixed:** `AuthGate` originally
+checked admin status once (on sign-in / auth-state change) rather than live — a revoked
+admin's UI would keep showing the full console until their next reload. Not an actual data
+bypass (every real Firestore call is independently re-checked server-side regardless), but
+fixed anyway for a "control should feel immediate" console: `AdminFirestoreService` gained
+`watchCurrentUserIsAdmin()` (a live stream on `admins/{uid}`), and `AuthGate` now re-subscribes
+to it on every auth-state change instead of doing a one-time `Future` check.
+
+**What was built, mechanically:** scaffolded a brand-new Flutter Web project at
+`admin_console/` (separate `pubspec.yaml`/git-nested project, deliberately *not* enabling web
+support inside the main POS app's own project — that app has many mobile-only plugins,
+`sqflite`/`mobile_scanner`/`local_auth`/etc., that would fight a web target). Shared
+foundation (models, `AdminFirestoreService`, theme, auth gate, login, shell/sidebar nav)
+written directly for architectural coherence; the four feature screens — Dashboard, Merchants
++ Merchant Detail (Pro grant/revoke), Coupons (full CRUD), Broadcast & Global Config — built in
+parallel by a workflow once that shared contract was fixed, each screen self-contained against
+the same `AdminFirestoreService`/`AdminTheme`/models. Firebase: reused an already-registered
+Web app on the `kamaiplus` project (`1:714323283488:web:...`) rather than creating a new one;
+created a brand-new, separate Firebase Hosting site (`kamaiplus-admin`, live at
+`https://kamaiplus-admin.web.app`) rather than touching the existing `kamaiplus` hosting site,
+so the old admin panel's hosting (if it even uses Firebase Hosting at all — evidence points to
+Vercel) was never at risk. Added `kamaiplus-admin.web.app`/`.firebaseapp.com` to Firebase
+Auth's authorized domains (Google Sign-In popup would otherwise fail on the new domain).
+
+**Verification:** `flutter analyze` (admin_console) — 0 issues. `flutter test` — 1/1 passing
+(a login-screen smoke test; full app testing needs `firebase_auth_mocks` or similar, not set
+up for this v1). `flutter build web --release` — succeeds. Deployed live and confirmed
+reachable. Firestore rules changes verified via `firebase deploy --only firestore:rules`
+compiling and releasing successfully (twice — once for the initial rules, once for the
+critical fix), and via the adversarial-review workflow re-reading the deployed rules text
+directly rather than trusting the diff. **Not yet verified**: an actual end-to-end login as
+the bootstrapped admin and a real Pro-grant/coupon-create/broadcast-publish click-through —
+the user has the live URL; that's the next real test.
+
+**See also:** `admin_console/README.md` for local dev / deploy commands, and
+`firebase.json`/`.firebaserc` (new, repo root) for the hosting-target and rules-deploy config.
+
+---
+
 ## 2026-09-11 — Batch of 14 targeted fixes across Products, Billing, Settings, Pro upgrade
 
 **Context:** user request list, not phase-numbered — a batch of small-to-medium fixes/

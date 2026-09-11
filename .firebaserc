@@ -1,0 +1,15 @@
+{
+  "projects": {
+    "default": "kamaiplus"
+  },
+  "targets": {
+    "kamaiplus": {
+      "hosting": {
+        "admin": [
+          "kamaiplus-admin"
+        ]
+      }
+    }
+  },
+  "etags": {}
+}

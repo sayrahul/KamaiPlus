@@ -14,14 +14,66 @@ service cloud.firestore {
     // 2. Strict Business Ownership Match:
     // User can ONLY access their own business if:
     // a) The businessId matches their auth UID ('biz_' + uid) OR
-    // b) The existing document's owner_uid matches their auth UID OR
-    // c) The new write document sets owner_uid to their auth UID
+    // b) The existing document's owner_uid matches their auth UID
+    //
+    // SECURITY FIX (found by adversarial review before this ever shipped to
+    // an admin console): this used to also OR in
+    // `request.resource.data.owner_uid == request.auth.uid` unconditionally
+    // — i.e. ANY write whose payload merely claimed `owner_uid: <attacker's
+    // own uid>` passed, regardless of the businessId path or the document's
+    // real, existing owner. That let any authenticated user hijack or
+    // inject data into ANY other merchant's businesses/{id} doc and every
+    // subcollection (products, customers, sales, ...), then legitimately
+    // delete it once "claimed". Removed entirely: clauses (a)/(b) alone
+    // already cover every real write this app makes, since
+    // firestore_sync_service.dart always uses the 'biz_' + uid path
+    // convention — there is no legitimate write clause (a)/(b) would miss.
+    // Do NOT re-add a "new document's owner_uid matches me" clause without
+    // also requiring `resource == null` (a genuine create) AND that the
+    // businessId path itself already matches the caller.
     function isBusinessOwner(businessId) {
       return isAuthenticated() && (
         businessId == 'biz_' + request.auth.uid ||
         businessId == request.auth.uid ||
-        (resource != null && resource.data.owner_uid == request.auth.uid) ||
-        (request.resource != null && request.resource.data.owner_uid == request.auth.uid)
+        (resource != null && resource.data.owner_uid == request.auth.uid)
+      );
+    }
+
+    // 3. Admin check for the KamaiPlus Admin Console: existence of
+    // admins/{uid} is the ONLY thing that grants admin power. This document
+    // can never be created or modified by any client (see its match block
+    // below) — it must be added by hand via the Firebase Console or CLI by
+    // someone with direct project access. This is the same "trusted person
+    // edits Firestore directly" pattern this project already uses for
+    // platform_settings/broadcast and coupons/{CODE} — no Cloud Functions or
+    // custom-claims setup required to bootstrap the very first admin.
+    function isAdmin() {
+      return isAuthenticated() && exists(/databases/$(database)/documents/admins/$(request.auth.uid));
+    }
+
+    // 4. Root-collection ownership match, for the dual-synced mirror
+    // collections below (sales/products/customers at the top level, written
+    // by firestore_sync_service.dart "for Web Admin Portal"). Every document
+    // there carries its own business_id field.
+    //
+    // Deliberately branches on `resource == null` (create) vs `!= null`
+    // (update/delete) rather than OR-ing both checks unconditionally — an
+    // earlier draft OR'd them, which let an attacker "relabel" someone
+    // else's existing sale/product/customer doc as their own by simply
+    // setting business_id to their own uid in an update payload (found by
+    // adversarial review before this shipped). On CREATE there is no prior
+    // owner, so the new payload's business_id must be the caller's own. On
+    // UPDATE/DELETE, the document already exists, so ownership is decided
+    // by its EXISTING business_id, never by what the caller is trying to
+    // change it to.
+    function ownsRootDoc() {
+      return isAuthenticated() && (
+        (resource == null && request.resource != null &&
+          (request.resource.data.business_id == 'biz_' + request.auth.uid ||
+           request.resource.data.business_id == request.auth.uid)) ||
+        (resource != null &&
+          (resource.data.business_id == 'biz_' + request.auth.uid ||
+           resource.data.business_id == request.auth.uid))
       );
     }
 
@@ -29,9 +81,14 @@ service cloud.firestore {
     // BUSINESS PROFILES & SUBCOLLECTIONS (STRICT MULTI-COUNTER ISOLATION)
     // =========================================================================
 
-    // Root Business Document (Store profile, settings, Pro status)
+    // Root Business Document (Store profile, settings, Pro status).
+    // Admin read: Merchant Directory listing/detail. Admin write: Pro
+    // subscription grants/revokes (the app already live-listens on this doc
+    // for exactly that — see firestore_sync_service.dart's
+    // "Live Business Profile Stream (Immediate Pro Upgrade / Downgrade sync
+    // from Admin Portal)").
     match /businesses/{businessId} {
-      allow read, write: if isBusinessOwner(businessId);
+      allow read, write: if isBusinessOwner(businessId) || isAdmin();
 
       // Products Catalog (SKUs, Barcodes, Pricing, Stock)
       match /products/{productId} {
@@ -68,11 +125,64 @@ service cloud.firestore {
     // MERCHANTS DIRECTORY (SUPER ADMIN & FAST LOOKUP MIRROR)
     // =========================================================================
     match /merchants/{merchantId} {
-      allow read, write: if isAuthenticated() && (
+      allow read, write: if isAdmin() || (isAuthenticated() && (
         merchantId == 'biz_' + request.auth.uid ||
         merchantId == request.auth.uid ||
         isBusinessOwner(merchantId)
-      );
+      ));
+    }
+
+    // =========================================================================
+    // ROOT-LEVEL DUAL-SYNC MIRRORS (Web Admin Portal read model)
+    // Each merchant's device already pushes its own sales/products/customers
+    // here in ADDITION to its businesses/{bizId}/... subcollection — see
+    // firestore_sync_service.dart's pushSaleToCloud/pushProductToCloud/
+    // pushCustomerToCloud. A merchant can only write/delete their OWN
+    // business_id-tagged documents here; only the admin console can read
+    // (list/query) across all of them.
+    // =========================================================================
+    match /sales/{saleId} {
+      allow read: if isAdmin();
+      allow write: if isAdmin() || ownsRootDoc();
+    }
+    match /products/{productId} {
+      allow read: if isAdmin();
+      allow write: if isAdmin() || ownsRootDoc();
+    }
+    match /customers/{customerId} {
+      allow read: if isAdmin();
+      allow write: if isAdmin() || ownsRootDoc();
+    }
+
+    // =========================================================================
+    // PLATFORM SETTINGS (broadcast messages, remote config) — every signed-in
+    // merchant's app reads these; only the admin console writes them.
+    // =========================================================================
+    match /platform_settings/{settingId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+
+    // =========================================================================
+    // COUPONS — every signed-in merchant's app reads a code to validate it at
+    // checkout in the Pro upgrade screen; only the admin console writes them.
+    // =========================================================================
+    match /coupons/{code} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+
+    // =========================================================================
+    // ADMIN ALLOW-LIST — existence alone grants admin power (see isAdmin()
+    // above). Deliberately NEVER client-writable, by anyone, admin included —
+    // the only way to add or remove an admin is direct Firebase Console/CLI
+    // access to this project, which only the project owner has. A user may
+    // read their own entry (harmless, and useful for the console's own "is
+    // my account still an admin" check) but nothing else.
+    // =========================================================================
+    match /admins/{uid} {
+      allow read: if isAuthenticated() && request.auth.uid == uid;
+      allow write: if false;
     }
 
     // =========================================================================
