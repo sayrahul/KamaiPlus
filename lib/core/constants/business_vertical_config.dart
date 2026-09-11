@@ -151,6 +151,19 @@ class BusinessVerticalProfile {
     }
   }
 
+  /// Label for the AI bulk-add button on the Products screen. Restaurant gets
+  /// its own wording ("Scan Menu") because it opens MenuScanSheet, not the
+  /// wholesale-purchase AiInwardModal every other vertical opens — see
+  /// products_screen.dart's _openAiInwardSheet.
+  String get aiBulkAddButtonLabel {
+    switch (id) {
+      case 'restaurant':
+        return 'Scan Menu';
+      default:
+        return 'Inward with AI';
+    }
+  }
+
   /// Field label for item name in add/edit modal
   String get itemFieldLabel {
     switch (id) {

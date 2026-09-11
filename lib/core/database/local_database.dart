@@ -1326,6 +1326,39 @@ class LocalDatabase {
     AppDataBus.instance.bumpProducts();
   }
 
+  /// Finds an existing category by name (case-insensitive) within a business
+  /// vertical, or creates one. Bulk-import flows (menu scan, master-catalog
+  /// import, AI inward) each need this same lookup-or-create step; this is the
+  /// one place to change it. Note: `importMasterProductToStore` has its own
+  /// inline copy of this same pattern, predating this helper — left as-is
+  /// rather than refactored, to avoid touching a tested existing flow.
+  Future<String> findOrCreateCategoryId({
+    required String name,
+    required String businessId,
+    required String businessType,
+  }) async {
+    final cleanName = name.trim();
+    final db = await instance.database;
+    final existing = await db.query(
+      'categories',
+      where: 'LOWER(TRIM(name)) = ? AND (business_type = ? OR business_type = \'both\')',
+      whereArgs: [cleanName.toLowerCase(), businessType],
+      limit: 1,
+    );
+    if (existing.isNotEmpty) {
+      return existing.first['id'] as String;
+    }
+
+    final newId = 'cat_${businessType}_${_uuid.v4().substring(0, 8)}';
+    await upsertCategory(CategoryModel(
+      id: newId,
+      businessId: businessId,
+      name: cleanName,
+      businessType: businessType,
+    ));
+    return newId;
+  }
+
   Future<void> upsertCustomer(CustomerModel customer) async {
     final db = await instance.database;
     await db.insert(

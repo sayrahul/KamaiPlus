@@ -7,6 +7,7 @@ import '../../core/database/local_database.dart';
 import '../common/pwa_top_bar.dart';
 import '../common/owner_privacy_modal.dart';
 import 'ai_inward_modal.dart';
+import 'menu_scan_sheet.dart';
 import 'add_product_modal.dart';
 import 'quick_stock_update_modal.dart';
 import '../inventory/low_stock_reorder_modal.dart';
@@ -141,6 +142,14 @@ class _ProductsScreenState extends State<ProductsScreen> with DataBusRefresh<Pro
 
 
   void _openAiInwardSheet() {
+    // Restaurant has no wholesale supplier bills to scan (hasBillScan == false,
+    // same flag purchases_screen.dart already checks) — a menu photo isn't a
+    // purchase invoice, so it gets its own dedicated flow instead of
+    // AiInwardModal's cost-price/supplier-oriented one.
+    if (BusinessVerticals.activeBusinessTypeNotifier.value == 'restaurant') {
+      MenuScanSheet.show(context, onMenuAddSuccess: () => _loadData());
+      return;
+    }
     AiInwardModal.show(
       context,
       onSelectManual: () => _openAddProductSheet(),
@@ -606,7 +615,7 @@ class _ProductsScreenState extends State<ProductsScreen> with DataBusRefresh<Pro
                           const Icon(Icons.receipt_long_outlined, size: 14, color: Color(0xFFD97706)),
                           const SizedBox(width: 5),
                           Text(
-                            'Inward with AI',
+                            vert.aiBulkAddButtonLabel,
                             style: GoogleFonts.outfit(
                               fontSize: 12,
                               fontWeight: FontWeight.w800,
