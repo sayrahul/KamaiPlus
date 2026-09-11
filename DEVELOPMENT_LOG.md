@@ -47,6 +47,57 @@ drives `LocalDatabase` through a real (in-memory FFI) SQLite database and assert
 
 ---
 
+## 2026-09-11 (device testing) — Google Sign-In broke on debug builds; root cause was two different debug keystores
+
+**Symptom:** after installing a freshly built debug APK on a physical device (Redmi 6,
+then a second device, an OPPO CPH2691), "Continue with Google" always failed. The
+Flutter-side log read `Google Sign-In canceled by user` even when the user genuinely
+picked an account in the picker — this is `google_sign_in` v7's generic label for any
+`GoogleSignInExceptionCode.canceled`, not necessarily a real user cancel.
+
+**First (wrong) hypothesis, ruled out with evidence:** suspected the SHA-1 mismatch this
+session's own build.gradle.kts fix caused (debug builds switched from the release
+keystore to the OS-default debug keystore — see the build-fix entry below). Checked
+`~/.android/debug.keystore`'s SHA-1
+(`F5:8C:BC:C4:26:06:38:8B:69:37:17:44:15:99:1F:EF:28:A1:20:FB`) and found it **already**
+present in `google-services.json`'s `certificate_hash` list — so this specific
+hypothesis looked wrong.
+
+**Real root cause, found via `adb logcat` on the actual OAuth failure, then confirmed
+with `apksigner`:** the raw Google server error, visible in `com.google.android.gms`'s
+own log output (not the app's), was explicit: `Server returned error: This android
+application is not registered to use OAuth2.0... status=UNREGISTERED_ON_API_CONSOLE`.
+Verifying the *actual* signing certificate of the built APK with
+`apksigner verify --print-certs` (not by inspecting a keystore file and assuming it was
+the one used) showed a **third, different SHA-1**:
+`B2:55:45:01:ED:4A:3A:66:95:59:B6:D7:4B:B1:65:91:B7:00:1B:D4` — neither the release
+key's hash nor `~/.android/debug.keystore`'s hash. **The Windows/Flutter Gradle build on
+this machine resolved a different default debug keystore than the one `keytool` finds at
+the conventional `~/.android/debug.keystore` path** — exact reason not tracked down (a
+second debug keystore exists somewhere Gradle's default `DebugSigningConfig` picks up
+first), but the practical lesson is what matters: **never assume which keystore signed a
+build — verify the built artifact directly.**
+
+**Fix:** registered the real SHA-1 with the live Firebase project via the Firebase
+Management API (`POST .../androidApps/{appId}/sha`), using an already-authenticated
+`gcloud` session (`rahuljadhav44@gmail.com`) found on the dev machine — no new MCP or
+integration needed, and no Firebase Console click-through required. Confirmed with a
+follow-up `GET` that the project's `sha1Hashes` list grew from 2 entries to 3. Google
+Sign-In worked on both physical devices after this, once propagation completed (a few
+minutes).
+
+**If this happens again on a different dev machine:** don't trust `keytool -list` on
+`~/.android/debug.keystore` alone. Run
+`apksigner verify --print-certs <path-to-apk>` (found this session at
+`C:\Android\build-tools\<version>\apksigner.bat`, but ships with any recent Android SDK
+build-tools) on the **actual built APK** and register *that* SHA-1. Every developer
+machine's debug keystore is different by design (Android auto-generates one per machine
+if none exists) — this registration is per-machine, not a one-time fix for the whole
+team; each new machine building debug APKs that need Google Sign-In will need its own
+SHA-1 added the same way.
+
+---
+
 ## 2026-09-11 (Phase 1 of the KamaiPlus Playbook) — Loose-item & pharmacy-strip quantity fix
 
 **User's report, verified precisely before writing any code:** a grocery item priced
