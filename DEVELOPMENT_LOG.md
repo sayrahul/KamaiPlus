@@ -47,6 +47,88 @@ drives `LocalDatabase` through a real (in-memory FFI) SQLite database and assert
 
 ---
 
+## 2026-09-11 (Phase 1 of the KamaiPlus Playbook) — Loose-item & pharmacy-strip quantity fix
+
+**User's report, verified precisely before writing any code:** a grocery item priced
+per kg (kaju, badam) can be added to a bill in grams via the `+`/`-` stepper, but editing
+that same product's *stock* only offers whole-count chips meant for packaged goods.
+Same complaint for pharmacy: a strip should let the cashier sell an exact number of
+tablets, not just a whole or half strip.
+
+**What was actually true, checked file by file:**
+- `pos_item_edit_modal.dart` (billing → edit cart line) already had correct, unit-aware
+  chips (`_getQuantityConfig()`) — 10g–500g for kg, ½-strip for pharmacy. This screen
+  was never the problem.
+- `quick_stock_update_modal.dart` (Products screen "pencil" button) had **no unit
+  awareness at all** — a fixed `+6 Pcs / +12 (1 Dozen) / +24 / +48 (Carton) / +100` chip
+  row regardless of the product's actual unit.
+- `add_product_modal.dart`'s opening-stock field had no chips and used
+  `TextInputType.number` (an integer-only keyboard on most Android devices — a merchant
+  could not even *type* "0.25" for 250g of opening stock).
+- No `tablets_per_strip`-equivalent field existed anywhere. The only granularity was a
+  hardcoded "½ Strip" chip, which assumes every strip is exactly 2 units — real strips
+  are 10, 15, 20 or 30 tablets.
+
+**Fix — extract, don't duplicate:**
+- New `lib/core/utils/quantity_config.dart`: `quantityConfigForUnit(unit, {subUnitsPerPack})`,
+  a pure function extracted from `pos_item_edit_modal.dart`'s private method (which now
+  calls the shared one instead of keeping its own copy — the duplication is gone at the
+  source, not just avoided at the two new call sites).
+- Wired into `quick_stock_update_modal.dart` (Inward tab's quick-add chips are now unit-
+  aware; the Loss/Adjustment tab's quantity field switched from an integer keyboard to
+  decimal, with the same chip set for deductions) and `add_product_modal.dart` (opening-
+  stock field: decimal keyboard + live unit-aware chips that update when the unit
+  dropdown changes, since it's a `late String _selectedUnit` the getter reads reactively).
+
+**Pharmacy tablet-level billing:**
+- New `products.sub_units_per_pack INTEGER` column — schema bumped to `version: 3` with
+  a proper `_migrateToV3` (existing installs get the column via `ALTER TABLE`; fresh
+  installs get it in `_createDB` directly). Null means "unknown", never assumed.
+- `ProductModel` gained `subUnitsPerPack` (constructor, `toMap`/`fromMap`, `copyWith`).
+- `add_product_modal.dart`: a "Tablets per Strip" field appears only when the selected
+  unit is `strip`, right below the Unit dropdown that triggers it.
+- `quantityConfigForUnit`'s `strip` branch, given a real pack size, now generates chips
+  like "1 Tablet" / "2 Tablets" / "3 Tablets" / "1 Full Strip" instead of the generic
+  ½-strip fallback. Quantity stays denominated in **strips** (what the price is set
+  per) — a "3 Tablets" chip on a 15-tablet strip is `3/15` strips, the same pattern
+  already used for a 250g chip on a kg-priced item (`0.25` kg). Without a known pack
+  size, the old whole/half-strip chips are still shown — never a wrong guess.
+
+**A second, more serious bug found while touching this code, fixed in the same pass:**
+`quick_stock_update_modal.dart`'s `_saveInward` and `_saveAdjustment` reconstructed a
+fresh `ProductModel(...)` field-by-field on every stock update, instead of calling
+`product.copyWith(...)`. The reconstruction's field list was missing `businessType`
+(which defaults to `'grocery'`), `size`, `color`, `imeiSerial`, `hsnCode`, `isFavorite`
+— meaning **every single stock update via the pencil button was silently resetting the
+product's business vertical back to grocery**, directly undoing the vertical-isolation
+fix from earlier this session the moment anyone touched that product's stock. Both call
+sites now use `copyWith`, which — unlike a field-by-field reconstruction — carries every
+field forward by default, so a future field added to `ProductModel` (like
+`subUnitsPerPack` itself) can't be silently dropped by these two functions again. This
+is the same class of bug the case study at the top of this file describes: a working
+fix silently undone by unrelated-looking code nearby, except this time it was caught
+before shipping rather than five hours after.
+
+**Also fixed alongside:** two more `ALTER TABLE ... DEFAULT "grocery"` statements using
+double-quoted string literals — the exact same misfeature already disclosed and fixed
+for `'both'` earlier this session, found by re-checking the whole file for the pattern
+while already editing the migration functions.
+
+**Verified:** `flutter analyze` (0 new issues), `flutter test` (51 pass, 15 new across
+`test/quantity_config_test.dart` — every unit's chip generation, tablet-count math for
+several real pack sizes, degenerate-input safety — and
+`test/product_copywith_preserves_fields_test.dart`, which locks in the `copyWith`
+fix specifically so it can't regress back to a field-by-field reconstruction),
+`flutter build apk --debug` (succeeds). **Not verified on a physical device or
+emulator** — none was available in this environment (`flutter devices` found only
+Windows desktop and two browsers; `flutter emulators` found no configured Android AVD).
+The user needs to check on their own phone: add opening stock in grams for a kg item,
+edit an existing kg item's stock via the pencil button and confirm gram chips appear,
+and set a pharmacy product's unit to "strip" with a tablet count to confirm the tablet
+chips show correctly at billing time.
+
+---
+
 ## 2026-09-11 (later same day) — Restaurant "Scan Menu Photo" feature
 
 **User's request, paraphrased:** scanning a product should auto-fill its name from the
