@@ -6,6 +6,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../core/constants/business_vertical_config.dart';
 import '../../core/utils/money_formatter.dart';
 import '../common/kamai_bottom_nav.dart';
+import '../common/in_app_notification.dart';
 import 'ai_inward_sheet.dart';
 
 class PurchasesScreen extends StatefulWidget {
@@ -197,20 +198,7 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
       backgroundColor: Colors.transparent,
       builder: (_) => AiInwardSheet(
         onInwardComplete: () {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: const Row(
-                children: [
-                  Icon(Icons.check_circle_rounded, color: Colors.white, size: 18),
-                  SizedBox(width: 8),
-                  Text('Wholesale bill products updated into inventory!'),
-                ],
-              ),
-              backgroundColor: const Color(0xFF0F172A),
-              behavior: SnackBarBehavior.floating,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-            ),
-          );
+          InAppNotification.success('Wholesale bill products updated into inventory!', context: context);
         },
       ),
     );
@@ -246,9 +234,7 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
         await launchUrl(uri, mode: LaunchMode.externalApplication);
       } catch (_) {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('WhatsApp application not found')),
-          );
+          InAppNotification.error('WhatsApp application not found', context: context);
         }
       }
     }
@@ -274,12 +260,7 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
               setState(() {
                 _purchases.removeWhere((p) => p['id'] == purchase['id']);
               });
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text('✓ Purchase order ${purchase['id']} deleted'),
-                  backgroundColor: const Color(0xFF0F172A),
-                ),
-              );
+              InAppNotification.success('Purchase order ${purchase['id']} deleted', context: context);
             },
             style: ElevatedButton.styleFrom(
               backgroundColor: const Color(0xFFEF4444),
@@ -573,9 +554,7 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
                               });
                               setSheetState(() {});
                               Navigator.pop(ctx);
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(content: Text('✓ ${purchase['id']} marked as Received into Stock!')),
-                              );
+                              InAppNotification.success('${purchase['id']} marked as Received into Stock!', context: context);
                             },
                             icon: const Icon(Icons.done_all_rounded, size: 16),
                             label: Text('Mark Inward Received', style: GoogleFonts.outfit(fontSize: 13, fontWeight: FontWeight.w700)),
@@ -774,11 +753,9 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
                         }
                       });
                       Navigator.pop(ctx);
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text('✓ Payment of ${MoneyFormatter.formatINR(payPaise)} recorded for ${purchase['supplier']}!'),
-                          backgroundColor: const Color(0xFF059669),
-                        ),
+                      InAppNotification.success(
+                        'Payment of ${MoneyFormatter.formatINR(payPaise)} recorded for ${purchase['supplier']}!',
+                        context: context,
                       );
                     },
                     style: ElevatedButton.styleFrom(
@@ -1083,11 +1060,9 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
                         _purchases.insert(0, newOrder);
                       });
                       Navigator.pop(ctx);
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text('✓ Inward bill for $supName (${MoneyFormatter.formatINR(amountPaise)}) added!'),
-                          backgroundColor: const Color(0xFF059669),
-                        ),
+                      InAppNotification.success(
+                        'Inward bill for $supName (${MoneyFormatter.formatINR(amountPaise)}) added!',
+                        context: context,
                       );
                     },
                     style: ElevatedButton.styleFrom(

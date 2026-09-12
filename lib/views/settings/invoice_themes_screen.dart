@@ -4,6 +4,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../core/constants/business_vertical_config.dart';
+import '../common/in_app_notification.dart';
 import '../../core/database/local_database.dart';
 import '../common/kamai_bottom_nav.dart';
 import '../common/pro_upgrade_modal.dart';
@@ -121,20 +122,7 @@ class _InvoiceThemesScreenState extends State<InvoiceThemesScreen> {
       await prefs.setBool('invoice_show_owner_phone', _showOwnerPhone);
     } catch (_) {}
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Row(
-          children: [
-            const Icon(Icons.check_circle_rounded, color: Colors.white, size: 18),
-            const SizedBox(width: 8),
-            const Text('Invoice theme & options saved successfully!'),
-          ],
-        ),
-        backgroundColor: const Color(0xFF059669),
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-      ),
-    );
+    InAppNotification.success('Invoice theme & options saved successfully!', context: context);
   }
 
   Future<void> _generateSamplePdf() async {

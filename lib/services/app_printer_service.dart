@@ -5,6 +5,7 @@ import '../core/database/local_database.dart';
 import 'thermal_printer_service.dart';
 import 'invoice_pdf_service.dart';
 import '../views/settings/printer_settings_screen.dart';
+import '../views/common/in_app_notification.dart';
 
 /// Central Unified Printer Service for KamaiPlus.
 ///
@@ -34,29 +35,11 @@ class AppPrinterService {
       if (printerAddress == null || printerAddress.isEmpty) {
         // No Bluetooth printer configured yet -> prompt user to set it up
         if (context.mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: const Row(
-                children: [
-                  Icon(Icons.print_rounded, color: Colors.amberAccent, size: 18),
-                  SizedBox(width: 8),
-                  Expanded(child: Text('No Bluetooth printer configured. Please select your printer.')),
-                ],
-              ),
-              action: SnackBarAction(
-                label: 'Setup',
-                textColor: Colors.amberAccent,
-                onPressed: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(builder: (_) => const PrinterSettingsScreen()),
-                  );
-                },
-              ),
-              backgroundColor: const Color(0xFF0F172A),
-              behavior: SnackBarBehavior.floating,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-            ),
+          InAppNotification.show(
+            context: context,
+            message: 'No Bluetooth printer configured. Please select your printer.',
+            customIcon: Icons.print_rounded,
+            customColor: Colors.amberAccent,
           );
           Navigator.push(
             context,
@@ -67,24 +50,9 @@ class AppPrinterService {
       }
 
       if (showToast && context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Row(
-              children: [
-                const SizedBox(
-                  width: 14,
-                  height: 14,
-                  child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-                ),
-                const SizedBox(width: 10),
-                Expanded(child: Text('Printing bill #${sale.invoiceNumber} to $printerName...')),
-              ],
-            ),
-            backgroundColor: const Color(0xFF0F172A),
-            duration: const Duration(milliseconds: 1400),
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-          ),
+        InAppNotification.info(
+          'Printing bill #${sale.invoiceNumber} to $printerName...',
+          context: context,
         );
       }
 
@@ -96,14 +64,7 @@ class AppPrinterService {
       );
 
       if (!success && context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Could not connect to "$printerName". Check printer power & Bluetooth.'),
-            backgroundColor: Colors.red.shade800,
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-          ),
-        );
+        InAppNotification.error('Could not connect to "$printerName". Check printer power & Bluetooth.', context: context);
       }
       return success;
     }
@@ -114,24 +75,11 @@ class AppPrinterService {
       final storeName = profile.storeName.isNotEmpty ? profile.storeName : 'KamaiPlus Store';
 
       if (showToast && context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: const Row(
-              children: [
-                SizedBox(
-                  width: 14,
-                  height: 14,
-                  child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-                ),
-                SizedBox(width: 10),
-                Expanded(child: Text('Opening A4 Print Spooler...')),
-              ],
-            ),
-            backgroundColor: const Color(0xFF0F172A),
-            duration: const Duration(milliseconds: 1200),
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-          ),
+        InAppNotification.show(
+          context: context,
+          message: 'Opening A4 Print Spooler...',
+          type: NotificationType.info,
+          duration: const Duration(milliseconds: 1200),
         );
       }
 
@@ -147,9 +95,7 @@ class AppPrinterService {
 
       if (pdfPath == null || pdfPath.isEmpty) {
         if (context.mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Failed to generate invoice document.')),
-          );
+          InAppNotification.error('Failed to generate invoice document.', context: context);
         }
         return false;
       }
@@ -160,9 +106,7 @@ class AppPrinterService {
       );
     } catch (e) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Print error: $e')),
-        );
+        InAppNotification.error('Print error: $e', context: context);
       }
       return false;
     }

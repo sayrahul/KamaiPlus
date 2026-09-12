@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../core/database/local_database.dart';
 import '../../services/firestore_sync_service.dart';
+import '../common/in_app_notification.dart';
 import '../common/kamai_bottom_nav.dart';
 import '../common/pro_upgrade_modal.dart';
 import '../common/pro_locked_card.dart';
@@ -432,9 +433,7 @@ class _BackupRestoreScreenState extends State<BackupRestoreScreen> {
                   subtitle: 'Upload .json backup file to recover items',
                   buttonLabel: 'Select File',
                   onTap: () {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Select KamaiPlus_Backup.json from your device storage')),
-                    );
+                    InAppNotification.info('Select KamaiPlus_Backup.json from your device storage', context: context);
                   },
                 ),
                 const SizedBox(height: 10),
@@ -478,9 +477,7 @@ class _BackupRestoreScreenState extends State<BackupRestoreScreen> {
                       ProUpgradeModal.show(context).then((_) => _loadStats());
                       return;
                     }
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Tally Prime XML vouchers compiled in Downloads/tally_vouchers.xml')),
-                    );
+                    InAppNotification.success('Tally Prime XML vouchers compiled in Downloads/tally_vouchers.xml', context: context);
                   },
                 ),
                 const SizedBox(height: 10),
@@ -497,9 +494,7 @@ class _BackupRestoreScreenState extends State<BackupRestoreScreen> {
                       ProUpgradeModal.show(context).then((_) => _loadStats());
                       return;
                     }
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('CA Master CSV exported to Downloads/kamai_ca_register.csv')),
-                    );
+                    InAppNotification.success('CA Master CSV exported to Downloads/kamai_ca_register.csv', context: context);
                   },
                 ),
                 if (!_isPro) ...[

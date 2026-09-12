@@ -6,6 +6,7 @@ import 'package:uuid/uuid.dart';
 import '../../core/constants/business_vertical_config.dart';
 import '../../core/database/local_database.dart';
 import '../../core/utils/money_formatter.dart';
+import '../common/in_app_notification.dart';
 import '../../models/models.dart';
 import '../../services/cloud_barcode_resolver_service.dart';
 import '../../services/firestore_sync_service.dart';
@@ -382,31 +383,12 @@ class _RapidBarcodeInwardScreenState extends State<RapidBarcodeInwardScreen> wit
   }
 
   void _showToast(String message, {bool isSuccess = false}) {
-    ScaffoldMessenger.of(context).hideCurrentSnackBar();
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Row(
-          children: [
-            Icon(
-              isSuccess ? Icons.check_circle_rounded : Icons.info_outline_rounded,
-              color: isSuccess ? Colors.greenAccent : Colors.amberAccent,
-              size: 18,
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Text(
-                message,
-                style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w700),
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-          ],
-        ),
-        backgroundColor: const Color(0xFF0F172A),
-        duration: const Duration(milliseconds: 1800),
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-      ),
+    InAppNotification.show(
+      context: context,
+      message: message,
+      customIcon: isSuccess ? Icons.check_circle_rounded : Icons.info_outline_rounded,
+      customColor: isSuccess ? Colors.greenAccent : Colors.amberAccent,
+      duration: const Duration(milliseconds: 1800),
     );
   }
 

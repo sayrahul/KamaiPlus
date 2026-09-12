@@ -9,6 +9,7 @@ import 'dart:io';
 import '../../core/database/local_database.dart';
 import '../../models/models.dart';
 import '../../services/upi_standee_pdf_service.dart';
+import 'in_app_notification.dart';
 
 class UpiStandeeModal extends StatefulWidget {
   const UpiStandeeModal({super.key});
@@ -77,9 +78,7 @@ class _UpiStandeeModalState extends State<UpiStandeeModal> {
       final bytes = await _generateStandeePdfBytes(storeName, upiId, qrData);
       if (bytes == null) {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Set a UPI ID in Store Profile first.'), backgroundColor: Colors.red),
-          );
+          InAppNotification.error('Set a UPI ID in Store Profile first.', context: context);
         }
         return;
       }
@@ -103,9 +102,7 @@ class _UpiStandeeModalState extends State<UpiStandeeModal> {
       final bytes = await _generateStandeePdfBytes(storeName, upiId, qrData);
       if (bytes == null) {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Set a UPI ID in Store Profile first.'), backgroundColor: Colors.red),
-          );
+          InAppNotification.error('Set a UPI ID in Store Profile first.', context: context);
         }
         return;
       }
@@ -122,9 +119,7 @@ class _UpiStandeeModalState extends State<UpiStandeeModal> {
       final bytes = await _generateStandeePdfBytes(storeName, upiId, qrData);
       if (bytes == null) {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Set a UPI ID in Store Profile first.'), backgroundColor: Colors.red),
-          );
+          InAppNotification.error('Set a UPI ID in Store Profile first.', context: context);
         }
         return;
       }
@@ -428,14 +423,13 @@ class _UpiStandeeModalState extends State<UpiStandeeModal> {
                             GestureDetector(
                               onTap: () {
                                 setState(() => _audioVoiceAlert = !_audioVoiceAlert);
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(
-                                    content: Text(_audioVoiceAlert
-                                        ? '🔊 Soundbox audio alert enabled'
-                                        : '🔇 Soundbox audio alert disabled'),
-                                    duration: const Duration(seconds: 1),
-                                    behavior: SnackBarBehavior.floating,
-                                  ),
+                                InAppNotification.show(
+                                  context: context,
+                                  message: _audioVoiceAlert
+                                      ? 'Soundbox audio alert enabled'
+                                      : 'Soundbox audio alert disabled',
+                                  customIcon: _audioVoiceAlert ? Icons.volume_up_rounded : Icons.volume_off_rounded,
+                                  duration: const Duration(seconds: 1),
                                 );
                               },
                               child: Container(

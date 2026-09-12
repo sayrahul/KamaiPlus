@@ -4,6 +4,7 @@ import '../../services/csv_inward_service.dart';
 import '../purchases/ai_inward_sheet.dart';
 import '../purchases/bill_scan_review_sheet.dart';
 import 'rapid_barcode_inward_screen.dart';
+import '../common/in_app_notification.dart';
 
 class AiInwardModal extends StatelessWidget {
   final VoidCallback onSelectManual;
@@ -38,13 +39,7 @@ class AiInwardModal extends StatelessWidget {
     if (!context.mounted) return;
 
     if (!res.success) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(res.errorMessage ?? 'Could not parse CSV file.'),
-          backgroundColor: Colors.red,
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
+      InAppNotification.error(res.errorMessage ?? 'Could not parse CSV file.', context: context);
       return;
     }
 

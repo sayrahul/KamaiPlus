@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'gemini_ai_service.dart';
 import 'mlkit_ocr_service.dart';
 import '../views/purchases/bill_scan_review_sheet.dart';
+import '../views/common/in_app_notification.dart';
 
 /// Share-To Target Service ("Send to KamaiPlus" from WhatsApp / Gallery)
 class ShareTargetService {
@@ -92,11 +93,10 @@ class ShareTargetService {
               billDate: result.billDate,
             );
           } else {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text(result.errorMessage ?? 'Could not parse products from shared PDF.'),
-                backgroundColor: Colors.orange,
-              ),
+            InAppNotification.show(
+              context: context,
+              message: result.errorMessage ?? 'Could not parse products from shared PDF.',
+              type: NotificationType.warning,
             );
           }
         }
@@ -116,11 +116,10 @@ class ShareTargetService {
               billDate: result.billDate,
             );
           } else {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text('Bill image received, but no product lines could be recognized.'),
-                backgroundColor: Colors.orange,
-              ),
+            InAppNotification.show(
+              context: context,
+              message: 'Bill image received, but no product lines could be recognized.',
+              type: NotificationType.warning,
             );
           }
         }
@@ -128,12 +127,7 @@ class ShareTargetService {
     } catch (e) {
       if (context.mounted) {
         Navigator.of(context, rootNavigator: true).pop(); // dismiss loading
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Failed to parse bill: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
+        InAppNotification.error('Failed to parse bill: $e', context: context);
       }
     }
   }

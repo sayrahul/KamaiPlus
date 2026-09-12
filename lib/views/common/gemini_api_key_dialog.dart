@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../services/gemini_ai_service.dart';
+import 'in_app_notification.dart';
 
 /// Lets a merchant enter/test their Gemini API key for any AI Vision feature
 /// (wholesale bill OCR, menu-photo scan). Extracted out of `ai_inward_sheet.dart`
@@ -101,9 +102,7 @@ class GeminiApiKeyDialog {
                   await GeminiAiService.setCustomApiKey(ctrl.text.trim());
                   if (ctx.mounted) Navigator.pop(dlgCtx);
                   if (context.mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('✅ Gemini API Key saved successfully!'), backgroundColor: Color(0xFF059669)),
-                    );
+                    InAppNotification.success('Gemini API Key saved successfully!', context: context);
                   }
                 },
                 style: ElevatedButton.styleFrom(

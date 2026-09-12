@@ -6,6 +6,7 @@ import '../../core/database/local_database.dart';
 import '../../core/utils/money_formatter.dart';
 import '../../models/models.dart';
 import '../../services/firestore_sync_service.dart';
+import '../common/in_app_notification.dart';
 import '../../services/gemini_ai_service.dart';
 
 class BillScanReviewSheet extends StatefulWidget {
@@ -242,9 +243,7 @@ class _BillScanReviewSheetState extends State<BillScanReviewSheet> {
 
   Future<void> _saveInwardToStock() async {
     if (_items.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please add at least 1 item to inward.')),
-      );
+      InAppNotification.error('Please add at least 1 item to inward.', context: context);
       return;
     }
 
@@ -370,24 +369,9 @@ class _BillScanReviewSheetState extends State<BillScanReviewSheet> {
 
       if (mounted) {
         Navigator.pop(context);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Row(
-              children: [
-                const Icon(Icons.check_circle_rounded, color: Colors.white, size: 20),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    '✅ Inward Successful! $createdCount new products added, $updatedCount stock quantities updated.',
-                    style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700),
-                  ),
-                ),
-              ],
-            ),
-            backgroundColor: const Color(0xFF059669),
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-          ),
+        InAppNotification.success(
+          'Inward Successful! $createdCount new products added, $updatedCount stock quantities updated.',
+          context: context,
         );
       }
     } catch (e) {
@@ -395,9 +379,7 @@ class _BillScanReviewSheetState extends State<BillScanReviewSheet> {
         setState(() {
           _isSaving = false;
         });
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to save inward: $e'), backgroundColor: Colors.red),
-        );
+        InAppNotification.error('Failed to save inward: $e', context: context);
       }
     }
   }

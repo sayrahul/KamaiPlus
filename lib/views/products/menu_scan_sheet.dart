@@ -6,6 +6,7 @@ import '../../core/constants/business_vertical_config.dart';
 import '../../services/gemini_ai_service.dart';
 import '../common/gemini_api_key_dialog.dart';
 import 'menu_item_review_sheet.dart';
+import '../common/in_app_notification.dart';
 
 /// Entry point for Restaurant vertical: "Scan Menu Photo" → AI extracts dish
 /// names, prices and categories → merchant reviews and confirms → dishes are
@@ -100,9 +101,7 @@ class MenuScanSheet extends StatelessWidget {
       _runExtraction(context, bytes, mimeType: 'image/jpeg');
     } catch (e) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Could not open image: $e'), backgroundColor: Colors.red),
-        );
+        InAppNotification.error('Could not open image: $e', context: context);
       }
     }
   }
@@ -199,20 +198,13 @@ class MenuScanSheet extends StatelessWidget {
 
             if (result == null || !result.success) {
               final needsApiKey = (result?.errorMessage ?? '').contains('API Key');
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text(result?.errorMessage ?? 'Could not read the menu photo.'),
-                  backgroundColor: Colors.red,
-                  behavior: SnackBarBehavior.floating,
-                  duration: const Duration(seconds: 6),
-                  action: needsApiKey
-                      ? SnackBarAction(
-                          label: 'Settings',
-                          textColor: Colors.white,
-                          onPressed: () => GeminiApiKeyDialog.show(context),
-                        )
-                      : null,
-                ),
+              InAppNotification.show(
+                context: context,
+                message: result?.errorMessage ?? 'Could not read the menu photo.',
+                type: NotificationType.error,
+                duration: const Duration(seconds: 6),
+                actionLabel: needsApiKey ? 'Settings' : null,
+                onAction: needsApiKey ? () => GeminiApiKeyDialog.show(context) : null,
               );
               return;
             }

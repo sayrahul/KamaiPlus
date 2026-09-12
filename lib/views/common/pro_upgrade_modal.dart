@@ -11,6 +11,7 @@ import '../../models/models.dart';
 import '../settings/pro_membership_screen.dart';
 import '../../services/razorpay_service.dart';
 import '../../services/firestore_sync_service.dart';
+import 'in_app_notification.dart';
 
 class ProUpgradeModal extends StatefulWidget {
   const ProUpgradeModal({super.key});
@@ -166,36 +167,17 @@ class _ProUpgradeModalState extends State<ProUpgradeModal> {
         if (!mounted) return;
         setState(() => _isLoading = false);
         Navigator.of(context).pop();
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Row(
-              children: [
-                const Icon(Icons.stars_rounded, color: Color(0xFFFBBF24), size: 20),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    '🎉 Kamai+ Pro Activated! Payment ID: ${response.paymentId ?? ""}',
-                    style: GoogleFonts.inter(fontWeight: FontWeight.w700),
-                  ),
-                ),
-              ],
-            ),
-            backgroundColor: const Color(0xFF059669),
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-          ),
+        InAppNotification.show(
+          context: context,
+          message: 'Kamai+ Pro Activated! Payment ID: ${response.paymentId ?? ""}',
+          customIcon: Icons.stars_rounded,
+          customColor: const Color(0xFFFBBF24),
         );
       },
       onError: (response) {
         if (!mounted) return;
         setState(() => _isLoading = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Payment cancelled or failed: ${response.message ?? "Try again"}'),
-            backgroundColor: const Color(0xFFDC2626),
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
+        InAppNotification.error('Payment cancelled or failed: ${response.message ?? "Try again"}', context: context);
       },
     );
   }

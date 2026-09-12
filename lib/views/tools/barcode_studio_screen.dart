@@ -6,6 +6,7 @@ import '../../core/utils/money_formatter.dart';
 import '../../models/models.dart';
 import '../common/pro_upgrade_modal.dart';
 import '../common/pro_locked_card.dart';
+import '../common/in_app_notification.dart';
 
 class BarcodeStudioScreen extends StatefulWidget {
   const BarcodeStudioScreen({super.key});
@@ -69,24 +70,11 @@ class _BarcodeStudioScreenState extends State<BarcodeStudioScreen> {
       return;
     }
     final name = _selectedProduct?.name ?? 'Item';
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Row(
-          children: [
-            const Icon(Icons.print_rounded, color: Color(0xFF10B981), size: 20),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Text(
-                'Sent $_copies thermal label(s) for "$name" to Bluetooth printer',
-                style: GoogleFonts.plusJakartaSans(fontSize: 12.5, fontWeight: FontWeight.w600, color: Colors.white),
-              ),
-            ),
-          ],
-        ),
-        backgroundColor: const Color(0xFF0F172A),
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      ),
+    InAppNotification.show(
+      context: context,
+      message: 'Sent $_copies thermal label(s) for "$name" to Bluetooth printer',
+      customIcon: Icons.print_rounded,
+      customColor: const Color(0xFF10B981),
     );
   }
 

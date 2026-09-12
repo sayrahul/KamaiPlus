@@ -4,6 +4,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../core/utils/money_formatter.dart';
+import '../common/in_app_notification.dart';
 
 class DenominationTallyModal extends StatefulWidget {
   final int expectedCashPaise;
@@ -138,9 +139,7 @@ class _DenominationTallyModalState extends State<DenominationTallyModal> {
       } catch (_) {
         await Clipboard.setData(ClipboardData(text: buffer.toString()));
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('✓ Cash tally breakdown copied to clipboard!')),
-          );
+          InAppNotification.success('Cash tally breakdown copied to clipboard!', context: context);
         }
       }
     }

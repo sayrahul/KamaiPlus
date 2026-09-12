@@ -6,6 +6,7 @@ import 'package:image_picker/image_picker.dart';
 import '../../services/csv_inward_service.dart';
 import '../../services/gemini_ai_service.dart';
 import '../../services/mlkit_ocr_service.dart';
+import '../common/in_app_notification.dart';
 import '../common/gemini_api_key_dialog.dart';
 import 'bill_scan_review_sheet.dart';
 
@@ -108,9 +109,7 @@ class AiInwardSheet extends StatelessWidget {
       _runExtraction(context, bytes, mimeType: 'image/jpeg', title: 'Analyzing Bill Photo');
     } catch (e) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Could not open image: $e'), backgroundColor: Colors.red),
-        );
+        InAppNotification.error('Could not open image: $e', context: context);
       }
     }
   }
@@ -129,9 +128,7 @@ class AiInwardSheet extends StatelessWidget {
 
       if (bytes.isEmpty) {
         if (context.mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Could not read PDF file.')),
-          );
+          InAppNotification.error('Could not read PDF file.', context: context);
         }
         return;
       }
@@ -140,9 +137,7 @@ class AiInwardSheet extends StatelessWidget {
       _runExtraction(context, bytes, mimeType: 'application/pdf', title: 'Parsing PDF Invoice');
     } catch (e) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('PDF Picker error: $e'), backgroundColor: Colors.red),
-        );
+        InAppNotification.error('PDF Picker error: $e', context: context);
       }
     }
   }
@@ -153,13 +148,7 @@ class AiInwardSheet extends StatelessWidget {
       if (!context.mounted) return;
 
       if (!res.success) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(res.errorMessage ?? 'Failed to parse CSV/Excel file.'),
-            backgroundColor: Colors.red,
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
+        InAppNotification.error(res.errorMessage ?? 'Failed to parse CSV/Excel file.', context: context);
         return;
       }
 
@@ -172,9 +161,7 @@ class AiInwardSheet extends StatelessWidget {
       );
     } catch (e) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
-        );
+        InAppNotification.error('Error: $e', context: context);
       }
     }
   }

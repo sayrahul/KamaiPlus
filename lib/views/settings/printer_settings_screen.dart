@@ -4,6 +4,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../core/database/local_database.dart';
 import '../../models/models.dart';
+import '../common/in_app_notification.dart';
 import '../../services/thermal_printer_service.dart';
 import '../../services/invoice_pdf_service.dart';
 
@@ -98,13 +99,7 @@ class _PrinterSettingsScreenState extends State<PrinterSettingsScreen> {
 
   Future<void> _testThermalPrint() async {
     if (_selectedMac == null || _selectedMac!.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Please select a paired Bluetooth printer first!'),
-          backgroundColor: Color(0xFFDC2626),
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
+      InAppNotification.error('Please select a paired Bluetooth printer first!', context: context);
       return;
     }
 
@@ -144,15 +139,11 @@ class _PrinterSettingsScreenState extends State<PrinterSettingsScreen> {
     setState(() => _isTestingPrint = false);
 
     if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            success ? '✓ Test receipt printed successfully!' : 'Failed to print. Check printer connection.',
-          ),
-          backgroundColor: success ? const Color(0xFF059669) : const Color(0xFFDC2626),
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
+      if (success) {
+        InAppNotification.success('Test receipt printed successfully!', context: context);
+      } else {
+        InAppNotification.error('Failed to print. Check printer connection.', context: context);
+      }
     }
   }
 

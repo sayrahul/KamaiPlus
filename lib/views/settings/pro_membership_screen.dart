@@ -4,6 +4,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../../core/database/local_database.dart';
 import '../../models/models.dart';
 import '../../services/firestore_sync_service.dart';
+import '../common/in_app_notification.dart';
 import '../../services/razorpay_service.dart';
 
 class ProMembershipScreen extends StatefulWidget {
@@ -128,24 +129,7 @@ class _ProMembershipScreenState extends State<ProMembershipScreen> {
       onError: (response) {
         if (!mounted) return;
         setState(() => _isLoading = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Row(
-              children: [
-                const Icon(Icons.info_outline_rounded, color: Colors.white, size: 18),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    'Payment cancelled or incomplete: ${response.message ?? "Try again"}',
-                    style: GoogleFonts.plusJakartaSans(fontSize: 12),
-                  ),
-                ),
-              ],
-            ),
-            backgroundColor: const Color(0xFFDC2626),
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
+        InAppNotification.error('Payment cancelled or incomplete: ${response.message ?? "Try again"}', context: context);
       },
     );
   }

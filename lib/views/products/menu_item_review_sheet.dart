@@ -6,6 +6,7 @@ import '../../core/constants/business_vertical_config.dart';
 import '../../core/database/local_database.dart';
 import '../../core/utils/money_formatter.dart';
 import '../../models/models.dart';
+import '../common/in_app_notification.dart';
 import '../../services/firestore_sync_service.dart';
 import '../../services/gemini_ai_service.dart';
 
@@ -141,9 +142,7 @@ class _MenuItemReviewSheetState extends State<MenuItemReviewSheet> {
   Future<void> _saveDishesToMenu() async {
     final validItems = _items.where((it) => it.nameCtrl.text.trim().isNotEmpty).toList();
     if (validItems.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please add at least 1 dish.')),
-      );
+      InAppNotification.error('Please add at least 1 dish.', context: context);
       return;
     }
 
@@ -227,22 +226,15 @@ class _MenuItemReviewSheetState extends State<MenuItemReviewSheet> {
 
       if (mounted) {
         Navigator.pop(context);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              '$createdCount dish(es) added, $updatedCount price(s) updated.',
-            ),
-            backgroundColor: const Color(0xFF059669),
-            behavior: SnackBarBehavior.floating,
-          ),
+        InAppNotification.success(
+          '$createdCount dish(es) added, $updatedCount price(s) updated.',
+          context: context,
         );
       }
     } catch (e) {
       if (mounted) {
         setState(() => _isSaving = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Could not save menu: $e'), backgroundColor: Colors.red),
-        );
+        InAppNotification.error('Could not save menu: $e', context: context);
       }
     }
   }

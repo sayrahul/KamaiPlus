@@ -6,6 +6,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../core/constants/business_vertical_config.dart';
 import '../../core/database/local_database.dart';
 import '../../core/utils/money_formatter.dart';
+import '../common/in_app_notification.dart';
 import '../../models/models.dart';
 
 /// Modal bottom sheet for 1-Tap Low-Stock Radar & Wholesale WhatsApp Reorder.
@@ -207,12 +208,7 @@ class _LowStockReorderModalState extends State<LowStockReorderModal> {
 
   Future<void> _dispatchWhatsApp() async {
     if (_selectedItems.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Please select at least 1 item to reorder.'),
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
+      InAppNotification.info('Please select at least 1 item to reorder.', context: context);
       return;
     }
 
@@ -244,36 +240,18 @@ class _LowStockReorderModalState extends State<LowStockReorderModal> {
     if (!launched) {
       await Clipboard.setData(ClipboardData(text: message));
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text(
-                'WhatsApp app not detected. Purchase Order copied to Clipboard! 📋'),
-            backgroundColor: Color(0xFF0F172A),
-            behavior: SnackBarBehavior.floating,
-            duration: Duration(seconds: 3),
-          ),
+        InAppNotification.info(
+          'WhatsApp app not detected. Purchase Order copied to Clipboard!',
+          context: context,
         );
       }
     } else {
       if (mounted) {
         widget.onReorderDispatched?.call();
         Navigator.pop(context);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Row(
-              children: [
-                const Icon(Icons.check_circle_rounded,
-                    color: Color(0xFF10B981), size: 20),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                      'Restock order dispatched to WhatsApp for ${_selectedItems.length} items!'),
-                ),
-              ],
-            ),
-            backgroundColor: const Color(0xFF0F172A),
-            behavior: SnackBarBehavior.floating,
-          ),
+        InAppNotification.success(
+          'Restock order dispatched to WhatsApp for ${_selectedItems.length} items!',
+          context: context,
         );
       }
     }
@@ -284,14 +262,7 @@ class _LowStockReorderModalState extends State<LowStockReorderModal> {
     final message = _generateWhatsAppOrderMessage();
     await Clipboard.setData(ClipboardData(text: message));
     if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('✓ Order text copied to clipboard!'),
-          backgroundColor: Color(0xFF059669),
-          behavior: SnackBarBehavior.floating,
-          duration: Duration(seconds: 2),
-        ),
-      );
+      InAppNotification.success('Order text copied to clipboard!', context: context);
     }
   }
 
