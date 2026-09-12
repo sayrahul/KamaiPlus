@@ -47,6 +47,24 @@ drives `LocalDatabase` through a real (in-memory FFI) SQLite database and assert
 
 ---
 
+## 2026-09-12 — Product Page Grid View Removed; Locked to Dense List View
+
+**Request:** "1)product page se.. Grid view wala nikal dalo.. list view se hi continue karenge hum" — remove Grid view toggle and grid layout from Products screen; continue exclusively with the standard List view without breaking any existing workflow or function.
+
+**Changes in `lib/views/products/products_screen.dart`:**
+1. Removed `bool _isGridView = false;` state variable.
+2. Removed the grid toggle button from `_buildSearchToolbar()`. Cleaned trailing spacing when `showBatchExpiry` is false.
+3. Updated the product catalog rendering section: replaced `_isGridView ? GridView.builder(...) : ListView.builder(...)` with direct `ListView.builder(...)`.
+4. Safely deleted unused `_buildProductGridCard(ProductModel product)`.
+5. All other features (Inward AI, Add Product, Search bar, Barcode scanner, Low stock filter, Category pills, quick stock adjustments, and pencil edit modal) remain 100% intact.
+
+**Verification:**
+- `flutter analyze lib/views/products/products_screen.dart` — 0 issues found.
+- `flutter test` — All 87/87 tests passed.
+- Updated `APP_FEATURE_MEMORY.md` to lock List View only for Products Master.
+
+---
+
 ## 2026-09-12 — Option 1: Unified Solid Local Database, Safe Logout & Complete Sales/Khata Cloud Sync
 
 **Request / Symptom:** After logout and login, user reported data appeared wiped (sales 0, products vanished) and the store's business vertical changed from Apparel/Clothing to Grocery.

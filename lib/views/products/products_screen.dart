@@ -47,7 +47,6 @@ class _ProductsScreenState extends State<ProductsScreen> with DataBusRefresh<Pro
   bool _filterLowStockOnly = false;
   bool _filterExpiringOnly = false;
   bool _isAssetHidden = true; // Hidden by default, unlocked via Owner PIN
-  bool _isGridView = false; // Instant List / Grid view toggle
 
   final TextEditingController _searchCtrl = TextEditingController();
 
@@ -453,25 +452,9 @@ class _ProductsScreenState extends State<ProductsScreen> with DataBusRefresh<Pro
             _buildCategoryPills(),
             const SizedBox(height: 12),
 
-            // 5. PRODUCT LIST / GRID ITEMS
+            // 5. PRODUCT LIST ITEMS
             if (filtered.isEmpty)
               _buildEmptyState()
-            else if (_isGridView)
-              GridView.builder(
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                itemCount: filtered.length,
-                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: 2,
-                  // Higher ratio = shorter cards (width/height) — was 0.88
-                  // (taller than wide), now closer to square so more rows
-                  // fit on screen without scrolling.
-                  childAspectRatio: 1.05,
-                  crossAxisSpacing: 8,
-                  mainAxisSpacing: 8,
-                ),
-                itemBuilder: (ctx, i) => _buildProductGridCard(filtered[i]),
-              )
             else
               ListView.builder(
                 shrinkWrap: true,
@@ -882,6 +865,7 @@ class _ProductsScreenState extends State<ProductsScreen> with DataBusRefresh<Pro
 
           // Expiring Filter Toggle (Only for verticals with Batch/Expiry e.g. Pharmacy)
           if (vert.toggles.showBatchExpiry) ...[
+            const SizedBox(width: 4),
             _buildToolbarButton(
               icon: Icons.access_time_rounded,
               iconColor: const Color(0xFFD97706),
@@ -889,20 +873,7 @@ class _ProductsScreenState extends State<ProductsScreen> with DataBusRefresh<Pro
               borderColor: _filterExpiringOnly ? const Color(0xFFD97706) : const Color(0xFFFDE68A),
               onTap: () => setState(() => _filterExpiringOnly = !_filterExpiringOnly),
             ),
-            const SizedBox(width: 4),
           ],
-
-          // Instant Grid / List Toggle
-          _buildToolbarButton(
-            icon: _isGridView ? Icons.view_list_rounded : Icons.grid_view_rounded,
-            iconColor: const Color(0xFF0F172A),
-            bgColor: const Color(0xFFF1F5F9),
-            borderColor: const Color(0xFFCBD5E1),
-            onTap: () {
-              HapticFeedback.selectionClick();
-              setState(() => _isGridView = !_isGridView);
-            },
-          ),
         ],
       ),
     );
@@ -1295,170 +1266,6 @@ class _ProductsScreenState extends State<ProductsScreen> with DataBusRefresh<Pro
     );
   }
 
-  Widget _buildProductGridCard(ProductModel product) {
-    final categoryName = _getCategoryName(product.categoryId);
-    final isInfinite = product.isLooseItem || product.stockQuantity >= 99999;
-
-    return Container(
-      padding: const EdgeInsets.all(8),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: const Color(0xFFEEF2F6), width: 1.2),
-        boxShadow: const [
-          BoxShadow(
-            color: Color(0x060F172A),
-            blurRadius: 6,
-            offset: Offset(0, 1.5),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Top Row: Category + Pencil Edit + Delete Trash
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Flexible(
-                child: Text(
-                  categoryName,
-                  style: GoogleFonts.inter(
-                    fontSize: 9,
-                    fontWeight: FontWeight.w700,
-                    color: const Color(0xFF64748B),
-                  ),
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-              Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  InkWell(
-                    onTap: () => _toggleFavorite(product),
-                    child: Icon(
-                      product.isFavorite ? Icons.star_rounded : Icons.star_outline_rounded,
-                      size: 15,
-                      color: const Color(0xFFF59E0B),
-                    ),
-                  ),
-                  const SizedBox(width: 5),
-                  InkWell(
-                    onTap: () => _openAddProductSheet(existingProduct: product),
-                    child: const Icon(Icons.edit_outlined, size: 14, color: Color(0xFF475569)),
-                  ),
-                  const SizedBox(width: 5),
-                  InkWell(
-                    onTap: () => _confirmDeleteProduct(product),
-                    child: const Icon(Icons.delete_outline_rounded, size: 14, color: Color(0xFFDC2626)),
-                  ),
-                ],
-              ),
-            ],
-          ),
-          const SizedBox(height: 3),
-
-          // Product Name
-          Text(
-            product.name,
-            style: GoogleFonts.outfit(
-              fontSize: 12.5,
-              fontWeight: FontWeight.w800,
-              color: const Color(0xFF0F172A),
-            ),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-          ),
-          const SizedBox(height: 3),
-
-          // Stock Traffic Badge
-          InkWell(
-            onTap: () => _openQuickUpdateDialog(product),
-            borderRadius: BorderRadius.circular(6),
-            child: _buildStockTrafficBadge(product.stockQuantity, product.unit, isLooseOrInfinite: isInfinite),
-          ),
-
-          const Spacer(),
-
-          // Selling Price & Stock Counter
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              InkWell(
-                onTap: () => _openQuickUpdateDialog(product),
-                child: Text(
-                  MoneyFormatter.formatINR(product.sellingPricePaise),
-                  style: GoogleFonts.robotoMono(
-                    fontSize: 13.5,
-                    fontWeight: FontWeight.w900,
-                    color: const Color(0xFF0F172A),
-                  ),
-                ),
-              ),
-              // If infinite, show badge with no +/- stepper
-              if (isInfinite)
-                InkWell(
-                  onTap: () => _openQuickUpdateDialog(product),
-                  borderRadius: BorderRadius.circular(6),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFF0FDF4),
-                      borderRadius: BorderRadius.circular(6),
-                      border: Border.all(color: const Color(0xFFBBF7D0)),
-                    ),
-                    child: Text(
-                      '∞ Unlimited',
-                      style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.w700, color: const Color(0xFF16A34A)),
-                    ),
-                  ),
-                )
-              else
-                // Stock Stepper (+ / -)
-                Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    GestureDetector(
-                      onTap: () => _adjustStock(product, -1),
-                      child: Container(
-                        padding: const EdgeInsets.all(2),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFF1F5F9),
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                        child: const Icon(Icons.remove_rounded, size: 13, color: Color(0xFF475569)),
-                      ),
-                    ),
-                    GestureDetector(
-                      onTap: () => _openQuickUpdateDialog(product),
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 4),
-                        child: Text(
-                          '${product.stockQuantity.toInt()}',
-                          style: GoogleFonts.robotoMono(fontSize: 11, fontWeight: FontWeight.bold),
-                        ),
-                      ),
-                    ),
-                    GestureDetector(
-                      onTap: () => _adjustStock(product, 1),
-                      child: Container(
-                        padding: const EdgeInsets.all(2),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFF1F5F9),
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                        child: const Icon(Icons.add_rounded, size: 13, color: Color(0xFF475569)),
-                      ),
-                    ),
-                  ],
-                ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
 
   Widget _buildEmptyState() {
     // A genuinely empty catalog (nothing added yet) needs different copy

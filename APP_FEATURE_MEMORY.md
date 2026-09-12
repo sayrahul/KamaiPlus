@@ -34,6 +34,7 @@ The Bottom Navigation Bar has 5 items. The navigation contract is strictly defin
 * **KPI Stats:** Today Sales, Orders count, Net profit, Low stock alert.
 
 ### 2. 📦 Products Master (`lib/views/products/products_screen.dart`)
+* **List View Only (Grid View Removed):** The catalog permanently uses the dense, informative List View layout (`_buildProductCard`) with stock stepper, price/profit, category pill, pencil edit button, and favorite toggle. The Grid View toggle and grid layout have been removed.
 * **Edit Product:** Pencil icon button has dedicated touch target; clicking it calls `AddProductModal(existingProduct: product)` with all fields pre-filled.
 * **Add Product:** Top "+" button and AI Vision bill OCR trigger.
 * **Bottom Nav:** Must NOT have its own `bottomNavigationBar` inside its Scaffold when displayed inside `HomeDashboardScreen`.
