@@ -28,7 +28,7 @@ void main() {
     await LocalDatabase.instance.closeDatabase();
   });
 
-  test('switching to a vertical with its own seed catalog never shows another vertical\'s products', () async {
+  test('a business that already has products is never phantom-seeded with a fresh vertical catalog', () async {
     // Simulate an existing Grocery store with grocery-tagged products already in the DB.
     await LocalDatabase.instance.upsertProduct(ProductModel(
       id: 'p_grocery_1',
@@ -49,23 +49,41 @@ void main() {
       businessType: 'clothing',
     ));
 
-    // Merchant now switches the store to Hardware (has its own default seed catalog).
+    // Business type is now locked at signup (store_profile_screen.dart no
+    // longer offers changing it) specifically because switching used to
+    // trigger exactly this: a query for a vertical this business happens to
+    // have zero products under (whether from an intentional switch or a
+    // stray/blank businessType value) auto-seeded a brand-new starter
+    // catalog on top of an already-populated store. That silently hid the
+    // real Grocery/Clothing catalog and its sales history behind a freshly
+    // seeded, empty Hardware catalog — "I edited a price and my products/
+    // sales disappeared, defaults came back" as reported by a real user.
+    // getAllProducts must refuse to auto-seed once a business has ANY
+    // products at all, regardless of which vertical asks.
     final hardwareProducts = await LocalDatabase.instance.getAllProducts(businessType: 'hardware');
 
-    expect(hardwareProducts, isNotEmpty, reason: 'hardware has a starter catalog and should auto-seed');
-    for (final p in hardwareProducts) {
-      expect(
-        p.businessType == 'hardware' || p.businessType == 'both',
-        isTrue,
-        reason: 'Leaked a non-hardware product into the Hardware catalog: '
-            '${p.name} (businessType=${p.businessType})',
-      );
-    }
+    expect(
+      hardwareProducts.any((p) => p.businessType == 'hardware'),
+      isFalse,
+      reason: 'Must not auto-seed a fresh Hardware catalog for a business that already has real products under other tags',
+    );
     expect(
       hardwareProducts.any((p) => p.id == 'p_grocery_1' || p.id == 'p_clothing_1'),
       isFalse,
-      reason: 'Grocery/Clothing products must never appear while browsing as a Hardware store',
+      reason: 'Grocery/Clothing products must never leak into a Hardware-filtered read either',
     );
+  });
+
+  test('a genuinely brand-new business (zero products of any kind) still gets its starter catalog seeded', () async {
+    // The defense-in-depth fix above only blocks seeding for a business that
+    // ALREADY has products under some tag — a real fresh signup (nothing in
+    // the products table yet) must still get its vertical's starter catalog,
+    // exactly as before.
+    final hardwareProducts = await LocalDatabase.instance.getAllProducts(businessType: 'hardware');
+    expect(hardwareProducts, isNotEmpty, reason: 'a genuinely empty store should still auto-seed its starter catalog');
+    for (final p in hardwareProducts) {
+      expect(p.businessType == 'hardware' || p.businessType == 'both', isTrue);
+    }
   });
 
   test('a vertical with no starter catalog shows an empty catalog, not every other vertical\'s products', () async {

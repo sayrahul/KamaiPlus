@@ -63,6 +63,13 @@ class AdminBusiness {
   /// The coupon code used at Pro checkout, if any — written by the mobile
   /// app's razorpay_service.dart onto this same doc at purchase time.
   final String? couponCodeUsed;
+  /// Admin kill-switch: when true, the mobile app's own live listener on
+  /// this same document (firestore_sync_service.dart's `_businessSub`) signs
+  /// the merchant out and blocks re-entry within seconds — no app update or
+  /// deploy needed. Reversible (toggle back to re-admit them), unlike a hard
+  /// delete of the business doc, which would also destroy their sales/
+  /// products/customers history.
+  final bool isDisabled;
 
   const AdminBusiness({
     required this.id,
@@ -83,6 +90,7 @@ class AdminBusiness {
     required this.lastSaleAt,
     required this.lastSyncedAt,
     this.couponCodeUsed,
+    this.isDisabled = false,
   });
 
   factory AdminBusiness.fromMap(String id, Map<String, dynamic> m) {
@@ -110,6 +118,7 @@ class AdminBusiness {
       lastSaleAt: _asDate(m['last_sale_at']),
       lastSyncedAt: _asDate(m['last_synced_at']),
       couponCodeUsed: m['coupon_code_used'] as String?,
+      isDisabled: _asBool(m['account_disabled']),
     );
   }
 

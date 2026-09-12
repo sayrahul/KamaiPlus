@@ -1056,11 +1056,11 @@ class _ProductsScreenState extends State<ProductsScreen> with DataBusRefresh<Pro
     final isInfinite = product.isLooseItem || product.stockQuantity >= 99999;
 
     return Container(
-      margin: const EdgeInsets.only(bottom: 9),
-      padding: const EdgeInsets.all(12),
+      margin: const EdgeInsets.only(bottom: 6),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(14),
         border: Border.all(color: const Color(0xFFEEF2F6), width: 1.2),
         boxShadow: const [
           BoxShadow(
@@ -1075,106 +1075,108 @@ class _ProductsScreenState extends State<ProductsScreen> with DataBusRefresh<Pro
         children: [
           // Title, Star, Fast Bolt Update, Edit Pencil & Delete Trash
           Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
+            crossAxisAlignment: CrossAxisAlignment.center,
             children: [
               Expanded(
                 child: Text(
                   product.name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                   style: GoogleFonts.outfit(
-                    fontSize: 14.5,
+                    fontSize: 13.5,
                     fontWeight: FontWeight.w800,
                     color: const Color(0xFF0F172A),
                   ),
                 ),
               ),
-              const SizedBox(width: 6),
+              const SizedBox(width: 4),
               // Favorite Star
               GestureDetector(
                 onTap: () => _toggleFavorite(product),
                 child: Icon(
                   isFav ? Icons.star_rounded : Icons.star_outline_rounded,
-                  size: 20,
+                  size: 18,
                   color: const Color(0xFFF59E0B),
                 ),
               ),
-              const SizedBox(width: 6),
+              const SizedBox(width: 4),
               // Quick In-Line Price & Stock Update Button
               InkWell(
                 onTap: () {
                   HapticFeedback.selectionClick();
                   _openQuickUpdateDialog(product);
                 },
-                borderRadius: BorderRadius.circular(8),
+                borderRadius: BorderRadius.circular(7),
                 child: Container(
-                  padding: const EdgeInsets.all(5),
+                  padding: const EdgeInsets.all(4),
                   decoration: BoxDecoration(
                     color: const Color(0xFFEFF6FF),
-                    borderRadius: BorderRadius.circular(8),
+                    borderRadius: BorderRadius.circular(7),
                     border: Border.all(color: const Color(0xFFBFDBFE)),
                   ),
                   child: const Icon(
                     Icons.bolt_rounded,
-                    size: 16,
+                    size: 14,
                     color: Color(0xFF2563EB),
                   ),
                 ),
               ),
-              const SizedBox(width: 6),
+              const SizedBox(width: 4),
               // Dedicated Pencil Edit Button
               InkWell(
                 onTap: () {
                   HapticFeedback.selectionClick();
                   _openAddProductSheet(existingProduct: product);
                 },
-                borderRadius: BorderRadius.circular(8),
+                borderRadius: BorderRadius.circular(7),
                 child: Container(
-                  padding: const EdgeInsets.all(5),
+                  padding: const EdgeInsets.all(4),
                   decoration: BoxDecoration(
                     color: const Color(0xFFF1F5F9),
-                    borderRadius: BorderRadius.circular(8),
+                    borderRadius: BorderRadius.circular(7),
                     border: Border.all(color: const Color(0xFFE2E8F0)),
                   ),
                   child: const Icon(
                     Icons.edit_outlined,
-                    size: 16,
+                    size: 14,
                     color: Color(0xFF0F172A),
                   ),
                 ),
               ),
-              const SizedBox(width: 6),
+              const SizedBox(width: 4),
               // Dedicated Delete Button
               InkWell(
                 onTap: () {
                   HapticFeedback.selectionClick();
                   _confirmDeleteProduct(product);
                 },
-                borderRadius: BorderRadius.circular(8),
+                borderRadius: BorderRadius.circular(7),
                 child: Container(
-                  padding: const EdgeInsets.all(5),
+                  padding: const EdgeInsets.all(4),
                   decoration: BoxDecoration(
                     color: const Color(0xFFFEF2F2),
-                    borderRadius: BorderRadius.circular(8),
+                    borderRadius: BorderRadius.circular(7),
                     border: Border.all(color: const Color(0xFFFECACA)),
                   ),
                   child: const Icon(
                     Icons.delete_outline_rounded,
-                    size: 16,
+                    size: 14,
                     color: Color(0xFFDC2626),
                   ),
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 6),
+          const SizedBox(height: 4),
 
           // Category Badge + Traffic Light Stock Badge (Clean listing: barcode digits removed per request)
           Wrap(
             spacing: 6,
-            runSpacing: 4,
+            runSpacing: 3,
             crossAxisAlignment: WrapCrossAlignment.center,
             children: [
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2.5),
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                 decoration: BoxDecoration(
                   color: const Color(0xFFF1F5F9),
                   borderRadius: BorderRadius.circular(6),
@@ -1182,7 +1184,7 @@ class _ProductsScreenState extends State<ProductsScreen> with DataBusRefresh<Pro
                 child: Text(
                   categoryName,
                   style: GoogleFonts.inter(
-                    fontSize: 10,
+                    fontSize: 9.5,
                     fontWeight: FontWeight.w700,
                     color: const Color(0xFF475569),
                   ),
@@ -1195,7 +1197,7 @@ class _ProductsScreenState extends State<ProductsScreen> with DataBusRefresh<Pro
               ),
             ],
           ),
-          const SizedBox(height: 10),
+          const SizedBox(height: 6),
 
           // Bottom Details: Selling Price, Profit Margin & Stock Counter
           Row(

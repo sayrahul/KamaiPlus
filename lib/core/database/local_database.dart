@@ -835,21 +835,39 @@ class LocalDatabase {
       if (result.isNotEmpty) {
         return result.map((json) => ProductModel.fromMap(json)).toList();
       }
-      // Nothing tagged for this vertical yet — seed its starter catalog (only inserts
-      // rows tagged with this exact businessType) and re-check.
-      await seedVerticalStarterData(businessType);
-      final seeded = await db.query(
-        'products',
-        where: "business_type = ? OR business_type = 'both'",
-        whereArgs: [businessType],
-        orderBy: 'is_favorite DESC, name ASC',
-      );
-      if (seeded.isNotEmpty) {
-        return seeded.map((json) => ProductModel.fromMap(json)).toList();
+      // Only seed a starter catalog if this business has genuinely NO products
+      // at all yet (a real brand-new store). If it already has products under
+      // some other tag, seeding here would silently plant a second, empty-of-
+      // history catalog for `businessType` while the real inventory — still
+      // sitting in the table — just becomes invisible behind this filter. That
+      // exact symptom ("saved my price edit and the whole product list plus
+      // its sales history vanished, replaced by defaults") is what happens if
+      // `businessType` ever drifts from the value products were actually
+      // tagged with (e.g. a stale/empty profile field). Business type is now
+      // locked at signup (store_profile_screen.dart no longer offers changing
+      // it) specifically so this drift can't happen — this check is the
+      // second, defense-in-depth layer: even if it somehow does, we fall
+      // through to the unclassified lookup below instead of masking real data
+      // with a fresh seed.
+      final totalCount = Sqflite.firstIntValue(
+            await db.rawQuery('SELECT COUNT(*) FROM products'),
+          ) ??
+          0;
+      if (totalCount == 0) {
+        await seedVerticalStarterData(businessType);
+        final seeded = await db.query(
+          'products',
+          where: "business_type = ? OR business_type = 'both'",
+          whereArgs: [businessType],
+          orderBy: 'is_favorite DESC, name ASC',
+        );
+        if (seeded.isNotEmpty) {
+          return seeded.map((json) => ProductModel.fromMap(json)).toList();
+        }
       }
-      // Still nothing (a custom vertical with no starter catalog, e.g.). Fall back
-      // ONLY to genuinely unclassified rows (pre-dating the vertical feature) —
-      // never to another vertical's tagged products. This is the fix for products
+      // Nothing tagged for this vertical. Fall back ONLY to genuinely
+      // unclassified rows (pre-dating the vertical feature) — never to
+      // another vertical's tagged products. This is the fix for products
       // from one store type (e.g. Apparel) leaking into a different one (e.g.
       // Electronics) whenever the active vertical had few or zero matches.
       final unclassified = await db.query(
@@ -1904,6 +1922,22 @@ class LocalDatabase {
     await _ensureStoreProfileTable(db);
     final map = profile.toMap();
     map['id'] = 'default_store';
+    // Never let an empty incoming businessType blank out an already-set one —
+    // business type is locked at signup and every product/category query is a
+    // hard partition keyed on it, so silently clearing it would make the
+    // entire existing catalog invisible on the very next read. A genuinely
+    // new store's profile always ships with a real businessType from
+    // signup_store_screen.dart, so an empty value here only ever means "this
+    // caller wasn't trying to change it" — preserve whatever is already saved.
+    if ((map['business_type'] as String?)?.trim().isEmpty ?? true) {
+      final existing = await db.query('store_profile', where: 'id = ?', whereArgs: ['default_store'], limit: 1);
+      if (existing.isNotEmpty) {
+        final existingType = existing.first['business_type'] as String?;
+        if (existingType != null && existingType.trim().isNotEmpty) {
+          map['business_type'] = existingType;
+        }
+      }
+    }
     await db.insert('store_profile', map, conflictAlgorithm: ConflictAlgorithm.replace);
   }
 

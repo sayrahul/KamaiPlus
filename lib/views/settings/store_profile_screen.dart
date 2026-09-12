@@ -6,8 +6,6 @@ import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:qr_flutter/qr_flutter.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-import '../../core/constants/business_vertical_config.dart';
 import '../../core/database/local_database.dart';
 import '../../core/utils/app_validators.dart';
 import '../../models/models.dart';
@@ -405,12 +403,8 @@ class _StoreProfileScreenState extends State<StoreProfileScreen> {
     );
 
     await LocalDatabase.instance.saveStoreProfile(profile);
-    await LocalDatabase.instance.seedVerticalStarterData(_selectedBusinessType);
-    BusinessVerticals.updateActiveBusinessType(_selectedBusinessType);
-
-
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('business_type', _selectedBusinessType);
+    // Business type itself is locked (see the read-only field above) — this
+    // form never changes it, so there is nothing to reseed or switch here.
     if (!mounted) return;
 
     ScaffoldMessenger.of(context).showSnackBar(
@@ -1047,47 +1041,47 @@ class _StoreProfileScreenState extends State<StoreProfileScreen> {
               ),
               const SizedBox(height: 16),
 
-              // Business Category / Vertical *
-              _buildFieldLabel('Store Category & Vertical *'),
+              // Business Category / Vertical — locked to what was chosen at
+              // signup. Every product/category in this store is tagged and
+              // queried against this single value, so letting it change here
+              // was the root cause of a serious bug: any accidental switch
+              // (or a save with a blank value) silently hid the entire real
+              // catalog and sales history behind a freshly auto-seeded, empty
+              // vertical. A store that genuinely needs a different vertical
+              // should sign up with a separate account instead.
+              _buildFieldLabel('Store Category & Vertical'),
               const SizedBox(height: 6),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 14),
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
                 decoration: BoxDecoration(
-                  color: Colors.white,
+                  color: const Color(0xFFF1F5F9),
                   borderRadius: BorderRadius.circular(12),
                   border: Border.all(color: const Color(0xFFE2E8F0)),
                 ),
-                child: DropdownButtonHideUnderline(
-                  child: DropdownButton<String>(
-                    value: _businessTypes.any((b) => b['type'] == _selectedBusinessType)
-                        ? _selectedBusinessType
-                        : 'grocery',
-                    isExpanded: true,
-                    icon: const Icon(Icons.keyboard_arrow_down_rounded, color: Color(0xFF64748B)),
-                    items: _businessTypes.map((b) {
-                      return DropdownMenuItem<String>(
-                        value: b['type'],
-                        child: Text(
-                          b['label']!,
-                          style: GoogleFonts.outfit(
-                            fontSize: 13.5,
-                            fontWeight: FontWeight.w700,
-                            color: const Color(0xFF0F172A),
-                          ),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        _businessTypes
+                            .firstWhere(
+                              (b) => b['type'] == _selectedBusinessType,
+                              orElse: () => _businessTypes.first,
+                            )['label']!,
+                        style: GoogleFonts.outfit(
+                          fontSize: 13.5,
+                          fontWeight: FontWeight.w700,
+                          color: const Color(0xFF475569),
                         ),
-                      );
-                    }).toList(),
-                    onChanged: (val) {
-                      if (val != null) {
-                        setState(() {
-                          _selectedBusinessType = val;
-                          final match = _businessTypes.firstWhere((b) => b['type'] == val);
-                          _selectedCategory = match['label']!;
-                        });
-                      }
-                    },
-                  ),
+                      ),
+                    ),
+                    const Icon(Icons.lock_outline_rounded, size: 16, color: Color(0xFF94A3B8)),
+                  ],
                 ),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                'Locked at signup — use a different account to run a different type of store.',
+                style: GoogleFonts.inter(fontSize: 11.5, color: const Color(0xFF94A3B8)),
               ),
             ],
           ),

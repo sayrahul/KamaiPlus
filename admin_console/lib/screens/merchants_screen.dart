@@ -410,12 +410,24 @@ class _MerchantsScreenState extends State<MerchantsScreen> {
                                                   ),
                                               cells: [
                                                 DataCell(
-                                                  Text(
-                                                    b.name,
-                                                    style: const TextStyle(
-                                                      fontWeight:
-                                                          FontWeight.w700,
-                                                    ),
+                                                  Row(
+                                                    mainAxisSize:
+                                                        MainAxisSize.min,
+                                                    children: [
+                                                      Text(
+                                                        b.name,
+                                                        style: const TextStyle(
+                                                          fontWeight:
+                                                              FontWeight.w700,
+                                                        ),
+                                                      ),
+                                                      if (b.isDisabled) ...[
+                                                        const SizedBox(
+                                                          width: 6,
+                                                        ),
+                                                        const _DisabledBadge(),
+                                                      ],
+                                                    ],
                                                   ),
                                                 ),
                                                 DataCell(
@@ -527,6 +539,10 @@ class _MerchantCard extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(width: 8),
+                  if (b.isDisabled) ...[
+                    const _DisabledBadge(),
+                    const SizedBox(width: 6),
+                  ],
                   _ProBadge(business: b),
                 ],
               ),
@@ -677,6 +693,30 @@ class _TypeChip extends StatelessWidget {
 
 /// Small pill showing a business's Pro/Free status — reused as-is by the
 /// merchant detail header.
+/// Flags a merchant an admin has kicked out via the kill-switch
+/// (merchant_detail_screen.dart's Disable action) — shown wherever a
+/// merchant's name appears in the directory so this doesn't stay hidden
+/// behind a detail-page click.
+class _DisabledBadge extends StatelessWidget {
+  const _DisabledBadge();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+      decoration: BoxDecoration(
+        color: AdminColors.redSoft,
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: AdminColors.red.withValues(alpha: 0.35)),
+      ),
+      child: const Text(
+        'DISABLED',
+        style: TextStyle(color: AdminColors.red, fontSize: 10, fontWeight: FontWeight.w800),
+      ),
+    );
+  }
+}
+
 class _ProBadge extends StatelessWidget {
   final AdminBusiness business;
   const _ProBadge({required this.business});

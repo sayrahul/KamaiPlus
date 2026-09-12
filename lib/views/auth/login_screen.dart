@@ -12,7 +12,11 @@ import '../dashboard/home_dashboard_screen.dart';
 import 'signup_store_screen.dart';
 
 class LoginScreen extends StatefulWidget {
-  const LoginScreen({super.key});
+  /// Shown once, right after this screen mounts, when the caller is routing
+  /// here because of a forced sign-out (e.g. an admin disabled the account)
+  /// rather than a normal user-initiated logout.
+  final String? disabledMessage;
+  const LoginScreen({super.key, this.disabledMessage});
 
   @override
   State<LoginScreen> createState() => _LoginScreenState();
@@ -20,6 +24,25 @@ class LoginScreen extends StatefulWidget {
 
 class _LoginScreenState extends State<LoginScreen> {
   bool _isLoading = false;
+
+  @override
+  void initState() {
+    super.initState();
+    final msg = widget.disabledMessage;
+    if (msg != null && msg.isNotEmpty) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(msg),
+            backgroundColor: const Color(0xFFDC2626),
+            behavior: SnackBarBehavior.floating,
+            duration: const Duration(seconds: 6),
+          ),
+        );
+      });
+    }
+  }
 
   Future<void> _handleGoogleSignIn() async {
     HapticFeedback.mediumImpact();
@@ -93,6 +116,31 @@ class _LoginScreenState extends State<LoginScreen> {
       }
 
       final profile = await LocalDatabase.instance.getStoreProfile();
+
+      // 3b. Refuse re-entry to an admin-disabled account right at login,
+      // rather than letting them briefly reach the dashboard and only get
+      // kicked out once FirestoreSyncService's live listener catches up.
+      if (hasStore) {
+        try {
+          final bizDoc = await FirebaseFirestore.instance.collection('businesses').doc('biz_$uid').get();
+          if (bizDoc.exists && bizDoc.data()?['account_disabled'] == true) {
+            await AuthService.instance.signOut();
+            if (!mounted) return;
+            setState(() => _isLoading = false);
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Your account access has been disabled. Contact support for help.'),
+                backgroundColor: Color(0xFFDC2626),
+                behavior: SnackBarBehavior.floating,
+                duration: Duration(seconds: 6),
+              ),
+            );
+            return;
+          }
+        } catch (e) {
+          debugPrint('Account-disabled check notice: $e');
+        }
+      }
 
       // 4. Persist session flags
       final prefs = await SharedPreferences.getInstance();

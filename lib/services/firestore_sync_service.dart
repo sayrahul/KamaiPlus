@@ -31,6 +31,15 @@ class FirestoreSyncService {
   final ValueNotifier<Map<String, dynamic>?> broadcastNotifier = ValueNotifier<Map<String, dynamic>?>(null);
   final ValueNotifier<Map<String, dynamic>?> globalConfigNotifier = ValueNotifier<Map<String, dynamic>?>(null);
 
+  /// Admin kill-switch signal: flips true the moment an admin sets
+  /// `account_disabled: true` on this business's Firestore doc (see
+  /// admin_console's merchant_detail_screen.dart). `main.dart` listens for
+  /// this at app startup and forces a sign-out + redirect to the login
+  /// screen — this ValueNotifier only carries the signal, it never performs
+  /// navigation itself (this services layer has no view/navigator access,
+  /// deliberately, to avoid a services->views import cycle).
+  final ValueNotifier<bool> accountDisabledNotifier = ValueNotifier<bool>(false);
+
   String get activeBusinessId => _activeBusinessId;
 
   /// Batch sync all pending local records (sales, store profile, etc.) to Cloud Firestore
@@ -341,6 +350,8 @@ class FirestoreSyncService {
       if (docSnap.exists) {
         final d = docSnap.data();
         if (d != null) {
+          accountDisabledNotifier.value = d['account_disabled'] == true;
+
           final isProCloud = (d['is_pro'] == true ||
               d['is_pro'] == 1 ||
               d['subscription_tier'] == 'pro' ||
@@ -810,6 +821,7 @@ class FirestoreSyncService {
     _globalConfigSub = null;
     broadcastNotifier.value = null;
     globalConfigNotifier.value = null;
+    accountDisabledNotifier.value = false;
     _isInitialized = false;
     _activeBusinessId = 'biz_starter_pos';
     syncState.value = SyncState.offline;

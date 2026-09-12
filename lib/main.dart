@@ -14,6 +14,7 @@ import 'services/home_widget_service.dart';
 import 'services/workmanager_sync_service.dart';
 import 'services/in_app_update_service.dart';
 import 'views/splash/splash_screen.dart';
+import 'views/auth/login_screen.dart';
 
 final GlobalKey<NavigatorState> rootNavigatorKey = GlobalKey<NavigatorState>();
 
@@ -61,6 +62,25 @@ void main() async {
     final savedBizId = prefs.getString('business_id') ?? 'biz_$cachedUserId';
     FirestoreSyncService.instance.initialize(businessId: savedBizId);
   }
+
+  // 6b. Admin kill-switch: if an admin ever flips `account_disabled` on this
+  // business's Firestore doc, FirestoreSyncService's live listener (already
+  // running for Pro status) flips this notifier — react by signing out and
+  // bouncing to the login screen immediately, from wherever the user
+  // currently is. Registered once here (not inside a widget) so it fires
+  // even if no screen happens to be listening for it itself.
+  FirestoreSyncService.instance.accountDisabledNotifier.addListener(() async {
+    if (!FirestoreSyncService.instance.accountDisabledNotifier.value) return;
+    await AuthService.instance.signOut();
+    rootNavigatorKey.currentState?.pushAndRemoveUntil(
+      MaterialPageRoute(
+        builder: (_) => const LoginScreen(
+          disabledMessage: 'Your account access has been disabled. Contact support for help.',
+        ),
+      ),
+      (route) => false,
+    );
+  });
 
   // 7. Initialize Native App Shortcuts & Share-To Receiver
   ShortcutsService.instance.init(rootNavigatorKey);

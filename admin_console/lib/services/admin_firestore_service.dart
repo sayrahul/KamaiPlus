@@ -106,6 +106,19 @@ class AdminFirestoreService {
     await _db.collection('businesses').doc(businessId).set(data, SetOptions(merge: true));
   }
 
+  /// Admin kill-switch. Writes `account_disabled` on the business doc,
+  /// which `firestore_sync_service.dart`'s live "Business Profile Stream"
+  /// (the mobile app's own real-time listener, already open for Pro status)
+  /// also checks — when true, the merchant is signed out and blocked from
+  /// re-entry within seconds. Reversible: pass `disabled: false` to re-admit
+  /// them without any data loss, unlike deleting the business doc outright.
+  Future<void> setAccountDisabled(String businessId, bool disabled) async {
+    await _db.collection('businesses').doc(businessId).set(
+      {'account_disabled': disabled},
+      SetOptions(merge: true),
+    );
+  }
+
   // ---------------------------------------------------------------------
   // Merchant detail — sales / products / customers for one business
   // ---------------------------------------------------------------------

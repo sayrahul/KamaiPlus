@@ -183,6 +183,33 @@ class _MerchantDetailScreenState extends State<MerchantDetailScreen> {
     }
   }
 
+  Future<void> _handleToggleDisabled() async {
+    final willDisable = !_business.isDisabled;
+    final confirmed = await _confirm(
+      title: willDisable ? 'Disable ${_business.name}?' : 'Re-enable ${_business.name}?',
+      message: willDisable
+          ? 'This immediately signs "${_business.name}" out of their Android app and blocks them from logging back in, within seconds. '
+              'Their products, sales, and customer data are NOT touched — you can re-enable access at any time.'
+          : 'This restores "${_business.name}"\'s access to their Android app immediately. They can sign back in right away.',
+      confirmLabel: willDisable ? 'Disable account' : 'Re-enable account',
+      destructive: willDisable,
+    );
+    if (!confirmed || !mounted) return;
+
+    setState(() => _proBusy = true);
+    try {
+      await AdminFirestoreService.instance.setAccountDisabled(_business.id, willDisable);
+      await _refreshBusiness();
+      if (mounted) {
+        _showSnack(willDisable ? '${_business.name} has been disabled.' : '${_business.name} re-enabled.');
+      }
+    } catch (e) {
+      if (mounted) _showSnack('Failed to update account status: $e', isError: true);
+    } finally {
+      if (mounted) setState(() => _proBusy = false);
+    }
+  }
+
   Future<void> _handleRevokePro() async {
     final expiryNote = _business.proExpiry != null
         ? ' (was valid until ${DateFormat('d MMM yyyy').format(_business.proExpiry!)})'
@@ -217,6 +244,41 @@ class _MerchantDetailScreenState extends State<MerchantDetailScreen> {
     return Scaffold(
       appBar: AppBar(
         title: Text(_business.name, style: AdminTheme.heading(18)),
+        actions: [
+          if (_business.isDisabled)
+            Padding(
+              padding: const EdgeInsets.only(right: 8),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+                decoration: BoxDecoration(
+                  color: AdminColors.redSoft,
+                  borderRadius: BorderRadius.circular(6),
+                  border: Border.all(color: AdminColors.red.withValues(alpha: 0.35)),
+                ),
+                child: const Text(
+                  'DISABLED',
+                  style: TextStyle(color: AdminColors.red, fontSize: 11, fontWeight: FontWeight.w800),
+                ),
+              ),
+            ),
+          Padding(
+            padding: const EdgeInsets.only(right: 8),
+            child: _proBusy
+                ? const SizedBox.shrink()
+                : TextButton.icon(
+                    onPressed: _handleToggleDisabled,
+                    icon: Icon(
+                      _business.isDisabled ? Icons.lock_open_rounded : Icons.block_rounded,
+                      size: 17,
+                      color: _business.isDisabled ? AdminColors.accent : AdminColors.red,
+                    ),
+                    label: Text(
+                      _business.isDisabled ? 'Re-enable' : 'Disable',
+                      style: TextStyle(color: _business.isDisabled ? AdminColors.accent : AdminColors.red),
+                    ),
+                  ),
+          ),
+        ],
       ),
       body: Padding(
         padding: const EdgeInsets.all(24),
