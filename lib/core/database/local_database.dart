@@ -35,7 +35,12 @@ class LocalDatabase {
     }
     try {
       final prefs = await SharedPreferences.getInstance();
-      final cachedUserId = prefs.getString('auth_user_id') ?? FirebaseAuth.instance.currentUser?.uid;
+      String? cachedUserId = prefs.getString('auth_user_id');
+      if (cachedUserId == null || cachedUserId.trim().isEmpty) {
+        try {
+          cachedUserId = FirebaseAuth.instance.currentUser?.uid;
+        } catch (_) {}
+      }
       if (cachedUserId != null && cachedUserId.trim().isNotEmpty) {
         final safeId = cachedUserId.trim().replaceAll(RegExp(r'[^a-zA-Z0-9_]'), '_');
         _activeDbName = 'kamaiplus_$safeId.db';

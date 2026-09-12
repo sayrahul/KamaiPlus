@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'core/constants/business_vertical_config.dart';
 import 'core/theme/app_theme.dart';
 import 'core/database/local_database.dart';
 import 'services/soundbox_service.dart';
@@ -31,7 +32,14 @@ void main() async {
     ),
   );
 
-  // 1. Initialize High-Speed Local SQLite Database (User-scoped if logged in)
+  // 1. Initialize Firebase Core Engine First
+  try {
+    await Firebase.initializeApp();
+  } catch (e) {
+    debugPrint('Firebase.initializeApp warning: $e');
+  }
+
+  // 2. Initialize High-Speed Local SQLite Database (User-scoped if logged in)
   final prefs = await SharedPreferences.getInstance();
   final cachedUserId = prefs.getString('auth_user_id');
   if (cachedUserId != null && cachedUserId.isNotEmpty) {
@@ -40,11 +48,17 @@ void main() async {
     await LocalDatabase.instance.database;
   }
 
-  // 2. Initialize Firebase Core Engine
-  try {
-    await Firebase.initializeApp();
-  } catch (e) {
-    debugPrint('Firebase.initializeApp warning: $e');
+  // 2b. Instantly restore active store vertical so UI labels & catalog filters never revert to grocery
+  final savedBusinessType = prefs.getString('business_type');
+  if (savedBusinessType != null && savedBusinessType.trim().isNotEmpty) {
+    BusinessVerticals.updateActiveBusinessType(savedBusinessType);
+  } else {
+    try {
+      final profile = await LocalDatabase.instance.getStoreProfile();
+      if (profile.businessType.trim().isNotEmpty) {
+        BusinessVerticals.updateActiveBusinessType(profile.businessType);
+      }
+    } catch (_) {}
   }
 
   // 3. Initialize Voice Soundbox Audio Engine
