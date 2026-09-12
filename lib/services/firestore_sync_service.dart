@@ -6,6 +6,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/models.dart';
 import '../core/database/local_database.dart';
+import '../core/constants/business_vertical_config.dart';
 
 enum SyncState { synced, syncing, offline, error }
 
@@ -270,6 +271,20 @@ class FirestoreSyncService {
           final data = change.doc.data();
           if (data != null) {
             try {
+              // business_type: fall back to this store's own locked vertical
+              // (never a hard default) for any cloud doc pushed before
+              // pushProductToCloud started writing this field — never trust
+              // ProductModel's own 'grocery' constructor default here, which
+              // is exactly the bug this fixes: this live listener fires on
+              // every one of the LOCAL app's own writes too (Firestore echoes
+              // a write straight back as a snapshot change), so omitting
+              // businessType silently reset every synced product's vertical
+              // tag back to 'grocery' within moments of it being set
+              // correctly — "I added a product and it vanished immediately."
+              final cloudType = data['business_type']?.toString();
+              final businessType = (cloudType != null && cloudType.trim().isNotEmpty)
+                  ? cloudType
+                  : BusinessVerticals.activeBusinessTypeNotifier.value;
               final product = ProductModel(
                 id: change.doc.id,
                 businessId: _activeBusinessId,
@@ -283,6 +298,8 @@ class FirestoreSyncService {
                 taxRate: (data['tax_rate'] ?? 0.0).toDouble(),
                 isTaxInclusive: (data['is_tax_inclusive'] == true || data['is_tax_inclusive'] == 1),
                 unit: data['unit'] ?? 'pcs',
+                isFavorite: data['is_favorite'] == true,
+                businessType: businessType,
                 syncStatus: 'synced',
               );
               await LocalDatabase.instance.upsertProduct(product);
@@ -506,6 +523,13 @@ class FirestoreSyncService {
 
       for (var doc in prodSnap.docs) {
         final d = doc.data();
+        // Same fix as the live listener above: never let ProductModel's own
+        // 'grocery' default stand in for a missing business_type — fall
+        // back to this store's own locked vertical instead.
+        final cloudType = d['business_type']?.toString();
+        final businessType = (cloudType != null && cloudType.trim().isNotEmpty)
+            ? cloudType
+            : BusinessVerticals.activeBusinessTypeNotifier.value;
         await LocalDatabase.instance.upsertProduct(
           ProductModel(
             id: doc.id,
@@ -520,10 +544,20 @@ class FirestoreSyncService {
             taxRate: (d['tax_rate'] ?? 0.0).toDouble(),
             isTaxInclusive: (d['is_tax_inclusive'] == true || d['is_tax_inclusive'] == 1),
             unit: d['unit'] ?? 'pcs',
+            isFavorite: d['is_favorite'] == true,
+            businessType: businessType,
             syncStatus: 'synced',
           ),
         );
       }
+
+      // Cloud docs pushed before this fix never carried business_type at
+      // all, so a device restoring from them for the first time (a genuinely
+      // fresh install, which never runs the schema-upgrade-triggered repair
+      // in local_database.dart) can still end up with a pile of freshly-
+      // pulled products all defaulted to 'grocery'. Run the same repair
+      // immediately so this device is never left carrying that damage.
+      await LocalDatabase.instance.repairMistaggedProducts();
 
       syncState.value = SyncState.synced;
       liveSyncCounter.value++;
@@ -675,7 +709,8 @@ class FirestoreSyncService {
         'unit': product.unit,
         'is_loose_item': product.isLooseItem,
         'is_active': true,
-        'is_favorite': false,
+        'is_favorite': product.isFavorite,
+        'business_type': product.businessType,
         'batch_number': product.batchNumber,
         'expiry_date': product.expiryDate,
         'size': product.size,

@@ -83,7 +83,7 @@ class LocalDatabase {
           await _migrateToV5(db);
         }
         if (oldVersion < 6) {
-          await _migrateToV6(db);
+          await _repairMistaggedProductsOnDb(db);
         }
       },
       onOpen: (db) async {
@@ -209,7 +209,24 @@ class LocalDatabase {
   /// mistagged row is a pure duplicate and is removed; otherwise it's the
   /// only copy, so it's simply re-tagged rather than deleted, so no stock
   /// data is ever lost.
-  Future<void> _migrateToV6(Database db) async {
+  ///
+  /// Runs automatically on schema upgrade (see `_migrateToV6` below), but
+  /// upgrade only fires for a database that already existed at an older
+  /// version — a brand-new install's database is created directly at the
+  /// latest version via `onCreate`, so it never goes through `onUpgrade` at
+  /// all. Such a device can still end up with mistagged products from a
+  /// cloud restore (see the `business_type` fix in
+  /// `firestore_sync_service.dart`'s `initialCloudRestore`/live product
+  /// listener, needed because cloud docs pushed before that fix never
+  /// carried the field at all) — `initialCloudRestore` calls this same
+  /// public method directly right after pulling products, so a fresh
+  /// device gets the identical repair without needing a schema bump.
+  Future<void> repairMistaggedProducts() async {
+    final db = await database;
+    await _repairMistaggedProductsOnDb(db);
+  }
+
+  Future<void> _repairMistaggedProductsOnDb(Database db) async {
     try {
       final correctVertical = <String, String>{};
       for (final entry in kDefaultProductsByVertical.entries) {

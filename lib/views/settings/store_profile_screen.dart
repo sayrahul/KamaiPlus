@@ -52,9 +52,16 @@ class _StoreProfileScreenState extends State<StoreProfileScreen> {
     {'type': 'grocery', 'label': 'Grocery / Kirana 🛒'},
     {'type': 'pharmacy', 'label': 'Pharmacy / Chemist / Medical 💊'},
     {'type': 'restaurant', 'label': 'Restaurant / Cafe / QSR 🍽️'},
-    {'type': 'apparel', 'label': 'Apparel & Footwear 👕'},
-    {'type': 'electronics', 'label': 'Electronics & Mobile 📱'},
-    {'type': 'general', 'label': 'General Retail Store 🏪'},
+    // Keys here must match signup_store_screen.dart's businessTypeId values
+    // exactly ('clothing', 'hardware' — not the more intuitive 'apparel'/
+    // 'electronics') since this list is now read-only display only (see the
+    // locked field below): a key that doesn't match what a store actually
+    // has stored silently falls through to the `orElse` default further
+    // down, which is how a real Clothing store ended up permanently
+    // displaying "Grocery / Kirana" here — the value itself was correct,
+    // only this lookup was broken.
+    {'type': 'clothing', 'label': 'Apparel & Footwear 👕'},
+    {'type': 'hardware', 'label': 'Electronics & Mobile 📱'},
   ];
 
   String _getStatutoryFieldLabel() {
@@ -65,9 +72,8 @@ class _StoreProfileScreenState extends State<StoreProfileScreen> {
         return 'FSSAI License Number (Mandatory for Food & Restaurant)';
       case 'grocery':
         return 'Udyam Registration / Shop Act (Gumasta) License';
-      case 'apparel':
-      case 'electronics':
-      case 'general':
+      case 'clothing':
+      case 'hardware':
       default:
         return 'Trade License / Municipal Registration (Gumasta)';
     }
@@ -81,9 +87,8 @@ class _StoreProfileScreenState extends State<StoreProfileScreen> {
         return 'e.g. 10019022009876 (14-digit FSSAI)';
       case 'grocery':
         return 'e.g. UDYAM-MH-12-0012345 or Shop Act Reg';
-      case 'apparel':
-      case 'electronics':
-      case 'general':
+      case 'clothing':
+      case 'hardware':
       default:
         return 'e.g. TL-2024-9988 or Gumasta Number';
     }
