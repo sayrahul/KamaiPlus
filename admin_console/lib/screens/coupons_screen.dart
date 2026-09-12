@@ -32,30 +32,44 @@ class _CouponsScreenState extends State<CouponsScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Row(
-                children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text('Coupons', style: AdminTheme.heading(24)),
-                        const SizedBox(height: 4),
-                        Text(
-                          'Codes merchants apply at checkout to buy Pro — changes go live immediately.',
-                          style: TextStyle(
-                            color: AdminColors.inkMuted,
-                            fontSize: 13,
-                          ),
+              LayoutBuilder(
+                builder: (context, constraints) {
+                  final title = Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('Coupons', style: AdminTheme.heading(24)),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Codes merchants apply at checkout to buy Pro — changes go live immediately.',
+                        style: TextStyle(
+                          color: AdminColors.inkMuted,
+                          fontSize: 13,
                         ),
-                      ],
-                    ),
-                  ),
-                  ElevatedButton.icon(
+                      ),
+                    ],
+                  );
+                  final newButton = ElevatedButton.icon(
                     onPressed: () => _openCouponDialog(context, existing: null),
                     icon: const Icon(Icons.add_rounded, size: 18),
                     label: const Text('New Coupon'),
-                  ),
-                ],
+                  );
+                  if (constraints.maxWidth < 520) {
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        title,
+                        const SizedBox(height: 14),
+                        SizedBox(width: double.infinity, child: newButton),
+                      ],
+                    );
+                  }
+                  return Row(
+                    children: [
+                      Expanded(child: title),
+                      newButton,
+                    ],
+                  );
+                },
               ),
               const SizedBox(height: 20),
               Expanded(
@@ -179,6 +193,30 @@ class _CouponsTable extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        if (constraints.maxWidth < 700) {
+          return ListView.separated(
+            itemCount: coupons.length,
+            separatorBuilder: (_, _) => const SizedBox(height: 10),
+            itemBuilder: (context, i) {
+              final c = coupons[i];
+              return _CouponCard(
+                coupon: c,
+                dateFmt: dateFmt,
+                discountLabel: _discountLabel(c),
+                onTap: () => onTap(c),
+                onDelete: () => onDelete(c),
+              );
+            },
+          );
+        }
+        return _buildTable(context);
+      },
+    );
+  }
+
+  Widget _buildTable(BuildContext context) {
     return Card(
       clipBehavior: Clip.antiAlias,
       child: SingleChildScrollView(
@@ -283,6 +321,100 @@ class _CouponsTable extends StatelessWidget {
   }
 }
 
+/// Narrow-width stand-in for a coupon `DataRow`, same fields as a tappable
+/// card instead of a 6-column table that would otherwise need horizontal
+/// scrolling on a phone.
+class _CouponCard extends StatelessWidget {
+  final AdminCoupon coupon;
+  final DateFormat dateFmt;
+  final String discountLabel;
+  final VoidCallback onTap;
+  final VoidCallback onDelete;
+
+  const _CouponCard({
+    required this.coupon,
+    required this.dateFmt,
+    required this.discountLabel,
+    required this.onTap,
+    required this.onDelete,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final c = coupon;
+    return Card(
+      clipBehavior: Clip.antiAlias,
+      margin: EdgeInsets.zero,
+      child: InkWell(
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.all(14),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Expanded(child: Text(c.code, style: AdminTheme.mono(15))),
+                  _Badge(
+                    label: c.active ? 'Active' : 'Inactive',
+                    color: c.active ? AdminColors.accent : AdminColors.inkMuted,
+                    bg: c.active
+                        ? AdminColors.accentSoft
+                        : AdminColors.surfaceSunken,
+                  ),
+                  if (c.isExpired) ...[
+                    const SizedBox(width: 6),
+                    const _Badge(
+                      label: 'Expired',
+                      color: AdminColors.red,
+                      bg: AdminColors.redSoft,
+                    ),
+                  ],
+                  IconButton(
+                    tooltip: 'Delete coupon',
+                    icon: const Icon(
+                      Icons.delete_outline_rounded,
+                      size: 19,
+                      color: AdminColors.red,
+                    ),
+                    onPressed: onDelete,
+                  ),
+                ],
+              ),
+              const SizedBox(height: 6),
+              Text(
+                discountLabel,
+                style: const TextStyle(
+                  fontWeight: FontWeight.w700,
+                  fontSize: 15,
+                ),
+              ),
+              const SizedBox(height: 10),
+              Row(
+                children: [
+                  Text(
+                    c.validTill == null
+                        ? 'No expiry'
+                        : dateFmt.format(c.validTill!),
+                    style: TextStyle(
+                      fontSize: 12.5,
+                      color: c.isExpired
+                          ? AdminColors.red
+                          : AdminColors.inkMuted,
+                    ),
+                  ),
+                  const Spacer(),
+                  _UsageCount(code: c.code),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 /// How many merchants' Pro purchase used this code — surfaces
 /// `AdminBusiness.couponCodeUsed`, written by the mobile app's
 /// razorpay_service.dart at checkout, so an admin can see whether a coupon
@@ -305,7 +437,9 @@ class _UsageCount extends StatelessWidget {
         }
         final count = snapshot.data!.length;
         return Text(
-          count == 0 ? 'Not used yet' : '$count merchant${count == 1 ? '' : 's'}',
+          count == 0
+              ? 'Not used yet'
+              : '$count merchant${count == 1 ? '' : 's'}',
           style: TextStyle(
             fontSize: 12.5,
             fontWeight: count == 0 ? FontWeight.w400 : FontWeight.w700,

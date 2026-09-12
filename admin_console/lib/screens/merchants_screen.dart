@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:html' as html;
+
 import 'package:csv/csv.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
@@ -134,7 +135,20 @@ class _MerchantsScreenState extends State<MerchantsScreen> {
   void _exportCsv(List<AdminBusiness> rows) {
     final dateFmt = DateFormat('d MMM yyyy');
     final data = [
-      ['Name', 'Owner', 'Phone', 'Email', 'Business Type', 'Pro Status', 'Plan', 'Pro Expiry', 'Bills', 'Revenue (INR)', 'Last Sale', 'Coupon Used'],
+      [
+        'Name',
+        'Owner',
+        'Phone',
+        'Email',
+        'Business Type',
+        'Pro Status',
+        'Plan',
+        'Pro Expiry',
+        'Bills',
+        'Revenue (INR)',
+        'Last Sale',
+        'Coupon Used',
+      ],
       for (final b in rows)
         [
           b.name,
@@ -156,258 +170,440 @@ class _MerchantsScreenState extends State<MerchantsScreen> {
     final blob = html.Blob([bytes], 'text/csv');
     final url = html.Url.createObjectUrlFromBlob(blob);
     html.AnchorElement(href: url)
-      ..setAttribute('download', 'kamaiplus_merchants_${DateFormat('yyyyMMdd').format(DateTime.now())}.csv')
+      ..setAttribute(
+        'download',
+        'kamaiplus_merchants_${DateFormat('yyyyMMdd').format(DateTime.now())}.csv',
+      )
       ..click();
     html.Url.revokeObjectUrl(url);
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: Text('Merchants', style: AdminTheme.heading(18)),
-        actions: [
-          ValueListenableBuilder<List<AdminBusiness>>(
-            valueListenable: _visibleNotifier,
-            builder: (context, visible, _) => IconButton(
-              tooltip: 'Export visible list as CSV',
-              icon: const Icon(Icons.download_rounded),
-              onPressed: visible.isEmpty ? null : () => _exportCsv(visible),
-            ),
-          ),
-          const SizedBox(width: 8),
-        ],
-      ),
-      body: Padding(
-        padding: const EdgeInsets.all(24),
-        child: StreamBuilder<List<AdminBusiness>>(
-          stream: AdminFirestoreService.instance.watchBusinesses(),
-          builder: (context, snapshot) {
-            if (snapshot.hasError) {
-              return _MessageState(
-                icon: Icons.error_outline_rounded,
-                color: AdminColors.red,
-                title: 'Could not load merchants',
-                subtitle: '${snapshot.error}',
-              );
-            }
-            if (!snapshot.hasData) {
-              return const _MessageState(
-                icon: Icons.hourglass_top_rounded,
-                color: AdminColors.inkFaint,
-                title: 'Loading merchants…',
-                subtitle: 'Fetching the merchant directory from Firestore.',
-                loading: true,
-              );
-            }
-
-            final all = snapshot.data!;
-            if (all.isEmpty) {
-              return const _MessageState(
-                icon: Icons.storefront_outlined,
-                color: AdminColors.inkFaint,
-                title: 'No merchants yet',
-                subtitle:
-                    'Businesses appear here as soon as they sync from the app.',
-              );
-            }
-
-            final visible = _filterAndSort(all);
-            final proCount = all.where((b) => b.isProEffective).length;
-            WidgetsBinding.instance.addPostFrameCallback((_) {
-              _visibleNotifier.value = visible;
-            });
-
-            return Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Expanded(
-                      child: TextField(
-                        controller: _searchCtrl,
-                        onChanged: (v) => setState(() => _query = v),
-                        decoration: InputDecoration(
-                          hintText: 'Search by name, owner, or phone',
-                          prefixIcon: const Icon(
-                            Icons.search_rounded,
-                            size: 20,
-                          ),
-                          suffixIcon: _query.isEmpty
-                              ? null
-                              : IconButton(
-                                  icon: const Icon(
-                                    Icons.close_rounded,
-                                    size: 18,
-                                  ),
-                                  onPressed: () => setState(() {
-                                    _searchCtrl.clear();
-                                    _query = '';
-                                  }),
-                                ),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 16),
-                    _StatChip(label: 'Merchants', value: '${all.length}'),
-                    const SizedBox(width: 8),
-                    _StatChip(
-                      label: 'Pro',
-                      value: '$proCount',
-                      color: AdminColors.accent,
-                      bg: AdminColors.accentSoft,
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  _query.isEmpty
-                      ? 'Showing all ${visible.length} merchants'
-                      : 'Showing ${visible.length} of ${all.length} merchants',
-                  style: const TextStyle(
-                    color: AdminColors.inkMuted,
-                    fontSize: 12.5,
-                  ),
-                ),
-                const SizedBox(height: 12),
-                Expanded(
-                  child: visible.isEmpty
-                      ? _MessageState(
-                          icon: Icons.search_off_rounded,
-                          color: AdminColors.inkFaint,
-                          title: 'No merchants match "$_query"',
-                          subtitle:
-                              'Try a different name, owner, or phone number.',
-                        )
-                      : Card(
-                          clipBehavior: Clip.antiAlias,
-                          margin: EdgeInsets.zero,
-                          child: LayoutBuilder(
-                            builder: (context, constraints) {
-                              return SingleChildScrollView(
-                                child: SingleChildScrollView(
-                                  scrollDirection: Axis.horizontal,
-                                  child: ConstrainedBox(
-                                    constraints: BoxConstraints(
-                                      minWidth: constraints.maxWidth,
-                                    ),
-                                    child: DataTable(
-                                      sortColumnIndex: _sortColumnIndex,
-                                      sortAscending: _sortAsc,
-                                      headingRowColor: WidgetStateProperty.all(
-                                        AdminColors.surfaceSunken,
-                                      ),
-                                      columns: [
-                                        DataColumn(
-                                          label: const Text('Business'),
-                                          onSort: (_, asc) =>
-                                              _onSort(_SortBy.name, asc),
-                                        ),
-                                        const DataColumn(label: Text('Owner')),
-                                        const DataColumn(label: Text('Phone')),
-                                        const DataColumn(label: Text('Type')),
-                                        const DataColumn(label: Text('Plan')),
-                                        DataColumn(
-                                          label: const Text('Sales'),
-                                          numeric: true,
-                                          onSort: (_, asc) =>
-                                              _onSort(_SortBy.sales, asc),
-                                        ),
-                                        DataColumn(
-                                          label: const Text('Revenue'),
-                                          numeric: true,
-                                          onSort: (_, asc) =>
-                                              _onSort(_SortBy.revenue, asc),
-                                        ),
-                                        DataColumn(
-                                          label: const Text('Last sale'),
-                                          onSort: (_, asc) =>
-                                              _onSort(_SortBy.lastSale, asc),
-                                        ),
-                                      ],
-                                      rows: [
-                                        for (final b in visible)
-                                          DataRow(
-                                            onSelectChanged: (_) =>
-                                                Navigator.push(
-                                                  context,
-                                                  MaterialPageRoute(
-                                                    builder: (_) =>
-                                                        MerchantDetailScreen(
-                                                          business: b,
-                                                        ),
-                                                  ),
-                                                ),
-                                            cells: [
-                                              DataCell(
-                                                Text(
-                                                  b.name,
-                                                  style: const TextStyle(
-                                                    fontWeight: FontWeight.w700,
-                                                  ),
-                                                ),
-                                              ),
-                                              DataCell(
-                                                Text(
-                                                  b.ownerName.isEmpty
-                                                      ? '—'
-                                                      : b.ownerName,
-                                                ),
-                                              ),
-                                              DataCell(
-                                                Text(
-                                                  b.phone.isEmpty
-                                                      ? '—'
-                                                      : b.phone,
-                                                ),
-                                              ),
-                                              DataCell(
-                                                _TypeChip(type: b.businessType),
-                                              ),
-                                              DataCell(_ProBadge(business: b)),
-                                              DataCell(
-                                                Text(
-                                                  '${b.totalSalesCount}',
-                                                  style: AdminTheme.mono(13),
-                                                ),
-                                              ),
-                                              DataCell(
-                                                Text(
-                                                  _formatPaise(
-                                                    b.totalRevenuePaise,
-                                                  ),
-                                                  style: AdminTheme.mono(13),
-                                                ),
-                                              ),
-                                              DataCell(
-                                                Text(
-                                                  b.lastSaleAt == null
-                                                      ? '—'
-                                                      : DateFormat(
-                                                          'd MMM yyyy',
-                                                        ).format(b.lastSaleAt!),
-                                                  style: const TextStyle(
-                                                    color: AdminColors.inkMuted,
-                                                    fontSize: 12.5,
-                                                  ),
-                                                ),
-                                              ),
-                                            ],
-                                          ),
-                                      ],
-                                    ),
-                                  ),
-                                ),
-                              );
-                            },
-                          ),
-                        ),
-                ),
-              ],
+    // No own Scaffold/AppBar — this is a shell tab (AdminShell owns the top
+    // chrome consistently across all four), not a pushed route. The title +
+    // CSV-export action live in an in-body header instead, matching
+    // coupons_screen.dart's own pattern.
+    return Padding(
+      padding: const EdgeInsets.all(24),
+      child: StreamBuilder<List<AdminBusiness>>(
+        stream: AdminFirestoreService.instance.watchBusinesses(),
+        builder: (context, snapshot) {
+          if (snapshot.hasError) {
+            return _MessageState(
+              icon: Icons.error_outline_rounded,
+              color: AdminColors.red,
+              title: 'Could not load merchants',
+              subtitle: '${snapshot.error}',
             );
-          },
+          }
+          if (!snapshot.hasData) {
+            return const _MessageState(
+              icon: Icons.hourglass_top_rounded,
+              color: AdminColors.inkFaint,
+              title: 'Loading merchants…',
+              subtitle: 'Fetching the merchant directory from Firestore.',
+              loading: true,
+            );
+          }
+
+          final all = snapshot.data!;
+          if (all.isEmpty) {
+            return const _MessageState(
+              icon: Icons.storefront_outlined,
+              color: AdminColors.inkFaint,
+              title: 'No merchants yet',
+              subtitle:
+                  'Businesses appear here as soon as they sync from the app.',
+            );
+          }
+
+          final visible = _filterAndSort(all);
+          final proCount = all.where((b) => b.isProEffective).length;
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            _visibleNotifier.value = visible;
+          });
+
+          final searchField = TextField(
+            controller: _searchCtrl,
+            onChanged: (v) => setState(() => _query = v),
+            decoration: InputDecoration(
+              hintText: 'Search by name, owner, or phone',
+              prefixIcon: const Icon(Icons.search_rounded, size: 20),
+              suffixIcon: _query.isEmpty
+                  ? null
+                  : IconButton(
+                      icon: const Icon(Icons.close_rounded, size: 18),
+                      onPressed: () => setState(() {
+                        _searchCtrl.clear();
+                        _query = '';
+                      }),
+                    ),
+            ),
+          );
+          final statChips = [
+            _StatChip(label: 'Merchants', value: '${all.length}'),
+            const SizedBox(width: 8),
+            _StatChip(
+              label: 'Pro',
+              value: '$proCount',
+              color: AdminColors.accent,
+              bg: AdminColors.accentSoft,
+            ),
+          ];
+
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Header: title/subtitle + CSV export — no own AppBar (see
+              // build()'s top comment), so this is the screen's only chrome.
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('Merchants', style: AdminTheme.heading(22)),
+                        const SizedBox(height: 2),
+                        const Text(
+                          'Every store synced from the app, searchable and exportable.',
+                          style: TextStyle(
+                            color: AdminColors.inkMuted,
+                            fontSize: 13,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  IconButton(
+                    tooltip: 'Export visible list as CSV',
+                    icon: const Icon(Icons.download_rounded),
+                    onPressed: visible.isEmpty
+                        ? null
+                        : () => _exportCsv(visible),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              // Search + stat chips — stacked on narrow width instead of
+              // squeezing three things into one row.
+              LayoutBuilder(
+                builder: (context, constraints) {
+                  if (constraints.maxWidth < 560) {
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        searchField,
+                        const SizedBox(height: 10),
+                        Row(children: statChips),
+                      ],
+                    );
+                  }
+                  return Row(
+                    children: [
+                      Expanded(child: searchField),
+                      const SizedBox(width: 16),
+                      ...statChips,
+                    ],
+                  );
+                },
+              ),
+              const SizedBox(height: 8),
+              Text(
+                _query.isEmpty
+                    ? 'Showing all ${visible.length} merchants'
+                    : 'Showing ${visible.length} of ${all.length} merchants',
+                style: const TextStyle(
+                  color: AdminColors.inkMuted,
+                  fontSize: 12.5,
+                ),
+              ),
+              const SizedBox(height: 12),
+              Expanded(
+                child: visible.isEmpty
+                    ? _MessageState(
+                        icon: Icons.search_off_rounded,
+                        color: AdminColors.inkFaint,
+                        title: 'No merchants match "$_query"',
+                        subtitle:
+                            'Try a different name, owner, or phone number.',
+                      )
+                    : LayoutBuilder(
+                        builder: (context, outer) {
+                          // Below ~700px an 8-column table is unreadable
+                          // even with horizontal scroll — a phone user
+                          // wants to scan merchants, not pan a table. Swap
+                          // to a card list instead of just shrinking it.
+                          if (outer.maxWidth < 700) {
+                            return ListView.separated(
+                              itemCount: visible.length,
+                              separatorBuilder: (_, _) =>
+                                  const SizedBox(height: 10),
+                              itemBuilder: (context, i) =>
+                                  _MerchantCard(business: visible[i]),
+                            );
+                          }
+                          return Card(
+                            clipBehavior: Clip.antiAlias,
+                            margin: EdgeInsets.zero,
+                            child: LayoutBuilder(
+                              builder: (context, constraints) {
+                                return SingleChildScrollView(
+                                  child: SingleChildScrollView(
+                                    scrollDirection: Axis.horizontal,
+                                    child: ConstrainedBox(
+                                      constraints: BoxConstraints(
+                                        minWidth: constraints.maxWidth,
+                                      ),
+                                      child: DataTable(
+                                        sortColumnIndex: _sortColumnIndex,
+                                        sortAscending: _sortAsc,
+                                        headingRowColor:
+                                            WidgetStateProperty.all(
+                                              AdminColors.surfaceSunken,
+                                            ),
+                                        columns: [
+                                          DataColumn(
+                                            label: const Text('Business'),
+                                            onSort: (_, asc) =>
+                                                _onSort(_SortBy.name, asc),
+                                          ),
+                                          const DataColumn(
+                                            label: Text('Owner'),
+                                          ),
+                                          const DataColumn(
+                                            label: Text('Phone'),
+                                          ),
+                                          const DataColumn(label: Text('Type')),
+                                          const DataColumn(label: Text('Plan')),
+                                          DataColumn(
+                                            label: const Text('Sales'),
+                                            numeric: true,
+                                            onSort: (_, asc) =>
+                                                _onSort(_SortBy.sales, asc),
+                                          ),
+                                          DataColumn(
+                                            label: const Text('Revenue'),
+                                            numeric: true,
+                                            onSort: (_, asc) =>
+                                                _onSort(_SortBy.revenue, asc),
+                                          ),
+                                          DataColumn(
+                                            label: const Text('Last sale'),
+                                            onSort: (_, asc) =>
+                                                _onSort(_SortBy.lastSale, asc),
+                                          ),
+                                        ],
+                                        rows: [
+                                          for (final b in visible)
+                                            DataRow(
+                                              onSelectChanged: (_) =>
+                                                  Navigator.push(
+                                                    context,
+                                                    MaterialPageRoute(
+                                                      builder: (_) =>
+                                                          MerchantDetailScreen(
+                                                            business: b,
+                                                          ),
+                                                    ),
+                                                  ),
+                                              cells: [
+                                                DataCell(
+                                                  Text(
+                                                    b.name,
+                                                    style: const TextStyle(
+                                                      fontWeight:
+                                                          FontWeight.w700,
+                                                    ),
+                                                  ),
+                                                ),
+                                                DataCell(
+                                                  Text(
+                                                    b.ownerName.isEmpty
+                                                        ? '—'
+                                                        : b.ownerName,
+                                                  ),
+                                                ),
+                                                DataCell(
+                                                  Text(
+                                                    b.phone.isEmpty
+                                                        ? '—'
+                                                        : b.phone,
+                                                  ),
+                                                ),
+                                                DataCell(
+                                                  _TypeChip(
+                                                    type: b.businessType,
+                                                  ),
+                                                ),
+                                                DataCell(
+                                                  _ProBadge(business: b),
+                                                ),
+                                                DataCell(
+                                                  Text(
+                                                    '${b.totalSalesCount}',
+                                                    style: AdminTheme.mono(13),
+                                                  ),
+                                                ),
+                                                DataCell(
+                                                  Text(
+                                                    _formatPaise(
+                                                      b.totalRevenuePaise,
+                                                    ),
+                                                    style: AdminTheme.mono(13),
+                                                  ),
+                                                ),
+                                                DataCell(
+                                                  Text(
+                                                    b.lastSaleAt == null
+                                                        ? '—'
+                                                        : DateFormat(
+                                                            'd MMM yyyy',
+                                                          ).format(
+                                                            b.lastSaleAt!,
+                                                          ),
+                                                    style: const TextStyle(
+                                                      color:
+                                                          AdminColors.inkMuted,
+                                                      fontSize: 12.5,
+                                                    ),
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                );
+                              },
+                            ),
+                          );
+                        },
+                      ),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+}
+
+/// Narrow-width stand-in for a `DataTable` row: same fields, laid out as a
+/// tappable card instead of columns that would otherwise get crushed or
+/// force horizontal scrolling on a phone.
+class _MerchantCard extends StatelessWidget {
+  final AdminBusiness business;
+  const _MerchantCard({required this.business});
+
+  @override
+  Widget build(BuildContext context) {
+    final b = business;
+    return Card(
+      clipBehavior: Clip.antiAlias,
+      margin: EdgeInsets.zero,
+      child: InkWell(
+        onTap: () => Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => MerchantDetailScreen(business: b)),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(14),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      b.name,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w700,
+                        fontSize: 15,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  _ProBadge(business: b),
+                ],
+              ),
+              const SizedBox(height: 4),
+              Text(
+                [
+                  if (b.ownerName.isNotEmpty) b.ownerName,
+                  if (b.phone.isNotEmpty) b.phone,
+                ].join(' · '),
+                style: const TextStyle(
+                  color: AdminColors.inkMuted,
+                  fontSize: 12.5,
+                ),
+                overflow: TextOverflow.ellipsis,
+              ),
+              const SizedBox(height: 10),
+              Row(
+                children: [
+                  _TypeChip(type: b.businessType),
+                  const Spacer(),
+                  Text(
+                    b.lastSaleAt == null
+                        ? '—'
+                        : DateFormat('d MMM yyyy').format(b.lastSaleAt!),
+                    style: const TextStyle(
+                      color: AdminColors.inkMuted,
+                      fontSize: 12,
+                    ),
+                  ),
+                ],
+              ),
+              const Divider(height: 20),
+              Row(
+                children: [
+                  Expanded(
+                    child: _MerchantCardStat(
+                      label: 'Bills',
+                      value: '${b.totalSalesCount}',
+                    ),
+                  ),
+                  Expanded(
+                    child: _MerchantCardStat(
+                      label: 'Revenue',
+                      value: _formatPaise(b.totalRevenuePaise),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
         ),
       ),
+    );
+  }
+}
+
+class _MerchantCardStat extends StatelessWidget {
+  final String label;
+  final String value;
+  const _MerchantCardStat({required this.label, required this.value});
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: const TextStyle(
+            color: AdminColors.inkFaint,
+            fontSize: 11,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        const SizedBox(height: 2),
+        Text(value, style: AdminTheme.mono(14)),
+      ],
     );
   }
 }

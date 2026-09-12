@@ -47,6 +47,101 @@ drives `LocalDatabase` through a real (in-memory FFI) SQLite database and assert
 
 ---
 
+## 2026-09-12 — Admin Console: mobile-responsive shell + bottom nav, card-list views, and an Android widgets audit
+
+**User's request (Hinglish):** "admin panel ka UI aur improve karo simple interacttive, creative,
+and professional chaiye, mobile responsive, bottom navbar for mobile version, aur admin panel me
+kya kya kar sakte hai.. uska bi hisab doo... android ke widgets fe functional chahiye" — i.e. make
+the Admin Console's UI mobile-responsive with a bottom nav bar, keep it visually clean/professional,
+list out everything the admin panel can do, and confirm the Android home-screen widgets work.
+
+**Root cause / gap:** `admin_console/` (the Flutter Web project at `kamaiplus-admin.web.app`) was
+built desktop-first — `admin_shell.dart` rendered a fixed 232px-wide left sidebar unconditionally,
+with no narrower alternative. On a phone this ate most of the screen. Three of the four tab
+screens' data tables (`merchants_screen.dart`, `coupons_screen.dart`) also had no mobile fallback
+beyond horizontal scrolling, which is a poor experience for an 8- and 6-column table respectively.
+
+**Fix — responsive shell (`admin_console/lib/screens/admin_shell.dart`):**
+- Added a `_wideBreakpoint = 760` (`MediaQuery` width check). At/above it, renders the original
+  sidebar layout (now extracted into `_DesktopSidebar`, with `AnimatedContainer` selection
+  transitions and outlined/filled icon swapping — a visual polish pass, not just a lift-and-shift).
+  Below it, renders a `Scaffold` with a compact top `AppBar` (current tab icon + label,
+  `_AccountMenu(compact: true)` as a `PopupMenuButton` in actions) and a Material 3
+  `NavigationBar` as `bottomNavigationBar` with the same 4 destinations (Dashboard / Merchants /
+  Coupons / Broadcast), each with distinct outlined vs. filled `IconData` for selected state.
+- `IndexedStack` (unchanged) keeps every tab's state alive across the nav-bar/sidebar switch, same
+  as before this change — the responsive split only touches the chrome around it.
+
+**Fix — removed a would-be double-AppBar bug before it shipped:** before adding the shell-level
+mobile `AppBar`, audited all 4 tab screens for their own `Scaffold`/`AppBar`. Found
+`merchants_screen.dart` had one (`Scaffold(appBar: AppBar(title: Text('Merchants'...)))`) — on
+mobile this would have rendered stacked on top of the shell's own AppBar. Removed it, converting
+the screen to bare content with an in-body header (title + subtitle + CSV-export icon button),
+matching the pattern `coupons_screen.dart` already used. `dashboard_screen.dart` and
+`broadcast_screen.dart` have no own Scaffold/AppBar (no conflict); `merchant_detail_screen.dart`'s
+own AppBar is correct as-is since it's a pushed route (`Navigator.push`), not a shell tab.
+
+**Fix — card-list views for narrow widths**, replacing horizontal-scroll-only tables:
+- `merchants_screen.dart`: below 700px, the 8-column `DataTable` (Business/Owner/Phone/Type/Plan/
+  Sales/Revenue/Last sale) is replaced by a `ListView.separated` of new `_MerchantCard` widgets —
+  name + Pro badge on top, owner/phone as a subtitle line, type chip + last-sale date, then a
+  bills/revenue stat row. Tapping a card still opens `MerchantDetailScreen`, same as a table row.
+  The search field + stat chips above it also switch from a `Row` to a stacked `Column` below
+  560px width instead of squeezing three elements into one line.
+- `coupons_screen.dart`: same treatment below 700px — the 6-column table becomes a `ListView` of
+  new `_CouponCard` widgets (code + active/expired badges + delete button on top, discount label,
+  then expiry date + usage count). The header `Row` (title/subtitle + "New Coupon" button) also
+  stacks vertically below 520px, with the button made full-width instead of getting squeezed next
+  to the title.
+- `broadcast_screen.dart` was already mobile-safe as-is (`ConstrainedBox(maxWidth: 760)` +
+  `SingleChildScrollView` + `Wrap` for its action buttons naturally reflow at any width) — no
+  changes needed.
+- `dashboard_screen.dart` already had its own `LayoutBuilder`-driven responsive split from its
+  original build — confirmed still correct, no changes needed.
+
+**Fix — login screen scroll safety:** `login_screen.dart` centered its sign-in `Card` with no
+`SingleChildScrollView` around it. On a short/narrow phone screen with the keyboard open, the
+fixed-height form (Google button + divider + 2 text fields + error text + submit button) could
+overflow vertically with no way to scroll past the keyboard. Wrapped it in
+`SafeArea > Center > SingleChildScrollView` so it now scrolls instead of overflowing.
+
+**Verified:** `flutter analyze` (whole `admin_console` project) — 0 errors, only the two
+pre-existing `dart:html`-deprecation info notices on `merchants_screen.dart` (expected; this
+project only ever targets Web, so `dart:html` for the CSV Blob download is intentional and
+harmless — it's also why the web build's wasm dry-run flags that one file, which does not affect
+the actual JS-target release build). `flutter test` — 1/1 passing. `flutter build web --release` —
+succeeds. Deployed via `firebase deploy --only hosting:admin --project kamaiplus` to
+`https://kamaiplus-admin.web.app`.
+
+**Android home-screen widgets — investigated, no bug found:** the user separately asked to confirm
+`QuickPosWidgetProvider`/`TodaySaleWidgetProvider` are functional. Reviewed end-to-end: both have
+correct `<receiver>` entries in `AndroidManifest.xml` with `APPWIDGET_UPDATE` intent-filters and
+`appwidget-provider` metadata; `HomeWidgetService.updateTodayMetrics()`
+(`lib/services/home_widget_service.dart`) writes the exact `SharedPreferences` keys
+(`today_sale`/`khata_due`/`cash_in_hand`/`store_name`) both providers' Java code reads, and is
+called from 4 places (`main.dart`, `workmanager_sync_service.dart`, `pos_billing_screen.dart`,
+`splash_screen.dart`) so the widgets refresh after app launch, background sync, and every sale.
+The "New Bill" / "tap card" `PendingIntent`s correctly deep-link into `MainActivity` via
+`kamaiplus://shortcut/pos`. **No concrete bug was found by static review.** This does not rule out
+an on-device rendering issue (widget picker preview, launcher-specific quirks) — that can only be
+confirmed on a real device, which this session cannot do (no touch-injection or on-device testing
+capability). If the user still sees a problem, the next step is a description of exactly what
+"not functional" looks like on their device (doesn't appear in the widget picker? appears but
+stays blank? tapping does nothing?) — those are three different failure points in the chain above.
+
+**Admin panel capabilities — delivered directly in chat** (not written to a separate file, per
+this session's established pattern of answering documentation-style requests inline): a rundown
+of everything `admin_console/` currently does — merchant directory + search/sort/CSV export +
+per-merchant detail drill-down, Pro-coupon CRUD with live Firestore writes, global broadcast
+banner + generic remote-config key/value editor, and the dashboard's KPI/revenue-trend view.
+
+**Files touched:** `admin_console/lib/screens/admin_shell.dart` (responsive shell rewrite),
+`admin_console/lib/screens/merchants_screen.dart` (Scaffold removal, responsive header, card-list
+view), `admin_console/lib/screens/coupons_screen.dart` (responsive header, card-list view),
+`admin_console/lib/screens/login_screen.dart` (scroll safety).
+
+---
+
 ## 2026-09-12 — Three roadmap items: Professional Polish Pass, Admin Console v2, Real FEFO for Pharmacy
 
 **Context:** the last three items on the KamaiPlus Playbook's near-term roadmap, done in one
