@@ -9,6 +9,7 @@ import '../../models/models.dart';
 import '../../services/firestore_sync_service.dart';
 import '../../services/cloud_barcode_resolver_service.dart';
 import '../pos/barcode_scanner_view.dart';
+import '../common/in_app_notification.dart';
 import 'rapid_barcode_inward_screen.dart';
 
 class AddProductModal extends StatefulWidget {
@@ -293,18 +294,9 @@ class _AddProductModalState extends State<AddProductModal> {
           _isStockExpanded = true;
         });
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Row(
-                children: [
-                  const Icon(Icons.check_circle_rounded, color: Colors.greenAccent, size: 20),
-                  const SizedBox(width: 8),
-                  Expanded(child: Text('Loaded from Store: ${existingStoreItem.name} (${existingStoreItem.unit})')),
-                ],
-              ),
-              backgroundColor: const Color(0xFF0F172A),
-              duration: const Duration(seconds: 2),
-            ),
+          InAppNotification.success(
+            'Loaded from Store: ${existingStoreItem.name} (${existingStoreItem.unit})',
+            context: context,
           );
         }
         return;
@@ -331,23 +323,9 @@ class _AddProductModalState extends State<AddProductModal> {
       }
 
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Row(
-              children: [
-                const Icon(Icons.info_outline_rounded, color: Colors.amberAccent, size: 20),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    'Barcode "$barcode" naya hai. Ek baar Naam & Unit set kar dein — aage se yeh hamesha auto-fill hoga!',
-                    style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w600),
-                  ),
-                ),
-              ],
-            ),
-            backgroundColor: const Color(0xFF0F172A),
-            duration: const Duration(seconds: 4),
-          ),
+        InAppNotification.info(
+          'Barcode "$barcode" naya hai. Ek baar Naam & Unit set kar dein — aage se yeh hamesha auto-fill hoga!',
+          context: context,
         );
       }
     } finally {
@@ -372,24 +350,11 @@ class _AddProductModalState extends State<AddProductModal> {
     });
 
     if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Row(
-            children: [
-              Icon(
-                source == 'Master Catalog' ? Icons.bolt_rounded : Icons.cloud_done_rounded,
-                color: source == 'Master Catalog' ? Colors.amber : Colors.cyanAccent,
-                size: 20,
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text('Auto-filled ($source): ${master.name} • Unit: ${_selectedUnit.toUpperCase()}'),
-              ),
-            ],
-          ),
-          backgroundColor: const Color(0xFF1E293B),
-          duration: const Duration(seconds: 2),
-        ),
+      InAppNotification.show(
+        context: context,
+        message: 'Auto-filled ($source): ${master.name} • Unit: ${_selectedUnit.toUpperCase()}',
+        customIcon: source == 'Master Catalog' ? Icons.bolt_rounded : Icons.cloud_done_rounded,
+        customColor: source == 'Master Catalog' ? Colors.amber : Colors.cyanAccent,
       );
     }
   }
@@ -592,20 +557,9 @@ class _AddProductModalState extends State<AddProductModal> {
 
       if (continueAddingNext) {
         widget.onSaved();
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Row(
-              children: [
-                const Icon(Icons.check_circle_rounded, color: Colors.greenAccent, size: 18),
-                const SizedBox(width: 8),
-                Expanded(child: Text('✓ Saved "${p.name}". Scanning next barcode...')),
-              ],
-            ),
-            backgroundColor: const Color(0xFF0F172A),
-            duration: const Duration(milliseconds: 1600),
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-          ),
+        InAppNotification.success(
+          'Saved "${p.name}". Scanning next barcode...',
+          context: context,
         );
         setState(() {
           _nameCtrl.clear();
@@ -623,23 +577,14 @@ class _AddProductModalState extends State<AddProductModal> {
       Navigator.of(context).pop();
       widget.onSaved();
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            widget.existingProduct != null
-                ? 'Product updated successfully!'
-                : 'New product added to catalog!',
-            style: GoogleFonts.inter(fontWeight: FontWeight.w700),
-          ),
-          backgroundColor: const Color(0xFF0F172A),
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-        ),
+      InAppNotification.success(
+        widget.existingProduct != null
+            ? 'Product updated successfully!'
+            : 'New product added to catalog!',
+        context: context,
       );
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to save product: $e')),
-      );
+      InAppNotification.error('Failed to save product: $e', context: context);
     } finally {
       if (mounted) setState(() => _isSaving = false);
     }

@@ -4,6 +4,7 @@ import '../../models/models.dart';
 import '../../core/utils/money_formatter.dart';
 import '../../core/database/local_database.dart';
 import '../../services/soundbox_service.dart';
+import '../common/in_app_notification.dart';
 import '../../services/firestore_sync_service.dart';
 import '../../services/app_printer_service.dart';
 import 'sale_completed_modal.dart';
@@ -97,9 +98,7 @@ class _PaymentModalState extends State<PaymentModal> {
     } catch (e) {
       setState(() => _isProcessing = false);
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error saving bill: $e'), backgroundColor: Colors.red),
-        );
+        InAppNotification.error('Error saving bill: $e', context: context);
       }
     }
   }

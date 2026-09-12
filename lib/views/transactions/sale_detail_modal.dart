@@ -396,35 +396,15 @@ class SaleDetailModal extends StatelessWidget {
 
                   if (context.mounted) {
                     Navigator.pop(context);
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Row(
-                          children: [
-                            const Icon(Icons.check_circle_rounded, color: Colors.white, size: 20),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: Text(
-                                '✓ Invoice #${sale.invoiceNumber} returned! Stock restocked & audit log saved.',
-                                style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700),
-                              ),
-                            ),
-                          ],
-                        ),
-                        backgroundColor: const Color(0xFF059669),
-                        behavior: SnackBarBehavior.floating,
-                        duration: const Duration(seconds: 3),
-                      ),
+                    InAppNotification.success(
+                      'Invoice #${sale.invoiceNumber} returned! Stock restocked & audit log saved.',
+                      context: context,
                     );
                   }
                   onVoidOrRefund?.call();
                 } catch (e) {
                   if (context.mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text('Return error: $e'),
-                        backgroundColor: const Color(0xFFDC2626),
-                      ),
-                    );
+                    InAppNotification.error('Return error: $e', context: context);
                   }
                 }
               },

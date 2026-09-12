@@ -2338,12 +2338,7 @@ class _KhataScreenState extends State<KhataScreen> with DataBusRefresh<KhataScre
                 if (!mounted) return;
                 _loadData();
 
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text('✓ Khata account opened for $name!'),
-                    backgroundColor: const Color(0xFF059669),
-                  ),
-                );
+                InAppNotification.success('Khata account opened for $name!', context: context);
               },
               style: ElevatedButton.styleFrom(
                 backgroundColor: const Color(0xFFF59E0B),
@@ -2682,11 +2677,9 @@ class _KhataScreenState extends State<KhataScreen> with DataBusRefresh<KhataScre
                         if (!mounted) return;
                         _loadData();
 
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            content: Text('✓ Received ${MoneyFormatter.formatINR(amtPaise)} from ${customer.name}!'),
-                            backgroundColor: const Color(0xFF059669),
-                          ),
+                        InAppNotification.success(
+                          'Received ${MoneyFormatter.formatINR(amtPaise)} from ${customer.name}!',
+                          context: context,
                         );
                       },
                       style: ElevatedButton.styleFrom(
@@ -2830,11 +2823,10 @@ class _KhataScreenState extends State<KhataScreen> with DataBusRefresh<KhataScre
                         if (!mounted) return;
                     _loadData();
 
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text('✓ Recorded ${MoneyFormatter.formatINR(amtPaise)} Udhar for ${customer.name}!'),
-                        backgroundColor: const Color(0xFFDC2626),
-                      ),
+                    InAppNotification.show(
+                      context: context,
+                      message: 'Recorded ${MoneyFormatter.formatINR(amtPaise)} Udhar for ${customer.name}!',
+                      customColor: const Color(0xFFDC2626),
                     );
                   },
                     style: ElevatedButton.styleFrom(
@@ -3261,11 +3253,9 @@ class _KhataScreenState extends State<KhataScreen> with DataBusRefresh<KhataScre
                           });
                           _loadData();
 
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text('✓ Cleared ${bills.length} bills (${MoneyFormatter.formatINR(totalPaise)}) via $paymentModeStr!'),
-                              backgroundColor: const Color(0xFF059669),
-                            ),
+                          InAppNotification.success(
+                            'Cleared ${bills.length} bills (${MoneyFormatter.formatINR(totalPaise)}) via $paymentModeStr!',
+                            context: context,
                           );
                         },
                         icon: const Icon(Icons.check_circle_rounded, color: Colors.white, size: 20),

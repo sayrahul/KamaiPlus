@@ -8,6 +8,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import '../../core/database/local_database.dart';
 import '../../core/utils/app_validators.dart';
+import '../common/in_app_notification.dart';
 import '../../models/models.dart';
 import '../common/pro_upgrade_modal.dart';
 import '../common/upi_standee_modal.dart';
@@ -212,33 +213,11 @@ class _StoreProfileScreenState extends State<StoreProfileScreen> {
       await LocalDatabase.instance.saveStoreProfile(updated);
 
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Row(
-              children: [
-                const Icon(Icons.check_circle_rounded, color: Colors.white, size: 18),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    '✓ Store Logo updated! It will appear on Top Bar & Invoices.',
-                    style: GoogleFonts.outfit(fontWeight: FontWeight.w600),
-                  ),
-                ),
-              ],
-            ),
-            backgroundColor: const Color(0xFF059669),
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
+        InAppNotification.success('Store Logo updated! It will appear on Top Bar & Invoices.', context: context);
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Failed to pick logo: $e'),
-            backgroundColor: const Color(0xFFDC2626),
-          ),
-        );
+        InAppNotification.error('Failed to pick logo: $e', context: context);
       }
     }
   }
@@ -412,23 +391,7 @@ class _StoreProfileScreenState extends State<StoreProfileScreen> {
     // form never changes it, so there is nothing to reseed or switch here.
     if (!mounted) return;
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Row(
-          children: [
-            const Icon(Icons.check_circle_rounded, color: Colors.white),
-            const SizedBox(width: 10),
-            Text(
-              '✓ Store & GST Profile updated successfully!',
-              style: GoogleFonts.outfit(fontWeight: FontWeight.w600),
-            ),
-          ],
-        ),
-        backgroundColor: const Color(0xFF0F172A),
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      ),
-    );
+    InAppNotification.success('Store & GST Profile updated successfully!', context: context);
   }
 
   void _addUpiAccount() {
@@ -437,13 +400,7 @@ class _StoreProfileScreenState extends State<StoreProfileScreen> {
 
     final vpaError = AppValidators.validateUpi(vpa);
     if (vpaError != null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(vpaError),
-          backgroundColor: const Color(0xFFDC2626),
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
+      InAppNotification.error(vpaError, context: context);
       return;
     }
 
@@ -463,14 +420,7 @@ class _StoreProfileScreenState extends State<StoreProfileScreen> {
 
     _saveProfile();
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('✓ Added $vpa to linked UPI accounts!'),
-        backgroundColor: const Color(0xFF059669),
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-      ),
-    );
+    InAppNotification.success('Added $vpa to linked UPI accounts!', context: context);
   }
 
   void _setDefaultUpi(String id) {
@@ -490,9 +440,7 @@ class _StoreProfileScreenState extends State<StoreProfileScreen> {
 
   void _deleteUpiAccount(String id) {
     if (_upiAccounts.length <= 1) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('At least 1 UPI account is required for customer billing QR.')),
-      );
+      InAppNotification.error('At least 1 UPI account is required for customer billing QR.', context: context);
       return;
     }
 
@@ -1388,13 +1336,7 @@ class _StoreProfileScreenState extends State<StoreProfileScreen> {
               await LocalDatabase.instance.completeFactoryReset(resetStoreProfile: false);
               FirestoreSyncService.instance.wipeCloudData().catchError((_) {});
               if (!mounted) return;
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('✓ Sabhi data safalta-purvak delete ho gaya. Fresh start ready!'),
-                  backgroundColor: Color(0xFF059669),
-                  behavior: SnackBarBehavior.floating,
-                ),
-              );
+              InAppNotification.success('Sabhi data safalta-purvak delete ho gaya. Fresh start ready!', context: context);
             },
             style: ElevatedButton.styleFrom(
               backgroundColor: const Color(0xFFDC2626),

@@ -9,6 +9,7 @@ import '../../models/models.dart';
 import '../../services/auth_service.dart';
 import '../../services/firestore_sync_service.dart';
 import '../dashboard/home_dashboard_screen.dart';
+import '../common/in_app_notification.dart';
 import 'signup_store_screen.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -32,13 +33,11 @@ class _LoginScreenState extends State<LoginScreen> {
     if (msg != null && msg.isNotEmpty) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(msg),
-            backgroundColor: const Color(0xFFDC2626),
-            behavior: SnackBarBehavior.floating,
-            duration: const Duration(seconds: 6),
-          ),
+        InAppNotification.show(
+          context: context,
+          message: msg,
+          type: NotificationType.error,
+          duration: const Duration(seconds: 6),
         );
       });
     }
@@ -127,13 +126,11 @@ class _LoginScreenState extends State<LoginScreen> {
             await AuthService.instance.signOut();
             if (!mounted) return;
             setState(() => _isLoading = false);
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text('Your account access has been disabled. Contact support for help.'),
-                backgroundColor: Color(0xFFDC2626),
-                behavior: SnackBarBehavior.floating,
-                duration: Duration(seconds: 6),
-              ),
+            InAppNotification.show(
+              context: context,
+              message: 'Your account access has been disabled. Contact support for help.',
+              type: NotificationType.error,
+              duration: const Duration(seconds: 6),
             );
             return;
           }
@@ -176,13 +173,7 @@ class _LoginScreenState extends State<LoginScreen> {
       setState(() => _isLoading = false);
 
       final displayName = user.displayName ?? user.email ?? 'User';
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('✓ Welcome, $displayName!'),
-          backgroundColor: const Color(0xFF059669),
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
+      InAppNotification.success('Welcome, $displayName!', context: context);
 
       if (hasStore) {
         Navigator.pushReplacement(
@@ -204,13 +195,7 @@ class _LoginScreenState extends State<LoginScreen> {
     } catch (e) {
       if (!mounted) return;
       setState(() => _isLoading = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Google Sign-In: $e'),
-          backgroundColor: const Color(0xFFDC2626),
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
+      InAppNotification.error('Google Sign-In: $e', context: context);
     }
   }
 
@@ -562,12 +547,7 @@ class _LoginScreenState extends State<LoginScreen> {
   Widget _buildFooterText(String text) {
     return GestureDetector(
       onTap: () {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('$text link opened'),
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
+        InAppNotification.info('$text link opened', context: context);
       },
       child: Text(
         text,

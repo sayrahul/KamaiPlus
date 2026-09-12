@@ -582,12 +582,7 @@ class _CustomersScreenState extends State<CustomersScreen> with DataBusRefresh<C
               if (!mounted) return;
               await _loadCustomers();
               if (!mounted) return;
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text('✓ Customer ${customer.name} deleted'),
-                  backgroundColor: const Color(0xFF0F172A),
-                ),
-              );
+              InAppNotification.success('Customer ${customer.name} deleted', context: context);
             },
             style: ElevatedButton.styleFrom(
               backgroundColor: const Color(0xFFEF4444),
@@ -667,7 +662,7 @@ class _CustomersScreenState extends State<CustomersScreen> with DataBusRefresh<C
               onPressed: () async {
                 final amt = double.tryParse(amountCtrl.text.trim());
                 if (amt == null || amt <= 0) {
-                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please enter a valid amount')));
+                  InAppNotification.error('Please enter a valid amount', context: context);
                   return;
                 }
                 final amountPaise = (amt * 100).round();
@@ -681,12 +676,7 @@ class _CustomersScreenState extends State<CustomersScreen> with DataBusRefresh<C
                 Navigator.pop(ctx);
                 if (!mounted) return;
                 _loadCustomers();
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text('✓ Entry recorded for ${customer.name}'),
-                    backgroundColor: const Color(0xFF0F172A),
-                  ),
-                );
+                InAppNotification.success('Entry recorded for ${customer.name}', context: context);
               },
               style: ElevatedButton.styleFrom(
                 backgroundColor: const Color(0xFF0F172A),

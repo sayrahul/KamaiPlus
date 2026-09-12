@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import '../../core/constants/business_vertical_config.dart';
+import '../common/in_app_notification.dart';
 import '../../core/state/app_data_bus.dart';
 import '../../core/state/data_bus_refresh.dart';
 import '../../core/database/local_database.dart';
@@ -108,14 +109,7 @@ class _InventoryScreenState extends State<InventoryScreen> with DataBusRefresh<I
       );
     } else {
       setState(() => _isAssetMasked = true);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: const Text('🔒 Inventory asset valuation masked.'),
-          duration: const Duration(seconds: 2),
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-        ),
-      );
+      InAppNotification.info('Inventory asset valuation masked.', context: context);
     }
   }
 
@@ -145,20 +139,7 @@ class _InventoryScreenState extends State<InventoryScreen> with DataBusRefresh<I
 
   void _exportStockAuditCsv() {
     HapticFeedback.selectionClick();
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Row(
-          children: [
-            const Icon(Icons.check_circle_rounded, color: Colors.white, size: 18),
-            const SizedBox(width: 8),
-            Text('Stock Valuation Report exported (${_products.length} SKUs)'),
-          ],
-        ),
-        backgroundColor: const Color(0xFF0F172A),
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-      ),
-    );
+    InAppNotification.success('Stock Valuation Report exported (${_products.length} SKUs)', context: context);
   }
 
   void _downloadSampleCsvTemplate() async {
@@ -974,13 +955,7 @@ class _InventoryScreenState extends State<InventoryScreen> with DataBusRefresh<I
                   await LocalDatabase.instance.upsertProduct(updated);
                   _loadData();
                   if (mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text('+10 ${product.unit} added to ${product.name}'),
-                        backgroundColor: const Color(0xFF059669),
-                        behavior: SnackBarBehavior.floating,
-                      ),
-                    );
+                    InAppNotification.success('+10 ${product.unit} added to ${product.name}', context: context);
                   }
                 },
                 borderRadius: BorderRadius.circular(6),

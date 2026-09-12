@@ -7,6 +7,7 @@ import '../../core/utils/money_formatter.dart';
 import '../../core/utils/quantity_config.dart';
 import '../../models/models.dart';
 import '../../services/firestore_sync_service.dart';
+import '../common/in_app_notification.dart';
 
 /// Modal bottom sheet for 1-Tap Rapid Quantity Inward & Retail Stock Adjustments.
 /// Supports wholesale box chips ([+6], [+12], [+24], [+48]), Unlimited Stock toggle,
@@ -241,17 +242,11 @@ class _QuickStockUpdateModalState extends State<QuickStockUpdateModal> {
     widget.onUpdated();
     if (mounted) {
       Navigator.pop(context);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            _isUnlimitedStock
-                ? '✓ ${p.name}: Stock set to Unlimited (∞)'
-                : '✓ ${p.name}: Stock updated to ${newStock.toInt()} ${p.unit}',
-          ),
-          backgroundColor: const Color(0xFF0F172A),
-          behavior: SnackBarBehavior.floating,
-          duration: const Duration(seconds: 2),
-        ),
+      InAppNotification.success(
+        _isUnlimitedStock
+            ? '${p.name}: Stock set to Unlimited (∞)'
+            : '${p.name}: Stock updated to ${newStock.toInt()} ${p.unit}',
+        context: context,
       );
     }
   }
@@ -299,13 +294,9 @@ class _QuickStockUpdateModalState extends State<QuickStockUpdateModal> {
     widget.onUpdated();
     if (mounted) {
       Navigator.pop(context);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('✓ Stock adjusted for ${p.name}: Now ${newStock.toInt()} ${p.unit}'),
-          backgroundColor: const Color(0xFF0F172A),
-          behavior: SnackBarBehavior.floating,
-          duration: const Duration(seconds: 2),
-        ),
+      InAppNotification.success(
+        'Stock adjusted for ${p.name}: Now ${newStock.toInt()} ${p.unit}',
+        context: context,
       );
     }
   }

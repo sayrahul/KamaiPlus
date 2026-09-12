@@ -3,6 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../../core/constants/business_vertical_config.dart';
 import '../../core/utils/quantity_config.dart';
 import '../../models/models.dart';
+import '../common/in_app_notification.dart';
 
 class PosItemEditModal extends StatefulWidget {
   final CartItemModel cartItem;
@@ -85,9 +86,7 @@ class _PosItemEditModalState extends State<PosItemEditModal> {
     final disc = double.tryParse(_discountController.text) ?? 0.0;
 
     if (qty <= 0) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Quantity must be greater than 0'), backgroundColor: Colors.red),
-      );
+      InAppNotification.error('Quantity must be greater than 0', context: context);
       return;
     }
 

@@ -1398,12 +1398,7 @@ class _TransactionsScreenState extends State<TransactionsScreen> with DataBusRef
             onPressed: () {
               Clipboard.setData(ClipboardData(text: csvRows.toString()));
               Navigator.pop(ctx);
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('✓ CSV Data copied to clipboard! Ready to paste into Excel.'),
-                  backgroundColor: Color(0xFF059669),
-                ),
-              );
+              InAppNotification.success('CSV Data copied to clipboard! Ready to paste into Excel.', context: context);
             },
             icon: const Icon(Icons.copy_rounded, size: 16, color: Colors.white),
             label: Text('Copy CSV Data', style: GoogleFonts.outfit(fontWeight: FontWeight.w700, color: Colors.white)),
@@ -1442,11 +1437,10 @@ class _TransactionsScreenState extends State<TransactionsScreen> with DataBusRef
           ElevatedButton(
             onPressed: () {
               Navigator.pop(ctx);
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('✓ Tally Prime XML vouchers generated successfully!'),
-                  backgroundColor: Color(0xFFD97706),
-                ),
+              InAppNotification.show(
+                context: context,
+                message: 'Tally Prime XML vouchers generated successfully!',
+                customColor: const Color(0xFFD97706),
               );
             },
             style: ElevatedButton.styleFrom(

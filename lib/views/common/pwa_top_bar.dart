@@ -3,6 +3,7 @@ import '../../services/soundbox_service.dart';
 import 'upi_standee_modal.dart';
 import 'pro_upgrade_modal.dart';
 import 'store_logo_avatar.dart';
+import 'in_app_notification.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../core/database/local_database.dart';
@@ -44,29 +45,13 @@ class _PwaTopBarState extends State<PwaTopBar> {
     await SoundboxService.instance.setAudioEnabled(newState);
     if (!mounted) return;
     setState(() => _isSoundboxEnabled = newState);
-    ScaffoldMessenger.of(context).hideCurrentSnackBar();
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Row(
-          children: [
-            Icon(
-              newState ? Icons.volume_up_rounded : Icons.volume_off_rounded,
-              color: Colors.white,
-              size: 20,
-            ),
-            const SizedBox(width: 8),
-            Text(
-              newState
-                  ? 'Voice Soundbox ON (Payment bolkar batayega)'
-                  : 'Voice Soundbox MUTE (Audio off hai)',
-              style: GoogleFonts.outfit(fontWeight: FontWeight.w600, fontSize: 13),
-            ),
-          ],
-        ),
-        backgroundColor: newState ? const Color(0xFF059669) : const Color(0xFF475569),
-        behavior: SnackBarBehavior.floating,
-        duration: const Duration(seconds: 2),
-      ),
+    InAppNotification.show(
+      context: context,
+      message: newState
+          ? 'Voice Soundbox ON (Payment bolkar batayega)'
+          : 'Voice Soundbox MUTE (Audio off hai)',
+      customIcon: newState ? Icons.volume_up_rounded : Icons.volume_off_rounded,
+      customColor: newState ? const Color(0xFF059669) : const Color(0xFF475569),
     );
   }
 

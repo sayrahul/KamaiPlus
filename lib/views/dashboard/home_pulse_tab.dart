@@ -1,4 +1,5 @@
 import '../common/owner_privacy_modal.dart';
+import '../common/in_app_notification.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../core/database/local_database.dart';
@@ -266,14 +267,7 @@ class _HomePulseTabState extends State<HomePulseTab> with DataBusRefresh<HomePul
               );
             } else {
               setState(() => _isProfitHidden = true);
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: const Text("🔒 Today's profit is now hidden."),
-                  duration: const Duration(seconds: 2),
-                  behavior: SnackBarBehavior.floating,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                ),
-              );
+              InAppNotification.info("Today's profit is now hidden.", context: context);
             }
           },
           borderRadius: BorderRadius.circular(8),
@@ -1629,11 +1623,9 @@ class _HomePulseTabState extends State<HomePulseTab> with DataBusRefresh<HomePul
   }
 
   void _shareBillOnWhatsapp(SaleModel sale) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('WhatsApp receipt ready for ${sale.invoiceNumber} (${MoneyFormatter.formatPaise(sale.totalAmountPaise)})'),
-        backgroundColor: const Color(0xFF10B981),
-      ),
+    InAppNotification.success(
+      'WhatsApp receipt ready for ${sale.invoiceNumber} (${MoneyFormatter.formatPaise(sale.totalAmountPaise)})',
+      context: context,
     );
   }
 
@@ -1691,9 +1683,7 @@ class _HomePulseTabState extends State<HomePulseTab> with DataBusRefresh<HomePul
                   child: ElevatedButton.icon(
                     onPressed: () {
                       Navigator.pop(ctx);
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('WhatsApp summary dispatched to store owner')),
-                      );
+                      InAppNotification.success('WhatsApp summary dispatched to store owner', context: context);
                     },
                     icon: const Icon(Icons.send_rounded, size: 16),
                     label: Text(

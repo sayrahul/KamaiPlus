@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../core/constants/business_vertical_config.dart';
+import '../common/in_app_notification.dart';
 import '../cash_register/cash_register_screen.dart';
 import '../transactions/transactions_screen.dart';
 import '../inventory/inventory_screen.dart';
@@ -215,24 +216,10 @@ class _MenuScreenState extends State<MenuScreen> {
 
   void _openAssistant() {
     HapticFeedback.lightImpact();
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Row(
-          children: [
-            const Icon(Icons.support_agent_rounded, color: Colors.white),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Text(
-                'KamaiPlus AI Assistant active: WhatsApp support ready!',
-                style: GoogleFonts.inter(fontSize: 13),
-              ),
-            ),
-          ],
-        ),
-        backgroundColor: const Color(0xFF0F172A),
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      ),
+    InAppNotification.show(
+      context: context,
+      message: 'KamaiPlus AI Assistant active: WhatsApp support ready!',
+      customIcon: Icons.support_agent_rounded,
     );
   }
 

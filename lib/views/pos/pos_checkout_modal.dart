@@ -928,44 +928,24 @@ class _PosCheckoutModalState extends State<PosCheckoutModal> {
 
     if (_paymentMode == 'credit' && _currentCustomer == null) {
       HapticFeedback.heavyImpact();
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            'Please select or add a customer for Credit (Udhar) bill',
-            style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w600, fontSize: 12),
-          ),
-          backgroundColor: const Color(0xFFDC2626),
-          behavior: SnackBarBehavior.floating,
-          duration: const Duration(seconds: 2),
-        ),
-      );
+      InAppNotification.error('Please select or add a customer for Credit (Udhar) bill', context: context);
       return;
     }
 
     if (_paymentMode == 'split') {
       if (!isSplitBalanced) {
         final diffRupees = (splitDifferencePaise / 100.0).abs().toStringAsFixed(2);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              splitDifferencePaise > 0
-                  ? 'Split total ₹${(totalSplitPaise / 100.0).toStringAsFixed(2)} is less than bill total ₹${(grandTotalPaise / 100.0).toStringAsFixed(2)} (₹$diffRupees remaining). Use Auto button.'
-                  : 'Split total exceeds bill total by ₹$diffRupees. Please balance the amounts.',
-            ),
-            backgroundColor: const Color(0xFFEA580C),
-            behavior: SnackBarBehavior.floating,
-          ),
+        InAppNotification.show(
+          context: context,
+          message: splitDifferencePaise > 0
+              ? 'Split total ₹${(totalSplitPaise / 100.0).toStringAsFixed(2)} is less than bill total ₹${(grandTotalPaise / 100.0).toStringAsFixed(2)} (₹$diffRupees remaining). Use Auto button.'
+              : 'Split total exceeds bill total by ₹$diffRupees. Please balance the amounts.',
+          type: NotificationType.warning,
         );
         return;
       }
       if (splitCreditPaise > 0 && _currentCustomer == null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Please select or add a Customer above for Udhar/Credit split portion'),
-            backgroundColor: Color(0xFFEF4444),
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
+        InAppNotification.error('Please select or add a Customer above for Udhar/Credit split portion', context: context);
         return;
       }
     }
@@ -1015,9 +995,7 @@ class _PosCheckoutModalState extends State<PosCheckoutModal> {
     } catch (e) {
       setState(() => _isProcessing = false);
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error saving sale: $e'), backgroundColor: Colors.red),
-        );
+        InAppNotification.error('Error saving sale: $e', context: context);
       }
     }
   }

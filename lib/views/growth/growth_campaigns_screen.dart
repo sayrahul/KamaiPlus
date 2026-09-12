@@ -4,6 +4,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../core/database/local_database.dart';
+import '../common/in_app_notification.dart';
 import '../../models/models.dart';
 import '../common/empty_state_card.dart';
 import '../common/pro_locked_card.dart';
@@ -405,17 +406,13 @@ Aapka Swagat Hai! Visit store today.
       } else {
         await Clipboard.setData(ClipboardData(text: message));
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('✓ Offer message copied for ${customer.name}')),
-          );
+          InAppNotification.success('Offer message copied for ${customer.name}', context: context);
         }
       }
     } catch (_) {
       await Clipboard.setData(ClipboardData(text: message));
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('✓ Offer message copied for ${customer.name}')),
-        );
+        InAppNotification.success('Offer message copied for ${customer.name}', context: context);
       }
     }
   }

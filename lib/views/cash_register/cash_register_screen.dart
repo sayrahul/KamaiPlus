@@ -4,6 +4,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
+import '../common/in_app_notification.dart';
 import 'package:uuid/uuid.dart';
 import '../../core/database/local_database.dart';
 import '../../core/state/app_data_bus.dart';
@@ -139,14 +140,7 @@ class _CashRegisterScreenState extends State<CashRegisterScreen> with DataBusRef
       final prefs = await SharedPreferences.getInstance();
       await prefs.setBool('cash_register_mask_amounts', true);
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: const Text('🔒 Cash drawer register figures masked.'),
-            duration: const Duration(seconds: 2),
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-          ),
-        );
+        InAppNotification.info('Cash drawer register figures masked.', context: context);
       }
     }
   }
@@ -161,19 +155,11 @@ class _CashRegisterScreenState extends State<CashRegisterScreen> with DataBusRef
     }
 
     if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Row(
-            children: [
-              Icon(_isDrawerOpen ? Icons.lock_open_rounded : Icons.lock_rounded, color: Colors.white, size: 18),
-              const SizedBox(width: 8),
-              Text(_isDrawerOpen ? 'Cash Drawer Shift Opened' : 'Cash Drawer Shift Closed / Locked'),
-            ],
-          ),
-          backgroundColor: _isDrawerOpen ? const Color(0xFF059669) : const Color(0xFF0F172A),
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-        ),
+      InAppNotification.show(
+        context: context,
+        message: _isDrawerOpen ? 'Cash Drawer Shift Opened' : 'Cash Drawer Shift Closed / Locked',
+        customIcon: _isDrawerOpen ? Icons.lock_open_rounded : Icons.lock_rounded,
+        customColor: _isDrawerOpen ? const Color(0xFF059669) : const Color(0xFF64748B),
       );
     }
   }
@@ -381,9 +367,7 @@ class _CashRegisterScreenState extends State<CashRegisterScreen> with DataBusRef
                     final rawAmt = amountCtrl.text.trim();
                     final amtRupees = int.tryParse(rawAmt) ?? 0;
                     if (amtRupees <= 0) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Kripya valid expense amount enter karein.')),
-                      );
+                      InAppNotification.error('Kripya valid expense amount enter karein.', context: context);
                       return;
                     }
                     HapticFeedback.mediumImpact();
@@ -688,9 +672,7 @@ Generated via KamaiPlus Retail POS
       }
     } catch (_) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('WhatsApp open nahi ho saka.')),
-        );
+        InAppNotification.error('WhatsApp open nahi ho saka.', context: context);
       }
     }
   }

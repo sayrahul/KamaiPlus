@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../core/database/local_database.dart';
+import '../common/in_app_notification.dart';
 import '../../core/state/app_data_bus.dart';
 import '../../core/state/data_bus_refresh.dart';
 import '../../core/utils/money_formatter.dart';
@@ -169,14 +170,7 @@ class _GstReportsScreenState extends State<GstReportsScreen> with DataBusRefresh
       );
     } else {
       setState(() => _isTurnoverMasked = true);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: const Text('🔒 GST turnover and tax figures masked.'),
-          duration: const Duration(seconds: 2),
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-        ),
-      );
+      InAppNotification.info('GST turnover and tax figures masked.', context: context);
     }
   }
 
@@ -189,13 +183,7 @@ class _GstReportsScreenState extends State<GstReportsScreen> with DataBusRefresh
     }
 
     if (_periodSales.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('No billing records found for $_selectedPeriod to export.'),
-          backgroundColor: const Color(0xFF0F172A),
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
+      InAppNotification.info('No billing records found for $_selectedPeriod to export.', context: context);
       return;
     }
 
@@ -243,13 +231,7 @@ class _GstReportsScreenState extends State<GstReportsScreen> with DataBusRefresh
     } catch (e) {
       if (!mounted) return;
       setState(() => _isExporting = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Export failed: $e'),
-          backgroundColor: const Color(0xFFDC2626),
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
+      InAppNotification.error('Export failed: $e', context: context);
     }
   }
 
@@ -386,13 +368,7 @@ class _GstReportsScreenState extends State<GstReportsScreen> with DataBusRefresh
     }
 
     if (_periodSales.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('No billing records found for $_selectedPeriod to share.'),
-          backgroundColor: const Color(0xFF0F172A),
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
+      InAppNotification.info('No billing records found for $_selectedPeriod to share.', context: context);
       return;
     }
 

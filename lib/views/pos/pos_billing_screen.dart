@@ -12,6 +12,7 @@ import '../../core/utils/expiry_utils.dart';
 import '../../services/firestore_sync_service.dart';
 import '../../services/home_widget_service.dart';
 import '../../services/cloud_barcode_resolver_service.dart';
+import '../common/in_app_notification.dart';
 import 'pos_checkout_modal.dart';
 import 'barcode_scanner_view.dart';
 
@@ -204,19 +205,12 @@ class _PosBillingScreenState extends State<PosBillingScreen> with DataBusRefresh
     _addToCart(imported);
     await _loadData();
     if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Row(
-            children: [
-              const Icon(Icons.auto_awesome, color: Colors.amber, size: 18),
-              const SizedBox(width: 8),
-              Expanded(child: Text('Added to Bill: ${imported.name}')),
-            ],
-          ),
-          backgroundColor: const Color(0xFF1E293B),
-          duration: const Duration(milliseconds: 1200),
-          behavior: SnackBarBehavior.floating,
-        ),
+      InAppNotification.show(
+        context: context,
+        message: 'Added to Bill: ${imported.name}',
+        customIcon: Icons.auto_awesome,
+        customColor: Colors.amber,
+        duration: const Duration(milliseconds: 1200),
       );
     }
   }
@@ -248,24 +242,9 @@ class _PosBillingScreenState extends State<PosBillingScreen> with DataBusRefresh
 
     if (!isUnlimited && (product.stockQuantity <= 0 || currentQty >= product.stockQuantity)) {
       HapticFeedback.heavyImpact();
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Row(
-            children: [
-              const Icon(Icons.block_rounded, color: Colors.white, size: 20),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  '⚠️ "${product.name}" is Out of Stock! (Available: ${product.stockQuantity.toInt()})',
-                  style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700),
-                ),
-              ),
-            ],
-          ),
-          backgroundColor: const Color(0xFFDC2626),
-          behavior: SnackBarBehavior.floating,
-          duration: const Duration(seconds: 2),
-        ),
+      InAppNotification.error(
+        '"${product.name}" is Out of Stock! (Available: ${product.stockQuantity.toInt()})',
+        context: context,
       );
       return;
     }
@@ -309,9 +288,7 @@ class _PosBillingScreenState extends State<PosBillingScreen> with DataBusRefresh
   void _holdBillAndNew() {
     HapticFeedback.mediumImpact();
     if (_tabs.length >= 5) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Max 5 parallel bills supported'), duration: Duration(seconds: 1)),
-      );
+      InAppNotification.info('Max 5 parallel bills supported', context: context);
       return;
     }
     setState(() {
@@ -323,13 +300,9 @@ class _PosBillingScreenState extends State<PosBillingScreen> with DataBusRefresh
       _tabs.add(CartTab(id: 'tab_$newNum', name: 'Bill #$newNum', number: newNum, items: {}));
       _activeTabIndex = _tabs.length - 1;
     });
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('Naya Bill #${_tabs.last.number} open ho gaya. Products add karein.'),
-        backgroundColor: const Color(0xFF0F172A),
-        behavior: SnackBarBehavior.floating,
-        duration: const Duration(seconds: 2),
-      ),
+    InAppNotification.info(
+      'Naya Bill #${_tabs.last.number} open ho gaya. Products add karein.',
+      context: context,
     );
   }
 
@@ -409,18 +382,9 @@ class _PosBillingScreenState extends State<PosBillingScreen> with DataBusRefresh
       if (matched != null) {
         _addToCart(matched);
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Row(
-                children: [
-                  const Icon(Icons.check_circle, color: Colors.white, size: 20),
-                  const SizedBox(width: 8),
-                  Expanded(child: Text('Scanned: ${matched.name}')),
-                ],
-              ),
-              backgroundColor: const Color(0xFF10B981),
-              duration: const Duration(seconds: 1),
-            ),
+          InAppNotification.success(
+            'Scanned: ${matched.name}',
+            context: context,
           );
         }
       } else {
@@ -437,18 +401,11 @@ class _PosBillingScreenState extends State<PosBillingScreen> with DataBusRefresh
           _addToCart(imported);
           _loadData(); // Update background products list
           if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Row(
-                  children: [
-                    const Icon(Icons.auto_awesome, color: Colors.amber, size: 20),
-                    const SizedBox(width: 8),
-                    Expanded(child: Text('Master SKU Added: ${imported.name}')),
-                  ],
-                ),
-                backgroundColor: const Color(0xFF1E293B),
-                duration: const Duration(seconds: 2),
-              ),
+            InAppNotification.show(
+              context: context,
+              message: 'Master SKU Added: ${imported.name}',
+              customIcon: Icons.auto_awesome,
+              customColor: Colors.amber,
             );
           }
         } else {
@@ -465,28 +422,19 @@ class _PosBillingScreenState extends State<PosBillingScreen> with DataBusRefresh
             _addToCart(imported);
             _loadData();
             if (mounted) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Row(
-                    children: [
-                      const Icon(Icons.cloud_done_rounded, color: Colors.cyanAccent, size: 20),
-                      const SizedBox(width: 8),
-                      Expanded(child: Text('Cloud SKU Added: ${imported.name}')),
-                    ],
-                  ),
-                  backgroundColor: const Color(0xFF0F172A),
-                  duration: const Duration(seconds: 2),
-                ),
+              InAppNotification.show(
+                context: context,
+                message: 'Cloud SKU Added: ${imported.name}',
+                customIcon: Icons.cloud_done_rounded,
+                customColor: Colors.cyanAccent,
               );
             }
           } else {
             if (mounted) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text('No item found with barcode: $barcode'),
-                  backgroundColor: const Color(0xFFF59E0B),
-                  duration: const Duration(seconds: 2),
-                ),
+              InAppNotification.show(
+                context: context,
+                message: 'No item found with barcode: $barcode',
+                type: NotificationType.warning,
               );
             }
           }
@@ -655,12 +603,7 @@ class _PosBillingScreenState extends State<PosBillingScreen> with DataBusRefresh
               InkWell(
                 onTap: () {
                   HapticFeedback.lightImpact();
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('POS Filter: Showing all available items'),
-                      duration: Duration(seconds: 1),
-                    ),
-                  );
+                  InAppNotification.info('POS Filter: Showing all available items', context: context);
                 },
                 borderRadius: BorderRadius.circular(12),
                 child: Container(
@@ -1607,12 +1550,7 @@ class _PosBillingScreenState extends State<PosBillingScreen> with DataBusRefresh
                       if (ctx.mounted) Navigator.pop(ctx);
                       _clearSearch();
                       if (mounted) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            content: Text('Added $queryName to bill!'),
-                            duration: const Duration(seconds: 1),
-                          ),
-                        );
+                        InAppNotification.success('Added $queryName to bill!', context: context);
                       }
                     },
                     style: ElevatedButton.styleFrom(

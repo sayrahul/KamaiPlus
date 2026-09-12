@@ -6,6 +6,7 @@ import '../../core/utils/money_formatter.dart';
 import '../../core/database/local_database.dart';
 import '../common/pwa_top_bar.dart';
 import '../common/owner_privacy_modal.dart';
+import '../common/in_app_notification.dart';
 import 'ai_inward_modal.dart';
 import 'restaurant_inward_options_sheet.dart';
 import 'add_product_modal.dart';
@@ -203,18 +204,12 @@ class _ProductsScreenState extends State<ProductsScreen> with DataBusRefresh<Pro
             _searchQuery = imported.name;
           });
           if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Row(
-                  children: [
-                    const Icon(Icons.auto_awesome, color: Colors.amber, size: 20),
-                    const SizedBox(width: 8),
-                    Expanded(child: Text('Imported from Master Catalog: ${imported.name}')),
-                  ],
-                ),
-                backgroundColor: const Color(0xFF1E293B),
-                duration: const Duration(seconds: 3),
-              ),
+            InAppNotification.show(
+              context: context,
+              message: 'Imported from Master Catalog: ${imported.name}',
+              customIcon: Icons.auto_awesome,
+              customColor: Colors.amber,
+              duration: const Duration(seconds: 3),
             );
           }
         } else {
@@ -234,18 +229,12 @@ class _ProductsScreenState extends State<ProductsScreen> with DataBusRefresh<Pro
               _searchQuery = imported.name;
             });
             if (mounted) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Row(
-                    children: [
-                      const Icon(Icons.cloud_done_rounded, color: Colors.cyanAccent, size: 20),
-                      const SizedBox(width: 8),
-                      Expanded(child: Text('Imported from Indian Barcode Cloud: ${imported.name}')),
-                    ],
-                  ),
-                  backgroundColor: const Color(0xFF0F172A),
-                  duration: const Duration(seconds: 3),
-                ),
+              InAppNotification.show(
+                context: context,
+                message: 'Imported from Indian Barcode Cloud: ${imported.name}',
+                customIcon: Icons.cloud_done_rounded,
+                customColor: Colors.cyanAccent,
+                duration: const Duration(seconds: 3),
               );
             }
           } else {
@@ -309,13 +298,7 @@ class _ProductsScreenState extends State<ProductsScreen> with DataBusRefresh<Pro
               FirestoreSyncService.instance.deleteProductFromCloud(product.id).catchError((_) {});
               _loadData();
               if (mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text('✓ "${product.name}" deleted from catalog'),
-                    backgroundColor: const Color(0xFF0F172A),
-                    behavior: SnackBarBehavior.floating,
-                  ),
-                );
+                InAppNotification.success('"${product.name}" deleted from catalog', context: context);
               }
             },
             style: ElevatedButton.styleFrom(
@@ -414,14 +397,7 @@ class _ProductsScreenState extends State<ProductsScreen> with DataBusRefresh<Pro
       );
     } else {
       setState(() => _isAssetHidden = true);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: const Text('🔒 Inventory asset valuation hidden.'),
-          duration: const Duration(seconds: 2),
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-        ),
-      );
+      InAppNotification.info('Inventory asset valuation hidden.', context: context);
     }
   }
 
@@ -487,9 +463,12 @@ class _ProductsScreenState extends State<ProductsScreen> with DataBusRefresh<Pro
                 itemCount: filtered.length,
                 gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                   crossAxisCount: 2,
-                  childAspectRatio: 0.88,
-                  crossAxisSpacing: 10,
-                  mainAxisSpacing: 10,
+                  // Higher ratio = shorter cards (width/height) — was 0.88
+                  // (taller than wide), now closer to square so more rows
+                  // fit on screen without scrolling.
+                  childAspectRatio: 1.05,
+                  crossAxisSpacing: 8,
+                  mainAxisSpacing: 8,
                 ),
                 itemBuilder: (ctx, i) => _buildProductGridCard(filtered[i]),
               )
@@ -1321,10 +1300,10 @@ class _ProductsScreenState extends State<ProductsScreen> with DataBusRefresh<Pro
     final isInfinite = product.isLooseItem || product.stockQuantity >= 99999;
 
     return Container(
-      padding: const EdgeInsets.all(10),
+      padding: const EdgeInsets.all(8),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(12),
         border: Border.all(color: const Color(0xFFEEF2F6), width: 1.2),
         boxShadow: const [
           BoxShadow(
@@ -1345,7 +1324,7 @@ class _ProductsScreenState extends State<ProductsScreen> with DataBusRefresh<Pro
                 child: Text(
                   categoryName,
                   style: GoogleFonts.inter(
-                    fontSize: 9.5,
+                    fontSize: 9,
                     fontWeight: FontWeight.w700,
                     color: const Color(0xFF64748B),
                   ),
@@ -1359,38 +1338,38 @@ class _ProductsScreenState extends State<ProductsScreen> with DataBusRefresh<Pro
                     onTap: () => _toggleFavorite(product),
                     child: Icon(
                       product.isFavorite ? Icons.star_rounded : Icons.star_outline_rounded,
-                      size: 16,
+                      size: 15,
                       color: const Color(0xFFF59E0B),
                     ),
                   ),
-                  const SizedBox(width: 6),
+                  const SizedBox(width: 5),
                   InkWell(
                     onTap: () => _openAddProductSheet(existingProduct: product),
-                    child: const Icon(Icons.edit_outlined, size: 15, color: Color(0xFF475569)),
+                    child: const Icon(Icons.edit_outlined, size: 14, color: Color(0xFF475569)),
                   ),
-                  const SizedBox(width: 6),
+                  const SizedBox(width: 5),
                   InkWell(
                     onTap: () => _confirmDeleteProduct(product),
-                    child: const Icon(Icons.delete_outline_rounded, size: 15, color: Color(0xFFDC2626)),
+                    child: const Icon(Icons.delete_outline_rounded, size: 14, color: Color(0xFFDC2626)),
                   ),
                 ],
               ),
             ],
           ),
-          const SizedBox(height: 4),
+          const SizedBox(height: 3),
 
           // Product Name
           Text(
             product.name,
             style: GoogleFonts.outfit(
-              fontSize: 13,
+              fontSize: 12.5,
               fontWeight: FontWeight.w800,
               color: const Color(0xFF0F172A),
             ),
-            maxLines: 2,
+            maxLines: 1,
             overflow: TextOverflow.ellipsis,
           ),
-          const SizedBox(height: 4),
+          const SizedBox(height: 3),
 
           // Stock Traffic Badge
           InkWell(

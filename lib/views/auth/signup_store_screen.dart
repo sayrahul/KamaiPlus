@@ -6,6 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
 import '../../core/constants/business_vertical_config.dart';
 import '../../core/constants/default_products.dart';
+import '../common/in_app_notification.dart';
 import '../../core/database/local_database.dart';
 import '../../core/utils/app_validators.dart';
 import '../../models/models.dart';
@@ -165,24 +166,11 @@ class _SignupStoreScreenState extends State<SignupStoreScreen> {
 
       if (!mounted) return;
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Row(
-            children: [
-              const Icon(Icons.stars_rounded, color: Color(0xFFFBBF24)),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Text(
-                  '🎉 Swagat hai $storeName! Aapka store setup poora hua.',
-                  style: GoogleFonts.outfit(fontWeight: FontWeight.w700),
-                ),
-              ),
-            ],
-          ),
-          backgroundColor: const Color(0xFF0F172A),
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        ),
+      InAppNotification.show(
+        context: context,
+        message: 'Swagat hai $storeName! Aapka store setup poora hua.',
+        customIcon: Icons.stars_rounded,
+        customColor: const Color(0xFFFBBF24),
       );
 
       if (_scanSupplierBill) {
@@ -200,9 +188,7 @@ class _SignupStoreScreenState extends State<SignupStoreScreen> {
     } catch (e) {
       if (mounted) {
         setState(() => _isSubmitting = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error completing setup: $e')),
-        );
+        InAppNotification.error('Error completing setup: $e', context: context);
       }
     }
   }
