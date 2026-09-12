@@ -68,9 +68,18 @@ drives `LocalDatabase` through a real (in-memory FFI) SQLite database and assert
 5. `lib/views/auth/signup_store_screen.dart`: Guarded `completeFactoryReset` so it only fires if the database genuinely has zero products and no configured profile.
 6. `lib/services/firestore_sync_service.dart`: Added complete restoration of `sales` and `customers` collections in `initialCloudRestore()`.
 
-**Verification:**
+**Verification & Live Device Run:**
 - `flutter analyze lib/` — 0 compile errors, 0 warnings.
 - `flutter test` — All 87/87 unit and integration tests passing cleanly.
+- **Physical Device Live Verification (Redmi 6 `de7ea8af7d29`):**
+  - Built fresh debug APK and installed cleanly via `adb install -r` (preserving all database files).
+  - App launched into **"my Footstore"** (Apparel / `clothing` vertical):
+    - 25 Apparel products displayed with correct categories.
+    - 3 Invoices intact (INV-001 ₹10,976, INV-002 ₹3,845, INV-003 ₹3,744 = Total Revenue ₹18,565).
+    - Market Udhar intact: customer `gfv` (₹3,845 pending ledger).
+  - Performed live Menu -> Sign Out -> verified smooth navigation to LoginScreen without clearing database files or prefs.
+  - Performed app force-stop (kill) and cold-start relaunch -> verified splash screen smoothly transitions to Login Screen with vertical and database intact.
+  - Enhanced `lib/main.dart` to initialize `Firebase.initializeApp()` first (avoiding uncaught `FirebaseAuth` exception during early database auto-discovery) and restore `BusinessVerticals.updateActiveBusinessType` right in `main()`.
 
 ---
 
