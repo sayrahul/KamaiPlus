@@ -1,0 +1,15 @@
+{
+  "mcpServers": {
+    "serena": {
+      "command": "C:\\Users\\sayra\\.local\\bin\\serena-agent.exe",
+      "args": [
+        "start-mcp-server",
+        "--project-from-cwd",
+        "--enable-web-dashboard",
+        "false",
+        "--open-web-dashboard",
+        "false"
+      ]
+    }
+  }
+}

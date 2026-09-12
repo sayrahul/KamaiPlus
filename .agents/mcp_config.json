@@ -1,0 +1,26 @@
+{
+  "mcpServers": {
+    "serena": {
+      "command": "C:\\Users\\sayra\\.local\\bin\\serena-agent.exe",
+      "args": [
+        "start-mcp-server",
+        "--project-from-cwd",
+        "--enable-web-dashboard",
+        "false",
+        "--open-web-dashboard",
+        "false"
+      ]
+    },
+    "context7": {
+      "serverUrl": "https://mcp.context7.com/mcp"
+    },
+    "chrome-devtools": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "chrome-devtools-mcp@latest",
+        "--no-usage-statistics"
+      ]
+    }
+  }
+}
