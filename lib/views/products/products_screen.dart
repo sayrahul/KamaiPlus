@@ -1056,11 +1056,11 @@ class _ProductsScreenState extends State<ProductsScreen> with DataBusRefresh<Pro
     final isInfinite = product.isLooseItem || product.stockQuantity >= 99999;
 
     return Container(
-      margin: const EdgeInsets.only(bottom: 6),
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      margin: const EdgeInsets.only(bottom: 5),
+      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 6),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(12),
         border: Border.all(color: const Color(0xFFEEF2F6), width: 1.2),
         boxShadow: const [
           BoxShadow(
@@ -1197,94 +1197,65 @@ class _ProductsScreenState extends State<ProductsScreen> with DataBusRefresh<Pro
               ),
             ],
           ),
-          const SizedBox(height: 6),
+          const SizedBox(height: 4),
 
-          // Bottom Details: Selling Price, Profit Margin & Stock Counter
+          // Bottom row: price + profit inline (no more separate captioned
+          // sections — those alone were the biggest single source of the
+          // card's height) + stock counter.
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            crossAxisAlignment: CrossAxisAlignment.end,
+            crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              // Selling Price (Tap for Quick Update)
               InkWell(
                 onTap: () => _openQuickUpdateDialog(product),
                 borderRadius: BorderRadius.circular(6),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
                   children: [
                     Text(
-                      'SELLING PRICE',
-                      style: GoogleFonts.inter(
-                        fontSize: 9,
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: 0.5,
-                        color: const Color(0xFF94A3B8),
+                      MoneyFormatter.formatINR(product.sellingPricePaise),
+                      style: GoogleFonts.robotoMono(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w900,
+                        color: const Color(0xFF0F172A),
                       ),
                     ),
-                    const SizedBox(height: 2),
-                    Row(
-                      children: [
-                        Text(
-                          MoneyFormatter.formatINR(product.sellingPricePaise),
-                          style: GoogleFonts.robotoMono(
-                            fontSize: 15,
-                            fontWeight: FontWeight.w900,
-                            color: const Color(0xFF0F172A),
-                          ),
+                    if (!_isAssetHidden) ...[
+                      const SizedBox(width: 5),
+                      Text(
+                        profitStr,
+                        style: GoogleFonts.robotoMono(
+                          fontSize: 10.5,
+                          fontWeight: FontWeight.w700,
+                          color: const Color(0xFF059669),
                         ),
-                        const SizedBox(width: 4),
-                        const Icon(Icons.edit_note_rounded, size: 14, color: Color(0xFF94A3B8)),
-                      ],
-                    ),
+                      ),
+                    ],
                   ],
                 ),
-              ),
-
-              // Profit Margin (Only visible if not asset hidden)
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  Text(
-                    'PROFIT MARGIN',
-                    style: GoogleFonts.inter(
-                      fontSize: 9,
-                      fontWeight: FontWeight.w800,
-                      letterSpacing: 0.5,
-                      color: const Color(0xFF94A3B8),
-                    ),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    _isAssetHidden ? '••••••' : profitStr,
-                    style: GoogleFonts.robotoMono(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w800,
-                      color: const Color(0xFF059669),
-                    ),
-                  ),
-                ],
               ),
 
               // Stock Counter: Hide Stepper (+/-) for Infinite/Loose Stock items
               if (isInfinite)
                 InkWell(
                   onTap: () => _openQuickUpdateDialog(product),
-                  borderRadius: BorderRadius.circular(10),
+                  borderRadius: BorderRadius.circular(8),
                   child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                     decoration: BoxDecoration(
                       color: const Color(0xFFF0FDF4),
-                      borderRadius: BorderRadius.circular(10),
+                      borderRadius: BorderRadius.circular(8),
                       border: Border.all(color: const Color(0xFFBBF7D0)),
                     ),
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        const Icon(Icons.all_inclusive_rounded, size: 13, color: Color(0xFF16A34A)),
-                        const SizedBox(width: 4),
+                        const Icon(Icons.all_inclusive_rounded, size: 12, color: Color(0xFF16A34A)),
+                        const SizedBox(width: 3),
                         Text(
                           'Unlimited',
                           style: GoogleFonts.inter(
-                            fontSize: 11,
+                            fontSize: 10.5,
                             fontWeight: FontWeight.w700,
                             color: const Color(0xFF16A34A),
                           ),
@@ -1296,10 +1267,10 @@ class _ProductsScreenState extends State<ProductsScreen> with DataBusRefresh<Pro
               else
                 // Stock Stepper (+ / -)
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                  padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 1),
                   decoration: BoxDecoration(
                     color: isLowStock ? const Color(0xFFFFF1F2) : const Color(0xFFF8FAFC),
-                    borderRadius: BorderRadius.circular(10),
+                    borderRadius: BorderRadius.circular(8),
                     border: Border.all(
                       color: isLowStock ? const Color(0xFFFECDD3) : const Color(0xFFE2E8F0),
                     ),
@@ -1310,18 +1281,18 @@ class _ProductsScreenState extends State<ProductsScreen> with DataBusRefresh<Pro
                       GestureDetector(
                         onTap: () => _adjustStock(product, -1),
                         child: Container(
-                          padding: const EdgeInsets.all(4),
-                          child: const Icon(Icons.remove_rounded, size: 14, color: Color(0xFF475569)),
+                          padding: const EdgeInsets.all(3),
+                          child: const Icon(Icons.remove_rounded, size: 13, color: Color(0xFF475569)),
                         ),
                       ),
                       GestureDetector(
                         onTap: () => _openQuickUpdateDialog(product),
                         child: Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 6),
+                          padding: const EdgeInsets.symmetric(horizontal: 5),
                           child: Text(
                             '${product.stockQuantity.toInt()} ${product.unit}',
                             style: GoogleFonts.robotoMono(
-                              fontSize: 11,
+                              fontSize: 10.5,
                               fontWeight: FontWeight.w800,
                               color: isLowStock ? const Color(0xFFE11D48) : const Color(0xFF0F172A),
                             ),
@@ -1331,8 +1302,8 @@ class _ProductsScreenState extends State<ProductsScreen> with DataBusRefresh<Pro
                       GestureDetector(
                         onTap: () => _adjustStock(product, 1),
                         child: Container(
-                          padding: const EdgeInsets.all(4),
-                          child: const Icon(Icons.add_rounded, size: 14, color: Color(0xFF475569)),
+                          padding: const EdgeInsets.all(3),
+                          child: const Icon(Icons.add_rounded, size: 13, color: Color(0xFF475569)),
                         ),
                       ),
                     ],

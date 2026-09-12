@@ -210,6 +210,33 @@ class _MerchantDetailScreenState extends State<MerchantDetailScreen> {
     }
   }
 
+  Future<void> _handlePermanentDelete() async {
+    final typedName = await showDialog<String>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => _PermanentDeleteDialog(business: _business),
+    );
+    if (typedName == null || !mounted) return;
+
+    setState(() => _proBusy = true);
+    try {
+      await AdminFirestoreService.instance.permanentlyDeleteBusiness(
+        _business.id,
+        ownerUid: _business.ownerUid,
+      );
+      if (!mounted) return;
+      Navigator.pop(context);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('${_business.name} permanently deleted.')),
+      );
+    } catch (e) {
+      if (mounted) {
+        setState(() => _proBusy = false);
+        _showSnack('Failed to delete: $e', isError: true);
+      }
+    }
+  }
+
   Future<void> _handleRevokePro() async {
     final expiryNote = _business.proExpiry != null
         ? ' (was valid until ${DateFormat('d MMM yyyy').format(_business.proExpiry!)})'
@@ -277,6 +304,14 @@ class _MerchantDetailScreenState extends State<MerchantDetailScreen> {
                       style: TextStyle(color: _business.isDisabled ? AdminColors.accent : AdminColors.red),
                     ),
                   ),
+          ),
+          Padding(
+            padding: const EdgeInsets.only(right: 12),
+            child: IconButton(
+              tooltip: 'Permanently delete this merchant',
+              onPressed: _proBusy ? null : _handlePermanentDelete,
+              icon: const Icon(Icons.delete_forever_rounded, color: AdminColors.red),
+            ),
           ),
         ],
       ),
@@ -591,6 +626,97 @@ class _ProCard extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+/// Irreversible-action confirmation: the admin must type the merchant's
+/// exact store name before the delete button enables at all — the same
+/// "type to confirm" pattern used for destructive actions everywhere,
+/// specifically because a plain Yes/No dialog is too easy to click through
+/// on a real merchant's actual business data with no way back.
+class _PermanentDeleteDialog extends StatefulWidget {
+  final AdminBusiness business;
+  const _PermanentDeleteDialog({required this.business});
+
+  @override
+  State<_PermanentDeleteDialog> createState() => _PermanentDeleteDialogState();
+}
+
+class _PermanentDeleteDialogState extends State<_PermanentDeleteDialog> {
+  final _typedCtrl = TextEditingController();
+  bool _matches = false;
+
+  @override
+  void dispose() {
+    _typedCtrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final name = widget.business.name;
+    return AlertDialog(
+      title: Row(
+        children: [
+          const Icon(Icons.warning_rounded, color: AdminColors.red, size: 22),
+          const SizedBox(width: 10),
+          Expanded(child: Text('Permanently delete "$name"?', style: AdminTheme.heading(16))),
+        ],
+      ),
+      content: SizedBox(
+        width: 420,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'This erases every product, category, customer, and sale this merchant has ever synced to the cloud — permanently, with no undo. Their Android app is signed out immediately, and the same email can sign up again and build a brand-new store from zero.',
+              style: TextStyle(color: AdminColors.inkMuted, fontSize: 13, height: 1.4),
+            ),
+            const SizedBox(height: 10),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: AdminColors.amberSoft,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: const Text(
+                'This only reaches the cloud. If this device still has the store\'s data cached locally, it stays there until that app is reinstalled or its data is cleared — this action cannot reach into a merchant\'s phone.',
+                style: TextStyle(color: AdminColors.amber, fontSize: 12, height: 1.4),
+              ),
+            ),
+            const SizedBox(height: 16),
+            Text(
+              'Type "$name" to confirm:',
+              style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13, color: AdminColors.ink),
+            ),
+            const SizedBox(height: 8),
+            TextField(
+              controller: _typedCtrl,
+              autofocus: true,
+              onChanged: (v) => setState(() => _matches = v.trim() == name),
+              decoration: InputDecoration(
+                hintText: name,
+                isDense: true,
+                border: const OutlineInputBorder(),
+              ),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
+        ElevatedButton(
+          onPressed: _matches ? () => Navigator.pop(context, _typedCtrl.text.trim()) : null,
+          style: ElevatedButton.styleFrom(backgroundColor: AdminColors.red, foregroundColor: Colors.white),
+          child: const Text('Permanently delete'),
+        ),
+      ],
     );
   }
 }

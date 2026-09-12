@@ -92,32 +92,36 @@ service cloud.firestore {
 
       // Products Catalog (SKUs, Barcodes, Pricing, Stock)
       match /products/{productId} {
-        allow read, write: if isBusinessOwner(businessId);
+        allow read, write: if isBusinessOwner(businessId) || isAdmin();
       }
 
       // Categories (Product classification)
       match /categories/{categoryId} {
-        allow read, write: if isBusinessOwner(businessId);
+        allow read, write: if isBusinessOwner(businessId) || isAdmin();
       }
 
       // Customer Khata Ledger (Udhar balances, profiles)
       match /customers/{customerId} {
-        allow read, write: if isBusinessOwner(businessId);
+        allow read, write: if isBusinessOwner(businessId) || isAdmin();
       }
 
       // Sales & Counter Invoices (Completed bills, return receipts)
       match /sales/{saleId} {
-        allow read, write: if isBusinessOwner(businessId);
+        allow read, write: if isBusinessOwner(businessId) || isAdmin();
       }
 
       // Supplier Inward Restock Orders
       match /inward_orders/{orderId} {
-        allow read, write: if isBusinessOwner(businessId);
+        allow read, write: if isBusinessOwner(businessId) || isAdmin();
       }
 
-      // Any nested subcollections under business
+      // Any nested subcollections under business — admin included so the
+      // admin console's permanent-delete action (merchant_detail_screen.dart)
+      // can actually clear a business's subcollections. This is the same
+      // isAdmin() grant the parent businesses/{businessId} doc above already
+      // has; subcollections previously fell behind it.
       match /{allChildren=**} {
-        allow read, write: if isBusinessOwner(businessId);
+        allow read, write: if isBusinessOwner(businessId) || isAdmin();
       }
     }
 

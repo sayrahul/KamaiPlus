@@ -119,6 +119,63 @@ class AdminFirestoreService {
     );
   }
 
+  /// Permanently erases a merchant from the cloud: every doc under
+  /// `businesses/{businessId}/*`, the business doc itself, its
+  /// `merchants/{businessId}` and `merchants/{ownerUid}` mirror entries, and
+  /// every root-level `products`/`customers`/`sales` mirror doc tagged with
+  /// this `business_id` (the dual-sync copies `firestore_sync_service.dart`
+  /// writes "for Web Admin Portal"). Irreversible — there is no undo, unlike
+  /// [setAccountDisabled]. The SAME email can sign up fresh afterwards and
+  /// build a brand-new store from zero, since nothing server-side will exist
+  /// to restore from.
+  ///
+  /// Cloud-only: this cannot reach into the merchant's own phone. If the
+  /// same device still has the old data cached locally (SQLite, offline-
+  /// first), sign-up-again will still show it until that device's app data
+  /// is cleared or the app is reinstalled — a real architectural limit of
+  /// this app's offline-first design, not something an admin action can
+  /// override.
+  Future<void> permanentlyDeleteBusiness(String businessId, {String? ownerUid}) async {
+    Future<void> deleteCollection(CollectionReference<Map<String, dynamic>> ref) async {
+      final snap = await ref.get();
+      if (snap.docs.isEmpty) return;
+      for (var i = 0; i < snap.docs.length; i += 400) {
+        final chunk = snap.docs.skip(i).take(400);
+        final batch = _db.batch();
+        for (final doc in chunk) {
+          batch.delete(doc.reference);
+        }
+        await batch.commit();
+      }
+    }
+
+    final bizRef = _db.collection('businesses').doc(businessId);
+    await deleteCollection(bizRef.collection('products'));
+    await deleteCollection(bizRef.collection('categories'));
+    await deleteCollection(bizRef.collection('customers'));
+    await deleteCollection(bizRef.collection('sales'));
+    await deleteCollection(bizRef.collection('inward_orders'));
+    await bizRef.delete();
+
+    final rootProducts = await _db.collection('products').where('business_id', isEqualTo: businessId).get();
+    for (final doc in rootProducts.docs) {
+      await doc.reference.delete().catchError((_) {});
+    }
+    final rootCustomers = await _db.collection('customers').where('business_id', isEqualTo: businessId).get();
+    for (final doc in rootCustomers.docs) {
+      await doc.reference.delete().catchError((_) {});
+    }
+    final rootSales = await _db.collection('sales').where('business_id', isEqualTo: businessId).get();
+    for (final doc in rootSales.docs) {
+      await doc.reference.delete().catchError((_) {});
+    }
+
+    await _db.collection('merchants').doc(businessId).delete().catchError((_) {});
+    if (ownerUid != null && ownerUid.isNotEmpty) {
+      await _db.collection('merchants').doc(ownerUid).delete().catchError((_) {});
+    }
+  }
+
   // ---------------------------------------------------------------------
   // Merchant detail — sales / products / customers for one business
   // ---------------------------------------------------------------------

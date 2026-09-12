@@ -67,7 +67,7 @@ class LocalDatabase {
 
     return await openDatabase(
       path,
-      version: 5,
+      version: 6,
       onCreate: _createDB,
       onUpgrade: (db, oldVersion, newVersion) async {
         if (oldVersion < 2) {
@@ -81,6 +81,9 @@ class LocalDatabase {
         }
         if (oldVersion < 5) {
           await _migrateToV5(db);
+        }
+        if (oldVersion < 6) {
+          await _migrateToV6(db);
         }
       },
       onOpen: (db) async {
@@ -180,6 +183,117 @@ class LocalDatabase {
           'purchase_price_paise': row['purchase_price_paise'] ?? 0,
           'created_at': now,
         }, conflictAlgorithm: ConflictAlgorithm.ignore);
+      }
+    } catch (_) {}
+  }
+
+  /// One-time repair for legacy data damage from a since-fixed bug: an
+  /// earlier version of `quick_stock_update_modal.dart` rebuilt a product's
+  /// row from a fresh `ProductModel(...)` instead of `copyWith(...)` on
+  /// every stock/price quick-update, silently resetting `businessType` to
+  /// its constructor default ('grocery') no matter what vertical the
+  /// product actually belonged to. That code path is long fixed (see the
+  /// `copyWith` comment in `_saveInward`/`_saveAdjustment`), but devices
+  /// that hit the bug before the fix shipped are still carrying rows like
+  /// "Dolo 650 Paracetamol" tagged `business_type='grocery'` — invisible to
+  /// every pharmacy-scoped query, which reads as "my product/quantity
+  /// update made the item disappear" even though the code doing the update
+  /// today is correct.
+  ///
+  /// Every starter-catalog product name is unique to exactly one vertical
+  /// (see `kDefaultProductsByVertical`), so a row whose name matches a seed
+  /// name but whose `business_type` doesn't match that seed's vertical is
+  /// unambiguously mistagged. If a correctly-tagged sibling with the same
+  /// name already exists (the common case — the corruption created a
+  /// second, wrong-tagged copy rather than corrupting the only copy), the
+  /// mistagged row is a pure duplicate and is removed; otherwise it's the
+  /// only copy, so it's simply re-tagged rather than deleted, so no stock
+  /// data is ever lost.
+  Future<void> _migrateToV6(Database db) async {
+    try {
+      final correctVertical = <String, String>{};
+      for (final entry in kDefaultProductsByVertical.entries) {
+        for (final seed in entry.value) {
+          correctVertical[seed.name] = entry.key;
+        }
+      }
+      if (correctVertical.isEmpty) return;
+
+      final rows = await db.query('products');
+      for (final row in rows) {
+        final name = row['name'] as String?;
+        final currentType = row['business_type'] as String?;
+        final id = row['id'] as String?;
+        if (name == null || id == null) continue;
+        final trueType = correctVertical[name];
+        if (trueType == null || trueType == currentType) continue;
+
+        final siblingCount = Sqflite.firstIntValue(await db.rawQuery(
+              'SELECT COUNT(*) FROM products WHERE name = ? AND business_type = ? AND id != ?',
+              [name, trueType, id],
+            )) ??
+            0;
+        if (siblingCount > 0) {
+          await db.delete('products', where: 'id = ?', whereArgs: [id]);
+        } else {
+          await db.update(
+            'products',
+            {'business_type': trueType},
+            where: 'id = ?',
+            whereArgs: [id],
+          );
+        }
+      }
+    } catch (_) {}
+
+    // Second, broader pass: a store's business type is now permanently
+    // locked at signup (store_profile_screen.dart no longer offers changing
+    // it), so a store can only ever have ONE true vertical for its entire
+    // lifetime. That makes the repair above generalize cleanly beyond just
+    // starter-catalog names: ANY product tagged with a business_type other
+    // than the store's own permanent one (and not 'both', and not the
+    // legacy-unclassified blank value getAllProducts already falls back to)
+    // is provably orphaned — there is no longer a legitimate way for a
+    // second vertical's products to exist in this store. This is what
+    // actually catches a merchant's own manually-added products (not just
+    // seed-catalog items) that got mistagged by the same historical bug.
+    try {
+      await _ensureStoreProfileTable(db);
+      final profileRows = await db.query(
+        'store_profile',
+        where: 'id = ?',
+        whereArgs: ['default_store'],
+        limit: 1,
+      );
+      if (profileRows.isEmpty) return;
+      final trueType = (profileRows.first['business_type'] as String?)?.trim().toLowerCase();
+      if (trueType == null || trueType.isEmpty) return;
+
+      final rows2 = await db.query('products');
+      for (final row in rows2) {
+        final id = row['id'] as String?;
+        final name = row['name'] as String?;
+        final currentType = (row['business_type'] as String?)?.trim().toLowerCase();
+        if (id == null || name == null) continue;
+        if (currentType == null || currentType.isEmpty || currentType == trueType || currentType == 'both') {
+          continue;
+        }
+
+        final siblingCount = Sqflite.firstIntValue(await db.rawQuery(
+              'SELECT COUNT(*) FROM products WHERE name = ? AND business_type = ? AND id != ?',
+              [name, trueType, id],
+            )) ??
+            0;
+        if (siblingCount > 0) {
+          await db.delete('products', where: 'id = ?', whereArgs: [id]);
+        } else {
+          await db.update(
+            'products',
+            {'business_type': trueType},
+            where: 'id = ?',
+            whereArgs: [id],
+          );
+        }
       }
     } catch (_) {}
   }

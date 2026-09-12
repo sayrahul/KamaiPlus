@@ -159,7 +159,7 @@ class _NotificationWidgetState extends State<_NotificationWidget>
     );
     _fadeAnim = CurvedAnimation(parent: _animCtrl, curve: Curves.easeOut);
     _slideAnim = Tween<Offset>(
-      begin: const Offset(0, 0.4),
+      begin: const Offset(0, -0.4),
       end: Offset.zero,
     ).animate(CurvedAnimation(parent: _animCtrl, curve: Curves.easeOutCubic));
 
@@ -181,12 +181,13 @@ class _NotificationWidgetState extends State<_NotificationWidget>
   @override
   Widget build(BuildContext context) {
     final mq = MediaQuery.of(context);
-    final bottomInset = mq.viewInsets.bottom;
-    // Position above bottom navbar (approx 84-90px) or above keyboard
-    final effectiveBottom = bottomInset > 0 ? (bottomInset + 16.0) : 84.0;
+    // Below the status bar / notch, not fighting the bottom navbar, the
+    // keyboard, or a bottom sheet's own action buttons — all of which sit
+    // at the bottom, exactly where this used to float and get obscured.
+    final effectiveTop = mq.padding.top + 10.0;
 
     return Positioned(
-      bottom: effectiveBottom,
+      top: effectiveTop,
       left: 14,
       right: 14,
       child: Material(
