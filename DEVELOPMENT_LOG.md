@@ -47,6 +47,22 @@ drives `LocalDatabase` through a real (in-memory FFI) SQLite database and assert
 
 ---
 
+## 2026-09-12 — Every in-app notification moved to the top of the screen (123 call sites, 41 files); Products grid-view cards shrunk
+
+**Request:** all toasts/notifications that appear above the bottom nav bar should appear at the top of the screen instead, "professional tarikhe se" — and separately, the Products screen's grid-view cards (a different view from the list-view cards already shrunk earlier) needed to be shorter too.
+
+**Why this couldn't be a quick style tweak:** Flutter's `SnackBar` is architecturally bottom-anchored to its `Scaffold` — there is no theme property or `SnackBarBehavior` value that moves it to the top. The only way to get a genuinely top-positioned toast is a different widget entirely. This app already had one: `InAppNotification` (an `Overlay`-based widget, already used for a handful of messages and already fixed to slide in from the top a few entries ago in this log). The only path to "all notifications at the top" was migrating every remaining `ScaffoldMessenger.of(context).showSnackBar(...)` call site to it.
+
+**Scope, found via a full-codebase search:** 123 occurrences across 41 files — effectively every screen and several service classes in the app.
+
+**Approach — deliberately NOT a blind find-and-replace**, given how easily a regex-based bulk edit across 41 files could silently break something (exactly the kind of risk to avoid on a codebase this size): each call site was read individually, converted to the semantically-equivalent `InAppNotification.success()/.error()/.info()/.show()` call (preserving any custom icon, color, action button, or duration the original `SnackBar` had), then `flutter analyze` was run on that specific file before moving to the next. Full-repo `flutter analyze` + the complete `flutter test` suite were re-run at several checkpoints throughout (not just once at the end) to catch any mistake as early as possible. Two commits were made — one after the ~73 highest-traffic call sites (POS billing, checkout, products, khata, login, transactions, customers, dashboard, menu, inventory, cash register, GST reports), one after the remaining ~50 lower-traffic ones (purchases, AI bill/menu scanning, backup/restore, printer settings, invoice themes, Pro membership, and the two service classes — `AppPrinterService`/`ShareTargetService` — that hold their own `BuildContext` via a navigator key rather than a widget's own context) — so the work was never in an all-or-nothing, unverified state.
+
+**Products screen grid view** (`_buildProductGridCard`, distinct from the list-view `_buildProductCard` shrunk in an earlier entry): `childAspectRatio` raised from `0.88` (taller than wide) to `1.05` (roughly square), plus tightened internal padding/font sizes — noticeably more rows fit on screen without scrolling.
+
+**Verified:** a full-codebase search for `ScaffoldMessenger.of(context).showSnackBar` after the migration returns zero matches. `flutter analyze` — 0 issues (only the same 4 pre-existing, unrelated deprecation infos this whole investigation has consistently seen). `flutter test` — 87/87 passing, completely unchanged from the baseline before this migration started — confirming the 123-call-site change introduced no regressions to core billing/GST/FEFO/vertical-isolation logic, which is what the user was specifically and repeatedly worried about going into this. Rebuilt the debug APK and reinstalled on the test device (`adb install -r`, preserving existing data).
+
+---
+
 ## 2026-09-12 — The REAL, still-live root cause: Firestore sync never round-tripped `business_type` at all, resetting it on every single sync event
 
 **Context:** deployed the previous entry's fix (data repair migration + business-type lock), installed it on a SECOND, independent test device (a Redmi 6, Android 9), and the user reported the exact same symptoms immediately — brand-new "my Footstore" (Apparel/`clothing` vertical) account, zero products showing, "product add nahi ho raha... kuch bhi implemented nahi hai." This was on a genuinely fresh device with a genuinely fresh local database — meaning the previous entry's `_migrateToV6` repair (which only runs on a schema *upgrade*) could not possibly be the whole story, since a brand-new database is created directly at the latest version and never goes through `onUpgrade` at all.
