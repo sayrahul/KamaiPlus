@@ -2,7 +2,6 @@ import 'package:flutter/foundation.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import '../core/constants/business_vertical_config.dart';
 import '../core/database/local_database.dart';
 import 'firestore_sync_service.dart';
 import 'workmanager_sync_service.dart';
@@ -113,16 +112,12 @@ class AuthService {
     } catch (_) {}
     try {
       final prefs = await SharedPreferences.getInstance();
-      await prefs.clear();
+      // Safely revoke auth session without destroying local store profile or vertical
+      await prefs.setBool('is_logged_in', false);
+      await prefs.remove('auth_user_photo');
     } catch (e) {
-      debugPrint('Error clearing prefs during signOut: $e');
+      debugPrint('Error updating prefs during signOut: $e');
     }
-    try {
-      await LocalDatabase.instance.closeDatabase();
-    } catch (_) {}
-    try {
-      BusinessVerticals.updateActiveBusinessType('grocery');
-    } catch (_) {}
     try {
       await WorkmanagerSyncService.instance.cancel();
     } catch (_) {}

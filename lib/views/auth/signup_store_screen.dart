@@ -123,8 +123,14 @@ class _SignupStoreScreenState extends State<SignupStoreScreen> {
       );
       final businessTypeId = selectedCat['businessTypeId'] as String? ?? 'grocery';
 
-      // 1. Wipe existing operational data in this active user's DB so vertical seeding is completely clean!
-      await LocalDatabase.instance.completeFactoryReset(resetStoreProfile: true);
+      // 1. Only wipe if store is genuinely brand new with zero products
+      final hasConfigured = await LocalDatabase.instance.hasConfiguredStoreProfile();
+      if (!hasConfigured) {
+        final existingProducts = await LocalDatabase.instance.getAllProducts();
+        if (existingProducts.isEmpty) {
+          await LocalDatabase.instance.completeFactoryReset(resetStoreProfile: true);
+        }
+      }
 
       final profile = StoreProfileModel(
         storeName: storeName.isNotEmpty ? storeName : 'My Store',

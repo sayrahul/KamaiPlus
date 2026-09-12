@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -558,6 +559,91 @@ class FirestoreSyncService {
       // pulled products all defaulted to 'grocery'. Run the same repair
       // immediately so this device is never left carrying that damage.
       await LocalDatabase.instance.repairMistaggedProducts();
+
+      // Fetch Sales
+      try {
+        final salesSnap = await firestore
+            .collection('businesses')
+            .doc(_activeBusinessId)
+            .collection('sales')
+            .orderBy('created_at', descending: true)
+            .limit(100)
+            .get();
+
+        for (var doc in salesSnap.docs) {
+          final d = doc.data();
+          final saleId = doc.id;
+          final existing = await LocalDatabase.instance.getSaleById(saleId);
+          if (existing == null) {
+            final rawItems = d['items'];
+            List<Map<String, dynamic>> parsedItems = [];
+            if (rawItems is List) {
+              parsedItems = rawItems.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+            } else if (rawItems is String) {
+              try {
+                parsedItems = List<Map<String, dynamic>>.from(jsonDecode(rawItems));
+              } catch (_) {}
+            }
+
+            final sale = SaleModel(
+              id: saleId,
+              businessId: _activeBusinessId,
+              invoiceNumber: d['invoice_number']?.toString() ?? 'INV-000',
+              customerId: d['customer_id']?.toString(),
+              customerName: d['customer_name']?.toString(),
+              customerPhone: d['customer_phone']?.toString(),
+              customerGstin: d['customer_gstin']?.toString(),
+              subtotalPaise: (d['subtotal_paise'] ?? ((d['subtotal'] ?? 0) * 100)).toInt(),
+              taxAmountPaise: (d['tax_amount_paise'] ?? ((d['tax_total'] ?? 0) * 100)).toInt(),
+              discountPaise: (d['discount_paise'] ?? ((d['discount_total'] ?? 0) * 100)).toInt(),
+              totalAmountPaise: (d['total_amount_paise'] ?? ((d['total_amount'] ?? 0) * 100)).toInt(),
+              paymentMethod: d['payment_method']?.toString() ?? 'cash',
+              status: d['status']?.toString() ?? 'completed',
+              items: parsedItems,
+              createdAt: d['created_at'] != null
+                  ? (DateTime.tryParse(d['created_at'].toString()) ?? DateTime.now())
+                  : (d['timestamp'] != null
+                      ? DateTime.fromMillisecondsSinceEpoch((d['timestamp'] as num).toInt())
+                      : DateTime.now()),
+              syncStatus: 'synced',
+            );
+            await LocalDatabase.instance.upsertSale(sale);
+          }
+        }
+      } catch (e) {
+        debugPrint('Cloud sales restore notice: $e');
+      }
+
+      // Fetch Customers
+      try {
+        final custSnap = await firestore
+            .collection('businesses')
+            .doc(_activeBusinessId)
+            .collection('customers')
+            .get();
+
+        for (var doc in custSnap.docs) {
+          final d = doc.data();
+          final custId = doc.id;
+          final existing = await LocalDatabase.instance.getCustomerById(custId);
+          if (existing == null) {
+            final cust = CustomerModel(
+              id: custId,
+              businessId: _activeBusinessId,
+              name: d['name']?.toString() ?? 'Customer',
+              phone: d['phone']?.toString() ?? '',
+              address: d['address']?.toString(),
+              gstin: d['gstin']?.toString(),
+              currentBalancePaise: (d['current_balance_paise'] ?? ((d['balance'] ?? 0) * 100)).toInt(),
+              isVip: d['is_vip'] == true || d['is_vip'] == 1,
+              syncStatus: 'synced',
+            );
+            await LocalDatabase.instance.upsertCustomer(cust);
+          }
+        }
+      } catch (e) {
+        debugPrint('Cloud customers restore notice: $e');
+      }
 
       syncState.value = SyncState.synced;
       liveSyncCounter.value++;

@@ -47,6 +47,33 @@ drives `LocalDatabase` through a real (in-memory FFI) SQLite database and assert
 
 ---
 
+## 2026-09-12 — Option 1: Unified Solid Local Database, Safe Logout & Complete Sales/Khata Cloud Sync
+
+**Request / Symptom:** After logout and login, user reported data appeared wiped (sales 0, products vanished) and the store's business vertical changed from Apparel/Clothing to Grocery.
+
+**Root Causes Found via Physical Device Inspection & Line-by-Line Audit:**
+1. `lib/services/auth_service.dart:116-125`: `signOut()` called `prefs.clear()`, called `LocalDatabase.closeDatabase()` which explicitly set `_activeDbName = 'kamaiplus_local.db'`, and called `BusinessVerticals.updateActiveBusinessType('grocery')`.
+   - Real store data was NOT deleted — it was safely stored in `kamaiplus_<uid>.db`. But `closeDatabase()` redirected active queries to `kamaiplus_local.db` (empty demo DB with 0 sales and 6 demo grocery products).
+   - `prefs.clear()` wiped `auth_user_id`, so cold-starts via `main.dart` opened `kamaiplus_local.db`.
+2. `lib/core/database/local_database.dart:15,61`: Multi-database file switching without active database auto-discovery meant any loss of session forced queries into the demo DB.
+3. `lib/views/auth/login_screen.dart:73,169`: Hardcoded fallback to `'grocery'` in Firestore checks and signup redirects.
+4. `lib/views/auth/signup_store_screen.dart:127`: Unconditionally called `completeFactoryReset(resetStoreProfile: true)`, wiping local data if a returning merchant ever hit the screen.
+5. `lib/services/firestore_sync_service.dart:500-565`: `initialCloudRestore()` only downloaded categories and products — it had zero logic to restore `sales` or `customers` from Firestore.
+
+**Fixes Applied:**
+1. `lib/core/database/local_database.dart`: Added `_resolveActiveDbName()` with auto-discovery of existing on-device user databases. `closeDatabase()` now only closes the handle without switching `_activeDbName` to `kamaiplus_local.db`. Added `upsertSale`, `getSaleById`, and `getCustomerById`.
+2. `lib/services/auth_service.dart`: `signOut()` now surgically revokes login flags (`is_logged_in = false`, removes auth photo/tokens) without calling `prefs.clear()`, without closing/switching the local DB, and **without** resetting category to `'grocery'`.
+3. `lib/views/splash/splash_screen.dart`: Restores store vertical from `LocalDatabase.instance.getStoreProfile()` even before login so UI labels and icons never revert to grocery.
+4. `lib/views/auth/login_screen.dart`: Restores existing store vertical from `LocalDatabase`, eliminating the hardcoded grocery override.
+5. `lib/views/auth/signup_store_screen.dart`: Guarded `completeFactoryReset` so it only fires if the database genuinely has zero products and no configured profile.
+6. `lib/services/firestore_sync_service.dart`: Added complete restoration of `sales` and `customers` collections in `initialCloudRestore()`.
+
+**Verification:**
+- `flutter analyze lib/` — 0 compile errors, 0 warnings.
+- `flutter test` — All 87/87 unit and integration tests passing cleanly.
+
+---
+
 ## 2026-09-12 — Every in-app notification moved to the top of the screen (123 call sites, 41 files); Products grid-view cards shrunk
 
 **Request:** all toasts/notifications that appear above the bottom nav bar should appear at the top of the screen instead, "professional tarikhe se" — and separately, the Products screen's grid-view cards (a different view from the list-view cards already shrunk earlier) needed to be shorter too.

@@ -60,6 +60,8 @@ class _LoginScreenState extends State<LoginScreen> {
       // 1. Switch to user-scoped isolated SQLite database
       await LocalDatabase.instance.switchUser(uid);
 
+      final existingProfile = await LocalDatabase.instance.getStoreProfile();
+
       // 2. Check if THIS specific user already has a configured store profile setup in SQLite
       bool hasStore = await LocalDatabase.instance.hasConfiguredStoreProfile();
 
@@ -70,7 +72,10 @@ class _LoginScreenState extends State<LoginScreen> {
           if (bizDoc.exists && bizDoc.data() != null) {
             final data = bizDoc.data()!;
             final sName = data['store_name']?.toString() ?? data['business_name']?.toString() ?? '';
-            final bType = data['business_type']?.toString() ?? 'grocery';
+            final cloudBType = data['business_type']?.toString();
+            final bType = (cloudBType != null && cloudBType.trim().isNotEmpty)
+                ? cloudBType
+                : (existingProfile.businessType.isNotEmpty ? existingProfile.businessType : 'grocery');
             if (sName.trim().isNotEmpty && sName.trim() != 'KamaiPlus Store') {
               final isPro = data['is_pro'] == true || data['subscription_tier'] == 'pro';
               final proPlan = data['pro_plan']?.toString() ?? (isPro ? 'pro' : '');
@@ -166,7 +171,9 @@ class _LoginScreenState extends State<LoginScreen> {
         await prefs.setBool('is_onboarded', false);
         await prefs.remove('business_name');
         await prefs.remove('business_type');
-        BusinessVerticals.updateActiveBusinessType('grocery');
+        if (existingProfile.businessType.trim().isNotEmpty) {
+          BusinessVerticals.updateActiveBusinessType(existingProfile.businessType);
+        }
       }
 
       if (!mounted) return;

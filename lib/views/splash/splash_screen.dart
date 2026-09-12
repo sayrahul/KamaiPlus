@@ -54,6 +54,14 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
         final firebaseUser = FirebaseAuth.instance.currentUser;
         final isLoggedIn = prefs.getBool('is_logged_in') ?? false;
 
+        // Always load existing store vertical if available so UI labels & theme are never reset to grocery
+        try {
+          final profile = await LocalDatabase.instance.getStoreProfile();
+          if (profile.businessType.trim().isNotEmpty) {
+            BusinessVerticals.updateActiveBusinessType(profile.businessType);
+          }
+        } catch (_) {}
+
         // Strict Session check: User MUST be signed in with Firebase AND have is_logged_in flag
         final bool hasActiveSession = (firebaseUser != null) && isLoggedIn;
 

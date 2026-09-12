@@ -1,6 +1,9 @@
+import 'dart:io';
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart' as p;
 import 'package:uuid/uuid.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import '../../models/models.dart';
 import '../utils/money_formatter.dart';
 import '../utils/gst_helper.dart';
@@ -19,20 +22,52 @@ class LocalDatabase {
 
   Future<Database> get database async {
     if (_database != null && _database!.isOpen) return _database!;
+    await _resolveActiveDbName();
     _database = await _initDB(_activeDbName);
     return _database!;
   }
 
+  /// Automatically resolves and locks onto the active store database on device,
+  /// preventing fallback to empty demo db if SharedPreferences was cleared.
+  Future<void> _resolveActiveDbName() async {
+    if (_activeDbName != 'kamaiplus_local.db') {
+      return;
+    }
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final cachedUserId = prefs.getString('auth_user_id') ?? FirebaseAuth.instance.currentUser?.uid;
+      if (cachedUserId != null && cachedUserId.trim().isNotEmpty) {
+        final safeId = cachedUserId.trim().replaceAll(RegExp(r'[^a-zA-Z0-9_]'), '_');
+        _activeDbName = 'kamaiplus_$safeId.db';
+        return;
+      }
+
+      // Auto-discover existing configured store database on device
+      final dbPath = await getDatabasesPath();
+      final dir = Directory(dbPath);
+      if (await dir.exists()) {
+        final files = await dir.list().toList();
+        for (final file in files) {
+          final name = p.basename(file.path);
+          if (name.startsWith('kamaiplus_') && name.endsWith('.db') && name != 'kamaiplus_local.db') {
+            _activeDbName = name;
+            return;
+          }
+        }
+      }
+    } catch (_) {}
+  }
+
   /// Switch the active SQLite database to a user-scoped database file.
   /// Each user/email gets their own isolated local database: `kamaiplus_<safeId>.db`.
-  /// This ensures multi-account isolation (e.g. User A has Store 1, User B has Store 2).
   Future<void> switchUser(String? userId) async {
     String targetDb;
     if (userId != null && userId.trim().isNotEmpty) {
       final safeId = userId.trim().replaceAll(RegExp(r'[^a-zA-Z0-9_]'), '_');
       targetDb = 'kamaiplus_$safeId.db';
     } else {
-      targetDb = 'kamaiplus_local.db';
+      await _resolveActiveDbName();
+      targetDb = _activeDbName;
     }
 
     if (_activeDbName == targetDb && _database != null && _database!.isOpen) {
@@ -50,7 +85,7 @@ class LocalDatabase {
     _database = await _initDB(_activeDbName);
   }
 
-  /// Closes database connection on sign-out
+  /// Closes database connection on sign-out without switching to demo db
   Future<void> closeDatabase() async {
     if (_database != null) {
       try {
@@ -58,7 +93,7 @@ class LocalDatabase {
       } catch (_) {}
       _database = null;
     }
-    _activeDbName = 'kamaiplus_local.db';
+    // Retain _activeDbName so store data is never lost or switched to demo db
   }
 
   Future<Database> _initDB(String filePath) async {
@@ -1777,6 +1812,30 @@ class LocalDatabase {
       await txn.delete('customers', where: 'id = ?', whereArgs: [id]);
     });
     AppDataBus.instance.bumpCustomers();
+  }
+
+  Future<CustomerModel?> getCustomerById(String id) async {
+    final db = await instance.database;
+    final result = await db.query('customers', where: 'id = ?', whereArgs: [id], limit: 1);
+    if (result.isNotEmpty) {
+      return CustomerModel.fromMap(result.first);
+    }
+    return null;
+  }
+
+  Future<void> upsertSale(SaleModel sale) async {
+    final db = await instance.database;
+    await db.insert('sales', sale.toMap(), conflictAlgorithm: ConflictAlgorithm.replace);
+    AppDataBus.instance.bumpSales();
+  }
+
+  Future<SaleModel?> getSaleById(String id) async {
+    final db = await instance.database;
+    final result = await db.query('sales', where: 'id = ?', whereArgs: [id], limit: 1);
+    if (result.isNotEmpty) {
+      return SaleModel.fromMap(result.first);
+    }
+    return null;
   }
 
   Future<List<SaleModel>> getAllSales({int limit = 100}) async {

@@ -1203,3 +1203,21 @@ Comprehensive enterprise-grade retail UX upgrade suite aligned with PhonePe Busi
     - **Files:** 41 files across `lib/views/**` and `lib/services/app_printer_service.dart` + `lib/services/share_target_service.dart` — too many to list individually; search git history for commits `c7e7d3c` and `71bba81` if a specific file's migration needs review.
     - **Verified in stages, not just once at the end** (deliberately, given the size of the change): `flutter analyze` run per-file immediately after each edit, plus full-repo `flutter analyze` + complete `flutter test` at ~4 checkpoints across the whole migration — 87/87 passing at every single checkpoint, unchanged from the pre-migration baseline. This was the explicit thing the user was worried about going into this ("purana kaam toot na jaye") — confirmed it did not.
 
+71. **Unified Solid Database, Safe Logout & 2-Way Sales/Khata Cloud Sync (LOCKED):**
+    - **Single Unified Database Architecture:**
+      - Deprecated destructive SQLite file switching to `kamaiplus_local.db`.
+      - Added `_resolveActiveDbName()` in `LocalDatabase` that automatically locks onto the active store database on device, with on-disk fallback discovery for `kamaiplus_<uid>.db` so store data is never disconnected even if SharedPreferences keys were cleared.
+      - `closeDatabase()` now only closes the handle gracefully and never clobbers `_activeDbName` back to the empty demo DB.
+    - **Safe Non-Destructive Logout (`AuthService.signOut`):**
+      - Removed `prefs.clear()` which was wiping all store configurations and session data on sign out.
+      - Surgically clears only session auth tokens (`is_logged_in = false`, `auth_user_photo`).
+      - Completely eliminated `BusinessVerticals.updateActiveBusinessType('grocery')` from `signOut()` — the store's vertical remains permanently locked to its configured `business_type`.
+    - **Store Vertical Cold-Start Invariant:**
+      - `splash_screen.dart` and `login_screen.dart` always restore the active business vertical from `LocalDatabase.instance.getStoreProfile()` even before authentication, eliminating grocery fallbacks.
+    - **Signup Screen Auto-Wipe Protection (`SignupStoreScreen`):**
+      - Guarded `completeFactoryReset` with checks ensuring existing stores with products are never accidentally wiped during onboarding forms. Factory reset is strictly isolated to Settings Danger Zone with 4-digit PIN (`1234`).
+    - **Complete 2-Way Cloud Sales & Khata Sync (`initialCloudRestore`):**
+      - Added Firestore restoration loops for `sales` and `customers` collections, ensuring sales history and khata ledgers survive re-installs and multi-device logins.
+    - **Verified:** `flutter analyze lib/` (0 errors), `flutter test` (all 87/87 tests passed).
+
+

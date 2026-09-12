@@ -204,7 +204,6 @@ class _MenuScreenState extends State<MenuScreen> {
 
     try {
       await AuthService.instance.signOut();
-      await LocalDatabase.instance.closeDatabase();
     } catch (_) {}
 
     // Route cleanly to LoginScreen on rootNavigatorKey
