@@ -47,6 +47,59 @@ drives `LocalDatabase` through a real (in-memory FFI) SQLite database and assert
 
 ---
 
+## 2026-09-12 — Item 13 resolved: UPI WhatsApp links are now actually clickable
+
+**Recap of the blocker:** the previous session's "batch of 14" left one item undone — the
+`upi://pay?...` links embedded in WhatsApp share text (7 call sites, not 8 as first counted;
+one apparent site in `khata_screen.dart` turned out to be a QR code payload, not WhatsApp
+text — see below) sit inert in a chat bubble because WhatsApp only auto-links `http(s)://`
+text as tappable. The fix needs *some* HTTP(S) redirector bridging to the `upi://` scheme.
+The first attempt — wrapping the link via a public shortener (TinyURL's free create-link
+endpoint) — was blocked by this session's own safety tooling as an external network call
+carrying payment data to a third party, and was correctly left unimplemented rather than
+worked around.
+
+**The actual fix: a first-party, self-hosted redirect page, not a third-party service.**
+New static site `pay_redirect/index.html` (plain HTML/JS, no Flutter/build step — this needed
+nothing more) — reads a `?u=<upi-uri>&s=<store-name>&a=<amount>` query string and shows a
+branded "Pay ₹X to <Store>" card with a big "Open UPI App to Pay" button
+(`window.location.href = upiUri`), plus a best-effort automatic redirect attempt (many mobile
+browsers only allow a custom-scheme navigation from a genuine user tap, not an automatic
+page-load redirect, so the button is the reliable path, not a decoration). Deployed to a
+**third, separate** Firebase Hosting site (`kamaiplus-pay`, live at
+`https://kamaiplus-pay.web.app`) under the same `kamaiplus` project — kept isolated from both
+the mobile app's own infrastructure and the admin console's hosting site, since this one is
+customer-facing rather than internal. Because the page and its data live entirely inside
+infrastructure this project already owns, this isn't "data exfiltration" the way a public
+shortener would have been — the UPI intent data (VPA, amount, store name) was always going
+into the WhatsApp message text either way; it's just now routed through a page under this
+project's own domain instead of sitting as a bare unclickable string.
+
+**New shared utility:** `lib/core/utils/upi_link_utils.dart` (`buildClickableUpiLink`) builds
+the `https://kamaiplus-pay.web.app/?u=...` link, still constructing the exact same
+`upi://pay?pa=...&pn=...&am=...&cu=INR&tn=...` intent internally — it's now the payload
+inside the redirect, not the string sent directly. **Wired into 7 call sites** — all of which
+build a WhatsApp *message string*, as distinct from the several other `upi://` usages in this
+codebase that are `QrImageView`/`QrPainter` payloads and correctly still use the raw URI
+directly (a scanner app parses that scheme; wrapping it would break scanning):
+`pos_checkout_modal.dart` (the one explicitly named in the original report — "Direct 1-Tap UPI
+se pay karne ke liye niche link par click karein"), `transactions_screen.dart`,
+`sale_completed_modal.dart`, `sale_detail_modal.dart`, and 3 in `khata_screen.dart`
+(friendly/formal udhaar reminder, ledger slip share, bill share — the *4th* apparent instance
+there, `upiPayUrl` in the multi-bill settlement sheet, turned out on inspection to feed a
+`QrImageView` only, correctly left untouched).
+
+**Verification:** new `test/upi_link_utils_test.dart` (5 tests — link host, VPA/name/amount/
+note round-tripping through the query-param encoding, verified via `Uri.parse(...)
+.queryParameters['u']` rather than a manual decode, which matches how the real consumer — the
+redirect page's `URLSearchParams` — reads it back). `flutter analyze` — 0 issues on all 6
+touched files. `flutter test` — 73/73 passing (was 68). `flutter build apk --debug` —
+succeeds. `curl` confirms `kamaiplus-pay.web.app` serves the page live. **Not yet verified**:
+an actual WhatsApp message sent from the app and tapped on a real phone — the device used
+earlier this session was unplugged by the time this landed; next real test.
+
+---
+
 ## 2026-09-11 — New: KamaiPlus Admin Console (`admin_console/`), and a critical Firestore rules fix found along the way
 
 **Context:** user's existing admin webapp (`kamaiplus.proventure.in/admin`, apparently a
@@ -842,16 +895,10 @@ isolation. `flutter analyze` clean, full `flutter test` suite passes (28 tests t
   **RESOLVED** by the 2026-09-11 "Batch of 14 fixes" entry above, alongside the same bug
   in `getAllSuppliers()` (three fabricated wholesalers with fake balances). Both now just
   return an empty list when their table is empty.
-- **UPI WhatsApp links aren't clickable** — the `upi://pay?...` links sent in WhatsApp
-  share text (8 call sites — see the 2026-09-11 "Batch of 14 fixes" entry, item 13) sit
-  inert in the chat because WhatsApp only auto-links `http(s)://` text. Fixing this needs
-  a real HTTP(S) redirector bridging to the `upi://` scheme; this app has no backend of its
-  own for that, and wrapping the link via a public shortener (e.g. TinyURL) was blocked by
-  this session's safety tooling as an external call carrying payment data. **Needs the
-  user's decision**: authorize a specific third-party shortener, stand up a small first-party
-  redirector (e.g. on Firebase Hosting, which this project already uses), or accept leaving
-  the raw `upi://` link as-is (still works — the customer just has to copy it manually, or
-  use the QR code shown alongside it, which is unaffected by this issue).
+- ~~UPI WhatsApp links aren't clickable...~~ **RESOLVED** by the 2026-09-12 entry above — a
+  first-party redirect page at `https://kamaiplus-pay.web.app` (new, separate Firebase
+  Hosting site), not a third-party shortener. See `lib/core/utils/upi_link_utils.dart` and
+  `pay_redirect/index.html`.
 - `splash_screen.dart` / `MainActivity.java` — a `test_screen` SharedPreferences key
   bypasses the login/session check and deep-links directly into any screen. It is now
   load-bearing for the home-screen widgets and launcher shortcuts (`QuickPosWidgetProvider`,

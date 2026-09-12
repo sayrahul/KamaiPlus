@@ -11,6 +11,7 @@ import '../../core/database/local_database.dart';
 import '../../core/utils/app_validators.dart';
 import '../../core/utils/datetime_utils.dart';
 import '../../core/utils/money_formatter.dart';
+import '../../core/utils/upi_link_utils.dart';
 import '../../models/models.dart';
 import '../../services/firestore_sync_service.dart';
 import '../../services/invoice_pdf_service.dart';
@@ -319,7 +320,7 @@ class _KhataScreenState extends State<KhataScreen> with DataBusRefresh<KhataScre
     final totalRupeesStr = (customer.currentBalancePaise / 100.0).toStringAsFixed(2);
     final storeName = _storeProfile.storeName.isNotEmpty ? _storeProfile.storeName : 'KamaiPlus Store';
     final upiId = _storeProfile.upiVpa.trim();
-    final upiPayLink = upiId.isNotEmpty ? 'upi://pay?pa=$upiId&pn=${Uri.encodeComponent(storeName)}&am=$totalRupeesStr&cu=INR' : '';
+    final upiPayLink = upiId.isNotEmpty ? buildClickableUpiLink(upiId: upiId, payeeName: storeName, amountRupees: totalRupeesStr) : '';
 
     final buffer = StringBuffer();
     if (isFriendly) {
@@ -386,7 +387,7 @@ class _KhataScreenState extends State<KhataScreen> with DataBusRefresh<KhataScre
     final balRupees = tx.balanceAfterPaise ~/ 100;
     final storeName = _storeProfile.storeName.isNotEmpty ? _storeProfile.storeName : 'KamaiPlus Store';
     final upiId = _storeProfile.upiVpa.trim();
-    final upiPayLink = upiId.isNotEmpty ? 'upi://pay?pa=$upiId&pn=${Uri.encodeComponent(storeName)}&am=$balRupees&cu=INR' : '';
+    final upiPayLink = upiId.isNotEmpty ? buildClickableUpiLink(upiId: upiId, payeeName: storeName, amountRupees: balRupees.toString()) : '';
     final dateStr = DateFormat('d MMM yyyy, hh:mm a').format(tx.createdAt);
 
     final buffer = StringBuffer();
@@ -420,7 +421,9 @@ class _KhataScreenState extends State<KhataScreen> with DataBusRefresh<KhataScre
     final totalRupees = (bill.totalAmountPaise / 100.0).toStringAsFixed(2);
     final storeName = _storeProfile.storeName.isNotEmpty ? _storeProfile.storeName : 'KamaiPlus Store';
     final upiId = _storeProfile.upiVpa.trim();
-    final upiPayLink = upiId.isNotEmpty ? 'upi://pay?pa=$upiId&pn=${Uri.encodeComponent(storeName)}&am=$totalRupees&cu=INR&tn=Bill_${bill.invoiceNumber}' : '';
+    final upiPayLink = upiId.isNotEmpty
+        ? buildClickableUpiLink(upiId: upiId, payeeName: storeName, amountRupees: totalRupees, transactionNote: 'Bill_${bill.invoiceNumber}')
+        : '';
     final dateStr = DateFormat('d MMM yyyy, hh:mm a').format(bill.createdAt);
 
     final buffer = StringBuffer();

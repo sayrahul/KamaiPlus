@@ -7,6 +7,9 @@
       "hosting": {
         "admin": [
           "kamaiplus-admin"
+        ],
+        "pay": [
+          "kamaiplus-pay"
         ]
       }
     }

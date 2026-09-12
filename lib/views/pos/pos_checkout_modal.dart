@@ -13,6 +13,7 @@ import '../../services/firestore_sync_service.dart';
 import '../../services/app_printer_service.dart';
 import '../../services/thermal_printer_service.dart';
 import '../../core/utils/money_formatter.dart';
+import '../../core/utils/upi_link_utils.dart';
 import '../../core/constants/business_vertical_config.dart';
 import 'pos_item_edit_modal.dart';
 import 'sale_completed_modal.dart';
@@ -2329,7 +2330,12 @@ class _PosCheckoutModalState extends State<PosCheckoutModal> {
                                 final phone = _currentCustomer!.phone.replaceAll(RegExp(r'\D'), '');
                                 final cleanPhone = phone.length == 10 ? '91$phone' : phone;
                                 final amountRupees = (grandTotalPaise / 100.0).toStringAsFixed(2);
-                                final upiUri = 'upi://pay?pa=$_activeUpiVpa&pn=${Uri.encodeComponent(_activeStoreName)}&am=$amountRupees&cu=INR&tn=POS+Bill';
+                                final upiUri = buildClickableUpiLink(
+                                  upiId: _activeUpiVpa,
+                                  payeeName: _activeStoreName,
+                                  amountRupees: amountRupees,
+                                  transactionNote: 'POS Bill',
+                                );
                                 final text = Uri.encodeComponent(
                                   '🙏 Namaste ${_currentCustomer!.name} Ji!\n\n'
                                   'Aapka KamaiPlus Bill amount: ₹$amountRupees\n'

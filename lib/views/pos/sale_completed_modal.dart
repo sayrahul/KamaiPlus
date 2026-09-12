@@ -6,6 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../core/database/local_database.dart';
 import '../../core/utils/money_formatter.dart';
+import '../../core/utils/upi_link_utils.dart';
 import '../../models/models.dart';
 import '../../services/native_notification_service.dart';
 import '../../services/notification_service.dart';
@@ -105,7 +106,7 @@ class _SaleCompletedModalState extends State<SaleCompletedModal> {
     final totalRupees = (widget.sale.totalAmountPaise / 100.0).toStringAsFixed(2);
     final upiId = _profile.upiVpa.trim();
     final upiPayLink = upiId.isNotEmpty
-        ? 'upi://pay?pa=$upiId&pn=${Uri.encodeComponent(_storeName)}&am=$totalRupees&cu=INR&tn=Bill_${widget.sale.invoiceNumber}'
+        ? buildClickableUpiLink(upiId: upiId, payeeName: _storeName, amountRupees: totalRupees, transactionNote: 'Bill_${widget.sale.invoiceNumber}')
         : '';
 
     final itemLines = widget.sale.items.map((it) {
