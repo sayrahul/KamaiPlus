@@ -47,6 +47,161 @@ drives `LocalDatabase` through a real (in-memory FFI) SQLite database and assert
 
 ---
 
+## 2026-09-12 — Three roadmap items: Professional Polish Pass, Admin Console v2, Real FEFO for Pharmacy
+
+**Context:** the last three items on the KamaiPlus Playbook's near-term roadmap, done in one
+sitting per explicit instruction ("carefully and wisely... like a professional senior
+software developer"). Deliberately did NOT act on a fourth ask — deleting the old admin
+panel at `kamaiplus.proventure.in` — since that's a separate Vercel/Next.js deployment this
+session has no access to; the nearest safe action (revoking its Firebase Auth domain) would
+be a real, live, hard-to-reverse action on infrastructure whose full dependencies aren't
+known, so it was left for the user to do directly once the new console is confirmed working.
+
+### 1. Professional Polish Pass
+
+Audited every screen for the Playbook's specific complaint — "every empty list should say
+something specific to that vertical, not a generic 'No data'" — rather than assuming it was
+still a gap everywhere. Findings:
+
+- **`products_screen.dart`'s `_buildEmptyState()` and `pos_billing_screen.dart`'s
+  `_buildProductGrid()` empty state were genuinely broken**: both showed "No matching
+  products found" / "No items match your search" even when the catalog was GENUINELY empty
+  (a brand-new store, zero products, no search or filter active) — exactly the gap the
+  Playbook named. Fixed by adding `emptyCatalogTitle`/`emptyCatalogDescription` getters to
+  `BusinessVerticalProfile` (`business_vertical_config.dart`, same pattern as the existing
+  `addProductButtonLabel`/`aiBulkAddButtonLabel`) and having both screens distinguish
+  "genuinely empty" (show vertical-specific copy — "No dishes on your menu yet — scan a photo
+  or add one" for restaurant, etc.) from "no results for this search/filter" (keep the
+  existing generic copy, which is actually correct there). New `test/empty_state_copy_test.dart`.
+- **Every other empty state already reasonable on inspection** — the 5 screens already using
+  the shared `EmptyStateCard` widget (`khata_screen.dart`, `customers_screen.dart`,
+  `inventory_screen.dart`, `cash_register_screen.dart`, `growth_campaigns_screen.dart`) already
+  had clear, specific, actionable copy; `gst_reports_screen.dart`/`barcode_studio_screen.dart`/
+  `rapid_barcode_inward_screen.dart` had no misleading empty states to begin with. Left
+  untouched — no speculative rewrites where nothing was actually wrong.
+- **"Every bottom sheet should open/close with the same curve"**: audited all 35
+  `showModalBottomSheet(` call sites across 22 files — none pass a custom
+  `transitionAnimationController` or `animationStyle`, so every single one already uses
+  Flutter's own default Material transition uniformly. **Already satisfied, no code change
+  needed** — don't go looking for a problem here again without a concrete report of an
+  actually-inconsistent-feeling sheet.
+- **Default invoice theme**: `invoice_pdf_service.dart`'s defaults (theme color `#0284C7`,
+  heading "TAX INVOICE", sensible terms/footer text, dynamic UPI QR on by default) and
+  `invoice_themes_screen.dart`'s default palette index (0 = "Navy Slate", a name chosen to
+  read as intentional) were already professional-looking out of the box. **Already
+  satisfied** — the native PDF engine's actual rendering wasn't re-verified visually (no
+  device available this session), so this is a code-level review, not a rendered-output one.
+
+### 2. KamaiPlus Admin Console v2
+
+Built on top of yesterday's v1 (see the entry below) without touching the mobile app, since
+everything added here is derivable from data the app already syncs:
+
+- **Revenue trend chart** on the Dashboard — new `AdminFirestoreService.getDailyRevenueTrend()`
+  (a single-field range query on root `sales.timestamp`, no composite index needed, unlike
+  the per-merchant `getSalesForBusiness` query) feeding a 14-day `fl_chart` line chart, with
+  every day in the window explicitly filled (including zero-sale days) so the line never
+  misleadingly joins two non-adjacent days as if nothing happened between them.
+- **Coupon usage visibility** — `AdminBusiness` gained a `couponCodeUsed` field (surfacing
+  `businesses/{id}.coupon_code_used`, already written by the mobile app's
+  `razorpay_service.dart` at Pro checkout but never previously read back anywhere). New
+  `getBusinessesUsingCoupon()` powers a "Used by" column on the Coupons screen; the same
+  field is shown as a small badge on Merchant Detail's Pro Subscription card.
+- **CSV export** on the Merchants screen — exports whatever's currently visible
+  (respecting the active search/sort) via `dart:html`'s Blob+anchor download, which is fine
+  here specifically because `admin_console` only ever targets Web (no cross-platform
+  concern a plugin would otherwise be needed for).
+- Added `fl_chart` and `csv` to `admin_console/pubspec.yaml`. Deployed live to the same
+  `kamaiplus-admin.web.app` site from yesterday (not a new site — this is v2 of the same
+  console, not a separate deployment).
+
+### 3. Pharmacy — Real Multi-Batch FEFO
+
+**What "real" means here, precisely**: the single-batch nudge shipped two sessions ago
+(feature #61) could only ever describe ONE expiry date per product — it had no way to
+represent "this medicine has two deliveries on the shelf, 15 units expiring next month and
+40 expiring in four months." This adds an actual `product_batches` table so that's
+representable, and makes a sale deduct from the soonest-expiring batch first (true FEFO),
+automatically and invisibly — billing itself needed zero new UI, since making a cashier pick
+a batch at checkout would slow down exactly the workflow a POS exists to speed up.
+
+**Design, and why each piece is shaped the way it is:**
+
+- New `ProductBatchModel` (`models.dart`) and `product_batches` table (schema `version: 5`,
+  `_migrateToV5`, plus `_createProductBatchesTable` shared by both the migration and
+  `_createDB`'s fresh-install path). Migration backfills every existing product with real
+  stock into its own single legacy batch (carrying forward whatever `batch_number`/
+  `expiry_date` it already had) — this is purely additive; nothing on the `products` table
+  itself is touched or recomputed during migration.
+- **`ProductModel.stockQuantity`/`expiryDate`/`batchNumber` stay exactly as they already
+  were** — fast, denormalized summaries (aggregate quantity; the soonest-expiring batch's
+  date/number) that the billing screen's product grid, and its existing "SELL FIRST" badge
+  (`expiry_utils.dart`, added in Phase 4), keep reading completely unchanged. The real,
+  detailed per-batch breakdown lives only in `product_batches`, read only by the two places
+  that actually need it: inward (recording a new delivery) and billing (FEFO deduction). This
+  was a deliberate choice to avoid ANY change to the billing screen's hot path — no new async
+  batch query on every product-grid render.
+- **`addProductBatch()` deliberately does not touch `products.stock_quantity`** — the caller
+  (`quick_stock_update_modal.dart`'s inward flow) already updates that via its existing
+  `upsertProduct` call, exactly as before this feature existed. It DOES refresh the
+  denormalized expiry summary, via `_recomputeProductExpirySummary`.
+- **FEFO deduction (`_deductStockFefo`) runs AFTER `processPosBill`'s atomic sale transaction
+  commits, never inside it**, and every call is wrapped in `try/catch` at the call site. This
+  is the single most important safety property of this whole feature: `processPosBill`
+  writes real money and stock numbers, and a bug in brand-new batch-tracking code must NEVER
+  be the reason a real sale fails to save. Batch bookkeeping is deliberately a best-effort
+  side effect layered on top of the already-correct, already-tested stock deduction (the
+  existing raw `UPDATE products SET stock_quantity = stock_quantity - ?`, left completely
+  untouched) — worst case on a bug, batch records go slightly out of sync (recoverable
+  later); the bill and the aggregate stock number are never at risk.
+- **Called unconditionally for every sold item, not gated on vertical** — a product with no
+  `product_batches` rows (every non-pharmacy item, and any pharmacy item never inwarded
+  through the new batch-aware flow) has nothing to deduct, which is a harmless no-op, not an
+  error. This sidesteps needing `local_database.dart` (a data layer) to import
+  `business_vertical_config.dart` just to check "is this pharmacy" — the batch table's own
+  emptiness already answers that question correctly.
+- **New UI in `quick_stock_update_modal.dart`'s inward tab** (pharmacy only, via
+  `BusinessVerticals...toggles.showBatchExpiry`, the same toggle the Phase 4 expiry badges
+  already use): an optional batch-number + expiry-date field for the delivery currently being
+  added, plus a live list of what's already on the shelf (existing batches) so a shopkeeper
+  can see the real picture before recording a new one, not just a single guessed date.
+- **`inventory_screen.dart`'s "Near Expiry" radar upgraded to genuinely multi-batch**: it used
+  to compute near-expiry rows from each product's single denormalized `expiryDate`/
+  `stockQuantity` (feature #61-era), which meant a product with two near-expiring batches at
+  different dates could only ever show as ONE row, with the wrong quantity (the product's
+  full aggregate, not that specific batch's). New `LocalDatabase.getNearExpiryBatches()`
+  queries real per-batch data instead — a product with two near-expiring deliveries now
+  correctly produces two separate rows, each with its own real quantity and date. The
+  screen's own `_nearExpiryBatches` getter is now a thin accessor over data loaded in
+  `_loadData()`, so none of its 5 other call sites needed to change.
+
+**Explicitly NOT done, and why**: no UI to let a cashier manually PICK a batch at checkout —
+FEFO deduction is fully automatic specifically so billing speed is unaffected; a manual
+override could be added later if a real need for it shows up (e.g. a specific batch needs to
+be sold down for a reason FEFO wouldn't know about), but wasn't asked for and would add
+friction to the one screen where friction matters most.
+
+**Verification** — this is the highest-stakes change of the three (billing/stock math), so it
+got the most test coverage: new `test/product_batches_fefo_test.dart` (7 tests) drives
+`LocalDatabase` through a real in-memory FFI SQLite database and asserts on actual behavior,
+not mocks — batch creation never touching the caller-owned aggregate, the denormalized
+summary correctly updating to whichever batch is soonest, sort order (unknown-expiry last),
+single-batch deduction, cascading multi-batch deduction, the aggregate `stock_quantity` still
+coming out correct after a FEFO sale, and — the most important safety test — a product with
+NO batches at all sailing through `processPosBill` completely unaffected, proving every
+non-pharmacy sale (the overwhelming majority of this app's actual sales) works exactly as it
+did before this feature existed. `flutter analyze` — 0 issues (2 pre-existing infos
+unrelated). `flutter test` — 83/83 passing (was 76 before today's three items: +3 empty-state
+copy, +7 FEFO). `flutter build apk --debug` — succeeds. Migration's backfill logic itself
+(the `oldVersion < 5` path) was NOT separately tested — no existing precedent in this
+codebase for testing schema migrations (`_migrateToV2`/`V3`/`V4` aren't tested either), and
+simulating a versioned-upgrade scenario would need new test infrastructure this session
+didn't build. **Not yet verified on a physical device** — no device was connected by the
+time this landed; next real test is inwarding a pharmacy item with two different-expiry
+batches and confirming a sale actually depletes the sooner one first.
+
+---
+
 ## 2026-09-12 — Item 13 resolved: UPI WhatsApp links are now actually clickable
 
 **Recap of the blocker:** the previous session's "batch of 14" left one item undone — the
@@ -899,6 +1054,14 @@ isolation. `flutter analyze` clean, full `flutter test` suite passes (28 tests t
   first-party redirect page at `https://kamaiplus-pay.web.app` (new, separate Firebase
   Hosting site), not a third-party shortener. See `lib/core/utils/upi_link_utils.dart` and
   `pay_redirect/index.html`.
+- **Old admin panel (`kamaiplus.proventure.in`, apparently Vercel-hosted — not in this repo)
+  still live.** User asked for it to be removed; this session has no access to that
+  deployment (no Vercel credentials, unknown DNS/hosting details) to actually delete it, and
+  the nearest action available from here — revoking its Firebase Auth authorized domain —
+  would be a real, hard-to-reverse action on infrastructure whose dependents aren't known, so
+  it was deliberately left alone. **User action needed**: once `kamaiplus-admin.web.app` (the
+  new console) is confirmed working end-to-end, either decommission the Vercel project
+  directly, or ask for the authorized-domain revoke specifically.
 - `splash_screen.dart` / `MainActivity.java` — a `test_screen` SharedPreferences key
   bypasses the login/session check and deep-links directly into any screen. It is now
   load-bearing for the home-screen widgets and launcher shortcuts (`QuickPosWidgetProvider`,
@@ -913,14 +1076,9 @@ isolation. `flutter analyze` clean, full `flutter test` suite passes (28 tests t
   Phase 2 master-catalog-depth entry above — now 368 rows (Grocery 267, Pharmacy 78),
   plus larger Clothing/Hardware starter-seed lists. Left struck through rather than
   deleted per this file's "never delete old entries" rule.
-- ~~Pharmacy FEFO stock-rotation prompt...~~ **PARTIALLY RESOLVED** by the 2026-09-11
-  Phase 4 part 2 entry above — a single-batch expiry nudge ("SELL FIRST · Nd" /
-  "EXPIRED" badges) now shows at billing. **Still open:** true multi-batch FEFO,
-  where the same medicine has multiple deliveries on the shelf with different
-  expiry dates and the app tells the cashier which physical batch to reach for.
-  Would need a new `product_batches` table (batch number, quantity, expiry, linked
-  to `inventory_movements` at each inward) — a real schema change, not attempted
-  in this lighter pass.
+- ~~Pharmacy FEFO stock-rotation prompt...~~ **FULLY RESOLVED** by the 2026-09-12
+  "Real Multi-Batch FEFO" entry above — a genuine `product_batches` table now exists,
+  and a sale automatically deducts the soonest-expiring batch first.
 - ~~Clothing size-chart / fit-notes field...~~ **RESOLVED** by the 2026-09-11
   Phase 4 part 2 entry above — `ProductModel.fitNotes` free-text field, set in
   Add Product, shown to the cashier at billing.

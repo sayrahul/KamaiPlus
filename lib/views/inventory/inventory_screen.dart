@@ -35,6 +35,7 @@ class _InventoryScreenState extends State<InventoryScreen> with DataBusRefresh<I
   List<ProductModel> _products = [];
   List<SaleModel> _sales = [];
   List<InventoryMovementModel> _movements = [];
+  List<Map<String, dynamic>> _nearExpiryBatchesData = [];
   bool _isLoading = true;
   bool _isAssetMasked = false;
   String _search = '';
@@ -63,11 +64,17 @@ class _InventoryScreenState extends State<InventoryScreen> with DataBusRefresh<I
       final products = await LocalDatabase.instance.getAllProducts(businessType: activeType);
       final sales = await LocalDatabase.instance.getAllSales(limit: 50);
       final movements = await LocalDatabase.instance.getAllInventoryMovements(limit: 50);
+      // Real per-batch near-expiry data (pharmacy only) — see
+      // getNearExpiryBatches' doc comment for why this replaced computing
+      // it from each product's single denormalized expiryDate field.
+      final showExpiry = BusinessVerticals.resolve(activeType).toggles.showBatchExpiry;
+      final nearExpiry = showExpiry ? await LocalDatabase.instance.getNearExpiryBatches(activeType) : <Map<String, dynamic>>[];
       if (mounted) {
         setState(() {
           _products = products;
           _sales = sales;
           _movements = movements;
+          _nearExpiryBatchesData = nearExpiry;
           _isLoading = false;
         });
       }
@@ -83,59 +90,9 @@ class _InventoryScreenState extends State<InventoryScreen> with DataBusRefresh<I
   List<ProductModel> get _lowStockProducts =>
       _products.where((p) => p.stockQuantity <= 5).toList();
 
-  // Real SQLite inventory near-expiry calculation (Solved Issue 11)
-  List<Map<String, dynamic>> get _nearExpiryBatches {
-    final now = DateTime.now();
-    final List<Map<String, dynamic>> list = [];
-
-    for (final p in _products) {
-      if (p.expiryDate != null && p.expiryDate!.trim().isNotEmpty) {
-        DateTime? expiry;
-        final expStr = p.expiryDate!.trim();
-        expiry = DateTime.tryParse(expStr);
-        if (expiry == null && expStr.contains('/')) {
-          final parts = expStr.split('/');
-          if (parts.length == 2) {
-            final month = int.tryParse(parts[0]);
-            var year = int.tryParse(parts[1]);
-            if (month != null && year != null) {
-              if (year < 100) year += 2000;
-              expiry = DateTime(year, month, 28);
-            }
-          } else if (parts.length == 3) {
-            final day = int.tryParse(parts[0]);
-            final month = int.tryParse(parts[1]);
-            final year = int.tryParse(parts[2]);
-            if (day != null && month != null && year != null) {
-              expiry = DateTime(year, month, day);
-            }
-          }
-        }
-
-        if (expiry != null) {
-          final daysLeft = expiry.difference(now).inDays;
-          if (daysLeft <= 90) {
-            list.add({
-              'product_name': p.name,
-              'batch_no': p.batchNumber?.isNotEmpty == true ? p.batchNumber! : 'DEFAULT',
-              'qty': p.stockQuantity.toInt(),
-              'unit': p.unit,
-              'expiry_date': expiry,
-              'days_left': daysLeft,
-              'cost_paise': p.purchasePricePaise,
-              'status': daysLeft <= 0
-                  ? 'Expired'
-                  : (daysLeft <= 30 ? 'Expiring Soon (<30d)' : 'Under 90 Days'),
-              'is_urgent': daysLeft <= 30,
-            });
-          }
-        }
-      }
-    }
-
-    list.sort((a, b) => (a['days_left'] as int).compareTo(b['days_left'] as int));
-    return list;
-  }
+  // Real per-batch near-expiry data, loaded in _loadData() via
+  // LocalDatabase.getNearExpiryBatches — see that method's doc comment.
+  List<Map<String, dynamic>> get _nearExpiryBatches => _nearExpiryBatchesData;
 
   String _formatValuation(int paise) {
     if (_isAssetMasked) return '••••••';

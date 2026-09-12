@@ -60,6 +60,9 @@ class AdminBusiness {
   final int totalRevenuePaise;
   final DateTime? lastSaleAt;
   final DateTime? lastSyncedAt;
+  /// The coupon code used at Pro checkout, if any — written by the mobile
+  /// app's razorpay_service.dart onto this same doc at purchase time.
+  final String? couponCodeUsed;
 
   const AdminBusiness({
     required this.id,
@@ -79,6 +82,7 @@ class AdminBusiness {
     required this.totalRevenuePaise,
     required this.lastSaleAt,
     required this.lastSyncedAt,
+    this.couponCodeUsed,
   });
 
   factory AdminBusiness.fromMap(String id, Map<String, dynamic> m) {
@@ -105,6 +109,7 @@ class AdminBusiness {
       totalRevenuePaise: _asInt(m['total_revenue_paise']),
       lastSaleAt: _asDate(m['last_sale_at']),
       lastSyncedAt: _asDate(m['last_synced_at']),
+      couponCodeUsed: m['coupon_code_used'] as String?,
     );
   }
 

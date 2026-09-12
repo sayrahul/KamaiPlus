@@ -1509,6 +1509,14 @@ class _ProductsScreenState extends State<ProductsScreen> with DataBusRefresh<Pro
   }
 
   Widget _buildEmptyState() {
+    // A genuinely empty catalog (nothing added yet) needs different copy
+    // from "no results for this search/filter" — showing "try adjusting
+    // your search" on a brand-new store with zero products and no active
+    // search was the exact gap the KamaiPlus Playbook's polish pass flagged.
+    final hasActiveFilter = _searchQuery.isNotEmpty || _selectedCategory != 'ALL';
+    final isGenuinelyEmpty = _products.isEmpty && !hasActiveFilter;
+    final vert = BusinessVerticals.resolve(BusinessVerticals.activeBusinessTypeNotifier.value);
+
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 36, horizontal: 20),
       alignment: Alignment.center,
@@ -1520,24 +1528,29 @@ class _ProductsScreenState extends State<ProductsScreen> with DataBusRefresh<Pro
               color: const Color(0xFFF1F5F9),
               borderRadius: BorderRadius.circular(20),
             ),
-            child: const Icon(Icons.search_off_rounded, size: 36, color: Color(0xFF94A3B8)),
+            child: Icon(
+              isGenuinelyEmpty ? vert.navActiveIcon : Icons.search_off_rounded,
+              size: 36,
+              color: const Color(0xFF94A3B8),
+            ),
           ),
           const SizedBox(height: 14),
           Text(
-            'No matching products found',
+            isGenuinelyEmpty ? vert.emptyCatalogTitle : 'No matching products found',
             style: GoogleFonts.outfit(fontSize: 15, fontWeight: FontWeight.w800, color: const Color(0xFF0F172A)),
           ),
           const SizedBox(height: 4),
           Text(
-            'Try adjusting your search query or category filters.',
+            isGenuinelyEmpty ? vert.emptyCatalogDescription : 'Try adjusting your search query or category filters.',
             style: GoogleFonts.inter(fontSize: 11.5, color: const Color(0xFF64748B)),
+            textAlign: TextAlign.center,
           ),
           const SizedBox(height: 14),
           ElevatedButton.icon(
             onPressed: () => _openAddProductSheet(),
             icon: const Icon(Icons.add_rounded, size: 16, color: Colors.white),
             label: Text(
-              BusinessVerticals.resolve(BusinessVerticals.activeBusinessTypeNotifier.value).addProductButtonLabel,
+              vert.addProductButtonLabel,
               style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.white),
             ),
             style: ElevatedButton.styleFrom(

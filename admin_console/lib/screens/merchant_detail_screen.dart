@@ -482,6 +482,20 @@ class _ProCard extends StatelessWidget {
                       fontSize: 12.5,
                     ),
                   ),
+                  if (business.couponCodeUsed != null && business.couponCodeUsed!.isNotEmpty) ...[
+                    const SizedBox(height: 6),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: AdminColors.violetSoft,
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Text(
+                        'Used coupon: ${business.couponCodeUsed}',
+                        style: const TextStyle(color: AdminColors.violet, fontSize: 11, fontWeight: FontWeight.w700),
+                      ),
+                    ),
+                  ],
                 ],
               ),
             ),

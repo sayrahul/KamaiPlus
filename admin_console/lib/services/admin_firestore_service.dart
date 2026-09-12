@@ -54,6 +54,35 @@ class AdminFirestoreService {
     return AdminBusiness.fromMap(doc.id, doc.data()!);
   }
 
+  /// Every business whose Pro purchase used [code] — surfaced on the
+  /// Coupons screen as a usage count. A single-field equality query, no
+  /// composite index needed.
+  Future<List<AdminBusiness>> getBusinessesUsingCoupon(String code) async {
+    final snap = await _db.collection('businesses').where('coupon_code_used', isEqualTo: code.toUpperCase()).get();
+    return snap.docs.map((d) => AdminBusiness.fromMap(d.id, d.data())).toList();
+  }
+
+  /// Day-by-day revenue across every merchant for the last [days] days, for
+  /// the Dashboard trend chart. A single-field range query on `timestamp`
+  /// (root `sales`, no `business_id` filter) — no composite index needed,
+  /// unlike `getSalesForBusiness`'s per-merchant query. Returns a map keyed
+  /// by a `yyyy-MM-dd` date string (UTC-independent, uses each sale's local
+  /// `createdAt`) so a day with zero sales is simply absent — the caller
+  /// fills gaps when building the chart's x-axis.
+  Future<Map<String, int>> getDailyRevenueTrend({int days = 14}) async {
+    final since = DateTime.now().subtract(Duration(days: days));
+    final snap = await _db.collection('sales').where('timestamp', isGreaterThanOrEqualTo: since.millisecondsSinceEpoch).get();
+    final byDay = <String, int>{};
+    for (final doc in snap.docs) {
+      final sale = AdminSale.fromMap(doc.id, doc.data());
+      final date = sale.createdAt;
+      if (date == null) continue;
+      final key = '${date.year.toString().padLeft(4, '0')}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
+      byDay[key] = (byDay[key] ?? 0) + sale.totalAmountPaise;
+    }
+    return byDay;
+  }
+
   /// Grants or revokes Pro for a business. Writes the exact field set
   /// `firestore_sync_service.dart`'s live "Business Profile Stream" already
   /// listens for — the merchant's app reflects this within seconds, no

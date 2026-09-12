@@ -67,7 +67,7 @@ class LocalDatabase {
 
     return await openDatabase(
       path,
-      version: 4,
+      version: 5,
       onCreate: _createDB,
       onUpgrade: (db, oldVersion, newVersion) async {
         if (oldVersion < 2) {
@@ -78,6 +78,9 @@ class LocalDatabase {
         }
         if (oldVersion < 4) {
           await _migrateToV4(db);
+        }
+        if (oldVersion < 5) {
+          await _migrateToV5(db);
         }
       },
       onOpen: (db) async {
@@ -146,6 +149,54 @@ class LocalDatabase {
       // the actual complaint (customers guessing sizes wrong) either way.
       await db.execute('ALTER TABLE products ADD COLUMN fit_notes TEXT');
     } catch (_) {}
+  }
+
+  Future<void> _migrateToV5(Database db) async {
+    // Real multi-batch FEFO (First-Expiry-First-Out) for Pharmacy — see
+    // ProductBatchModel's doc comment for why a single ProductModel.expiryDate
+    // field can't represent "this medicine has two deliveries on the shelf
+    // with two different expiry dates", which the single-batch nudge added
+    // earlier (feature #61) could not.
+    await _createProductBatchesTable(db);
+
+    // Backfill: every existing product with real stock becomes its own
+    // single batch, carrying forward whatever batch_number/expiry_date it
+    // already had. This keeps the aggregate (existing stock_quantity)
+    // exactly unchanged — a batch is only ADDED here, nothing is
+    // recomputed or overwritten on the products table itself.
+    try {
+      final existing = await db.query('products', where: 'stock_quantity > 0');
+      final now = DateTime.now().toIso8601String();
+      for (final row in existing) {
+        final qty = (row['stock_quantity'] as num?)?.toDouble() ?? 0.0;
+        if (qty <= 0) continue;
+        await db.insert('product_batches', {
+          'id': 'batch_legacy_${row['id']}',
+          'product_id': row['id'],
+          'business_id': row['business_id'],
+          'batch_number': row['batch_number'],
+          'quantity': qty,
+          'expiry_date': row['expiry_date'],
+          'purchase_price_paise': row['purchase_price_paise'] ?? 0,
+          'created_at': now,
+        }, conflictAlgorithm: ConflictAlgorithm.ignore);
+      }
+    } catch (_) {}
+  }
+
+  Future<void> _createProductBatchesTable(Database db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS product_batches (
+        id TEXT PRIMARY KEY,
+        product_id TEXT NOT NULL,
+        business_id TEXT NOT NULL,
+        batch_number TEXT,
+        quantity REAL NOT NULL,
+        expiry_date TEXT,
+        purchase_price_paise INTEGER DEFAULT 0,
+        created_at TEXT NOT NULL
+      )
+    ''');
   }
 
   Future<void> _ensureExtraTables(Database db) async {
@@ -540,6 +591,8 @@ class LocalDatabase {
         fit_notes TEXT
       )
     ''');
+
+    await _createProductBatchesTable(db);
 
 
     await db.execute('''
@@ -1182,6 +1235,19 @@ class LocalDatabase {
       }
     });
 
+    // Best-effort FEFO batch bookkeeping — deliberately AFTER the sale's own
+    // atomic transaction has already committed, and wrapped so it can never
+    // fail the sale itself. This is a no-op for any product with no
+    // product_batches rows (every non-pharmacy item, and any pharmacy item
+    // never inwarded through the batch-aware flow) — see _deductStockFefo's
+    // doc comment for why that makes it safe to call unconditionally here
+    // rather than checking the vertical first.
+    for (var item in cartItems) {
+      try {
+        await _deductStockFefo(item.product.id, item.quantity);
+      } catch (_) {}
+    }
+
     // Tell every other screen the bill landed: sales + stock always, khata when the
     // bill carries credit, cash drawer when money physically came in.
     final bool touchedCustomer = customer != null &&
@@ -1329,6 +1395,154 @@ class LocalDatabase {
     final db = await instance.database;
     await db.delete('products', where: 'id = ?', whereArgs: [id]);
     AppDataBus.instance.bumpProducts();
+  }
+
+  // ==========================================================================
+  // PRODUCT BATCHES — real multi-batch FEFO (First-Expiry-First-Out).
+  // See ProductBatchModel's doc comment for the design: this table is the
+  // source of truth for per-delivery quantity/expiry; ProductModel.
+  // stockQuantity/expiryDate/batchNumber stay as fast denormalized summaries
+  // the billing screen already reads today, unchanged.
+  // ==========================================================================
+
+  /// Records one delivery/batch. Deliberately does NOT touch
+  /// products.stock_quantity itself — the caller (quick_stock_update_modal.dart's
+  /// inward flow) already updates that via its own `upsertProduct` call, the
+  /// same as before this feature existed; recording a batch is a parallel,
+  /// additive bookkeeping step. It DOES refresh the product's denormalized
+  /// expiry_date/batch_number (the soonest-expiring batch) so the existing
+  /// "SELL FIRST" billing badge (expiry_utils.dart, reading ProductModel
+  /// directly) reflects the new delivery without any change to that code.
+  Future<void> addProductBatch(ProductBatchModel batch) async {
+    final db = await instance.database;
+    await db.insert('product_batches', batch.toMap(), conflictAlgorithm: ConflictAlgorithm.replace);
+    await _recomputeProductExpirySummary(db, batch.productId);
+    AppDataBus.instance.bumpProducts();
+  }
+
+  /// Every batch for a product, soonest-expiring first (nulls — unknown
+  /// expiry — sorted last, since a known-expiring batch is the more urgent
+  /// one to sell). Powers the "Batches" viewer in quick_stock_update_modal.dart.
+  Future<List<ProductBatchModel>> getBatchesForProduct(String productId) async {
+    final db = await instance.database;
+    final rows = await db.query('product_batches', where: 'product_id = ? AND quantity > 0', whereArgs: [productId]);
+    final batches = rows.map((r) => ProductBatchModel.fromMap(r)).toList();
+    batches.sort((a, b) {
+      if (a.expiryDate == null && b.expiryDate == null) return 0;
+      if (a.expiryDate == null) return 1;
+      if (b.expiryDate == null) return -1;
+      return a.expiryDate!.compareTo(b.expiryDate!);
+    });
+    return batches;
+  }
+
+  /// Deducts [qty] from a product's batches in FEFO order (soonest expiry
+  /// first; unknown-expiry batches last), for the portion of a sale that
+  /// batch-tracking actually knows about. A product with no batches (every
+  /// non-pharmacy item, and any pharmacy item never inwarded through the
+  /// batch-aware flow) simply has nothing to deduct — a harmless no-op, not
+  /// an error — which is why processPosBill calls this unconditionally for
+  /// every sold item rather than checking the vertical first.
+  ///
+  /// Deliberately called AFTER the sale's own atomic transaction commits,
+  /// never inside it, and wrapped in try/catch by its caller: this is
+  /// bookkeeping on top of an already-correct stock_quantity deduction
+  /// (processPosBill's existing raw UPDATE), never allowed to be the reason
+  /// a real sale fails to save.
+  Future<void> _deductStockFefo(String productId, double qty) async {
+    if (qty <= 0) return;
+    final db = await instance.database;
+    var remaining = qty;
+    final batches = await getBatchesForProduct(productId);
+    for (final batch in batches) {
+      if (remaining <= 0) break;
+      final take = remaining >= batch.quantity ? batch.quantity : remaining;
+      final newQty = batch.quantity - take;
+      if (newQty <= 0) {
+        await db.delete('product_batches', where: 'id = ?', whereArgs: [batch.id]);
+      } else {
+        await db.update('product_batches', {'quantity': newQty}, where: 'id = ?', whereArgs: [batch.id]);
+      }
+      remaining -= take;
+    }
+    await _recomputeProductExpirySummary(db, productId);
+  }
+
+  /// Every batch, across every product for [businessType], expiring within
+  /// [withinDays] — the real, per-batch version of what
+  /// inventory_screen.dart's "Near Expiry" radar used to compute from each
+  /// product's single denormalized expiryDate/stockQuantity (which could
+  /// only ever show ONE batch per product, and with the wrong quantity —
+  /// the product's full aggregate stock, not that specific batch's). A
+  /// product with two deliveries expiring at different times now correctly
+  /// produces two separate rows here, each with its own real quantity.
+  Future<List<Map<String, dynamic>>> getNearExpiryBatches(String businessType, {int withinDays = 90}) async {
+    final now = DateTime.now();
+    final products = await getAllProducts(businessType: businessType);
+    final results = <Map<String, dynamic>>[];
+
+    for (final product in products) {
+      final batches = await getBatchesForProduct(product.id);
+      for (final batch in batches) {
+        final expiryStr = batch.expiryDate?.trim();
+        if (expiryStr == null || expiryStr.isEmpty) continue;
+        DateTime? expiry = DateTime.tryParse(expiryStr);
+        if (expiry == null && expiryStr.contains('/')) {
+          final parts = expiryStr.split('/');
+          if (parts.length == 2) {
+            final month = int.tryParse(parts[0]);
+            var year = int.tryParse(parts[1]);
+            if (month != null && year != null) {
+              if (year < 100) year += 2000;
+              expiry = DateTime(year, month, 28);
+            }
+          } else if (parts.length == 3) {
+            final day = int.tryParse(parts[0]);
+            final month = int.tryParse(parts[1]);
+            final year = int.tryParse(parts[2]);
+            if (day != null && month != null && year != null) {
+              expiry = DateTime(year, month, day);
+            }
+          }
+        }
+        if (expiry == null) continue;
+
+        final daysLeft = expiry.difference(now).inDays;
+        if (daysLeft > withinDays) continue;
+
+        results.add({
+          'product_name': product.name,
+          'batch_no': batch.batchNumber?.isNotEmpty == true ? batch.batchNumber! : 'DEFAULT',
+          'qty': batch.quantity.toInt(),
+          'unit': product.unit,
+          'expiry_date': expiry,
+          'days_left': daysLeft,
+          'cost_paise': batch.purchasePricePaise,
+          'status': daysLeft <= 0 ? 'Expired' : (daysLeft <= 30 ? 'Expiring Soon (<30d)' : 'Under 90 Days'),
+          'is_urgent': daysLeft <= 30,
+        });
+      }
+    }
+
+    results.sort((a, b) => (a['days_left'] as int).compareTo(b['days_left'] as int));
+    return results;
+  }
+
+  /// Refreshes products.expiry_date/batch_number from whichever batch now
+  /// has the soonest expiry (or clears both if no batches remain) — the
+  /// denormalized summary every existing billing-screen badge already reads.
+  Future<void> _recomputeProductExpirySummary(Database db, String productId) async {
+    final batches = await getBatchesForProduct(productId);
+    final soonest = batches.isEmpty ? null : batches.first;
+    await db.update(
+      'products',
+      {
+        'expiry_date': soonest?.expiryDate,
+        'batch_number': soonest?.batchNumber,
+      },
+      where: 'id = ?',
+      whereArgs: [productId],
+    );
   }
 
   Future<void> toggleProductFavorite(String id, bool isFavorite) async {

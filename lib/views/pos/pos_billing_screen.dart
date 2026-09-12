@@ -923,21 +923,43 @@ class _PosBillingScreenState extends State<PosBillingScreen> with DataBusRefresh
     final prods = filteredProducts;
 
     if (prods.isEmpty) {
+      // This grid only renders when there's no active search (see the
+      // caller) — so emptiness here means either a genuinely empty catalog
+      // or an active category filter with no matches, never "no search
+      // results" (that has its own separate view/copy below).
+      final isGenuinelyEmpty = _allProducts.isEmpty && _selectedCategoryId == null;
+      final vert = BusinessVerticals.resolve(BusinessVerticals.activeBusinessTypeNotifier.value);
       return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Icon(Icons.search_off_rounded, size: 48, color: Color(0xFF94A3B8)),
-            const SizedBox(height: 12),
-            Text(
-              'No items match your search',
-              style: GoogleFonts.plusJakartaSans(
-                fontSize: 14,
-                fontWeight: FontWeight.w600,
-                color: const Color(0xFF64748B),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 32),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                isGenuinelyEmpty ? vert.navActiveIcon : Icons.filter_alt_off_rounded,
+                size: 48,
+                color: const Color(0xFF94A3B8),
               ),
-            ),
-          ],
+              const SizedBox(height: 12),
+              Text(
+                isGenuinelyEmpty ? vert.emptyCatalogTitle : 'No items in this category',
+                textAlign: TextAlign.center,
+                style: GoogleFonts.plusJakartaSans(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w700,
+                  color: const Color(0xFF334155),
+                ),
+              ),
+              if (isGenuinelyEmpty) ...[
+                const SizedBox(height: 4),
+                Text(
+                  vert.emptyCatalogDescription,
+                  textAlign: TextAlign.center,
+                  style: GoogleFonts.plusJakartaSans(fontSize: 12, color: const Color(0xFF64748B)),
+                ),
+              ],
+            ],
+          ),
         ),
       );
     }

@@ -197,6 +197,7 @@ class _CouponsTable extends StatelessWidget {
                 DataColumn(label: Text('Status')),
                 DataColumn(label: Text('Discount')),
                 DataColumn(label: Text('Expiry')),
+                DataColumn(label: Text('Used by')),
                 DataColumn(label: Text('')),
               ],
               rows: [
@@ -247,6 +248,7 @@ class _CouponsTable extends StatelessWidget {
                           ),
                         ),
                       ),
+                      DataCell(_UsageCount(code: c.code)),
                       DataCell(
                         IconButton(
                           tooltip: 'Delete coupon',
@@ -278,6 +280,40 @@ class _CouponsTable extends StatelessWidget {
       return '₹${(c.flatOffPaise! / 100).toStringAsFixed(2)} off';
     }
     return '—';
+  }
+}
+
+/// How many merchants' Pro purchase used this code — surfaces
+/// `AdminBusiness.couponCodeUsed`, written by the mobile app's
+/// razorpay_service.dart at checkout, so an admin can see whether a coupon
+/// is actually being used before deciding to deactivate or extend it.
+class _UsageCount extends StatelessWidget {
+  final String code;
+  const _UsageCount({required this.code});
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<List<dynamic>>(
+      future: AdminFirestoreService.instance.getBusinessesUsingCoupon(code),
+      builder: (context, snapshot) {
+        if (!snapshot.hasData) {
+          return const SizedBox(
+            width: 14,
+            height: 14,
+            child: CircularProgressIndicator(strokeWidth: 1.5),
+          );
+        }
+        final count = snapshot.data!.length;
+        return Text(
+          count == 0 ? 'Not used yet' : '$count merchant${count == 1 ? '' : 's'}',
+          style: TextStyle(
+            fontSize: 12.5,
+            fontWeight: count == 0 ? FontWeight.w400 : FontWeight.w700,
+            color: count == 0 ? AdminColors.inkFaint : AdminColors.ink,
+          ),
+        );
+      },
+    );
   }
 }
 

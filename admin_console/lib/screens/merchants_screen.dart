@@ -1,3 +1,6 @@
+import 'dart:convert';
+import 'dart:html' as html;
+import 'package:csv/csv.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
@@ -56,10 +59,18 @@ class _MerchantsScreenState extends State<MerchantsScreen> {
   String _query = '';
   _SortBy _sortBy = _SortBy.lastSale;
   bool _sortAsc = false;
+  // A ValueNotifier, not a plain field: Scaffold evaluates its `appBar`
+  // argument before `body` runs the StreamBuilder that computes the
+  // visible list, so a plain field read by the export button would show
+  // stale (disabled) data for a full extra render. The button listens to
+  // this directly instead, so it updates the moment the list is known,
+  // independent of Scaffold's argument-evaluation order.
+  final _visibleNotifier = ValueNotifier<List<AdminBusiness>>([]);
 
   @override
   void dispose() {
     _searchCtrl.dispose();
+    _visibleNotifier.dispose();
     super.dispose();
   }
 
@@ -116,10 +127,57 @@ class _MerchantsScreenState extends State<MerchantsScreen> {
     });
   }
 
+  /// Downloads the currently visible (filtered/sorted) merchant list as a
+  /// CSV — `dart:html` directly, not a plugin, since this project only
+  /// ever targets Web and a Blob + anchor-click download needs nothing
+  /// more than that.
+  void _exportCsv(List<AdminBusiness> rows) {
+    final dateFmt = DateFormat('d MMM yyyy');
+    final data = [
+      ['Name', 'Owner', 'Phone', 'Email', 'Business Type', 'Pro Status', 'Plan', 'Pro Expiry', 'Bills', 'Revenue (INR)', 'Last Sale', 'Coupon Used'],
+      for (final b in rows)
+        [
+          b.name,
+          b.ownerName,
+          b.phone,
+          b.email,
+          b.businessType,
+          b.isProEffective ? 'Pro' : (b.isPro ? 'Expired' : 'Free'),
+          b.proPlan,
+          b.proExpiry != null ? dateFmt.format(b.proExpiry!) : '',
+          b.totalSalesCount,
+          (b.totalRevenuePaise / 100).toStringAsFixed(2),
+          b.lastSaleAt != null ? dateFmt.format(b.lastSaleAt!) : '',
+          b.couponCodeUsed ?? '',
+        ],
+    ];
+    final csv = const ListToCsvConverter().convert(data);
+    final bytes = utf8.encode(csv);
+    final blob = html.Blob([bytes], 'text/csv');
+    final url = html.Url.createObjectUrlFromBlob(blob);
+    html.AnchorElement(href: url)
+      ..setAttribute('download', 'kamaiplus_merchants_${DateFormat('yyyyMMdd').format(DateTime.now())}.csv')
+      ..click();
+    html.Url.revokeObjectUrl(url);
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text('Merchants', style: AdminTheme.heading(18))),
+      appBar: AppBar(
+        title: Text('Merchants', style: AdminTheme.heading(18)),
+        actions: [
+          ValueListenableBuilder<List<AdminBusiness>>(
+            valueListenable: _visibleNotifier,
+            builder: (context, visible, _) => IconButton(
+              tooltip: 'Export visible list as CSV',
+              icon: const Icon(Icons.download_rounded),
+              onPressed: visible.isEmpty ? null : () => _exportCsv(visible),
+            ),
+          ),
+          const SizedBox(width: 8),
+        ],
+      ),
       body: Padding(
         padding: const EdgeInsets.all(24),
         child: StreamBuilder<List<AdminBusiness>>(
@@ -156,6 +214,9 @@ class _MerchantsScreenState extends State<MerchantsScreen> {
 
             final visible = _filterAndSort(all);
             final proCount = all.where((b) => b.isProEffective).length;
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              _visibleNotifier.value = visible;
+            });
 
             return Column(
               crossAxisAlignment: CrossAxisAlignment.start,

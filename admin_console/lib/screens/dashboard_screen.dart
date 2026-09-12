@@ -1,3 +1,4 @@
+import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
@@ -154,6 +155,8 @@ class _DashboardContent extends StatelessWidget {
                 ],
               ),
               const SizedBox(height: 24),
+              const _RevenueTrendSection(),
+              const SizedBox(height: 24),
               if (stacked)
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -185,6 +188,138 @@ class _DashboardContent extends StatelessWidget {
 // ---------------------------------------------------------------------
 // Sections
 // ---------------------------------------------------------------------
+
+/// 14-day revenue trend across every merchant. Its own Future (not part of
+/// [DashboardScreen]'s `watchBusinesses()` stream) since it needs a
+/// different query — a `timestamp` range on root `sales`, not anything
+/// derivable from the businesses list.
+class _RevenueTrendSection extends StatefulWidget {
+  const _RevenueTrendSection();
+
+  @override
+  State<_RevenueTrendSection> createState() => _RevenueTrendSectionState();
+}
+
+class _RevenueTrendSectionState extends State<_RevenueTrendSection> {
+  static const _days = 14;
+  late Future<Map<String, int>> _trendFuture;
+
+  @override
+  void initState() {
+    super.initState();
+    _trendFuture = AdminFirestoreService.instance.getDailyRevenueTrend(days: _days);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return _SectionCard(
+      icon: Icons.show_chart_rounded,
+      iconColor: AdminColors.accent,
+      iconBg: AdminColors.accentSoft,
+      title: 'Revenue — last $_days days',
+      subtitle: 'Total across every merchant, by day',
+      child: SizedBox(
+        height: 200,
+        child: FutureBuilder<Map<String, int>>(
+          future: _trendFuture,
+          builder: (context, snapshot) {
+            if (snapshot.hasError) {
+              return const _InlineEmpty(text: 'Could not load the revenue trend.');
+            }
+            if (!snapshot.hasData) {
+              return const Center(child: CircularProgressIndicator(strokeWidth: 2));
+            }
+            final byDay = snapshot.data!;
+            // Fill every day in the window, even ones with zero sales — a
+            // gap in the line would otherwise misleadingly join two
+            // non-adjacent days as if nothing happened in between, instead
+            // of showing the actual zero.
+            final now = DateTime.now();
+            final points = <FlSpot>[];
+            final dayLabels = <int, String>{};
+            int maxPaise = 0;
+            for (int i = _days - 1; i >= 0; i--) {
+              final day = now.subtract(Duration(days: i));
+              final key = '${day.year.toString().padLeft(4, '0')}-${day.month.toString().padLeft(2, '0')}-${day.day.toString().padLeft(2, '0')}';
+              final paise = byDay[key] ?? 0;
+              final x = (_days - 1 - i).toDouble();
+              points.add(FlSpot(x, paise / 100.0));
+              dayLabels[x.toInt()] = DateFormat('d MMM').format(day);
+              if (paise > maxPaise) maxPaise = paise;
+            }
+
+            if (maxPaise == 0) {
+              return const _InlineEmpty(text: 'No sales recorded in this window yet.');
+            }
+
+            return LineChart(
+              LineChartData(
+                minY: 0,
+                gridData: FlGridData(
+                  show: true,
+                  drawVerticalLine: false,
+                  horizontalInterval: (maxPaise / 100.0) / 4,
+                  getDrawingHorizontalLine: (_) => const FlLine(color: AdminColors.border, strokeWidth: 1),
+                ),
+                borderData: FlBorderData(show: false),
+                titlesData: FlTitlesData(
+                  topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                  rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                  leftTitles: AxisTitles(
+                    sideTitles: SideTitles(
+                      showTitles: true,
+                      reservedSize: 52,
+                      getTitlesWidget: (value, meta) => Text(
+                        _formatPaiseCompact((value * 100).round()),
+                        style: const TextStyle(fontSize: 10, color: AdminColors.inkFaint),
+                      ),
+                    ),
+                  ),
+                  bottomTitles: AxisTitles(
+                    sideTitles: SideTitles(
+                      showTitles: true,
+                      reservedSize: 26,
+                      interval: (_days / 5).ceilToDouble(),
+                      getTitlesWidget: (value, meta) {
+                        final label = dayLabels[value.toInt()];
+                        if (label == null) return const SizedBox.shrink();
+                        return Padding(
+                          padding: const EdgeInsets.only(top: 6),
+                          child: Text(label, style: const TextStyle(fontSize: 10, color: AdminColors.inkFaint)),
+                        );
+                      },
+                    ),
+                  ),
+                ),
+                lineTouchData: LineTouchData(
+                  touchTooltipData: LineTouchTooltipData(
+                    getTooltipItems: (spots) => spots
+                        .map((s) => LineTooltipItem(
+                              _formatPaise((s.y * 100).round()),
+                              const TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 11),
+                            ))
+                        .toList(),
+                  ),
+                ),
+                lineBarsData: [
+                  LineChartBarData(
+                    spots: points,
+                    isCurved: true,
+                    curveSmoothness: 0.2,
+                    color: AdminColors.accent,
+                    barWidth: 2.5,
+                    dotData: const FlDotData(show: false),
+                    belowBarData: BarAreaData(show: true, color: AdminColors.accentSoft),
+                  ),
+                ],
+              ),
+            );
+          },
+        ),
+      ),
+    );
+  }
+}
 
 class _RecentlyActiveSection extends StatelessWidget {
   final List<AdminBusiness> businesses;
@@ -546,6 +681,15 @@ final NumberFormat _decimal = NumberFormat.decimalPattern('en_IN');
 final NumberFormat _currency = NumberFormat.currency(locale: 'en_IN', symbol: '₹', decimalDigits: 0);
 
 String _formatPaise(int paise) => _currency.format(paise / 100);
+
+/// Chart-axis-friendly compact form ("₹1.2K", "₹45"), since the full
+/// comma-grouped `_formatPaise` output is too wide for a Y-axis label.
+String _formatPaiseCompact(int paise) {
+  final rupees = paise / 100.0;
+  if (rupees >= 100000) return '₹${(rupees / 100000).toStringAsFixed(1)}L';
+  if (rupees >= 1000) return '₹${(rupees / 1000).toStringAsFixed(1)}K';
+  return '₹${rupees.toStringAsFixed(0)}';
+}
 
 String _titleCase(String s) => s.isEmpty ? s : '${s[0].toUpperCase()}${s.substring(1)}';
 

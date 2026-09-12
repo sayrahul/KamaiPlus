@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
+import '../../core/constants/business_vertical_config.dart';
 import '../../core/database/local_database.dart';
 import '../../core/utils/money_formatter.dart';
 import '../../core/utils/quantity_config.dart';
@@ -50,6 +51,15 @@ class _QuickStockUpdateModalState extends State<QuickStockUpdateModal> {
   double _inwardDelta = 0.0;
   bool _isUnlimitedStock = false;
 
+  // Batch tracking (Pharmacy only, real FEFO — see ProductBatchModel).
+  // This NEW delivery's own batch number + expiry, distinct from whatever
+  // is already on the shelf; recorded as its own product_batches row so a
+  // sale can deduct the soonest-expiring batch first, not just decrement
+  // one shared total.
+  late TextEditingController _newBatchNumberCtrl;
+  late TextEditingController _newBatchExpiryCtrl;
+  List<ProductBatchModel>? _existingBatches;
+
   // Adjustment State
   String _selectedReason = 'Damaged / Wastage';
   String _movementType = 'DAMAGE';
@@ -94,6 +104,39 @@ class _QuickStockUpdateModalState extends State<QuickStockUpdateModal> {
     _customInwardCtrl = TextEditingController();
     _adjustQtyCtrl = TextEditingController(text: '1');
     _adjustNoteCtrl = TextEditingController();
+    _newBatchNumberCtrl = TextEditingController();
+    _newBatchExpiryCtrl = TextEditingController();
+    if (_showBatchFields) _loadExistingBatches();
+  }
+
+  bool get _showBatchFields =>
+      BusinessVerticals.resolve(BusinessVerticals.activeBusinessTypeNotifier.value).toggles.showBatchExpiry;
+
+  Future<void> _loadExistingBatches() async {
+    final batches = await LocalDatabase.instance.getBatchesForProduct(widget.product.id);
+    if (mounted) setState(() => _existingBatches = batches);
+  }
+
+  Future<void> _pickBatchExpiry() async {
+    final now = DateTime.now();
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: now.add(const Duration(days: 180)),
+      firstDate: DateTime(now.year - 2),
+      lastDate: DateTime(now.year + 10),
+      builder: (ctx, child) {
+        return Theme(
+          data: Theme.of(ctx).copyWith(
+            colorScheme: const ColorScheme.light(primary: Color(0xFF0F172A), onPrimary: Colors.white),
+          ),
+          child: child!,
+        );
+      },
+    );
+    if (picked != null) {
+      final monthStr = picked.month.toString().padLeft(2, '0');
+      setState(() => _newBatchExpiryCtrl.text = '$monthStr/${picked.year}');
+    }
   }
 
   @override
@@ -102,6 +145,8 @@ class _QuickStockUpdateModalState extends State<QuickStockUpdateModal> {
     _customInwardCtrl.dispose();
     _adjustQtyCtrl.dispose();
     _adjustNoteCtrl.dispose();
+    _newBatchNumberCtrl.dispose();
+    _newBatchExpiryCtrl.dispose();
     super.dispose();
   }
 
@@ -168,6 +213,29 @@ class _QuickStockUpdateModalState extends State<QuickStockUpdateModal> {
         createdAt: DateTime.now(),
       );
       await LocalDatabase.instance.recordInventoryMovement(movement);
+
+      // Real FEFO batch tracking (Pharmacy only) — this delivery becomes
+      // its own batch, distinct from whatever is already on the shelf, so
+      // a later sale deducts the soonest-expiring one first rather than
+      // treating the whole shelf as one undated pile. A batch number/expiry
+      // are both optional here — an admin who leaves them blank still gets
+      // a batch row (so the delivery is counted for FEFO ordering against
+      // OTHER dated batches), just with no known expiry of its own.
+      if (_showBatchFields) {
+        final expiryText = _newBatchExpiryCtrl.text.trim();
+        await LocalDatabase.instance.addProductBatch(
+          ProductBatchModel(
+            id: 'batch_${DateTime.now().millisecondsSinceEpoch}',
+            productId: p.id,
+            businessId: p.businessId,
+            batchNumber: _newBatchNumberCtrl.text.trim().isNotEmpty ? _newBatchNumberCtrl.text.trim() : null,
+            quantity: _inwardDelta,
+            expiryDate: expiryText.isNotEmpty ? expiryText : null,
+            purchasePricePaise: p.purchasePricePaise,
+            createdAt: DateTime.now(),
+          ),
+        );
+      }
     }
 
     widget.onUpdated();
@@ -578,6 +646,102 @@ class _QuickStockUpdateModalState extends State<QuickStockUpdateModal> {
                     ),
                   ],
                 ),
+
+                // Batch tracking (Pharmacy only, real FEFO) — only relevant
+                // once there's actually a new delivery quantity to record.
+                if (_showBatchFields && !_isUnlimitedStock && _inwardDelta > 0) ...[
+                  const SizedBox(height: 14),
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF5F3FF),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: const Color(0xFFDDD6FE)),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            const Icon(Icons.inventory_2_outlined, size: 14, color: Color(0xFF6D28D9)),
+                            const SizedBox(width: 6),
+                            Text(
+                              'THIS DELIVERY\'S BATCH (optional)',
+                              style: GoogleFonts.plusJakartaSans(fontSize: 10.5, fontWeight: FontWeight.w800, letterSpacing: 0.4, color: const Color(0xFF6D28D9)),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          'Kept separate from what\'s already on the shelf, so billing sells the soonest-expiring batch first.',
+                          style: GoogleFonts.plusJakartaSans(fontSize: 10.5, color: const Color(0xFF64748B)),
+                        ),
+                        const SizedBox(height: 10),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: TextField(
+                                controller: _newBatchNumberCtrl,
+                                style: GoogleFonts.jetBrainsMono(fontSize: 13, fontWeight: FontWeight.w700),
+                                decoration: InputDecoration(
+                                  labelText: 'Batch No.',
+                                  isDense: true,
+                                  filled: true,
+                                  fillColor: Colors.white,
+                                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: Color(0xFFCBD5E1))),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: TextField(
+                                controller: _newBatchExpiryCtrl,
+                                readOnly: true,
+                                onTap: _pickBatchExpiry,
+                                style: GoogleFonts.jetBrainsMono(fontSize: 13, fontWeight: FontWeight.w700),
+                                decoration: InputDecoration(
+                                  labelText: 'Expiry',
+                                  hintText: 'MM/YYYY',
+                                  isDense: true,
+                                  filled: true,
+                                  fillColor: Colors.white,
+                                  suffixIcon: const Icon(Icons.calendar_today_rounded, size: 15, color: Color(0xFF64748B)),
+                                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: Color(0xFFCBD5E1))),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        if (_existingBatches != null && _existingBatches!.isNotEmpty) ...[
+                          const SizedBox(height: 12),
+                          Text(
+                            'ALREADY ON THE SHELF',
+                            style: GoogleFonts.plusJakartaSans(fontSize: 10, fontWeight: FontWeight.w800, letterSpacing: 0.4, color: const Color(0xFF64748B)),
+                          ),
+                          const SizedBox(height: 6),
+                          for (final batch in _existingBatches!)
+                            Padding(
+                              padding: const EdgeInsets.only(bottom: 3),
+                              child: Row(
+                                children: [
+                                  Text(
+                                    '${batch.quantity.toInt()} ${widget.product.unit}',
+                                    style: GoogleFonts.plusJakartaSans(fontSize: 11.5, fontWeight: FontWeight.w700, color: const Color(0xFF0F172A)),
+                                  ),
+                                  if (batch.batchNumber != null && batch.batchNumber!.isNotEmpty) ...[
+                                    Text(' · Batch ${batch.batchNumber}', style: GoogleFonts.plusJakartaSans(fontSize: 11, color: const Color(0xFF64748B))),
+                                  ],
+                                  if (batch.expiryDate != null && batch.expiryDate!.isNotEmpty) ...[
+                                    Text(' · Exp ${batch.expiryDate}', style: GoogleFonts.plusJakartaSans(fontSize: 11, color: const Color(0xFF64748B))),
+                                  ],
+                                ],
+                              ),
+                            ),
+                        ],
+                      ],
+                    ),
+                  ),
+                ],
                 const SizedBox(height: 20),
 
                 // Save Inward Button

@@ -195,6 +195,46 @@ class BusinessVerticalProfile {
         return '$count registered products with barcodes, batch expiry & instant stock tracking';
     }
   }
+
+  /// Headline for a genuinely-empty catalog (zero products, no search/filter
+  /// active) — deliberately distinct from "no results for your search",
+  /// which every screen using this should show instead when a search query
+  /// or filter is what actually produced the empty list. Conflating the two
+  /// (a generic "No matching products found" shown even on a brand-new
+  /// store with nothing added yet) was the exact gap flagged in the
+  /// KamaiPlus Playbook's professional-polish pass.
+  String get emptyCatalogTitle {
+    switch (id) {
+      case 'restaurant':
+        return 'No dishes on your menu yet';
+      case 'pharmacy':
+        return 'No medicines added yet';
+      case 'clothing':
+        return 'No apparel added yet';
+      case 'hardware':
+        return 'No items added yet';
+      default:
+        return 'No products added yet';
+    }
+  }
+
+  /// Companion body text for [emptyCatalogTitle] — names the actual first
+  /// action available on that screen (matches [aiBulkAddButtonLabel] /
+  /// [addProductButtonLabel] wording) rather than a generic "add something".
+  String get emptyCatalogDescription {
+    switch (id) {
+      case 'restaurant':
+        return 'Scan a photo of your menu card, or add your first dish manually.';
+      case 'pharmacy':
+        return 'Scan a barcode or add your first medicine to get started.';
+      case 'clothing':
+        return 'Add your first apparel item — sizes and colors can be set per item.';
+      case 'hardware':
+        return 'Scan a barcode or add your first item to get started.';
+      default:
+        return 'Scan a barcode or add your first product to get started.';
+    }
+  }
 }
 
 class BusinessVerticals {

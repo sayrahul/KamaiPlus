@@ -954,6 +954,62 @@ class InventoryMovementModel {
   );
 }
 
+/// One physical delivery of a product, tracked separately from
+/// [ProductModel]'s own aggregate `stockQuantity` — real FEFO
+/// (First-Expiry-First-Out) needs this because a pharmacy can have several
+/// deliveries of the SAME medicine on the shelf at once, each with its own
+/// expiry date; a single `ProductModel.expiryDate` field can only describe
+/// one of them. `ProductModel.stockQuantity`/`expiryDate`/`batchNumber`
+/// stay as fast, denormalized summaries (sum of all batches; the
+/// soonest-expiring batch's date/number) so the billing screen's product
+/// grid never has to query this table per-render — only inward (creating a
+/// batch) and billing (deducting from the earliest-expiry batch first) read
+/// or write it directly. See `local_database.dart`'s `addProductBatch` /
+/// `_deductStockFefo` / `_recomputeProductAggregateFromBatches`.
+class ProductBatchModel {
+  final String id;
+  final String productId;
+  final String businessId;
+  final String? batchNumber;
+  final double quantity;
+  final String? expiryDate;
+  final int purchasePricePaise;
+  final DateTime createdAt;
+
+  ProductBatchModel({
+    required this.id,
+    required this.productId,
+    required this.businessId,
+    this.batchNumber,
+    required this.quantity,
+    this.expiryDate,
+    this.purchasePricePaise = 0,
+    required this.createdAt,
+  });
+
+  Map<String, dynamic> toMap() => {
+    'id': id,
+    'product_id': productId,
+    'business_id': businessId,
+    'batch_number': batchNumber,
+    'quantity': quantity,
+    'expiry_date': expiryDate,
+    'purchase_price_paise': purchasePricePaise,
+    'created_at': createdAt.toIso8601String(),
+  };
+
+  factory ProductBatchModel.fromMap(Map<String, dynamic> map) => ProductBatchModel(
+    id: map['id'] ?? '',
+    productId: map['product_id'] ?? '',
+    businessId: map['business_id'] ?? '',
+    batchNumber: map['batch_number'] as String?,
+    quantity: (map['quantity'] as num?)?.toDouble() ?? 0.0,
+    expiryDate: map['expiry_date'] as String?,
+    purchasePricePaise: (map['purchase_price_paise'] as num?)?.toInt() ?? 0,
+    createdAt: DateTime.tryParse(map['created_at'] ?? '') ?? DateTime.now(),
+  );
+}
+
 class SupplierModel {
   final String id;
   final String businessId;
