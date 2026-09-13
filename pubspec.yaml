@@ -2,7 +2,7 @@ name: kamaiplus_pos
 description: "KamaiPlus Native Android POS App"
 publish_to: 'none'
 
-version: 4.20.0+42001
+version: 4.21.0+42100
 
 environment:
   sdk: ^3.13.2
