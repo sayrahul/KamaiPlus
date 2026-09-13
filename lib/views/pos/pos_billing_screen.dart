@@ -13,6 +13,7 @@ import '../../services/firestore_sync_service.dart';
 import '../../services/home_widget_service.dart';
 import '../../services/cloud_barcode_resolver_service.dart';
 import '../common/in_app_notification.dart';
+import '../common/pro_upgrade_modal.dart';
 import 'pos_checkout_modal.dart';
 import 'barcode_scanner_view.dart';
 
@@ -72,6 +73,7 @@ class _PosBillingScreenState extends State<PosBillingScreen>
   // Multi-cart Hold & Resume system
   late List<CartTab> _tabs;
   int _activeTabIndex = 0;
+  bool _isPro = false;
 
   @override
   void initState() {
@@ -90,16 +92,27 @@ class _PosBillingScreenState extends State<PosBillingScreen>
     _loadBusinessType();
     BusinessVerticals.activeBusinessTypeNotifier.addListener(_onBusinessTypeChanged);
     FirestoreSyncService.instance.liveSyncCounter.addListener(_handleCloudSyncUpdate);
+    FirestoreSyncService.isProNotifier.addListener(_handleProStatusUpdate);
   }
 
   Future<void> _loadBusinessType() async {
     try {
       final profile = await LocalDatabase.instance.getStoreProfile();
+      if (mounted) {
+        setState(() => _isPro = profile.isPro);
+      }
       if (profile.businessType.isNotEmpty) {
         BusinessVerticals.updateActiveBusinessType(profile.businessType);
       }
     } catch (_) {}
     _loadData();
+  }
+
+  void _handleProStatusUpdate() async {
+    try {
+      final profile = await LocalDatabase.instance.getStoreProfile();
+      if (mounted) setState(() => _isPro = profile.isPro);
+    } catch (_) {}
   }
 
   void _onBusinessTypeChanged() {
@@ -112,6 +125,7 @@ class _PosBillingScreenState extends State<PosBillingScreen>
   void dispose() {
     BusinessVerticals.activeBusinessTypeNotifier.removeListener(_onBusinessTypeChanged);
     FirestoreSyncService.instance.liveSyncCounter.removeListener(_handleCloudSyncUpdate);
+    FirestoreSyncService.isProNotifier.removeListener(_handleProStatusUpdate);
     _searchController.dispose();
     super.dispose();
   }
@@ -470,8 +484,17 @@ class _PosBillingScreenState extends State<PosBillingScreen>
 
   void _holdBillAndNew() {
     HapticFeedback.mediumImpact();
-    if (_tabs.length >= 5) {
-      InAppNotification.info('Max 5 parallel bills supported', context: context);
+    // Strict Pro Lock: Free user limited to 3 simultaneous bills (4th is locked)
+    if (!_isPro && _tabs.length >= 3) {
+      HapticFeedback.heavyImpact();
+      ProUpgradeModal.show(
+        context,
+        triggerFeature: 'Simultaneous Multi-Counter Billing (Free plan: max 3 parallel bills. Upgrade to Pro for unlimited parallel billing)',
+      );
+      return;
+    }
+    if (_tabs.length >= 10) {
+      InAppNotification.info('Max 10 parallel bills supported', context: context);
       return;
     }
     setState(() {
@@ -831,6 +854,7 @@ class _PosBillingScreenState extends State<PosBillingScreen>
         itemCount: _tabs.length + 1,
         itemBuilder: (ctx, i) {
           if (i == _tabs.length) {
+            final isLockedForFree = !_isPro && _tabs.length >= 3;
             // + New Bill button
             return Padding(
               padding: const EdgeInsets.only(right: 6),
@@ -840,21 +864,28 @@ class _PosBillingScreenState extends State<PosBillingScreen>
                 child: Container(
                   padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                   decoration: BoxDecoration(
-                    color: const Color(0xFFECFDF5),
+                    color: isLockedForFree ? const Color(0xFFFEF3C7) : const Color(0xFFECFDF5),
                     borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: const Color(0xFFA7F3D0), width: 1.1),
+                    border: Border.all(
+                      color: isLockedForFree ? const Color(0xFFFDE68A) : const Color(0xFFA7F3D0),
+                      width: 1.1,
+                    ),
                   ),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      const Icon(Icons.add_rounded, size: 15, color: Color(0xFF059669)),
+                      Icon(
+                        isLockedForFree ? Icons.lock_rounded : Icons.add_rounded,
+                        size: 14,
+                        color: isLockedForFree ? const Color(0xFFD97706) : const Color(0xFF059669),
+                      ),
                       const SizedBox(width: 4),
                       Text(
-                        'New Bill',
+                        isLockedForFree ? 'New Bill (Pro)' : 'New Bill',
                         style: GoogleFonts.plusJakartaSans(
                           fontSize: 11,
                           fontWeight: FontWeight.w700,
-                          color: const Color(0xFF059669),
+                          color: isLockedForFree ? const Color(0xFFD97706) : const Color(0xFF059669),
                         ),
                       ),
                     ],

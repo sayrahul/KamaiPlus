@@ -417,8 +417,20 @@ class SaleDetailModal extends StatelessWidget {
     );
   }
 
-  void _openPartialReturnSheet(BuildContext context) {
+  void _openPartialReturnSheet(BuildContext context) async {
     HapticFeedback.mediumImpact();
+    final profile = await LocalDatabase.instance.getStoreProfile();
+    if (!profile.isPro) {
+      if (context.mounted) {
+        ProUpgradeModal.show(
+          context,
+          triggerFeature: 'Sales Return & Item Refund (Strictly Pro Feature)',
+        );
+      }
+      return;
+    }
+    if (!context.mounted) return;
+
     final isUdhar = sale.paymentMethod == 'credit' || (sale.paymentMethod == 'split' && sale.splitCreditPaise > 0);
 
     final returnQtys = <int, double>{};

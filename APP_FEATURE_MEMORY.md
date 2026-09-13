@@ -1323,3 +1323,27 @@ Comprehensive enterprise-grade retail UX upgrade suite aligned with PhonePe Busi
       - **Live Digital Ticker Countdown:** A 1-second interval real-time digital timer displaying remaining trial validity: `[06] DAYS : [23] HOURS : [42] MINS : [15] SECS`.
       - **Dual Plan Selection & Validity Extension:** While on trial, merchants can still see Annual (₹1,499/yr, 50% OFF) and Monthly (₹199/mo) plans. The primary action button says `Extend Pro Validity • ₹1,499/yr` to incentivize early lock-in of discounts without billing interruption.
       - **Trial Expired State:** If trial expires, shows clear notice prompting to renew before locking Pro features.
+
+80. **Vertical Variant Matrix, Minimalist POS UPI QR, Strict Pro Tier Locks & Swipeable Home Banner (LOCKED):**
+    - **Add Product Modal (`AddProductModal`):**
+      - Removed redundant individual `Size / Variant` and `Color` fields; sizes/colors are managed via the Variant Matrix.
+      - Removed `Fit Notes (optional)` field completely.
+      - Removed `Have a Wholesale Bill / Parcha?` inward banner completely.
+      - Variant Matrix generator dynamically adapts presets and guidance by active business vertical (`vert.id`):
+        - `clothing` / apparel: Sizes (`S, M, L, XL, XXL, 3XL`, `28, 30, 32, 34, 36, 38, 40`) & Colors (`Black, White, Navy Blue, Maroon, Olive Green`).
+        - `grocery` / fmcg: Net Quantities (`100g, 250g, 500g, 1kg, 2kg, 5kg`) & Multipacks (`Pack of 2, Pack of 4, Family Pack`).
+        - `pharmacy` / medical: Formulations (`Strip of 10, Strip of 15, Bottle 100ml, Bottle 200ml`) & Strengths (`250mg, 500mg, 650mg`).
+        - `hardware` / electrical: Sizes/Ratings (`½ inch, ¾ inch, 1 inch, 2 inch`, `5 Amp, 15 Amp, 16 Amp`).
+        - `restaurant` / food: Portions (`Half, Full, Regular, Medium, Large, Mini`).
+    - **POS Checkout Modal Dynamic UPI QR (`PosCheckoutModal`):**
+      - UPI payment mode renders strictly a clean, distraction-free scannable QR canvas with a tap hint: `"Tap QR to Enlarge & More Options"`.
+      - Tapping the QR opens an enlarged bottom sheet modal with full controls: multi-account UPI selector chips, 1-tap copyable UPI ID chip (`UPI: store@upi`), payable amount in rupees, and direct WhatsApp bill summary share.
+    - **Pro vs Free Strict Feature Locking:**
+      - **Simultaneous Draft Bills (`PosBillingScreen`):** Free users can open at most 3 held/active carts. Attempting to add a 4th bill triggers `ProUpgradeModal.show(context)` with lock badge on `+ New Bill (Pro 🔒)`.
+      - **Transaction History Limit (`TransactionsScreen`):** Free tier is strictly constrained to the last 7 days of sales. Filters beyond 7 days (`Month`, `Pick Date 📅`) are visually locked with `🔒` and prompt Pro upgrade.
+      - **Sales Return Lock (`SaleDetailModal` & `TransactionsScreen`):** Both Partial Sales Return and Full Void Return are exclusively reserved for Pro users (`profile.isPro`). Free users tapping return are prompted to unlock Pro membership.
+    - **Free vs Pro Authentic FAQs (`ProMembershipScreen`):**
+      - Replaced dummy FAQs with 7 real, high-converting Free vs Pro plan comparison questions explaining simultaneous billing limits, 7-day history limit, sales return unlock, thermal barcode sticker studio, offline SQLite performance, and cloud data safety.
+    - **Swipeable Home Broadcast Banner (`HomePulseTab`):**
+      - Special Update live broadcast banner wrapped in `Dismissible(direction: DismissDirection.horizontal)` with smooth haptic feedback; swiping left or right immediately dismisses/hides the banner for the session.
+

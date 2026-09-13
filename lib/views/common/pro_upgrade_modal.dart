@@ -14,14 +14,15 @@ import '../../services/razorpay_service.dart';
 import 'in_app_notification.dart';
 
 class ProUpgradeModal extends StatefulWidget {
-  const ProUpgradeModal({super.key});
+  final String? triggerFeature;
+  const ProUpgradeModal({super.key, this.triggerFeature});
 
-  static Future<void> show(BuildContext context) {
+  static Future<void> show(BuildContext context, {String? triggerFeature}) {
     return showDialog(
       context: context,
       barrierDismissible: true,
       barrierColor: const Color(0xCC020617), // Deep obsidian slate overlay
-      builder: (ctx) => const ProUpgradeModal(),
+      builder: (ctx) => ProUpgradeModal(triggerFeature: triggerFeature),
     );
   }
 

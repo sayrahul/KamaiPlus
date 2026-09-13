@@ -13,6 +13,7 @@ import '../../services/invoice_pdf_service.dart';
 import '../../services/app_printer_service.dart';
 import '../common/kamai_bottom_nav.dart';
 import '../common/in_app_notification.dart';
+import '../common/pro_upgrade_modal.dart';
 import '../../core/utils/app_validators.dart';
 import 'sale_detail_modal.dart';
 
@@ -463,7 +464,16 @@ class _TransactionsScreenState extends State<TransactionsScreen> with DataBusRef
             onSelected: (val) {
               if (val == 'csv') _showExportCsvModal();
               if (val == 'tally') _showTallyModal();
-              if (val == 'return') _showSalesReturnInfo();
+              if (val == 'return') {
+                if (!_isPro) {
+                  ProUpgradeModal.show(
+                    context,
+                    triggerFeature: 'Sales Return & Refund Restocking (Pro Only)',
+                  );
+                } else {
+                  _showSalesReturnInfo();
+                }
+              }
             },
             itemBuilder: (ctx) => [
               PopupMenuItem(
@@ -491,9 +501,9 @@ class _TransactionsScreenState extends State<TransactionsScreen> with DataBusRef
                 value: 'return',
                 child: Row(
                   children: [
-                    const Icon(Icons.replay_rounded, color: Color(0xFFDC2626), size: 18),
+                    Icon(!_isPro ? Icons.lock_rounded : Icons.replay_rounded, color: !_isPro ? const Color(0xFFD97706) : const Color(0xFFDC2626), size: 18),
                     const SizedBox(width: 8),
-                    Text('Sales Return (Refund)', style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w600)),
+                    Text(!_isPro ? 'Sales Return (Pro 🔒)' : 'Sales Return (Refund)', style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w600)),
                   ],
                 ),
               ),
@@ -872,8 +882,9 @@ class _TransactionsScreenState extends State<TransactionsScreen> with DataBusRef
             children: [
               ..._dateFilters.map((df) {
                 final isSel = _selectedDateFilter == df;
+                final isLockedForFree = !_isPro && (df == 'Month' || df == 'Pick Date 📅');
                 final label = df == 'All'
-                    ? 'All Dates ($totalAccounts)'
+                    ? (!_isPro ? '7 Days ($totalAccounts)' : 'All Dates ($totalAccounts)')
                     : df == 'Today'
                         ? '⚡ Today'
                         : df == 'Yesterday'
@@ -881,8 +892,8 @@ class _TransactionsScreenState extends State<TransactionsScreen> with DataBusRef
                             : df == '7 Days'
                                 ? '📅 7 Days'
                                 : df == 'Month'
-                                    ? '📊 This Month'
-                                    : '📅 $df';
+                                    ? (isLockedForFree ? '🔒 This Month' : '📊 This Month')
+                                    : (isLockedForFree ? '🔒 Pick Date' : '📅 $df');
                 return Padding(
                   padding: const EdgeInsets.only(right: 6),
                   child: FilterChip(
@@ -907,6 +918,13 @@ class _TransactionsScreenState extends State<TransactionsScreen> with DataBusRef
                     visualDensity: VisualDensity.compact,
                     onSelected: (_) async {
                       HapticFeedback.selectionClick();
+                      if (isLockedForFree) {
+                        ProUpgradeModal.show(
+                          context,
+                          triggerFeature: 'Custom Date & Lifetime History (Free plan: last 7 days)',
+                        );
+                        return;
+                      }
                       if (df == 'Pick Date 📅') {
                         await _pickCustomDateRange();
                         return;

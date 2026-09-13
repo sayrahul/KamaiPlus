@@ -10,7 +10,6 @@ import '../../services/firestore_sync_service.dart';
 import '../../services/cloud_barcode_resolver_service.dart';
 import '../pos/barcode_scanner_view.dart';
 import '../common/in_app_notification.dart';
-import 'rapid_barcode_inward_screen.dart';
 
 class AddProductModal extends StatefulWidget {
   final ProductModel? existingProduct;
@@ -732,110 +731,7 @@ class _AddProductModalState extends State<AddProductModal> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // Wholesale AI Inward Suggestion Banner (Hidden for restaurant dishes)
-                      if (!isEditing && vert.id != 'restaurant') ...[
-                        Container(
-                          padding: const EdgeInsets.all(12),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFFFFFDF5),
-                            borderRadius: BorderRadius.circular(16),
-                            border: Border.all(color: const Color(0xFFFDE68A), width: 1.2),
-                          ),
-                          child: Row(
-                            children: [
-                              Container(
-                                width: 36,
-                                height: 36,
-                                decoration: BoxDecoration(
-                                  color: const Color(0xFFFBBF24),
-                                  borderRadius: BorderRadius.circular(10),
-                                ),
-                                child: const Icon(Icons.auto_awesome_rounded, color: Color(0xFF0F172A), size: 18),
-                              ),
-                              const SizedBox(width: 10),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      'Have a Wholesale Bill / Parcha?',
-                                      style: GoogleFonts.outfit(
-                                        fontSize: 12.5,
-                                        fontWeight: FontWeight.w800,
-                                        color: const Color(0xFF0F172A),
-                                      ),
-                                    ),
-                                    Text(
-                                      "Don't type items one by one. Scan distributor invoice...",
-                                      style: GoogleFonts.inter(fontSize: 10, color: const Color(0xFF64748B)),
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                  ],
-                                ),
-                              ),
-                              const SizedBox(width: 8),
-                              GestureDetector(
-                                onTap: () {
-                                  Navigator.of(context).pop();
-                                  RapidBarcodeInwardScreen.show(context, onInwardSuccess: widget.onSaved);
-                                },
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-                                  decoration: BoxDecoration(
-                                    color: const Color(0xFF7C3AED),
-                                    borderRadius: BorderRadius.circular(10),
-                                  ),
-                                  child: Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      const Icon(Icons.flash_on_rounded, size: 12, color: Colors.white),
-                                      const SizedBox(width: 3),
-                                      Text(
-                                        'Rapid Scan',
-                                        style: GoogleFonts.inter(
-                                          fontSize: 10,
-                                          fontWeight: FontWeight.w800,
-                                          color: Colors.white,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(width: 6),
-                              GestureDetector(
-                                onTap: () {
-                                  Navigator.of(context).pop();
-                                  widget.onSwitchToAiInward();
-                                },
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-                                  decoration: BoxDecoration(
-                                    color: const Color(0xFF0F172A),
-                                    borderRadius: BorderRadius.circular(10),
-                                  ),
-                                  child: Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      const Icon(Icons.camera_alt_outlined, size: 12, color: Colors.white),
-                                      const SizedBox(width: 3),
-                                      Text(
-                                        'AI Bill',
-                                        style: GoogleFonts.inter(
-                                          fontSize: 10,
-                                          fontWeight: FontWeight.w800,
-                                          color: Colors.white,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        const SizedBox(height: 14),
-                      ],
+
 
                       // 1. Dynamic Item Name *
                       _buildLabel(vert.itemFieldLabel),
@@ -1292,51 +1188,7 @@ class _AddProductModalState extends State<AddProductModal> {
                         const SizedBox(height: 12),
                       ],
 
-                      // Row 5: Size + Color (Clothing/Apparel only)
-                      if (vert.toggles.showSizeVariants) ...[
-                        Row(
-                          children: [
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  _buildLabel('Size / Variant'),
-                                  const SizedBox(height: 4),
-                                  TextFormField(
-                                    controller: _sizeCtrl,
-                                    style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w600),
-                                    decoration: _buildInputDecoration('e.g. S, M, L, XL, 40, 42'),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            const SizedBox(width: 10),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  _buildLabel('Color'),
-                                  const SizedBox(height: 4),
-                                  TextFormField(
-                                    controller: _colorCtrl,
-                                    style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w600),
-                                    decoration: _buildInputDecoration('e.g. Red, Navy Blue, Black'),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 12),
-                        _buildLabel('Fit Notes (optional)'),
-                        const SizedBox(height: 4),
-                        TextFormField(
-                          controller: _fitNotesCtrl,
-                          style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w600),
-                          decoration: _buildInputDecoration('e.g. Runs small, order one size up'),
-                        ),
-                        const SizedBox(height: 12),
-                      ],
+
 
                       // Variant Matrix Generator (Sizes / Colors)
                       if (widget.existingProduct == null && widget.parentIdForNewVariant == null) ...[
@@ -1767,9 +1619,51 @@ class _AddProductModalState extends State<AddProductModal> {
   }
 
   Widget _buildVariantMatrixSection() {
-    final garmentSizes = ['S', 'M', 'L', 'XL', 'XXL', '3XL'];
-    final numberSizes = ['28', '30', '32', '34', '36', '38', '40', '42'];
-    final commonColors = ['Red', 'Blue', 'Black', 'White', 'Green', 'Yellow'];
+    final vert = BusinessVerticals.resolve(BusinessVerticals.activeBusinessTypeNotifier.value);
+
+    // Business vertical-specific presets and matrix configuration
+    final List<String> presets;
+    final String matrixTitle;
+    final String matrixSubtitle;
+    final String hintText;
+
+    switch (vert.id) {
+      case 'grocery':
+        matrixTitle = 'Variants Matrix (वजन / पैक मैट्रिक्स)';
+        matrixSubtitle = 'Create weight or pack variants (e.g. 500g, 1kg, 5kg)';
+        hintText = 'Custom variant (e.g. 250g, 2kg, Combo)...';
+        presets = ['100g', '250g', '500g', '1kg', '2kg', '5kg', '10kg', '500ml', '1 Litre', 'Pack of 2', 'Pack of 4', 'Combo'];
+        break;
+      case 'pharmacy':
+        matrixTitle = 'Variants Matrix (डोज़ / पैक मैट्रिक्स)';
+        matrixSubtitle = 'Create dosage or pack variants (e.g. 500mg, Strip of 10)';
+        hintText = 'Custom variant (e.g. Strip 15, 650mg, 100ml)...';
+        presets = ['Strip (10 Tab)', 'Strip (15 Tab)', 'Bottle (60ml)', 'Bottle (100ml)', '100mg', '250mg', '500mg', '650mg', 'Sachet', 'Box of 10'];
+        break;
+      case 'hardware':
+        matrixTitle = 'Variants Matrix (साइज / माप मैट्रिक्स)';
+        matrixSubtitle = 'Create dimension or volume variants (e.g. 1/2 Inch, 1 Litre)';
+        hintText = 'Custom variant (e.g. 1.5 Inch, 10 Litre)...';
+        presets = ['1/2 Inch', '3/4 Inch', '1 Inch', '1.5 Inch', '2 Inch', '50mm', '100mm', '500ml', '1 Ltr', '4 Ltr', '10 Ltr', '20 Ltr'];
+        break;
+      case 'restaurant':
+        matrixTitle = 'Variants Matrix (पोर्शन / सर्विंग मैट्रिक्स)';
+        matrixSubtitle = 'Create portion or serving variants (e.g. Half, Full, Large)';
+        hintText = 'Custom variant (e.g. Medium, Spicy, Jain)...';
+        presets = ['Regular', 'Medium', 'Large', 'Half', 'Full', 'Single', 'Double', 'Jain', 'Spicy', 'Combo'];
+        break;
+      case 'clothing':
+      default:
+        matrixTitle = 'Variants Matrix (साइज / कलर मैट्रिक्स)';
+        matrixSubtitle = 'Create multiple sizes or colors under this item';
+        hintText = 'Custom variant (e.g. 36, Red-XL)...';
+        presets = [
+          'S', 'M', 'L', 'XL', 'XXL', '3XL',
+          '28', '30', '32', '34', '36', '38', '40', '42',
+          'Red', 'Blue', 'Black', 'White', 'Green', 'Yellow', 'Grey', 'Navy'
+        ];
+        break;
+    }
 
     return Container(
       decoration: BoxDecoration(
@@ -1801,7 +1695,7 @@ class _AddProductModalState extends State<AddProductModal> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'Variants Matrix (साइज / कलर मैट्रिक्स)',
+                        matrixTitle,
                         style: GoogleFonts.outfit(
                           fontSize: 13,
                           fontWeight: FontWeight.w800,
@@ -1809,7 +1703,7 @@ class _AddProductModalState extends State<AddProductModal> {
                         ),
                       ),
                       Text(
-                        'Create multiple sizes or colors under this item',
+                        matrixSubtitle,
                         style: GoogleFonts.inter(fontSize: 10.5, color: const Color(0xFF64748B)),
                       ),
                     ],
@@ -1841,11 +1735,7 @@ class _AddProductModalState extends State<AddProductModal> {
                   Wrap(
                     spacing: 6,
                     runSpacing: 6,
-                    children: [
-                      ...garmentSizes.map((s) => _buildPresetChip(s)),
-                      ...numberSizes.map((s) => _buildPresetChip(s)),
-                      ...commonColors.map((c) => _buildPresetChip(c)),
-                    ],
+                    children: presets.map((s) => _buildPresetChip(s)).toList(),
                   ),
                   const SizedBox(height: 10),
                   Row(
@@ -1857,7 +1747,7 @@ class _AddProductModalState extends State<AddProductModal> {
                             controller: _customVariantCtrl,
                             style: GoogleFonts.inter(fontSize: 12),
                             decoration: InputDecoration(
-                              hintText: 'Custom variant (e.g. 500g, Red-XL)...',
+                              hintText: hintText,
                               hintStyle: GoogleFonts.inter(fontSize: 11, color: const Color(0xFF94A3B8)),
                               contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
                               border: OutlineInputBorder(

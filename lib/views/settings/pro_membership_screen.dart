@@ -68,28 +68,36 @@ class _ProMembershipScreenState extends State<ProMembershipScreen> {
 
   final List<Map<String, String>> _faqs = [
     {
-      'q': 'Will Kamai+ work when there is no internet at my counter?',
-      'a': 'Yes, 100%! Kamai+ is built on an offline-first local SQLite engine. You can create bills, print thermal receipts, scan barcodes, and record udhar without any internet. When connectivity returns, your data automatically syncs to cloud backup in the background.',
+      'q': 'KamaiPlus Free aur Pro plans me kya mukhya antar (difference) hai?',
+      'a': 'Free plan me aap basic counter billing kar sakte hain (maximum 3 simultaneous bills aur 7 dino ki transaction history). Pro plan me aapko milta hai: Unlimited Parallel Billing, Lifetime Sales History, Sales Return & Refund Restocking, Barcode Label Studio, Cloud Backup & Sync, aur Priority Merchant Support.',
     },
     {
-      'q': 'Which Bluetooth thermal printers are compatible?',
-      'a': 'Kamai+ supports all standard 58mm (2-inch) and 80mm (3-inch) ESC/POS Bluetooth printers, including Everycom, NGX, Pegasus, BluPrints, TVS, Rugtek, and generic thermal roll printers.',
+      'q': 'Simultaneous Multi-Bill counter billing ki Free plan me kya limit hai?',
+      'a': 'Free plan me aap ek samay par maximum 3 simultaneous/parallel bills hold kar sakte hain. 4th bill open karne ke liye Pro plan zaroori hai. Pro plan me aap unlimited parallel bills hold aur switch kar sakte hain bina kisi rukawat ke.',
     },
     {
-      'q': 'Can my shop cashiers bill from their own smartphones?',
-      'a': 'Yes! With the Pro Business plan, you can connect multiple staff smartphones to your shop profile. All transactions, inventory stock, and customer khata stay synchronized.',
+      'q': 'Free plan me Transaction History kitne din ki dikhti hai?',
+      'a': 'Free plan me aap strictly pichle 7 dino ki sales aur transaction history dekh sakte hain. Pro plan lene par aapko shuruwat se lekar aaj tak ki complete Lifetime sales history, advanced date search, aur CA/Excel exports milte hain.',
     },
     {
-      'q': 'How does the 7-day money-back guarantee work?',
-      'a': 'If you are not completely delighted with Kamai+ Pro within your first 7 days, tap support or email us for an instant 100% refund without any questions asked.',
+      'q': 'Kya Free user Sales Return ya Customer Refund kar sakta hai?',
+      'a': 'Nahi, Sales Return aur Partial Item Refund ka feature strictly Kamai+ Pro members ke liye locked hai. Pro plan me cashier security PIN ke sath item-wise return kar sakte hain jisse stock automatic inventory me wapas jud jata hai.',
     },
     {
-      'q': 'Can I claim GST input tax credit (ITC) on this plan?',
-      'a': 'Yes! We provide an official B2B Tax Invoice with 18% GST ITC breakdown registered with your store GSTIN so you can claim full tax deduction.',
+      'q': 'Kya Barcode Studio aur Custom Label Print Free plan me uplabdh hai?',
+      'a': 'Barcode Label Studio sirf Pro plan me uplabdh hai. Pro members apne sabhi products ke 50mm x 25mm barcode stickers design aur thermal printer se direct print kar sakte hain.',
+    },
+    {
+      'q': 'Kya internet na hone par bhi billing kaam karegi?',
+      'a': 'Haan! Dono Free aur Pro plans me bina internet ke 100% offline local SQLite billing aur thermal printing kaam karti hai. Pro users ka data internet aate hi automatically Cloud Backup me sync ho jata hai.',
+    },
+    {
+      'q': 'Kya Pro plan lene par mera purana data safe rahega?',
+      'a': 'Bilkul 100% safe! Upgrade karne par aapka pehle ka koi bhi data ya customer balance delete nahi hota, balki aapki 7-day history limit hat kar turant puri lifetime history unlock ho jati hai.',
     },
   ];
 
-  final List<bool> _faqExpanded = [true, false, false, false, false];
+  final List<bool> _faqExpanded = [true, false, false, false, false, false, false];
 
   @override
   void initState() {

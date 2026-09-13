@@ -2362,221 +2362,55 @@ class _PosCheckoutModalState extends State<PosCheckoutModal> {
                               ),
                             ),
                           ] else ...[
-                            // Multi-account switcher chips if more than 1 linked
-                            if (_upiAccounts.length > 1) ...[
-                              SingleChildScrollView(
-                                scrollDirection: Axis.horizontal,
-                                physics: const BouncingScrollPhysics(),
-                                child: Row(
-                                  children: _upiAccounts.map((acc) {
-                                    final isSel = acc.id == _selectedUpiAccountId;
-                                    return Padding(
-                                      padding: const EdgeInsets.only(right: 6, bottom: 10),
-                                      child: InkWell(
-                                        onTap: () {
-                                          HapticFeedback.selectionClick();
-                                          setState(() => _selectedUpiAccountId = acc.id);
-                                        },
-                                        borderRadius: BorderRadius.circular(8),
-                                        child: Container(
-                                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                                          decoration: BoxDecoration(
-                                            color: isSel ? const Color(0xFF10B981) : const Color(0xFF1E293B),
-                                            borderRadius: BorderRadius.circular(8),
-                                            border: Border.all(
-                                              color: isSel ? const Color(0xFF34D399) : const Color(0xFF334155),
-                                              width: isSel ? 1.4 : 1,
+                            // Pure Minimalist QR Code Canvas (Tap to Enlarge & More Options)
+                            Center(
+                              child: InkWell(
+                                onTap: () {
+                                  HapticFeedback.mediumImpact();
+                                  _showEnlargedUpiQrModal(context);
+                                },
+                                borderRadius: BorderRadius.circular(16),
+                                child: Container(
+                                  padding: const EdgeInsets.all(12),
+                                  decoration: BoxDecoration(
+                                    color: Colors.white,
+                                    borderRadius: BorderRadius.circular(16),
+                                    border: Border.all(color: const Color(0xFFCBD5E1), width: 1.2),
+                                    boxShadow: const [
+                                      BoxShadow(
+                                        color: Color(0x12000000),
+                                        blurRadius: 8,
+                                        offset: Offset(0, 3),
+                                      ),
+                                    ],
+                                  ),
+                                  child: Column(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      QrImageView(
+                                        data: 'upi://pay?pa=$_activeUpiVpa&pn=${Uri.encodeComponent(_activeStoreName)}&am=${(grandTotalPaise / 100.0).toStringAsFixed(2)}&cu=INR&tn=POS+Bill',
+                                        version: QrVersions.auto,
+                                        size: 155,
+                                      ),
+                                      const SizedBox(height: 6),
+                                      Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          const Icon(Icons.zoom_in_rounded, size: 14, color: Color(0xFF64748B)),
+                                          const SizedBox(width: 4),
+                                          Text(
+                                            'Tap to enlarge & more options',
+                                            style: GoogleFonts.inter(
+                                              fontSize: 10,
+                                              fontWeight: FontWeight.w600,
+                                              color: const Color(0xFF64748B),
                                             ),
                                           ),
-                                          child: Row(
-                                            mainAxisSize: MainAxisSize.min,
-                                            children: [
-                                              Icon(
-                                                Icons.account_balance_wallet_rounded,
-                                                size: 12,
-                                                color: isSel ? Colors.white : const Color(0xFF94A3B8),
-                                              ),
-                                              const SizedBox(width: 5),
-                                              Text(
-                                                acc.label,
-                                                style: GoogleFonts.inter(
-                                                  fontSize: 11,
-                                                  fontWeight: isSel ? FontWeight.w800 : FontWeight.w600,
-                                                  color: isSel ? Colors.white : const Color(0xFFCBD5E1),
-                                                ),
-                                              ),
-                                            ],
-                                          ),
-                                        ),
+                                        ],
                                       ),
-                                    );
-                                  }).toList(),
-                                ),
-                              ),
-                            ],
-
-                            // QR White Canvas Container
-                            Container(
-                              padding: const EdgeInsets.all(12),
-                              decoration: BoxDecoration(
-                                color: Colors.white,
-                                borderRadius: BorderRadius.circular(14),
-                                boxShadow: const [
-                                  BoxShadow(
-                                    color: Color(0x1A000000),
-                                    blurRadius: 10,
-                                    offset: Offset(0, 4),
-                                  ),
-                                ],
-                              ),
-                              child: Column(
-                                children: [
-                                  QrImageView(
-                                    data: 'upi://pay?pa=$_activeUpiVpa&pn=${Uri.encodeComponent(_activeStoreName)}&am=${(grandTotalPaise / 100.0).toStringAsFixed(2)}&cu=INR&tn=POS+Bill',
-                                    version: QrVersions.auto,
-                                    size: 150,
-                                  ),
-                                  const SizedBox(height: 6),
-                                  Text(
-                                    'Scan to Pay Exact ₹${(grandTotalPaise / 100.0).toStringAsFixed(2)}',
-                                    style: GoogleFonts.outfit(
-                                      fontSize: 13.5,
-                                      fontWeight: FontWeight.w800,
-                                      color: const Color(0xFF0F172A),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            const SizedBox(height: 10),
-
-                            // Copyable UPI ID Chip
-                            InkWell(
-                              onTap: () {
-                                Clipboard.setData(ClipboardData(text: _activeUpiVpa));
-                                HapticFeedback.selectionClick();
-                                InAppNotification.success('UPI ID copied: $_activeUpiVpa', context: context);
-                              },
-                              borderRadius: BorderRadius.circular(20),
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                                decoration: BoxDecoration(
-                                  color: const Color(0xFF1E293B),
-                                  borderRadius: BorderRadius.circular(20),
-                                  border: Border.all(color: const Color(0xFF334155)),
-                                ),
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    const Icon(Icons.copy_rounded, size: 12, color: Color(0xFF34D399)),
-                                    const SizedBox(width: 6),
-                                    Text(
-                                      'UPI: $_activeUpiVpa',
-                                      style: GoogleFonts.jetBrainsMono(
-                                        fontSize: 11,
-                                        fontWeight: FontWeight.w700,
-                                        color: const Color(0xFFE2E8F0),
-                                      ),
-                                    ),
-                                    const SizedBox(width: 6),
-                                    Text(
-                                      '• Tap to copy',
-                                      style: GoogleFonts.inter(
-                                        fontSize: 10,
-                                        color: const Color(0xFF94A3B8),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                            const SizedBox(height: 12),
-
-                            // Accepted UPI Apps Strip & Timer
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                Text(
-                                  'PhonePe • GPay • Paytm • BHIM',
-                                  style: GoogleFonts.inter(
-                                    fontSize: 10,
-                                    fontWeight: FontWeight.w600,
-                                    color: const Color(0xFF94A3B8),
+                                    ],
                                   ),
                                 ),
-                                Row(
-                                  children: [
-                                    const Icon(Icons.timer_outlined, size: 12, color: Color(0xFFFBBF24)),
-                                    const SizedBox(width: 4),
-                                    Text(
-                                      'Valid: 05:00',
-                                      style: GoogleFonts.robotoMono(
-                                        fontSize: 10,
-                                        fontWeight: FontWeight.w700,
-                                        color: const Color(0xFFFBBF24),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ],
-                            ),
-                          ],
-                          if (_currentCustomer != null && _currentCustomer!.phone.isNotEmpty) ...[
-                            const SizedBox(height: 12),
-                            InkWell(
-                              onTap: () async {
-                                final phone = _currentCustomer!.phone.replaceAll(RegExp(r'\D'), '');
-                                final cleanPhone = phone.length == 10 ? '91$phone' : phone;
-                                final amountRupees = (grandTotalPaise / 100.0).toStringAsFixed(2);
-                                final upiInfo = _activeUpiVpa.isNotEmpty ? '📌 UPI ID: $_activeUpiVpa\n' : '';
-                                final text = Uri.encodeComponent(
-                                  '🙏 Namaste ${_currentCustomer!.name} Ji!\n\n'
-                                  'Aapka $_activeStoreName Bill amount: ₹$amountRupees\n'
-                                  '$upiInfo\n'
-                                  'Counter par bill ready hai. Dhanyawad! ✨'
-                                );
-                                final url = Uri.parse('https://wa.me/$cleanPhone?text=$text');
-                                if (await canLaunchUrl(url)) {
-                                  await launchUrl(url, mode: LaunchMode.externalApplication);
-                                }
-                              },
-                              borderRadius: BorderRadius.circular(10),
-                              child: Container(
-                                width: double.infinity,
-                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
-                                decoration: BoxDecoration(
-                                  color: const Color(0xFF25D366).withValues(alpha: 0.15),
-                                  borderRadius: BorderRadius.circular(10),
-                                  border: Border.all(color: const Color(0xFF25D366), width: 1.2),
-                                ),
-                                child: Row(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    const Icon(Icons.send_rounded, size: 14, color: Color(0xFF25D366)),
-                                    const SizedBox(width: 6),
-                                    Flexible(
-                                      child: Text(
-                                        'Send Bill Summary to ${_currentCustomer!.name}',
-                                        style: GoogleFonts.plusJakartaSans(
-                                          fontSize: 11.5,
-                                          fontWeight: FontWeight.w700,
-                                          color: const Color(0xFF25D366),
-                                        ),
-                                        overflow: TextOverflow.ellipsis,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                          ] else ...[
-                            const SizedBox(height: 8),
-                            Text(
-                              '💡 Select customer above to send bill summary via WhatsApp',
-                              style: GoogleFonts.inter(
-                                fontSize: 10,
-                                fontStyle: FontStyle.italic,
-                                color: const Color(0xFF94A3B8),
                               ),
                             ),
                           ],
@@ -3386,6 +3220,278 @@ class _PosCheckoutModalState extends State<PosCheckoutModal> {
           ),
         ),
       ),
+    );
+  }
+
+  void _showEnlargedUpiQrModal(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (ctx, setModalState) {
+            return Container(
+              decoration: const BoxDecoration(
+                color: Color(0xFF0F172A),
+                borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+              ),
+              padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
+              child: SafeArea(
+                top: false,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // Handle
+                    Center(
+                      child: Container(
+                        width: 36,
+                        height: 4,
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF334155),
+                          borderRadius: BorderRadius.circular(2),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    // Header
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Row(
+                          children: [
+                            const Icon(Icons.qr_code_scanner_rounded, color: Color(0xFF34D399), size: 20),
+                            const SizedBox(width: 8),
+                            Text(
+                              'Dynamic Bill UPI QR',
+                              style: GoogleFonts.outfit(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w800,
+                                color: Colors.white,
+                              ),
+                            ),
+                          ],
+                        ),
+                        IconButton(
+                          onPressed: () => Navigator.pop(ctx),
+                          icon: const Icon(Icons.close_rounded, color: Color(0xFF94A3B8)),
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    // Multi-account switcher chips if > 1
+                    if (_upiAccounts.length > 1) ...[
+                      SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        physics: const BouncingScrollPhysics(),
+                        child: Row(
+                          children: _upiAccounts.map((acc) {
+                            final isSel = acc.id == _selectedUpiAccountId;
+                            return Padding(
+                              padding: const EdgeInsets.only(right: 6, bottom: 10),
+                              child: InkWell(
+                                onTap: () {
+                                  HapticFeedback.selectionClick();
+                                  setState(() => _selectedUpiAccountId = acc.id);
+                                  setModalState(() {});
+                                },
+                                borderRadius: BorderRadius.circular(8),
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                                  decoration: BoxDecoration(
+                                    color: isSel ? const Color(0xFF10B981) : const Color(0xFF1E293B),
+                                    borderRadius: BorderRadius.circular(8),
+                                    border: Border.all(
+                                      color: isSel ? const Color(0xFF34D399) : const Color(0xFF334155),
+                                      width: isSel ? 1.4 : 1,
+                                    ),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(
+                                        Icons.account_balance_wallet_rounded,
+                                        size: 12,
+                                        color: isSel ? Colors.white : const Color(0xFF94A3B8),
+                                      ),
+                                      const SizedBox(width: 5),
+                                      Text(
+                                        acc.label,
+                                        style: GoogleFonts.inter(
+                                          fontSize: 11,
+                                          fontWeight: isSel ? FontWeight.w800 : FontWeight.w600,
+                                          color: isSel ? Colors.white : const Color(0xFFCBD5E1),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            );
+                          }).toList(),
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                    ],
+                    // Large QR Canvas
+                    Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(20),
+                        boxShadow: const [
+                          BoxShadow(
+                            color: Color(0x33000000),
+                            blurRadius: 16,
+                            offset: Offset(0, 6),
+                          ),
+                        ],
+                      ),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          QrImageView(
+                            data: 'upi://pay?pa=$_activeUpiVpa&pn=${Uri.encodeComponent(_activeStoreName)}&am=${(grandTotalPaise / 100.0).toStringAsFixed(2)}&cu=INR&tn=POS+Bill',
+                            version: QrVersions.auto,
+                            size: 230,
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            'Scan to Pay Exact ₹${(grandTotalPaise / 100.0).toStringAsFixed(2)}',
+                            style: GoogleFonts.outfit(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w900,
+                              color: const Color(0xFF0F172A),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+                    // Copyable UPI ID Chip
+                    InkWell(
+                      onTap: () {
+                        Clipboard.setData(ClipboardData(text: _activeUpiVpa));
+                        HapticFeedback.selectionClick();
+                        InAppNotification.success('UPI ID copied: $_activeUpiVpa', context: context);
+                      },
+                      borderRadius: BorderRadius.circular(20),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF1E293B),
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(color: const Color(0xFF334155)),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(Icons.copy_rounded, size: 13, color: Color(0xFF34D399)),
+                            const SizedBox(width: 6),
+                            Text(
+                              'UPI: $_activeUpiVpa',
+                              style: GoogleFonts.jetBrainsMono(
+                                fontSize: 11.5,
+                                fontWeight: FontWeight.w700,
+                                color: const Color(0xFFE2E8F0),
+                              ),
+                            ),
+                            const SizedBox(width: 6),
+                            Text(
+                              '• Tap to copy',
+                              style: GoogleFonts.inter(fontSize: 10, color: const Color(0xFF94A3B8)),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    // Accepted UPI Apps & Timer
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          'PhonePe • GPay • Paytm • BHIM',
+                          style: GoogleFonts.inter(
+                            fontSize: 10.5,
+                            fontWeight: FontWeight.w600,
+                            color: const Color(0xFF94A3B8),
+                          ),
+                        ),
+                        Row(
+                          children: [
+                            const Icon(Icons.timer_outlined, size: 13, color: Color(0xFFFBBF24)),
+                            const SizedBox(width: 4),
+                            Text(
+                              'Valid: 05:00',
+                              style: GoogleFonts.robotoMono(
+                                fontSize: 10.5,
+                                fontWeight: FontWeight.w700,
+                                color: const Color(0xFFFBBF24),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                    if (_currentCustomer != null && _currentCustomer!.phone.isNotEmpty) ...[
+                      const SizedBox(height: 12),
+                      InkWell(
+                        onTap: () async {
+                          final phone = _currentCustomer!.phone.replaceAll(RegExp(r'\D'), '');
+                          final cleanPhone = phone.length == 10 ? '91$phone' : phone;
+                          final amountRupees = (grandTotalPaise / 100.0).toStringAsFixed(2);
+                          final upiInfo = _activeUpiVpa.isNotEmpty ? '📌 UPI ID: $_activeUpiVpa\n' : '';
+                          final text = Uri.encodeComponent(
+                            '🙏 Namaste ${_currentCustomer!.name} Ji!\n\n'
+                            'Aapka $_activeStoreName Bill amount: ₹$amountRupees\n'
+                            '$upiInfo\n'
+                            'Counter par bill ready hai. Dhanyawad! ✨'
+                          );
+                          final url = Uri.parse('https://wa.me/$cleanPhone?text=$text');
+                          if (await canLaunchUrl(url)) {
+                            await launchUrl(url, mode: LaunchMode.externalApplication);
+                          }
+                        },
+                        borderRadius: BorderRadius.circular(10),
+                        child: Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF25D366).withValues(alpha: 0.15),
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(color: const Color(0xFF25D366), width: 1.2),
+                          ),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              const Icon(Icons.send_rounded, size: 14, color: Color(0xFF25D366)),
+                              const SizedBox(width: 6),
+                              Flexible(
+                                child: Text(
+                                  'Send Bill Summary to ${_currentCustomer!.name}',
+                                  style: GoogleFonts.plusJakartaSans(
+                                    fontSize: 11.5,
+                                    fontWeight: FontWeight.w700,
+                                    color: const Color(0xFF25D366),
+                                  ),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
     );
   }
 }

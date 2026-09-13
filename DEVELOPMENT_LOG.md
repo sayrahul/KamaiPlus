@@ -47,6 +47,47 @@ drives `LocalDatabase` through a real (in-memory FFI) SQLite database and assert
 
 ---
 
+## 2026-09-13 — Vertical Variant Matrix, Minimalist POS UPI QR, Strict Pro Tier Locks & Swipeable Home Banner
+
+**User Request:**
+"ye qucik changes kardlo
+Product Add page me (Add New Apparel Item) Variant Matrix businerrr vertical ke accroding change hona chahiye
+so apne Apparel store type se Size and colour remove kar sate ho
+remove Fit Notes as well as Have Wholesale Bill Parcha
+aur billing page UPI QR selection ke baad (Dynamic Bill UPI QR) sirf qr code dikhna chahiye..
+vaha bahut jyada text hai remove kardo sab sir QR code rakho... uspar tap karne ke baad QR bada ho jayga aur baki ki options aayenge
+Pro and Free user ke according app sticktly lock rahega free user ko following cheejo me
+free user sirf 3 Bill simulatnous kar sakta hai,, 4th lock rahega..
+transection history sirf 7 day ki dikhni chahiye
+sale rertun fully sirf pro user ke liye hai.. lock it
+Kamai= member ke detail wale page main jaha FAQ hai.. waha dummy data nahi chahiye.. use actual data free vs Pro comparison..
+Home Screen wala Special Update swipe karne par hide ya disappaear hona chhaiye"
+
+**Root Cause & Implementation Details:**
+1. **Product Add Page Vertical Adaptations (`add_product_modal.dart`):**
+   - *Issue:* Redundant manual fields (`Size / Variant`, `Color`, `Fit Notes`) cluttered the product creation form and collided with the Variant Matrix.
+   - *Fix:* Removed individual `Size / Variant` and `Color` form fields and `Fit Notes` field completely. Removed the `Have a Wholesale Bill / Parcha?` suggestion banner.
+   - *Dynamic Matrix Presets:* Updated `_buildVariantMatrixSection()` to adapt based on `vert.id` (`clothing`, `grocery`, `pharmacy`, `hardware`, `restaurant`), supplying contextual presets (e.g. Garment Sizes/Colors vs Grocery Net Quantities/Multipacks vs Pharmacy Formulations/Strengths).
+2. **Minimalist POS Dynamic Bill UPI QR (`pos_checkout_modal.dart`):**
+   - *Issue:* UPI QR canvas was cluttered with text, timer counters, account switchers, and buttons.
+   - *Fix:* Reduced default UPI checkout view to strictly the clean white QR canvas with a tap hint: `"Tap QR to Enlarge & More Options"`.
+   - *Enlarged Modal (`_showEnlargedUpiQrModal`):* Tapping the QR opens an enlarged bottom sheet modal with full controls: multi-account UPI selector chips, 1-tap copyable UPI ID chip (`UPI: store@upi`), payable amount in rupees, and direct WhatsApp bill summary share.
+3. **Strict Free vs Pro Feature Locks:**
+   - *Simultaneous Billing (`pos_billing_screen.dart`):* In `_holdBillAndNew()`, free merchants are locked to max 3 concurrent/held draft bills (`if (!_isPro && _tabs.length >= 3)`). Attempting to open a 4th bill triggers `ProUpgradeModal.show(context)` and shows a locked badge `+ New Bill (Pro 🔒)` in the tab header.
+   - *Transaction History (`transactions_screen.dart`):* Free tier is strictly constrained to the last 7 days of sales. Long-range date filters (`Month`, `Pick Date 📅`) are visually locked with `🔒` and prompt Pro upgrade.
+   - *Sales Return Lock (`sale_detail_modal.dart` & `transactions_screen.dart`):* Partial sales returns and full void returns are exclusively unlocked for Pro users (`profile.isPro`). Free users tapping return are prompted to unlock Pro membership.
+4. **Authentic Free vs Pro FAQs (`pro_membership_screen.dart`):**
+   - Replaced dummy FAQs with 7 real, high-converting Free vs Pro plan comparison questions explaining simultaneous billing limits, 7-day history limit, sales return unlock, thermal barcode sticker studio, offline SQLite performance, and cloud data safety.
+5. **Swipeable Home Broadcast Banner (`home_pulse_tab.dart`):**
+   - Wrapped `_buildLiveBroadcastBanner()` in `Dismissible(direction: DismissDirection.horizontal)` with smooth haptic feedback; swiping left or right immediately dismisses/hides the banner for the session.
+
+**Verification:**
+- `flutter analyze --no-pub`: **0 issues found** across all modified files.
+- `flutter test test/vertical_product_leak_test.dart`: **All 6 tests passed (100%)**.
+- `test/partial_sales_return_test.dart`: **All tests passed (100%)**.
+
+---
+
 ## 2026-09-13 — Universal Release APK Rebuild & Installation on Second Device (OnePlus CPH2691)
 
 **User Request:**
