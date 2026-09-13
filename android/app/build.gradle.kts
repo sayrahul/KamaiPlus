@@ -20,7 +20,7 @@ val keystoreProperties = Properties().apply {
 
 android {
     namespace = "com.kamaiplus.pos"
-    compileSdk = flutter.compileSdkVersion
+    compileSdk = 36
     ndkVersion = flutter.ndkVersion
 
     compileOptions {
@@ -45,7 +45,7 @@ android {
     defaultConfig {
         applicationId = "com.kamaiplus.pos"
         minSdk = 24
-        targetSdk = 34
+        targetSdk = 36
         versionCode = flutter.versionCode
         versionName = flutter.versionName
         ndk {
