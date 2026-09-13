@@ -1721,3 +1721,20 @@ isolation. `flutter analyze` clean, full `flutter test` suite passes (28 tests t
 - ~~Clothing size-chart / fit-notes field...~~ **RESOLVED** by the 2026-09-11
   Phase 4 part 2 entry above — `ProductModel.fitNotes` free-text field, set in
   Add Product, shown to the cashier at billing.
+
+---
+
+## 2026-09-13 — Super Admin Console Enterprise Upgrade: Direct Push Sender (FCM), Inactive Merchant Radar, Vertical Analytics & Force Update Controller
+
+**Request / Objectives:**
+1. **Direct Push Notification Sender (FCM):** Compose, target (All, Pro, Free, Inactive merchants), deep-link (Home, Billing, Catalog, Pro Upgrade, External URL), live mobile shade preview, emoji quick-chips, and dual-mirroring to `admin_push_notifications` and `platform_settings/broadcast`.
+2. **Inactive Merchant Radar (Drop-off Detection):** Drop-off radar tracking stores with zero sales, 7-day dormant (slipping), and 30-day dormant (critical drop-off), complete with 1-click personalized WhatsApp re-engagement pre-filling context-aware Hinglish recovery messages.
+3. **Vertical Analytics Engine:** Interactive Donut Market Share Chart (`fl_chart`), vertical comparison cards (Kirana vs Kapda vs Pharmacy vs Hardware vs Restaurant), store counts, gross turnover in paise, active rates, Pro penetration %, and per-store drilldowns.
+4. **Force Update & App Version Controller:** Control minimum required version code, latest released version name & code, non-dismissible force update enforcement (`force_update: true`), and emergency maintenance downtime mode across all installed devices via Firestore `platform_settings/global_config`.
+5. **Mobile-Responsive Admin Shell Overhaul:** Upgraded `admin_shell.dart` to support both wide desktop screens (rich dark sidebar with category headers & badges) and narrow mobile screens (compact AppBar + 4-tab quick bottom bar + full enterprise navigation drawer + "More Modules" bottom sheet).
+6. **Mobile POS App Force-Update Hook:** Wired `FirestoreSyncService.instance.globalConfigNotifier` in `home_dashboard_screen.dart` to check `currentVersionCode (42201) < minVersionCode` and display a non-dismissible `PopScope(canPop: !forceUpdate)` dialog redirecting directly to Google Play Store.
+
+**Verification:**
+- `admin_console`: `flutter analyze` — 0 errors, 0 warnings.
+- Mobile App: `flutter analyze` — 0 errors, 0 warnings. All existing POS, Khata, and billing financial invariants preserved.
+

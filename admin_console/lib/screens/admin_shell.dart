@@ -5,6 +5,9 @@ import '../services/admin_auth_service.dart';
 import '../theme/admin_theme.dart';
 import 'dashboard_screen.dart';
 import 'merchants_screen.dart';
+import 'inactive_radar_screen.dart';
+import 'vertical_analytics_screen.dart';
+import 'push_notifications_screen.dart';
 import 'coupons_screen.dart';
 import 'broadcast_screen.dart';
 
@@ -12,21 +15,27 @@ class _NavItem {
   final IconData icon;
   final IconData selectedIcon;
   final String label;
+  final String? badge;
+  final String category;
   final Widget Function() build;
-  const _NavItem(this.icon, this.selectedIcon, this.label, this.build);
+
+  const _NavItem({
+    required this.icon,
+    required this.selectedIcon,
+    required this.label,
+    required this.build,
+    required this.category,
+    this.badge,
+  });
 }
 
-/// The admin console's whole navigation shell — responsive, not
-/// desktop-only: a fixed left sidebar above [_wideBreakpoint], a bottom
-/// [NavigationBar] + compact top app bar below it. An internal tool still
-/// gets opened from a phone often enough (checking a merchant while away
-/// from a desk) that a 232px-wide sidebar eating most of a narrow screen
-/// isn't acceptable — this mirrors the same wide/narrow split
-/// `dashboard_screen.dart`'s own `LayoutBuilder` already uses internally.
+/// The admin console's responsive navigation shell.
+/// Above 860px width: Fixed rich dark left sidebar.
+/// Below 860px width: Mobile App Bar + Quick Bottom Bar + Enterprise Navigation Drawer.
 class AdminShell extends StatefulWidget {
   const AdminShell({super.key});
 
-  static const double _wideBreakpoint = 760;
+  static const double _wideBreakpoint = 860;
 
   @override
   State<AdminShell> createState() => _AdminShellState();
@@ -34,38 +43,167 @@ class AdminShell extends StatefulWidget {
 
 class _AdminShellState extends State<AdminShell> {
   int _selected = 0;
+  final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
 
   late final List<_NavItem> _items = [
     _NavItem(
-      Icons.dashboard_outlined,
-      Icons.dashboard_rounded,
-      'Dashboard',
-      () => const DashboardScreen(),
+      icon: Icons.dashboard_outlined,
+      selectedIcon: Icons.dashboard_rounded,
+      label: 'Dashboard',
+      category: 'OPERATIONS',
+      build: () => const DashboardScreen(),
     ),
     _NavItem(
-      Icons.storefront_outlined,
-      Icons.storefront_rounded,
-      'Merchants',
-      () => const MerchantsScreen(),
+      icon: Icons.storefront_outlined,
+      selectedIcon: Icons.storefront_rounded,
+      label: 'Merchants',
+      category: 'OPERATIONS',
+      build: () => const MerchantsScreen(),
     ),
     _NavItem(
-      Icons.local_offer_outlined,
-      Icons.local_offer_rounded,
-      'Coupons',
-      () => const CouponsScreen(),
+      icon: Icons.radar_outlined,
+      selectedIcon: Icons.radar_rounded,
+      label: 'Inactive Radar',
+      category: 'OPERATIONS',
+      badge: 'DROPOFF',
+      build: () => const InactiveRadarScreen(),
     ),
     _NavItem(
-      Icons.campaign_outlined,
-      Icons.campaign_rounded,
-      'Broadcast',
-      () => const BroadcastScreen(),
+      icon: Icons.pie_chart_outline_rounded,
+      selectedIcon: Icons.pie_chart_rounded,
+      label: 'Vertical Analytics',
+      category: 'INTELLIGENCE',
+      badge: 'INSIGHTS',
+      build: () => const VerticalAnalyticsScreen(),
+    ),
+    _NavItem(
+      icon: Icons.notifications_active_outlined,
+      selectedIcon: Icons.notifications_active_rounded,
+      label: 'Push Alerts (FCM)',
+      category: 'ENGAGEMENT',
+      badge: 'DISPATCH',
+      build: () => const PushNotificationsScreen(),
+    ),
+    _NavItem(
+      icon: Icons.local_offer_outlined,
+      selectedIcon: Icons.local_offer_rounded,
+      label: 'Coupons',
+      category: 'ENGAGEMENT',
+      build: () => const CouponsScreen(),
+    ),
+    _NavItem(
+      icon: Icons.system_security_update_rounded,
+      selectedIcon: Icons.system_security_update_rounded,
+      label: 'Release & Control',
+      category: 'PLATFORM',
+      badge: 'v4.21',
+      build: () => const BroadcastScreen(),
     ),
   ];
 
+  void _showMoreBottomSheet() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: AdminColors.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                  child: Row(
+                    children: [
+                      Text('More Admin Modules', style: AdminTheme.heading(18)),
+                      const Spacer(),
+                      IconButton(
+                        onPressed: () => Navigator.pop(ctx),
+                        icon: const Icon(Icons.close_rounded, color: AdminColors.inkMuted),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Wrap(
+                  spacing: 12,
+                  runSpacing: 12,
+                  children: [
+                    for (int i = 3; i < _items.length; i++)
+                      InkWell(
+                        onTap: () {
+                          Navigator.pop(ctx);
+                          setState(() => _selected = i);
+                        },
+                        borderRadius: BorderRadius.circular(12),
+                        child: Container(
+                          width: (MediaQuery.of(context).size.width - 44) / 2,
+                          padding: const EdgeInsets.all(14),
+                          decoration: BoxDecoration(
+                            color: _selected == i ? AdminColors.accentSoft : AdminColors.surfaceSunken,
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(
+                              color: _selected == i ? AdminColors.accentBorder : AdminColors.border,
+                            ),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Icon(
+                                _items[i].selectedIcon,
+                                color: _selected == i ? AdminColors.accent : AdminColors.ink,
+                                size: 24,
+                              ),
+                              const SizedBox(height: 8),
+                              Text(
+                                _items[i].label,
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w700,
+                                  color: _selected == i ? AdminColors.accent : AdminColors.ink,
+                                ),
+                              ),
+                              if (_items[i].badge != null) ...[
+                                const SizedBox(height: 4),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: AdminColors.accent.withValues(alpha: 0.15),
+                                    borderRadius: BorderRadius.circular(4),
+                                  ),
+                                  child: Text(
+                                    _items[i].badge!,
+                                    style: const TextStyle(
+                                      fontSize: 9,
+                                      fontWeight: FontWeight.w800,
+                                      color: AdminColors.accent,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ],
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    final isWide =
-        MediaQuery.of(context).size.width >= AdminShell._wideBreakpoint;
+    final isWide = MediaQuery.of(context).size.width >= AdminShell._wideBreakpoint;
     final content = IndexedStack(
       index: _selected,
       children: [for (final item in _items) item.build()],
@@ -86,13 +224,21 @@ class _AdminShellState extends State<AdminShell> {
       );
     }
 
+    // Determine bottom nav selected index (0: Dashboard, 1: Merchants, 2: Inactive Radar, 3: More)
+    final bottomIndex = _selected <= 2 ? _selected : 3;
+
     return Scaffold(
+      key: _scaffoldKey,
       appBar: AppBar(
+        leading: IconButton(
+          icon: const Icon(Icons.menu_rounded, color: AdminColors.ink),
+          onPressed: () => _scaffoldKey.currentState?.openDrawer(),
+        ),
         title: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(
-              Icons.admin_panel_settings_rounded,
+            Icon(
+              _items[_selected].selectedIcon,
               color: AdminColors.accent,
               size: 20,
             ),
@@ -100,22 +246,50 @@ class _AdminShellState extends State<AdminShell> {
             Text(_items[_selected].label, style: AdminTheme.heading(16)),
           ],
         ),
-        actions: [_AccountMenu(compact: true)],
+        actions: const [_AccountMenu(compact: true)],
+      ),
+      drawer: _MobileDrawer(
+        items: _items,
+        selected: _selected,
+        onSelect: (i) {
+          Navigator.pop(context);
+          setState(() => _selected = i);
+        },
       ),
       body: content,
       bottomNavigationBar: NavigationBar(
-        selectedIndex: _selected,
-        onDestinationSelected: (i) => setState(() => _selected = i),
+        selectedIndex: bottomIndex,
+        onDestinationSelected: (i) {
+          if (i == 3) {
+            _showMoreBottomSheet();
+          } else {
+            setState(() => _selected = i);
+          }
+        },
         height: 64,
         backgroundColor: AdminColors.surface,
         indicatorColor: AdminColors.accentSoft,
-        destinations: [
-          for (final item in _items)
-            NavigationDestination(
-              icon: Icon(item.icon, color: AdminColors.inkMuted),
-              selectedIcon: Icon(item.selectedIcon, color: AdminColors.accent),
-              label: item.label,
-            ),
+        destinations: const [
+          NavigationDestination(
+            icon: Icon(Icons.dashboard_outlined, color: AdminColors.inkMuted),
+            selectedIcon: Icon(Icons.dashboard_rounded, color: AdminColors.accent),
+            label: 'Dashboard',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.storefront_outlined, color: AdminColors.inkMuted),
+            selectedIcon: Icon(Icons.storefront_rounded, color: AdminColors.accent),
+            label: 'Merchants',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.radar_outlined, color: AdminColors.inkMuted),
+            selectedIcon: Icon(Icons.radar_rounded, color: AdminColors.accent),
+            label: 'Radar',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.grid_view_outlined, color: AdminColors.inkMuted),
+            selectedIcon: Icon(Icons.grid_view_rounded, color: AdminColors.accent),
+            label: 'More',
+          ),
         ],
       ),
     );
@@ -136,50 +310,189 @@ class _DesktopSidebar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      width: 232,
+      width: 240,
       color: AdminColors.ink,
       child: SafeArea(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            const Padding(
-              padding: EdgeInsets.fromLTRB(20, 22, 20, 22),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 20, 20, 18),
               child: Row(
                 children: [
-                  Icon(
-                    Icons.admin_panel_settings_rounded,
-                    color: AdminColors.accent,
-                    size: 22,
+                  Container(
+                    padding: const EdgeInsets.all(7),
+                    decoration: BoxDecoration(
+                      color: AdminColors.accent.withValues(alpha: 0.18),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: const Icon(
+                      Icons.admin_panel_settings_rounded,
+                      color: AdminColors.accent,
+                      size: 20,
+                    ),
                   ),
-                  SizedBox(width: 8),
-                  Flexible(
-                    child: Text(
-                      'KamaiPlus Admin',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.w800,
-                        fontSize: 15,
-                      ),
-                      overflow: TextOverflow.ellipsis,
+                  const SizedBox(width: 10),
+                  const Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'KamaiPlus',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w900,
+                            fontSize: 16,
+                            letterSpacing: -0.2,
+                          ),
+                        ),
+                        Text(
+                          'Admin Console',
+                          style: TextStyle(
+                            color: Colors.white54,
+                            fontWeight: FontWeight.w500,
+                            fontSize: 11,
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 ],
               ),
             ),
-            for (int i = 0; i < items.length; i++)
-              _SidebarButton(
-                icon: selected == i ? items[i].selectedIcon : items[i].icon,
-                label: items[i].label,
-                selected: selected == i,
-                onTap: () => onSelect(i),
+            const Divider(color: Colors.white10, height: 1),
+            Expanded(
+              child: ListView(
+                padding: const EdgeInsets.symmetric(vertical: 10),
+                children: [
+                  for (int i = 0; i < items.length; i++) ...[
+                    if (i == 0 || items[i].category != items[i - 1].category) ...[
+                      Padding(
+                        padding: EdgeInsets.fromLTRB(22, i == 0 ? 6 : 18, 20, 6),
+                        child: Text(
+                          items[i].category,
+                          style: const TextStyle(
+                            color: Colors.white38,
+                            fontSize: 10,
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: 1.1,
+                          ),
+                        ),
+                      ),
+                    ],
+                    _SidebarButton(
+                      icon: selected == i ? items[i].selectedIcon : items[i].icon,
+                      label: items[i].label,
+                      badge: items[i].badge,
+                      selected: selected == i,
+                      onTap: () => onSelect(i),
+                    ),
+                  ],
+                ],
               ),
-            const Spacer(),
-            const Padding(
-              padding: EdgeInsets.symmetric(horizontal: 20),
-              child: Divider(color: Colors.white12, height: 1),
             ),
+            const Divider(color: Colors.white10, height: 1),
             const Padding(
-              padding: EdgeInsets.fromLTRB(20, 12, 20, 4),
+              padding: EdgeInsets.fromLTRB(20, 12, 20, 10),
+              child: _AccountMenu(compact: false),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _MobileDrawer extends StatelessWidget {
+  final List<_NavItem> items;
+  final int selected;
+  final ValueChanged<int> onSelect;
+
+  const _MobileDrawer({
+    required this.items,
+    required this.selected,
+    required this.onSelect,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Drawer(
+      backgroundColor: AdminColors.ink,
+      child: SafeArea(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 20, 20, 16),
+              child: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: AdminColors.accent.withValues(alpha: 0.18),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: const Icon(
+                      Icons.admin_panel_settings_rounded,
+                      color: AdminColors.accent,
+                      size: 22,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  const Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'KamaiPlus',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w900,
+                          fontSize: 16,
+                        ),
+                      ),
+                      Text(
+                        'Super Admin System',
+                        style: TextStyle(color: Colors.white54, fontSize: 11),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            const Divider(color: Colors.white10, height: 1),
+            Expanded(
+              child: ListView(
+                padding: const EdgeInsets.symmetric(vertical: 10),
+                children: [
+                  for (int i = 0; i < items.length; i++) ...[
+                    if (i == 0 || items[i].category != items[i - 1].category) ...[
+                      Padding(
+                        padding: EdgeInsets.fromLTRB(22, i == 0 ? 6 : 16, 20, 6),
+                        child: Text(
+                          items[i].category,
+                          style: const TextStyle(
+                            color: Colors.white38,
+                            fontSize: 10,
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: 1.1,
+                          ),
+                        ),
+                      ),
+                    ],
+                    _SidebarButton(
+                      icon: selected == i ? items[i].selectedIcon : items[i].icon,
+                      label: items[i].label,
+                      badge: items[i].badge,
+                      selected: selected == i,
+                      onTap: () => onSelect(i),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+            const Divider(color: Colors.white10, height: 1),
+            const Padding(
+              padding: EdgeInsets.fromLTRB(20, 12, 20, 12),
               child: _AccountMenu(compact: false),
             ),
           ],
@@ -192,6 +505,7 @@ class _DesktopSidebar extends StatelessWidget {
 class _SidebarButton extends StatelessWidget {
   final IconData icon;
   final String label;
+  final String? badge;
   final bool selected;
   final VoidCallback onTap;
 
@@ -200,6 +514,7 @@ class _SidebarButton extends StatelessWidget {
     required this.label,
     required this.selected,
     required this.onTap,
+    this.badge,
   });
 
   @override
@@ -211,10 +526,8 @@ class _SidebarButton extends StatelessWidget {
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 180),
           curve: Curves.easeOut,
-          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 13),
-          color: selected
-              ? Colors.white.withValues(alpha: 0.08)
-              : Colors.transparent,
+          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
+          color: selected ? Colors.white.withValues(alpha: 0.08) : Colors.transparent,
           child: Row(
             children: [
               AnimatedContainer(
@@ -244,6 +557,25 @@ class _SidebarButton extends StatelessWidget {
                   ),
                 ),
               ),
+              if (badge != null) ...[
+                const SizedBox(width: 6),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: selected ? AdminColors.accent : Colors.white12,
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: Text(
+                    badge!,
+                    style: TextStyle(
+                      fontSize: 9,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: 0.5,
+                      color: selected ? Colors.white : Colors.white70,
+                    ),
+                  ),
+                ),
+              ],
             ],
           ),
         ),

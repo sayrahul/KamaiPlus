@@ -177,6 +177,13 @@ service cloud.firestore {
     }
 
     // =========================================================================
+    // ADMIN PUSH NOTIFICATIONS & CAMPAIGN DISPATCH (Admin Console only)
+    // =========================================================================
+    match /admin_push_notifications/{notificationId} {
+      allow read, write: if isAdmin();
+    }
+
+    // =========================================================================
     // ADMIN ALLOW-LIST — existence alone grants admin power (see isAdmin()
     // above). Deliberately NEVER client-writable, by anyone, admin included —
     // the only way to add or remove an admin is direct Firebase Console/CLI

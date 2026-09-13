@@ -232,10 +232,17 @@ class AdminFirestoreService {
     return doc.data();
   }
 
-  Future<void> setBroadcast({required String message, required bool active, String? actionUrl}) async {
+  Future<void> setBroadcast({
+    required String message,
+    required bool active,
+    String? actionUrl,
+    String type = 'info',
+  }) async {
     await _db.collection('platform_settings').doc('broadcast').set({
       'message': message,
       'active': active,
+      'enabled': active, // Dual-key compatibility with mobile app
+      'type': type,
       'action_url': actionUrl,
       'updated_at': FieldValue.serverTimestamp(),
     }, SetOptions(merge: true));
@@ -244,6 +251,8 @@ class AdminFirestoreService {
   Future<void> clearBroadcast() async {
     await _db.collection('platform_settings').doc('broadcast').set({
       'active': false,
+      'enabled': false,
+      'updated_at': FieldValue.serverTimestamp(),
     }, SetOptions(merge: true));
   }
 
@@ -252,16 +261,125 @@ class AdminFirestoreService {
     return doc.data();
   }
 
-  /// Full replace (no merge) — this console is the sole writer of
-  /// `global_config` (the app only ever listens), and the admin screen is a
-  /// generic key/value editor showing the whole doc at once, so "remove a
-  /// row then save" must actually remove that key rather than leaving it
-  /// behind, which `SetOptions(merge: true)` would do. Stamps `updated_at`
-  /// the same way [setBroadcast] does, so the editor can show "last saved".
   Future<void> setGlobalConfig(Map<String, dynamic> data) async {
     await _db.collection('platform_settings').doc('global_config').set({
       ...data,
       'updated_at': FieldValue.serverTimestamp(),
     });
   }
+
+  // ---------------------------------------------------------------------
+  // Push Notifications (FCM / Campaign Dispatch)
+  // ---------------------------------------------------------------------
+
+  Stream<List<AdminPushNotification>> watchPushNotifications() {
+    return _db.collection('admin_push_notifications').snapshots().map((snap) {
+      final list = snap.docs.map((d) => AdminPushNotification.fromMap(d.id, d.data())).toList();
+      list.sort((a, b) => (b.sentAt ?? DateTime(2000)).compareTo(a.sentAt ?? DateTime(2000)));
+      return list;
+    });
+  }
+
+  Future<void> sendPushNotification(AdminPushNotification notification) async {
+    final docRef = _db.collection('admin_push_notifications').doc();
+    final data = notification.toMap()
+      ..['sent_at'] = FieldValue.serverTimestamp()
+      ..['id'] = docRef.id;
+    await docRef.set(data);
+
+    // Also mirror to platform_settings/broadcast so all active apps display banner immediately
+    await setBroadcast(
+      message: '${notification.title}: ${notification.body}',
+      active: true,
+      type: notification.targetAudience == 'pro' ? 'festive' : 'info',
+      actionUrl: notification.actionUrl,
+    );
+  }
+
+  // ---------------------------------------------------------------------
+  // App Version Control & Force Update
+  // ---------------------------------------------------------------------
+
+  Future<AdminAppVersionConfig> getAppVersionControl() async {
+    final doc = await _db.collection('platform_settings').doc('global_config').get();
+    if (!doc.exists || doc.data() == null) {
+      return const AdminAppVersionConfig(
+        minVersionCode: 42201,
+        latestVersionName: '4.21.0',
+        latestVersionCode: 42201,
+        forceUpdate: false,
+        maintenanceMode: false,
+        maintenanceMessage: 'KamaiPlus is undergoing planned server upgrades. We will be back online shortly.',
+        playStoreUrl: 'https://play.google.com/store/apps/details?id=com.kamaiplus.pos',
+      );
+    }
+    return AdminAppVersionConfig.fromMap(doc.data()!);
+  }
+
+  Future<void> setAppVersionControl(AdminAppVersionConfig config) async {
+    await _db.collection('platform_settings').doc('global_config').set({
+      ...config.toMap(),
+      'updated_at': FieldValue.serverTimestamp(),
+    }, SetOptions(merge: true));
+  }
+
+  // ---------------------------------------------------------------------
+  // Vertical Analytics Engine
+  // ---------------------------------------------------------------------
+
+  List<AdminVerticalStat> computeVerticalAnalytics(List<AdminBusiness> businesses) {
+    const verticalMeta = {
+      'grocery': {'label': 'Kirana & FMCG', 'emoji': '🛒'},
+      'clothing': {'label': 'Apparel & Footwear', 'emoji': '👗'},
+      'pharmacy': {'label': 'Pharmacy & Health', 'emoji': '💊'},
+      'hardware': {'label': 'Hardware & Electrical', 'emoji': '🔧'},
+      'restaurant': {'label': 'Cafe & Food Dine', 'emoji': '🍽️'},
+    };
+
+    final totalCount = businesses.length;
+    final groups = <String, List<AdminBusiness>>{};
+
+    for (final b in businesses) {
+      final key = b.businessType.toLowerCase().trim();
+      final resolvedKey = verticalMeta.containsKey(key) ? key : 'other';
+      groups.putIfAbsent(resolvedKey, () => []).add(b);
+    }
+
+    final stats = <AdminVerticalStat>[];
+    final now = DateTime.now();
+
+    for (final entry in verticalMeta.entries) {
+      final id = entry.key;
+      final label = entry.value['label']!;
+      final emoji = entry.value['emoji']!;
+      final bList = groups[id] ?? [];
+
+      final count = bList.length;
+      final percentage = totalCount > 0 ? (count / totalCount) * 100.0 : 0.0;
+      final revenuePaise = bList.fold<int>(0, (total, b) => total + b.totalRevenuePaise);
+      final avgPaise = count > 0 ? (revenuePaise / count).round() : 0;
+      final activeCount = bList.where((b) {
+        final last = b.lastSaleAt;
+        return last != null && now.difference(last).inDays <= 7;
+      }).length;
+      final proCount = bList.where((b) => b.isProEffective).length;
+
+      stats.add(AdminVerticalStat(
+        verticalId: id,
+        label: label,
+        iconEmoji: emoji,
+        storeCount: count,
+        percentage: percentage,
+        totalRevenuePaise: revenuePaise,
+        avgRevenuePaise: avgPaise,
+        activeStoresCount: activeCount,
+        proStoresCount: proCount,
+      ));
+    }
+
+    // Sort by revenue descending
+    stats.sort((a, b) => b.totalRevenuePaise.compareTo(a.totalRevenuePaise));
+    return stats;
+  }
 }
+

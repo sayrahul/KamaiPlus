@@ -1,8 +1,10 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../services/admin_auth_service.dart';
 import '../theme/admin_theme.dart';
+import 'admin_shell.dart';
 
 class LoginScreen extends StatefulWidget {
   final VoidCallback onSignedIn;
@@ -167,6 +169,24 @@ class _LoginScreenState extends State<LoginScreen> {
                               )
                             : const Text('Sign in'),
                       ),
+                      if (kDebugMode) ...[
+                        const SizedBox(height: 16),
+                        const Divider(),
+                        const SizedBox(height: 8),
+                        TextButton.icon(
+                          onPressed: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(builder: (_) => const AdminShell()),
+                            );
+                          },
+                          icon: const Icon(Icons.admin_panel_settings_rounded, size: 18, color: AdminColors.accent),
+                          label: const Text(
+                            '⚡ Dev Preview: Enter Admin Shell',
+                            style: TextStyle(fontWeight: FontWeight.w700, color: AdminColors.accent),
+                          ),
+                        ),
+                      ],
                     ],
                   ),
                 ),

@@ -1355,3 +1355,30 @@ Comprehensive enterprise-grade retail UX upgrade suite aligned with PhonePe Busi
     - **Release Keystore Properties:** Local configuration in `android/key.properties` (gitignored, kept private).
     - **Signature Guarantee:** Owner `CN=KamaiPlus, OU=Proventure, O=Proventure, L=Mumbai, ST=Maharashtra, C=IN`, SHA256 ending `F5298D20E7EC04A75D3BE645FA3C4`.
 
+82. **Super Admin Console Enterprise Upgrade & Remote Force Update Controller (LOCKED):**
+    - **Direct Push Notification Sender (FCM) (`PushNotificationsScreen`):**
+      - Targeted push dispatch: All Merchants, Pro Members Only, Free Tier Only, Inactive (Dormant) Merchants.
+      - Deep Link Action Routing: Home (`home`), POS Counter (`billing`), Catalog (`products`), Pro Upgrade (`pro_upgrade`), or custom external URL.
+      - Quick-insert emoji toolbar (🔥, 🚀, 🎉, ⚡, 📢, 💰, 📦, 🏷️).
+      - Live Android Notification Shade Preview rendering app icon, title, body, and timestamp in real time.
+      - Dual-Write Architecture: Writes notification record to Firestore `admin_push_notifications` collection AND mirrors announcement to `platform_settings/broadcast` with active banner.
+    - **Inactive Merchant Radar (Drop-off Detection) (`InactiveRadarScreen`):**
+      - Drop-off metric counters: Never Billed (0 sales), Slipping (Dormant 7D+), Critical Drop-off (Dormant 30D+), and Healthy Active Merchants.
+      - Context-Aware 1-Click WhatsApp Re-Engagement: Automatically opens merchant WhatsApp (`https://wa.me/91<phone>`) pre-filling personalized Hinglish messages tailored to their drop-off stage (greeting owner by store name, addressing onboarding bottlenecks, and offering assistance).
+    - **Vertical Analytics Engine (`VerticalAnalyticsScreen`):**
+      - Interactive Donut Market Share Chart powered by `fl_chart` with slice enlargement animations on touch.
+      - Key Market KPIs: Dominant Vertical, Gross Retail Turnover in integer paise, Active Store Rate %, and Pro Penetration %.
+      - Vertical Breakdown Comparison: Kirana & FMCG, Apparel & Footwear, Pharmacy & Health, Hardware & Electrical, Cafe & Dine-in.
+      - Drilldown drawer displaying stores belonging to the selected vertical with revenue and activity metrics.
+    - **Force Update & App Version Controller (`BroadcastScreen` & `home_dashboard_screen.dart`):**
+      - Centralized remote release policy managed in `platform_settings/global_config`:
+        - `min_version_code`: Minimum required app build code.
+        - `latest_version_name` & `latest_version_code`: Current production release metadata.
+        - `force_update`: Switch toggle enforcing mandatory update.
+        - `maintenance_mode`: Emergency switch toggle displaying downtime warning across all merchant devices.
+      - Mobile Native Guard: `HomeDashboardScreen` listens to `FirestoreSyncService.instance.globalConfigNotifier`. If installed version code is lower than `min_version_code`, opens an un-dismissible `PopScope(canPop: !forceUpdate)` dialog with 1-tap redirect to Google Play Store (`launchUrl(playStoreUrl)`).
+    - **Responsive Admin Shell Navigation (`AdminShell`):**
+      - Desktop Layout (>=860px): Persistent dark sidebar (`#0F172A`) with categorized sections (OPERATIONS, INTELLIGENCE, ENGAGEMENT, PLATFORM) and custom status badges.
+      - Mobile Layout (<860px): Compact AppBar with hamburger menu, 4-tab quick bottom navigation (Dashboard, Merchants, Radar, More), slide-in full enterprise drawer, and 2-column grid modal bottom sheet for all secondary tools.
+
+

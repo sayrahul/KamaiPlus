@@ -19,6 +19,7 @@ class AdminColors {
   static const amberSoft = Color(0xFFFEF3C7);
   static const red = Color(0xFFDC2626);
   static const redSoft = Color(0xFFFEE2E2);
+  static const redBorder = Color(0xFFFECACA);
   static const violet = Color(0xFF7C3AED);
   static const violetSoft = Color(0xFFF5F3FF);
 }

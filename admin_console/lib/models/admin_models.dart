@@ -69,6 +69,8 @@ class AdminBusiness {
   /// deploy needed. Reversible (toggle back to re-admit them), unlike a hard
   /// delete of the business doc, which would also destroy their sales/
   /// products/customers history.
+  final String? fcmToken;
+  final DateTime? createdAt;
   final bool isDisabled;
 
   const AdminBusiness({
@@ -90,6 +92,8 @@ class AdminBusiness {
     required this.lastSaleAt,
     required this.lastSyncedAt,
     this.couponCodeUsed,
+    this.fcmToken,
+    this.createdAt,
     this.isDisabled = false,
   });
 
@@ -118,12 +122,36 @@ class AdminBusiness {
       lastSaleAt: _asDate(m['last_sale_at']),
       lastSyncedAt: _asDate(m['last_synced_at']),
       couponCodeUsed: m['coupon_code_used'] as String?,
+      fcmToken: m['fcm_token'] as String?,
+      createdAt: _asDate(m['created_at'] ?? m['createdAt'] ?? m['registered_at']),
       isDisabled: _asBool(m['account_disabled']),
     );
   }
 
   bool get isProExpired => proExpiry != null && DateTime.now().isAfter(proExpiry!);
   bool get isProEffective => isPro && !isProExpired;
+
+  int get daysSinceLastActive {
+    final ref = lastSaleAt ?? createdAt;
+    if (ref == null) return 999;
+    return DateTime.now().difference(ref).inDays;
+  }
+
+  int? get daysSinceSignup {
+    if (createdAt == null) return null;
+    return DateTime.now().difference(createdAt!).inDays;
+  }
+
+  bool get isNeverBilled => totalSalesCount == 0;
+  bool get isDormant7Days => totalSalesCount > 0 && daysSinceLastActive >= 7;
+  bool get isDormant30Days => totalSalesCount > 0 && daysSinceLastActive >= 30;
+
+  String get inactivityCategory {
+    if (totalSalesCount == 0) return 'never_billed';
+    if (daysSinceLastActive >= 30) return 'dormant_30d';
+    if (daysSinceLastActive >= 7) return 'dormant_7d';
+    return 'active';
+  }
 }
 
 class AdminSale {
@@ -258,3 +286,133 @@ class AdminCoupon {
 
   bool get isExpired => validTill != null && DateTime.now().isAfter(validTill!);
 }
+
+class AdminPushNotification {
+  final String id;
+  final String title;
+  final String body;
+  final String targetAudience; // 'all', 'pro', 'free', 'inactive', 'single'
+  final String? targetBusinessId;
+  final String? actionRoute; // 'home', 'billing', 'products', 'pro_upgrade', 'whatsapp', 'external'
+  final String? actionUrl;
+  final DateTime? sentAt;
+  final String sentBy;
+  final int successCount;
+  final String status; // 'sent', 'scheduled', 'failed'
+
+  const AdminPushNotification({
+    required this.id,
+    required this.title,
+    required this.body,
+    required this.targetAudience,
+    this.targetBusinessId,
+    this.actionRoute,
+    this.actionUrl,
+    this.sentAt,
+    this.sentBy = 'admin',
+    this.successCount = 0,
+    this.status = 'sent',
+  });
+
+  factory AdminPushNotification.fromMap(String id, Map<String, dynamic> m) {
+    return AdminPushNotification(
+      id: id,
+      title: _asString(m['title']),
+      body: _asString(m['body']),
+      targetAudience: _asString(m['target_audience'], 'all'),
+      targetBusinessId: m['target_business_id'] as String?,
+      actionRoute: m['action_route'] as String?,
+      actionUrl: m['action_url'] as String?,
+      sentAt: _asDate(m['sent_at']),
+      sentBy: _asString(m['sent_by'], 'admin'),
+      successCount: _asInt(m['success_count']),
+      status: _asString(m['status'], 'sent'),
+    );
+  }
+
+  Map<String, dynamic> toMap() => {
+        'title': title,
+        'body': body,
+        'target_audience': targetAudience,
+        if (targetBusinessId != null) 'target_business_id': targetBusinessId,
+        if (actionRoute != null) 'action_route': actionRoute,
+        if (actionUrl != null) 'action_url': actionUrl,
+        'sent_at': sentAt?.toIso8601String(),
+        'sent_by': sentBy,
+        'success_count': successCount,
+        'status': status,
+      };
+}
+
+class AdminVerticalStat {
+  final String verticalId;
+  final String label;
+  final String iconEmoji;
+  final int storeCount;
+  final double percentage;
+  final int totalRevenuePaise;
+  final int avgRevenuePaise;
+  final int activeStoresCount;
+  final int proStoresCount;
+
+  const AdminVerticalStat({
+    required this.verticalId,
+    required this.label,
+    required this.iconEmoji,
+    required this.storeCount,
+    required this.percentage,
+    required this.totalRevenuePaise,
+    required this.avgRevenuePaise,
+    required this.activeStoresCount,
+    required this.proStoresCount,
+  });
+
+  double get proPenetrationPercent => storeCount > 0 ? (proStoresCount / storeCount) * 100.0 : 0.0;
+  double get activeRatePercent => storeCount > 0 ? (activeStoresCount / storeCount) * 100.0 : 0.0;
+}
+
+class AdminAppVersionConfig {
+  final int minVersionCode;
+  final String latestVersionName;
+  final int latestVersionCode;
+  final bool forceUpdate;
+  final bool maintenanceMode;
+  final String maintenanceMessage;
+  final String playStoreUrl;
+  final DateTime? updatedAt;
+
+  const AdminAppVersionConfig({
+    required this.minVersionCode,
+    required this.latestVersionName,
+    required this.latestVersionCode,
+    required this.forceUpdate,
+    required this.maintenanceMode,
+    required this.maintenanceMessage,
+    required this.playStoreUrl,
+    this.updatedAt,
+  });
+
+  factory AdminAppVersionConfig.fromMap(Map<String, dynamic> m) {
+    return AdminAppVersionConfig(
+      minVersionCode: _asInt(m['min_version_code'], 42201),
+      latestVersionName: _asString(m['latest_version_name'], '4.21.0'),
+      latestVersionCode: _asInt(m['latest_version_code'], 42201),
+      forceUpdate: _asBool(m['force_update']),
+      maintenanceMode: _asBool(m['maintenance_mode']),
+      maintenanceMessage: _asString(m['maintenance_message'], 'KamaiPlus is undergoing planned server upgrades. We will be back online shortly.'),
+      playStoreUrl: _asString(m['play_store_url'], 'https://play.google.com/store/apps/details?id=com.kamaiplus.pos'),
+      updatedAt: _asDate(m['updated_at']),
+    );
+  }
+
+  Map<String, dynamic> toMap() => {
+        'min_version_code': minVersionCode,
+        'latest_version_name': latestVersionName,
+        'latest_version_code': latestVersionCode,
+        'force_update': forceUpdate,
+        'maintenance_mode': maintenanceMode,
+        'maintenance_message': maintenanceMessage,
+        'play_store_url': playStoreUrl,
+      };
+}
+
