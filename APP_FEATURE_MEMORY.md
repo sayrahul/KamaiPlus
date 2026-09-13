@@ -1347,3 +1347,10 @@ Comprehensive enterprise-grade retail UX upgrade suite aligned with PhonePe Busi
     - **Swipeable Home Broadcast Banner (`HomePulseTab`):**
       - Special Update live broadcast banner wrapped in `Dismissible(direction: DismissDirection.horizontal)` with smooth haptic feedback; swiping left or right immediately dismisses/hides the banner for the session.
 
+81. **Google Play Store Release v4.21.0 (Version Code 42100) (LOCKED):**
+    - **Version Specification:** `v4.21.0` with `versionCode: 42100` (incremented monotonically from previous release `4.20.0+42001`).
+    - **Official Release Keystore:** `android/app/kamai-release-key.jks`, alias `kamaiplus`.
+    - **Production Bundle Artifact:** `build/app/outputs/bundle/release/app-release.aab`.
+    - **Release Keystore Properties:** Local configuration in `android/key.properties` (gitignored, kept private).
+    - **Signature Guarantee:** Owner `CN=KamaiPlus, OU=Proventure, O=Proventure, L=Mumbai, ST=Maharashtra, C=IN`, SHA256 ending `F5298D20E7EC04A75D3BE645FA3C4`.
+

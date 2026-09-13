@@ -47,6 +47,30 @@ drives `LocalDatabase` through a real (in-memory FFI) SQLite database and assert
 
 ---
 
+## 2026-09-13 — Version 4.21.0 (Code 42100) Google Play Production App Bundle (.aab) Build & Official Signing
+
+**User Request:**
+"chalo playstore me update karte hai app.. give me systematic procersss and create bundle accordingly..."
+
+**Release Details & Signing Specifications:**
+- **App Version:** `4.21.0` (incremented from `4.20.0`)
+- **Version Code:** `42100` (incremented from `42001`, meeting Google Play's monotonic version code requirement)
+- **Output Artifact:** `build/app/outputs/bundle/release/app-release.aab` (95.2 MB)
+- **Keystore File:** `android/app/kamai-release-key.jks`
+- **Key Alias:** `kamaiplus`
+- **Signing Verification:** Verified via `keytool -printcert -jarfile`:
+  - Owner/Issuer: `CN=KamaiPlus, OU=Proventure, O=Proventure, L=Mumbai, ST=Maharashtra, C=IN`
+  - SHA-256 Fingerprint: `33:D4:F8:39:75:99:D9:D6:78:49:A0:AE:8B:67:EE:ED:9F:EF:52:98:D2:0E:7E:C0:4A:75:D3:BE:64:5F:A3:C4`
+  - Status: 100% production-signed with official Google Play key.
+
+**Files Updated:**
+- `pubspec.yaml`: bumped `version: 4.21.0+42100`
+- `lib/views/splash/splash_screen.dart`: updated version text to `'v4.21.0 • Pro Enterprise Edition'`
+- `lib/views/menu/menu_screen.dart`: updated version text to `'v4.21.0'`
+- `android/key.properties`: configured local release keystore credentials (gitignored, kept secure).
+
+---
+
 ## 2026-09-13 — Universal Release APK Rebuild & Installation on Redmi 6 (de7ea8af7d29)
 
 **User Request:**
