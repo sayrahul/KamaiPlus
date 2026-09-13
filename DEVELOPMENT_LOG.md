@@ -47,6 +47,35 @@ drives `LocalDatabase` through a real (in-memory FFI) SQLite database and assert
 
 ---
 
+## 2026-09-13 — Admin Console Complete Dark SaaS UI Overhaul, Device Push Notification Trigger, and Live Multi-Domain Deployment
+
+**User Request:**
+"ok setup kardo.. aur ui pura change kardo admin panel ka jaise pehle bola tha"
+"push and make it live"
+
+**Changes & Implementations:**
+1. **Device Heads-Up Push Notification Pipeline:**
+   - In `lib/services/firestore_sync_service.dart`: Added direct live listener trigger in `_broadcastSub` calling `NotificationService.instance.showLocalNotification(title: title, body: newMsg)`. Whenever an announcement or system alert is pushed from the admin console, all merchant devices immediately ring, vibrate, and drop down a high-priority system status-bar notification.
+   - In `admin_console/lib/services/admin_firestore_service.dart`: Updated `sendPushNotification()` and `setBroadcast()` to write both title and message.
+2. **Admin Console Enterprise Dark UI Overhaul:**
+   - In `admin_console/lib/theme/admin_theme.dart`: Upgraded to Enterprise Obsidian tokens (`bgDark: #090D16`, `bgSidebar: #0D1322`, `bgCard: #141D30`, `bgElevated: #1B263E`, `accent: #10B981`, `borderDark: #222F4C`), Google Fonts typography (`Plus Jakarta Sans` & `Inter`), and dark card/table themes.
+   - In `admin_console/lib/screens/admin_shell.dart`: Upgraded sidebar, mobile drawer, app bar, and module bottom sheet to dark theme tokens with high-contrast text and emerald accents.
+   - In `admin_console/lib/screens/login_screen.dart`: Split-screen mission control portal with ambient gradient orbs, feature highlights, and frosted auth card.
+   - In `admin_console/lib/screens/push_notifications_screen.dart`: Interactive 3D smartphone simulator with real-time status-bar preview and FCM dispatch controls.
+   - In `admin_console/lib/screens/inactive_radar_screen.dart`: Dark SaaS Drop-off radar with WhatsApp 1-click re-engagement CTA.
+   - In `admin_console/web/index.html` & `build/web/index.html`: Added automatic service-worker unregister and cache-bust script to ensure browsers instantly fetch fresh assets without caching stale builds.
+3. **Verification & Build:**
+   - `flutter analyze` in `admin_console` $\rightarrow$ 0 errors.
+   - `flutter analyze` in mobile app root $\rightarrow$ 0 errors.
+   - Built release bundle: `flutter build web --release` $\rightarrow$ `√ Built build\web`.
+4. **Live Deployment:**
+   - Deployed live via `firebase deploy --only hosting --project kamaiplus`.
+   - Active on both:
+     - `https://kamaiplus.web.app`
+     - `https://kamaiplus-admin.web.app`
+
+---
+
 ## 2026-09-13 — Version 4.21.0 (Code 42201, Target SDK 36) Google Play Production App Bundle (.aab) Build & Official Signing
 
 **User Request:**

@@ -8,6 +8,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../models/models.dart';
 import '../core/database/local_database.dart';
 import '../core/constants/business_vertical_config.dart';
+import 'notification_service.dart';
 
 enum SyncState { synced, syncing, offline, error }
 
@@ -434,7 +435,17 @@ class FirestoreSyncService {
         final isExpired = expiresAt != null && DateTime.now().isAfter(expiresAt);
 
         if (enabled && !isExpired && (data['message']?.toString().isNotEmpty ?? false)) {
+          final previousMsg = broadcastNotifier.value?['message']?.toString();
+          final newMsg = data['message']?.toString();
           broadcastNotifier.value = data;
+          if (newMsg != null && newMsg != previousMsg) {
+            final title = data['title']?.toString() ?? '📢 KamaiPlus Announcement';
+            NotificationService.instance.showLocalNotification(
+              id: DateTime.now().millisecondsSinceEpoch ~/ 1000,
+              title: title,
+              body: newMsg,
+            );
+          }
         } else {
           broadcastNotifier.value = null;
         }

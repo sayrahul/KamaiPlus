@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 
 import '../models/admin_models.dart';
@@ -244,11 +245,11 @@ class _PushNotificationsScreenState extends State<PushNotificationsScreen> {
     return Container(
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
-        color: AdminColors.surface,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AdminColors.border),
-        boxShadow: const [
-          BoxShadow(color: Color(0x08000000), blurRadius: 8, offset: Offset(0, 2)),
+        color: AdminColors.bgCard,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: AdminColors.borderDark, width: 1.2),
+        boxShadow: [
+          BoxShadow(color: Colors.black.withValues(alpha: 0.25), blurRadius: 18, offset: const Offset(0, 6)),
         ],
       ),
       child: Column(
@@ -256,31 +257,41 @@ class _PushNotificationsScreenState extends State<PushNotificationsScreen> {
         children: [
           Row(
             children: [
-              const Icon(Icons.edit_note_rounded, size: 20, color: AdminColors.accent),
-              const SizedBox(width: 8),
+              Container(
+                padding: const EdgeInsets.all(6),
+                decoration: BoxDecoration(
+                  color: AdminColors.accent.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Icon(Icons.edit_note_rounded, size: 20, color: AdminColors.accent),
+              ),
+              const SizedBox(width: 10),
               Text('Compose Message', style: AdminTheme.heading(16)),
             ],
           ),
           const SizedBox(height: 18),
 
           // Title with Emoji shortcuts
-          const Text('Notification Title', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
-          const SizedBox(height: 6),
+          const Text('Notification Title', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13, color: AdminColors.textWhite)),
+          const SizedBox(height: 8),
           TextField(
             controller: _titleCtrl,
+            style: const TextStyle(color: AdminColors.textWhite, fontSize: 14),
             onChanged: (_) => setState(() {}),
             decoration: InputDecoration(
               hintText: 'e.g. ⚡ Special Update: Variant Matrix is Live!',
-              border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-              contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+              fillColor: AdminColors.bgSidebar,
+              border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: AdminColors.borderDark)),
             ),
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 10),
           Wrap(
             spacing: 6,
             children: [
               for (final emoji in ['⚡', '🎉', '🔥', '📢', '💰', '👗', '🛒', '👑'])
                 ActionChip(
+                  backgroundColor: AdminColors.bgElevated,
+                  side: const BorderSide(color: AdminColors.borderDark),
                   label: Text(emoji, style: const TextStyle(fontSize: 14)),
                   padding: EdgeInsets.zero,
                   materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
@@ -291,22 +302,23 @@ class _PushNotificationsScreenState extends State<PushNotificationsScreen> {
           const SizedBox(height: 18),
 
           // Body
-          const Text('Message Body', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
-          const SizedBox(height: 6),
+          const Text('Message Body', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13, color: AdminColors.textWhite)),
+          const SizedBox(height: 8),
           TextField(
             controller: _bodyCtrl,
             maxLines: 3,
+            style: const TextStyle(color: AdminColors.textWhite, fontSize: 14),
             onChanged: (_) => setState(() {}),
             decoration: InputDecoration(
               hintText: 'e.g. Now easily manage sizes and colors in your clothing store without creating duplicate products.',
-              border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-              contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+              fillColor: AdminColors.bgSidebar,
+              border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: AdminColors.borderDark)),
             ),
           ),
           const SizedBox(height: 18),
 
           // Target Audience
-          const Text('Target Audience', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+          const Text('Target Audience', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13, color: AdminColors.textWhite)),
           const SizedBox(height: 8),
           Wrap(
             spacing: 8,
@@ -321,13 +333,15 @@ class _PushNotificationsScreenState extends State<PushNotificationsScreen> {
           const SizedBox(height: 18),
 
           // Action Route
-          const Text('Action Destination (On Tap)', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
-          const SizedBox(height: 6),
+          const Text('Action Destination (On Tap)', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13, color: AdminColors.textWhite)),
+          const SizedBox(height: 8),
           DropdownButtonFormField<String>(
             initialValue: _actionRoute,
+            dropdownColor: AdminColors.bgSidebar,
+            style: const TextStyle(color: AdminColors.textWhite, fontSize: 14),
             decoration: InputDecoration(
-              border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-              contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+              fillColor: AdminColors.bgSidebar,
+              border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: AdminColors.borderDark)),
             ),
             items: const [
               DropdownMenuItem(value: 'home', child: Text('Open App Dashboard (Home)')),
@@ -342,11 +356,12 @@ class _PushNotificationsScreenState extends State<PushNotificationsScreen> {
             const SizedBox(height: 12),
             TextField(
               controller: _urlCtrl,
+              style: const TextStyle(color: AdminColors.textWhite, fontSize: 14),
               decoration: InputDecoration(
                 labelText: 'External URL (https://…)',
                 hintText: 'https://kamaiplus.com/offer',
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                fillColor: AdminColors.bgSidebar,
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: AdminColors.borderDark)),
               ),
               keyboardType: TextInputType.url,
             ),
@@ -356,7 +371,7 @@ class _PushNotificationsScreenState extends State<PushNotificationsScreen> {
           // Dispatch CTA
           SizedBox(
             width: double.infinity,
-            height: 46,
+            height: 48,
             child: ElevatedButton.icon(
               onPressed: _sending ? null : _handleSend,
               icon: _sending
@@ -366,7 +381,7 @@ class _PushNotificationsScreenState extends State<PushNotificationsScreen> {
               style: ElevatedButton.styleFrom(
                 backgroundColor: AdminColors.accent,
                 foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                 elevation: 0,
               ),
             ),
@@ -379,19 +394,21 @@ class _PushNotificationsScreenState extends State<PushNotificationsScreen> {
   Widget _buildAudienceChip(String key, String label, IconData icon) {
     final isSelected = _targetAudience == key;
     return ChoiceChip(
+      backgroundColor: AdminColors.bgElevated,
+      selectedColor: AdminColors.accent,
+      side: BorderSide(color: isSelected ? AdminColors.accentBorder : AdminColors.borderDark),
       label: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 15, color: isSelected ? Colors.white : AdminColors.inkMuted),
+          Icon(icon, size: 15, color: isSelected ? Colors.white : AdminColors.textMuted),
           const SizedBox(width: 6),
           Text(label),
         ],
       ),
       selected: isSelected,
-      selectedColor: AdminColors.accent,
       labelStyle: TextStyle(
-        color: isSelected ? Colors.white : AdminColors.ink,
-        fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
+        color: isSelected ? Colors.white : AdminColors.textMuted,
+        fontWeight: isSelected ? FontWeight.w700 : FontWeight.normal,
         fontSize: 12,
       ),
       onSelected: (_) => setState(() => _targetAudience = key),
@@ -402,134 +419,275 @@ class _PushNotificationsScreenState extends State<PushNotificationsScreen> {
     final title = _titleCtrl.text.trim().isNotEmpty ? _titleCtrl.text.trim() : 'KamaiPlus POS Update';
     final body = _bodyCtrl.text.trim().isNotEmpty
         ? _bodyCtrl.text.trim()
-        : 'Your notification preview will appear here in real-time as you type.';
+        : 'Your live alert message will render inside the Android status-bar notification drawer in real time.';
 
     return Container(
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
-        color: AdminColors.surface,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AdminColors.border),
+        color: AdminColors.bgCard,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: AdminColors.borderDark, width: 1.2),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.3),
+            blurRadius: 20,
+            offset: const Offset(0, 8),
+          ),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              const Icon(Icons.phone_android_rounded, size: 18, color: AdminColors.accent),
-              const SizedBox(width: 8),
-              Text('Live Mobile Phone Preview', style: AdminTheme.heading(15)),
+              Container(
+                padding: const EdgeInsets.all(6),
+                decoration: BoxDecoration(
+                  color: AdminColors.accent.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Icon(Icons.phone_android_rounded, size: 18, color: AdminColors.accent),
+              ),
+              const SizedBox(width: 10),
+              Text('Live Android Device Preview', style: AdminTheme.heading(15)),
             ],
           ),
-          const SizedBox(height: 6),
+          const SizedBox(height: 4),
           const Text(
-            'Exact mock-up of how cashiers will see this on their device status bar.',
-            style: TextStyle(color: AdminColors.inkMuted, fontSize: 12),
+            'Exact interactive simulator of the heads-up notification drawer.',
+            style: TextStyle(color: AdminColors.textFaint, fontSize: 12),
           ),
           const SizedBox(height: 20),
 
-          // Android Notification Shade Mockup
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: const Color(0xFF1E293B), // Dark Android shade
-              borderRadius: BorderRadius.circular(14),
-              boxShadow: const [
-                BoxShadow(color: Color(0x22000000), blurRadius: 10, offset: Offset(0, 4)),
-              ],
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Top App Header
-                Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(4),
-                      decoration: BoxDecoration(
-                        color: AdminColors.accent,
-                        borderRadius: BorderRadius.circular(6),
-                      ),
-                      child: const Icon(Icons.point_of_sale_rounded, color: Colors.white, size: 14),
-                    ),
-                    const SizedBox(width: 8),
-                    const Text(
-                      'KamaiPlus POS',
-                      style: TextStyle(color: Color(0xFF94A3B8), fontSize: 11, fontWeight: FontWeight.w600),
-                    ),
-                    const Text(
-                      ' • now',
-                      style: TextStyle(color: Color(0xFF64748B), fontSize: 11),
-                    ),
-                    const Spacer(),
-                    const Icon(Icons.expand_more_rounded, color: Color(0xFF94A3B8), size: 16),
-                  ],
-                ),
-                const SizedBox(height: 10),
-
-                // Notification Content
-                Text(
-                  title,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w700,
-                    fontSize: 14,
-                    height: 1.3,
+          // High-Fidelity Realistic Android Phone Frame
+          Center(
+            child: Container(
+              width: 310,
+              decoration: BoxDecoration(
+                color: const Color(0xFF0F172A),
+                borderRadius: BorderRadius.circular(38),
+                border: Border.all(color: const Color(0xFF334155), width: 7),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.6),
+                    blurRadius: 30,
+                    offset: const Offset(0, 14),
                   ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  body,
-                  style: const TextStyle(
-                    color: Color(0xFFCBD5E1),
-                    fontSize: 12,
-                    height: 1.4,
+                ],
+              ),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(30),
+                child: Container(
+                  padding: const EdgeInsets.fromLTRB(14, 10, 14, 16),
+                  decoration: const BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: [
+                        Color(0xFF0B1120),
+                        Color(0xFF020617),
+                      ],
+                    ),
                   ),
-                ),
-                const SizedBox(height: 14),
-
-                // Action Bar
-                Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF334155),
-                        borderRadius: BorderRadius.circular(6),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      // Punch Hole Camera & Speaker
+                      Center(
+                        child: Container(
+                          width: 60,
+                          height: 12,
+                          decoration: BoxDecoration(
+                            color: Colors.black,
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: Center(
+                            child: Container(
+                              width: 6,
+                              height: 6,
+                              decoration: const BoxDecoration(
+                                color: Color(0xFF1E293B),
+                                shape: BoxShape.circle,
+                              ),
+                            ),
+                          ),
+                        ),
                       ),
-                      child: Row(
+                      const SizedBox(height: 8),
+
+                      // Android Status Bar
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
                           Text(
-                            _actionRoute == 'pro_upgrade'
-                                ? 'UPGRADE TO PRO 👑'
-                                : _actionRoute == 'billing'
-                                    ? 'OPEN POS 🧾'
-                                    : 'OPEN APP ➔',
-                            style: const TextStyle(color: AdminColors.accentSoft, fontSize: 11, fontWeight: FontWeight.bold),
+                            DateFormat('hh:mm').format(DateTime.now()),
+                            style: GoogleFonts.inter(
+                              color: Colors.white,
+                              fontSize: 11,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                          Row(
+                            children: const [
+                              Icon(Icons.wifi_rounded, size: 13, color: Colors.white70),
+                              SizedBox(width: 4),
+                              Icon(Icons.signal_cellular_4_bar_rounded, size: 13, color: Colors.white70),
+                              SizedBox(width: 4),
+                              Icon(Icons.battery_5_bar_rounded, size: 14, color: AdminColors.accent),
+                            ],
                           ),
                         ],
                       ),
-                    ),
-                  ],
+                      const SizedBox(height: 16),
+
+                      // Heads-Up Drop Notification Drawer Card
+                      Container(
+                        padding: const EdgeInsets.all(14),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF1E293B).withValues(alpha: 0.95),
+                          borderRadius: BorderRadius.circular(18),
+                          border: Border.all(
+                            color: AdminColors.accent.withValues(alpha: 0.35),
+                            width: 1.2,
+                          ),
+                          boxShadow: [
+                            BoxShadow(
+                              color: AdminColors.accent.withValues(alpha: 0.12),
+                              blurRadius: 16,
+                              offset: const Offset(0, 4),
+                            ),
+                          ],
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            // App Brand Header
+                            Row(
+                              children: [
+                                Container(
+                                  padding: const EdgeInsets.all(5),
+                                  decoration: BoxDecoration(
+                                    gradient: const LinearGradient(
+                                      colors: [AdminColors.accent, AdminColors.accentGlow],
+                                    ),
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  child: const Icon(
+                                    Icons.point_of_sale_rounded,
+                                    color: Colors.white,
+                                    size: 13,
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                Text(
+                                  'KamaiPlus POS',
+                                  style: GoogleFonts.inter(
+                                    color: const Color(0xFFE2E8F0),
+                                    fontSize: 11.5,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                                const Text(
+                                  ' • now',
+                                  style: TextStyle(color: Color(0xFF64748B), fontSize: 10.5),
+                                ),
+                                const Spacer(),
+                                const Icon(Icons.notifications_active_rounded, size: 12, color: AdminColors.accent),
+                              ],
+                            ),
+                            const SizedBox(height: 10),
+
+                            // Notification Title & Body
+                            Text(
+                              title,
+                              style: GoogleFonts.plusJakartaSans(
+                                color: Colors.white,
+                                fontWeight: FontWeight.w700,
+                                fontSize: 13.5,
+                                height: 1.25,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              body,
+                              style: GoogleFonts.inter(
+                                color: const Color(0xFF94A3B8),
+                                fontSize: 11.5,
+                                height: 1.4,
+                              ),
+                            ),
+                            const SizedBox(height: 14),
+
+                            // Quick Action Button
+                            Row(
+                              children: [
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                                  decoration: BoxDecoration(
+                                    color: AdminColors.accentSoft,
+                                    borderRadius: BorderRadius.circular(8),
+                                    border: Border.all(color: AdminColors.accent.withValues(alpha: 0.4)),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Text(
+                                        _actionRoute == 'pro_upgrade'
+                                            ? 'UPGRADE TO PRO 👑'
+                                            : _actionRoute == 'billing'
+                                                ? 'OPEN POS BILLING 🧾'
+                                                : _actionRoute == 'products'
+                                                    ? 'VIEW PRODUCTS 🛒'
+                                                    : 'OPEN KAMAI+ ➔',
+                                        style: GoogleFonts.inter(
+                                          color: AdminColors.accent,
+                                          fontSize: 10.5,
+                                          fontWeight: FontWeight.w800,
+                                          letterSpacing: 0.4,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 28),
+
+                      // Android Home Navigation Bar
+                      Container(
+                        width: 90,
+                        height: 4,
+                        decoration: BoxDecoration(
+                          color: Colors.white38,
+                          borderRadius: BorderRadius.circular(3),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
-              ],
+              ),
             ),
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 18),
+
           Container(
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: AdminColors.accentSoft,
-              borderRadius: BorderRadius.circular(8),
+              color: AdminColors.bgElevated,
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: AdminColors.borderDark),
             ),
             child: Row(
               children: [
-                const Icon(Icons.verified_user_rounded, color: AdminColors.accent, size: 18),
+                const Icon(Icons.flash_on_rounded, color: AdminColors.accent, size: 16),
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
-                    'Target: ${_getAudienceLabel(_targetAudience)} • Reaches devices instantly.',
-                    style: const TextStyle(color: AdminColors.accent, fontSize: 12, fontWeight: FontWeight.w600),
+                    'Target Audience: ${_getAudienceLabel(_targetAudience)} • High-Priority Delivery',
+                    style: GoogleFonts.inter(color: AdminColors.textWhite, fontSize: 11.5, fontWeight: FontWeight.w600),
                   ),
                 ),
               ],
@@ -544,21 +702,31 @@ class _PushNotificationsScreenState extends State<PushNotificationsScreen> {
     return Container(
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
-        color: AdminColors.surface,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AdminColors.border),
+        color: AdminColors.bgCard,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: AdminColors.borderDark, width: 1.2),
+        boxShadow: [
+          BoxShadow(color: Colors.black.withValues(alpha: 0.25), blurRadius: 18, offset: const Offset(0, 6)),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              const Icon(Icons.history_rounded, size: 20, color: AdminColors.accent),
-              const SizedBox(width: 8),
+              Container(
+                padding: const EdgeInsets.all(6),
+                decoration: BoxDecoration(
+                  color: AdminColors.accent.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Icon(Icons.history_rounded, size: 20, color: AdminColors.accent),
+              ),
+              const SizedBox(width: 10),
               Text('Dispatched Notifications History', style: AdminTheme.heading(16)),
             ],
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 18),
           StreamBuilder<List<AdminPushNotification>>(
             stream: AdminFirestoreService.instance.watchPushNotifications(),
             builder: (context, snapshot) {
@@ -572,13 +740,13 @@ class _PushNotificationsScreenState extends State<PushNotificationsScreen> {
               final list = snapshot.data!;
               if (list.isEmpty) {
                 return const Padding(
-                  padding: EdgeInsets.symmetric(vertical: 24),
+                  padding: EdgeInsets.symmetric(vertical: 28),
                   child: Center(
                     child: Column(
                       children: [
-                        Icon(Icons.notifications_none_rounded, size: 36, color: AdminColors.inkFaint),
+                        Icon(Icons.notifications_none_rounded, size: 36, color: AdminColors.textFaint),
                         SizedBox(height: 8),
-                        Text('No push notifications dispatched yet.', style: TextStyle(color: AdminColors.inkMuted)),
+                        Text('No push notifications dispatched yet.', style: TextStyle(color: AdminColors.textMuted)),
                       ],
                     ),
                   ),
@@ -589,30 +757,33 @@ class _PushNotificationsScreenState extends State<PushNotificationsScreen> {
                 shrinkWrap: true,
                 physics: const NeverScrollableScrollPhysics(),
                 itemCount: list.length,
-                separatorBuilder: (_, _) => const Divider(height: 1, color: AdminColors.border),
+                separatorBuilder: (_, _) => const Divider(height: 1, color: AdminColors.borderDark),
                 itemBuilder: (context, index) {
                   final notif = list[index];
                   return ListTile(
-                    contentPadding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
+                    contentPadding: const EdgeInsets.symmetric(vertical: 10, horizontal: 4),
                     leading: CircleAvatar(
-                      backgroundColor: AdminColors.accentSoft,
+                      backgroundColor: AdminColors.bgElevated,
                       child: const Icon(Icons.notifications_active_rounded, color: AdminColors.accent, size: 20),
                     ),
                     title: Row(
                       children: [
                         Expanded(
-                          child: Text(notif.title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                          child: Text(
+                            notif.title,
+                            style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14, color: AdminColors.textWhite),
+                          ),
                         ),
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                           decoration: BoxDecoration(
-                            color: AdminColors.surfaceSunken,
+                            color: AdminColors.bgElevated,
                             borderRadius: BorderRadius.circular(6),
-                            border: Border.all(color: AdminColors.border),
+                            border: Border.all(color: AdminColors.borderDark),
                           ),
                           child: Text(
                             _getAudienceLabel(notif.targetAudience),
-                            style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AdminColors.inkMuted),
+                            style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AdminColors.accent),
                           ),
                         ),
                       ],
@@ -621,11 +792,17 @@ class _PushNotificationsScreenState extends State<PushNotificationsScreen> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         const SizedBox(height: 4),
-                        Text(notif.body, style: const TextStyle(color: AdminColors.inkMuted, fontSize: 13)),
-                        const SizedBox(height: 4),
-                        Text(
-                          notif.sentAt != null ? _dateFmt.format(notif.sentAt!) : 'Just now',
-                          style: const TextStyle(fontSize: 11, color: AdminColors.inkFaint),
+                        Text(notif.body, style: const TextStyle(color: AdminColors.textMuted, fontSize: 13)),
+                        const SizedBox(height: 6),
+                        Row(
+                          children: [
+                            const Icon(Icons.check_circle_rounded, size: 12, color: AdminColors.accent),
+                            const SizedBox(width: 4),
+                            Text(
+                              notif.sentAt != null ? _dateFmt.format(notif.sentAt!) : 'Just now',
+                              style: const TextStyle(fontSize: 11, color: AdminColors.textFaint),
+                            ),
+                          ],
                         ),
                       ],
                     ),
@@ -639,3 +816,4 @@ class _PushNotificationsScreenState extends State<PushNotificationsScreen> {
     );
   }
 }
+

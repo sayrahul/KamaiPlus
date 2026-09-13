@@ -1381,4 +1381,10 @@ Comprehensive enterprise-grade retail UX upgrade suite aligned with PhonePe Busi
       - Desktop Layout (>=860px): Persistent dark sidebar (`#0F172A`) with categorized sections (OPERATIONS, INTELLIGENCE, ENGAGEMENT, PLATFORM) and custom status badges.
       - Mobile Layout (<860px): Compact AppBar with hamburger menu, 4-tab quick bottom navigation (Dashboard, Merchants, Radar, More), slide-in full enterprise drawer, and 2-column grid modal bottom sheet for all secondary tools.
 
+83. **Enterprise Dark SaaS Admin Console UI Overhaul & Heads-Up Push Notification Pipeline (LOCKED):**
+    - **Color System & Aesthetics:** Full obsidian dark theme (`AdminColors.bgDark = #090D16`, `bgSidebar = #0D1322`, `bgCard = #141D30`, `bgElevated = #1B263E`, `borderDark = #222F4C`), vibrant emerald accents (`#10B981`), and high-contrast typography (`textWhite = #F8FAFC`, `textMuted = #94A3B8`).
+    - **Instant Cache Busting:** `index.html` unregisters any stale service workers and deletes caches on page load so browsers always render the fresh live build immediately.
+    - **Device Heads-Up Push Alerts:** `lib/services/firestore_sync_service.dart` listens to `_broadcastSub`. When an alert/broadcast is published from the Admin Console, it triggers `NotificationService.instance.showLocalNotification(title: title, body: newMsg)` creating a system tray status-bar drop-down notification with ringtone and vibration even when the app is in the background.
+    - **Dual-Domain Hosting Deployment:** Both `https://kamaiplus.web.app` and `https://kamaiplus-admin.web.app` configured in `firebase.json` with `Cache-Control: no-cache, no-store, must-revalidate` serving `admin_console/build/web`.
+
 

@@ -104,7 +104,7 @@ class _AdminShellState extends State<AdminShell> {
   void _showMoreBottomSheet() {
     showModalBottomSheet(
       context: context,
-      backgroundColor: AdminColors.surface,
+      backgroundColor: AdminColors.bgCard,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
@@ -124,7 +124,7 @@ class _AdminShellState extends State<AdminShell> {
                       const Spacer(),
                       IconButton(
                         onPressed: () => Navigator.pop(ctx),
-                        icon: const Icon(Icons.close_rounded, color: AdminColors.inkMuted),
+                        icon: const Icon(Icons.close_rounded, color: AdminColors.textMuted),
                       ),
                     ],
                   ),
@@ -145,10 +145,10 @@ class _AdminShellState extends State<AdminShell> {
                           width: (MediaQuery.of(context).size.width - 44) / 2,
                           padding: const EdgeInsets.all(14),
                           decoration: BoxDecoration(
-                            color: _selected == i ? AdminColors.accentSoft : AdminColors.surfaceSunken,
+                            color: _selected == i ? AdminColors.accentSoft : AdminColors.bgElevated,
                             borderRadius: BorderRadius.circular(12),
                             border: Border.all(
-                              color: _selected == i ? AdminColors.accentBorder : AdminColors.border,
+                              color: _selected == i ? AdminColors.accentBorder : AdminColors.borderDark,
                             ),
                           ),
                           child: Column(
@@ -156,7 +156,7 @@ class _AdminShellState extends State<AdminShell> {
                             children: [
                               Icon(
                                 _items[i].selectedIcon,
-                                color: _selected == i ? AdminColors.accent : AdminColors.ink,
+                                color: _selected == i ? AdminColors.accent : AdminColors.textWhite,
                                 size: 24,
                               ),
                               const SizedBox(height: 8),
@@ -165,7 +165,7 @@ class _AdminShellState extends State<AdminShell> {
                                 style: TextStyle(
                                   fontSize: 13,
                                   fontWeight: FontWeight.w700,
-                                  color: _selected == i ? AdminColors.accent : AdminColors.ink,
+                                  color: _selected == i ? AdminColors.accent : AdminColors.textWhite,
                                 ),
                               ),
                               if (_items[i].badge != null) ...[
@@ -231,7 +231,7 @@ class _AdminShellState extends State<AdminShell> {
       key: _scaffoldKey,
       appBar: AppBar(
         leading: IconButton(
-          icon: const Icon(Icons.menu_rounded, color: AdminColors.ink),
+          icon: const Icon(Icons.menu_rounded, color: AdminColors.textWhite),
           onPressed: () => _scaffoldKey.currentState?.openDrawer(),
         ),
         title: Row(
@@ -267,26 +267,26 @@ class _AdminShellState extends State<AdminShell> {
           }
         },
         height: 64,
-        backgroundColor: AdminColors.surface,
+        backgroundColor: AdminColors.bgSidebar,
         indicatorColor: AdminColors.accentSoft,
         destinations: const [
           NavigationDestination(
-            icon: Icon(Icons.dashboard_outlined, color: AdminColors.inkMuted),
+            icon: Icon(Icons.dashboard_outlined, color: AdminColors.textMuted),
             selectedIcon: Icon(Icons.dashboard_rounded, color: AdminColors.accent),
             label: 'Dashboard',
           ),
           NavigationDestination(
-            icon: Icon(Icons.storefront_outlined, color: AdminColors.inkMuted),
+            icon: Icon(Icons.storefront_outlined, color: AdminColors.textMuted),
             selectedIcon: Icon(Icons.storefront_rounded, color: AdminColors.accent),
             label: 'Merchants',
           ),
           NavigationDestination(
-            icon: Icon(Icons.radar_outlined, color: AdminColors.inkMuted),
+            icon: Icon(Icons.radar_outlined, color: AdminColors.textMuted),
             selectedIcon: Icon(Icons.radar_rounded, color: AdminColors.accent),
             label: 'Radar',
           ),
           NavigationDestination(
-            icon: Icon(Icons.grid_view_outlined, color: AdminColors.inkMuted),
+            icon: Icon(Icons.grid_view_outlined, color: AdminColors.textMuted),
             selectedIcon: Icon(Icons.grid_view_rounded, color: AdminColors.accent),
             label: 'More',
           ),
@@ -310,8 +310,11 @@ class _DesktopSidebar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      width: 240,
-      color: AdminColors.ink,
+      width: 260,
+      decoration: const BoxDecoration(
+        color: AdminColors.bgSidebar,
+        border: Border(right: BorderSide(color: AdminColors.borderDark)),
+      ),
       child: SafeArea(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -417,7 +420,7 @@ class _MobileDrawer extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Drawer(
-      backgroundColor: AdminColors.ink,
+      backgroundColor: AdminColors.bgSidebar,
       child: SafeArea(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -628,7 +631,7 @@ class _AccountMenu extends StatelessWidget {
     }
 
     return PopupMenuButton<String>(
-      icon: const Icon(Icons.account_circle_outlined, color: AdminColors.ink),
+      icon: const Icon(Icons.account_circle_outlined, color: AdminColors.textWhite),
       onSelected: (v) {
         if (v == 'signout') AdminAuthService.instance.signOut();
       },
@@ -637,7 +640,7 @@ class _AccountMenu extends StatelessWidget {
           enabled: false,
           child: Text(
             email,
-            style: const TextStyle(color: AdminColors.inkMuted, fontSize: 12),
+            style: const TextStyle(color: AdminColors.textMuted, fontSize: 12),
             overflow: TextOverflow.ellipsis,
           ),
         ),

@@ -235,10 +235,12 @@ class AdminFirestoreService {
   Future<void> setBroadcast({
     required String message,
     required bool active,
+    String? title,
     String? actionUrl,
     String type = 'info',
   }) async {
     await _db.collection('platform_settings').doc('broadcast').set({
+      'title': ?title,
       'message': message,
       'active': active,
       'enabled': active, // Dual-key compatibility with mobile app
@@ -289,7 +291,8 @@ class AdminFirestoreService {
 
     // Also mirror to platform_settings/broadcast so all active apps display banner immediately
     await setBroadcast(
-      message: '${notification.title}: ${notification.body}',
+      title: notification.title,
+      message: notification.body,
       active: true,
       type: notification.targetAudience == 'pro' ? 'festive' : 'info',
       actionUrl: notification.actionUrl,

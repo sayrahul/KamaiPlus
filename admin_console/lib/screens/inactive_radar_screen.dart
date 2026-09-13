@@ -89,7 +89,7 @@ class _InactiveRadarScreenState extends State<InactiveRadarScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AdminColors.surfaceSunken,
+      backgroundColor: AdminColors.bgDark,
       body: SafeArea(
         child: StreamBuilder<List<AdminBusiness>>(
           stream: AdminFirestoreService.instance.watchBusinesses(),
@@ -120,12 +120,13 @@ class _InactiveRadarScreenState extends State<InactiveRadarScreen> {
                       Container(
                         padding: const EdgeInsets.all(10),
                         decoration: BoxDecoration(
-                          color: AdminColors.redSoft,
-                          borderRadius: BorderRadius.circular(10),
+                          color: AdminColors.red.withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: AdminColors.red.withValues(alpha: 0.3)),
                         ),
                         child: const Icon(Icons.radar_rounded, color: AdminColors.red, size: 24),
                       ),
-                      const SizedBox(width: 12),
+                      const SizedBox(width: 14),
                       Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
@@ -133,7 +134,7 @@ class _InactiveRadarScreenState extends State<InactiveRadarScreen> {
                           const SizedBox(height: 2),
                           const Text(
                             'Detect dropped-off signups, dormant stores, and trigger 1-click WhatsApp re-engagement.',
-                            style: TextStyle(color: AdminColors.inkMuted, fontSize: 13),
+                            style: TextStyle(color: AdminColors.textMuted, fontSize: 13),
                           ),
                         ],
                       ),
@@ -158,7 +159,7 @@ class _InactiveRadarScreenState extends State<InactiveRadarScreen> {
                             value: totalInactive.toString(),
                             subtitle: 'Drop-off & churn risk',
                             color: AdminColors.red,
-                            bgColor: AdminColors.redSoft,
+                            bgColor: AdminColors.red.withValues(alpha: 0.12),
                             icon: Icons.person_off_rounded,
                             active: _filter == 'all',
                             onTap: () => setState(() => _filter = 'all'),
@@ -167,8 +168,8 @@ class _InactiveRadarScreenState extends State<InactiveRadarScreen> {
                             title: '0 Bills Ever (Drop-off)',
                             value: neverBilled.length.toString(),
                             subtitle: 'Signed up, never created a bill',
-                            color: const Color(0xFFDC2626),
-                            bgColor: const Color(0xFFFEE2E2),
+                            color: const Color(0xFFEF4444),
+                            bgColor: const Color(0xFFEF4444).withValues(alpha: 0.12),
                             icon: Icons.receipt_long_outlined,
                             active: _filter == 'never_billed',
                             onTap: () => setState(() => _filter = 'never_billed'),
@@ -178,7 +179,7 @@ class _InactiveRadarScreenState extends State<InactiveRadarScreen> {
                             value: dormant7d.length.toString(),
                             subtitle: 'No sale in the last week',
                             color: AdminColors.amber,
-                            bgColor: AdminColors.amberSoft,
+                            bgColor: AdminColors.amber.withValues(alpha: 0.12),
                             icon: Icons.hourglass_empty_rounded,
                             active: _filter == 'dormant_7d',
                             onTap: () => setState(() => _filter = 'dormant_7d'),
@@ -187,8 +188,8 @@ class _InactiveRadarScreenState extends State<InactiveRadarScreen> {
                             title: 'Dormant (30+ Days)',
                             value: dormant30d.length.toString(),
                             subtitle: 'Inactive for over a month',
-                            color: const Color(0xFF7C3AED),
-                            bgColor: const Color(0xFFEDE9FE),
+                            color: AdminColors.violet,
+                            bgColor: AdminColors.violet.withValues(alpha: 0.12),
                             icon: Icons.event_busy_rounded,
                             active: _filter == 'dormant_30d',
                             onTap: () => setState(() => _filter = 'dormant_30d'),
@@ -203,20 +204,22 @@ class _InactiveRadarScreenState extends State<InactiveRadarScreen> {
                   Container(
                     padding: const EdgeInsets.all(16),
                     decoration: BoxDecoration(
-                      color: AdminColors.surface,
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: AdminColors.border),
+                      color: AdminColors.bgCard,
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(color: AdminColors.borderDark),
                     ),
                     child: Row(
                       children: [
                         Expanded(
                           child: TextField(
                             controller: _searchCtrl,
+                            style: const TextStyle(color: AdminColors.textWhite, fontSize: 14),
                             onChanged: (val) => setState(() => _query = val),
                             decoration: InputDecoration(
                               hintText: 'Search inactive merchants by store name, owner, or phone…',
-                              prefixIcon: const Icon(Icons.search_rounded, size: 20),
-                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                              prefixIcon: const Icon(Icons.search_rounded, size: 20, color: AdminColors.textFaint),
+                              fillColor: AdminColors.bgSidebar,
+                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: AdminColors.borderDark)),
                               contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                               isDense: true,
                             ),
@@ -225,7 +228,7 @@ class _InactiveRadarScreenState extends State<InactiveRadarScreen> {
                         if (_query.isNotEmpty) ...[
                           const SizedBox(width: 8),
                           IconButton(
-                            icon: const Icon(Icons.clear_rounded),
+                            icon: const Icon(Icons.clear_rounded, color: AdminColors.textFaint),
                             onPressed: () => setState(() {
                               _searchCtrl.clear();
                               _query = '';
@@ -289,16 +292,16 @@ class _InactiveRadarScreenState extends State<InactiveRadarScreen> {
   }) {
     return InkWell(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(12),
+      borderRadius: BorderRadius.circular(14),
       child: Container(
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: AdminColors.surface,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: active ? color : AdminColors.border, width: active ? 2 : 1),
+          color: AdminColors.bgCard,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: active ? color : AdminColors.borderDark, width: active ? 1.8 : 1),
           boxShadow: active
-              ? [BoxShadow(color: color.withValues(alpha: 0.15), blurRadius: 8, offset: const Offset(0, 2))]
-              : const [BoxShadow(color: Color(0x06000000), blurRadius: 4, offset: Offset(0, 2))],
+              ? [BoxShadow(color: color.withValues(alpha: 0.25), blurRadius: 12, offset: const Offset(0, 3))]
+              : [BoxShadow(color: Colors.black.withValues(alpha: 0.15), blurRadius: 6, offset: const Offset(0, 2))],
         ),
         child: Row(
           children: [
@@ -314,8 +317,8 @@ class _InactiveRadarScreenState extends State<InactiveRadarScreen> {
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   Text(value, style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800, color: color)),
-                  Text(title, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13, color: AdminColors.ink)),
-                  Text(subtitle, style: const TextStyle(fontSize: 11, color: AdminColors.inkMuted), overflow: TextOverflow.ellipsis),
+                  Text(title, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13, color: AdminColors.textWhite)),
+                  Text(subtitle, style: const TextStyle(fontSize: 11, color: AdminColors.textMuted), overflow: TextOverflow.ellipsis),
                 ],
               ),
             ),
@@ -331,17 +334,17 @@ class _InactiveRadarScreenState extends State<InactiveRadarScreen> {
     Color badgeBg;
 
     if (b.isNeverBilled) {
-      badgeText = '0 BILLS EVER (CRITICAL DROP-OFF)';
-      badgeColor = const Color(0xFFDC2626);
-      badgeBg = const Color(0xFFFEE2E2);
+      badgeText = '0 BILLS (DROP-OFF)';
+      badgeColor = const Color(0xFFEF4444);
+      badgeBg = const Color(0xFFEF4444).withValues(alpha: 0.15);
     } else if (b.isDormant30Days) {
       badgeText = 'DORMANT 30+ DAYS';
-      badgeColor = const Color(0xFF7C3AED);
-      badgeBg = const Color(0xFFEDE9FE);
+      badgeColor = AdminColors.violet;
+      badgeBg = AdminColors.violet.withValues(alpha: 0.15);
     } else {
-      badgeText = 'SLIPPING (7+ DAYS INACTIVE)';
+      badgeText = 'SLIPPING (7+ DAYS)';
       badgeColor = AdminColors.amber;
-      badgeBg = AdminColors.amberSoft;
+      badgeBg = AdminColors.amber.withValues(alpha: 0.15);
     }
 
     final lastActiveStr = b.lastSaleAt != null
@@ -351,9 +354,12 @@ class _InactiveRadarScreenState extends State<InactiveRadarScreen> {
     return Container(
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
-        color: AdminColors.surface,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AdminColors.border),
+        color: AdminColors.bgCard,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: AdminColors.borderDark, width: 1.1),
+        boxShadow: [
+          BoxShadow(color: Colors.black.withValues(alpha: 0.15), blurRadius: 10, offset: const Offset(0, 3)),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -372,21 +378,21 @@ class _InactiveRadarScreenState extends State<InactiveRadarScreen> {
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
                           decoration: BoxDecoration(
-                            color: AdminColors.surfaceSunken,
+                            color: AdminColors.bgElevated,
                             borderRadius: BorderRadius.circular(6),
-                            border: Border.all(color: AdminColors.border),
+                            border: Border.all(color: AdminColors.borderDark),
                           ),
                           child: Text(
                             b.businessType.toUpperCase(),
-                            style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: AdminColors.inkMuted),
+                            style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: AdminColors.accent),
                           ),
                         ),
                       ],
                     ),
-                    const SizedBox(height: 2),
+                    const SizedBox(height: 3),
                     Text(
                       '${b.ownerName.isNotEmpty ? b.ownerName : 'Store Owner'} • 📞 ${b.phone}',
-                      style: const TextStyle(color: AdminColors.inkMuted, fontSize: 13),
+                      style: const TextStyle(color: AdminColors.textMuted, fontSize: 13),
                     ),
                   ],
                 ),
@@ -395,7 +401,7 @@ class _InactiveRadarScreenState extends State<InactiveRadarScreen> {
                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                 decoration: BoxDecoration(
                   color: badgeBg,
-                  borderRadius: BorderRadius.circular(6),
+                  borderRadius: BorderRadius.circular(8),
                   border: Border.all(color: badgeColor.withValues(alpha: 0.4)),
                 ),
                 child: Text(
@@ -406,15 +412,15 @@ class _InactiveRadarScreenState extends State<InactiveRadarScreen> {
             ],
           ),
           const SizedBox(height: 12),
-          const Divider(height: 1, color: AdminColors.border),
+          const Divider(height: 1, color: AdminColors.borderDark),
           const SizedBox(height: 12),
 
           // Metadata & Re-engagement Action Bar
           Row(
             children: [
-              Icon(Icons.access_time_rounded, size: 15, color: AdminColors.inkMuted),
+              const Icon(Icons.access_time_rounded, size: 15, color: AdminColors.textFaint),
               const SizedBox(width: 6),
-              Text(lastActiveStr, style: const TextStyle(fontSize: 12, color: AdminColors.inkMuted)),
+              Text(lastActiveStr, style: const TextStyle(fontSize: 12, color: AdminColors.textMuted)),
               const Spacer(),
 
               // Direct WhatsApp Re-engagement CTA
@@ -426,7 +432,7 @@ class _InactiveRadarScreenState extends State<InactiveRadarScreen> {
                   backgroundColor: const Color(0xFF25D366), // Official WhatsApp Green
                   foregroundColor: Colors.white,
                   padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                  textStyle: const TextStyle(fontWeight: FontWeight.w600, fontSize: 12),
+                  textStyle: const TextStyle(fontWeight: FontWeight.w700, fontSize: 12),
                   elevation: 0,
                 ),
               ),
@@ -435,9 +441,10 @@ class _InactiveRadarScreenState extends State<InactiveRadarScreen> {
               // Direct Phone Call CTA
               OutlinedButton.icon(
                 onPressed: () => _makeCall(b),
-                icon: const Icon(Icons.call_rounded, size: 15),
-                label: const Text('Call'),
+                icon: const Icon(Icons.call_rounded, size: 15, color: AdminColors.textWhite),
+                label: const Text('Call', style: TextStyle(color: AdminColors.textWhite)),
                 style: OutlinedButton.styleFrom(
+                  side: const BorderSide(color: AdminColors.borderDark),
                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                   textStyle: const TextStyle(fontSize: 12),
                 ),
@@ -446,7 +453,7 @@ class _InactiveRadarScreenState extends State<InactiveRadarScreen> {
 
               // View Store Details
               IconButton(
-                icon: const Icon(Icons.arrow_forward_ios_rounded, size: 14),
+                icon: const Icon(Icons.arrow_forward_ios_rounded, size: 14, color: AdminColors.textFaint),
                 tooltip: 'View Full Store Profile',
                 onPressed: () {
                   Navigator.push(
