@@ -45,6 +45,29 @@ hits (the screen's data-loading call), not just the data shape. See
 drives `LocalDatabase` through a real (in-memory FFI) SQLite database and asserts on what
 `getAllProducts`/`getAllCategories` actually return.
 
+## 2026-09-13 — Live On-Device Installation & Verification (Xiaomi Redmi 6) & Gradle Build Tuning
+
+**User Request:**
+"mere mobile me install kardo..jo connect hai"
+
+**Root Cause & Build Optimization:**
+- Windows host system has ~8GB RAM with high memory compression (~570MB available physical RAM).
+- Running multi-ABI debug compilation with default `-Xmx2048m` and unconstrained workers caused Gradle daemon/JVM thread allocation failures (`Native memory allocation (mmap) failed`).
+- **Fix:** In `android/gradle.properties`:
+  - Adjusted `org.gradle.jvmargs=-Xmx1280m -XX:MaxMetaspaceSize=384m -XX:+HeapDumpOnOutOfMemoryError`
+  - Added `org.gradle.workers.max=2`
+  - Built targeted debug APK for the connected device's ABI: `flutter build apk --debug --target-platform android-arm`
+  - Successfully built `build/app/outputs/flutter-apk/app-debug.apk` with zero errors.
+
+**On-Device Installation & Verification (Xiaomi Redmi 6, ID: `de7ea8af7d29`):**
+- Installed APK via `adb -s de7ea8af7d29 install -r "build/app/outputs/flutter-apk/app-debug.apk"` $\rightarrow$ `Success`.
+- Launched app via `adb shell monkey` into live POS Billing.
+- Captured screencaps:
+  1. Billing Screen: High contrast, responsive 2-column product grid, floating cart bar intact.
+  2. Menu Modal: Bottom sheet opens smoothly; top "FREE STARTER PLAN / UPGRADE" banner is completely gone.
+  3. Menu Footer: Arranged in exact single row (`v4.20.0` $\rightarrow$ `WhatsApp Support` $\rightarrow$ `🇬🇧 EN ▾` $\rightarrow$ `Logout`) with zero text wrapping or overflow.
+  4. Dismissal: 'X' close button dismisses cleanly back to active billing screen without reloading or data loss.
+
 ---
 
 ## 2026-09-13 — Menu Header Upgrade Removal, Single-Row Footer & Modal Gaps Polish
