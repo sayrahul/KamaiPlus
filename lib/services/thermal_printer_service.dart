@@ -34,6 +34,7 @@ class ThermalPrinterService {
         storeName: resolvedStoreName,
         storePhone: profile.phone,
         storeAddress: profile.address,
+        storeUpiVpa: profile.upiVpa.trim(),
         is80mm: use80mm,
         kickCashDrawer: kickCashDrawer,
       );
@@ -53,6 +54,7 @@ class ThermalPrinterService {
     required String storeName,
     String? storePhone,
     String? storeAddress,
+    String? storeUpiVpa,
     bool is80mm = false,
     bool kickCashDrawer = true,
   }) {
@@ -129,6 +131,12 @@ class ThermalPrinterService {
     bytes.addAll([0x1B, 0x61, 0x02]); // Right align
     bytes.addAll('$totalText\n'.codeUnits);
     bytes.addAll([0x1B, 0x45, 0x00]); // Bold OFF
+
+    // UPI ID line if available
+    if (storeUpiVpa != null && storeUpiVpa.isNotEmpty) {
+      bytes.addAll([0x1B, 0x61, 0x01]); // Center
+      bytes.addAll('UPI: $storeUpiVpa\n'.codeUnits);
+    }
 
     // Footer
     bytes.addAll([0x1B, 0x61, 0x01]); // Center

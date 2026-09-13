@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -18,6 +19,7 @@ import 'pos_item_edit_modal.dart';
 import 'sale_completed_modal.dart';
 import '../common/in_app_notification.dart';
 import '../../services/upi_payment_detector_service.dart';
+import '../settings/store_profile_screen.dart';
 
 class PosCheckoutModal extends StatefulWidget {
   final List<CartItemModel> cartItems;
@@ -145,6 +147,9 @@ class _PosCheckoutModalState extends State<PosCheckoutModal> {
   String _selectedTable = 'Takeaway';
 
   StoreProfileModel? _storeProfile;
+  final ScrollController _bodyScrollController = ScrollController();
+  List<UpiAccountModel> _upiAccounts = [];
+  String? _selectedUpiAccountId;
 
   bool _isProcessing = false;
 
@@ -265,12 +270,41 @@ class _PosCheckoutModalState extends State<PosCheckoutModal> {
     try {
       final p = await LocalDatabase.instance.getStoreProfile();
       if (mounted) {
-        setState(() => _storeProfile = p);
+        List<UpiAccountModel> accounts = [];
+        try {
+          final List decoded = jsonDecode(p.upiAccountsJson);
+          accounts = decoded.map((m) => UpiAccountModel.fromMap(m)).toList();
+        } catch (_) {}
+        if (accounts.isEmpty && p.upiVpa.isNotEmpty) {
+          accounts = [
+            UpiAccountModel(
+              id: 'primary',
+              label: 'Shop Primary QR',
+              upiVpa: p.upiVpa,
+              isDefault: true,
+            ),
+          ];
+        }
+        setState(() {
+          _storeProfile = p;
+          _upiAccounts = accounts;
+          if (_selectedUpiAccountId == null && accounts.isNotEmpty) {
+            final def = accounts.firstWhere((a) => a.isDefault, orElse: () => accounts.first);
+            _selectedUpiAccountId = def.id;
+          }
+        });
       }
     } catch (_) {}
   }
 
   String get _activeUpiVpa {
+    if (_selectedUpiAccountId != null && _upiAccounts.isNotEmpty) {
+      final acc = _upiAccounts.firstWhere(
+        (a) => a.id == _selectedUpiAccountId,
+        orElse: () => _upiAccounts.first,
+      );
+      if (acc.upiVpa.trim().isNotEmpty) return acc.upiVpa.trim();
+    }
     final v = _storeProfile?.upiVpa.trim();
     if (v != null && v.isNotEmpty) return v;
     return '';
@@ -324,6 +358,7 @@ class _PosCheckoutModalState extends State<PosCheckoutModal> {
 
   @override
   void dispose() {
+    _bodyScrollController.dispose();
     _stopUpiPaymentListening();
     _cashTenderedController.dispose();
     _splitCashController.dispose();
@@ -1249,6 +1284,7 @@ class _PosCheckoutModalState extends State<PosCheckoutModal> {
           // Scrollable Body
           Expanded(
             child: SingleChildScrollView(
+              controller: _bodyScrollController,
               padding: EdgeInsets.only(
                 left: 16,
                 right: 16,
@@ -2263,7 +2299,122 @@ class _PosCheckoutModalState extends State<PosCheckoutModal> {
                                 ],
                               ),
                             )
-                          else ...[
+                          else if (_activeUpiVpa.isEmpty) ...[
+                            // Empty UPI ID Setup Warning Box
+                            Container(
+                              width: double.infinity,
+                              padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 16),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF1E293B),
+                                borderRadius: BorderRadius.circular(14),
+                                border: Border.all(color: const Color(0xFFEF4444).withValues(alpha: 0.5)),
+                              ),
+                              child: Column(
+                                children: [
+                                  Container(
+                                    padding: const EdgeInsets.all(10),
+                                    decoration: BoxDecoration(
+                                      color: const Color(0xFFEF4444).withValues(alpha: 0.15),
+                                      shape: BoxShape.circle,
+                                    ),
+                                    child: const Icon(Icons.qr_code_2_rounded, size: 30, color: Color(0xFFF87171)),
+                                  ),
+                                  const SizedBox(height: 10),
+                                  Text(
+                                    'UPI ID Not Linked',
+                                    style: GoogleFonts.outfit(
+                                      fontSize: 15,
+                                      fontWeight: FontWeight.w800,
+                                      color: Colors.white,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    'Customer payment QR generate karne ke liye Store Profile me apna UPI ID (Google Pay, PhonePe, Paytm) dalein.',
+                                    textAlign: TextAlign.center,
+                                    style: GoogleFonts.inter(
+                                      fontSize: 11,
+                                      color: const Color(0xFF94A3B8),
+                                    ),
+                                  ),
+                                  const SizedBox(height: 12),
+                                  ElevatedButton.icon(
+                                    onPressed: () {
+                                      Navigator.push(
+                                        context,
+                                        MaterialPageRoute(builder: (_) => const StoreProfileScreen()),
+                                      ).then((_) => _loadStoreProfile());
+                                    },
+                                    icon: const Icon(Icons.add_link_rounded, size: 16),
+                                    label: Text(
+                                      'Setup Store UPI ID',
+                                      style: GoogleFonts.outfit(fontSize: 13, fontWeight: FontWeight.w700),
+                                    ),
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: const Color(0xFF10B981),
+                                      foregroundColor: Colors.white,
+                                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                                      elevation: 0,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ] else ...[
+                            // Multi-account switcher chips if more than 1 linked
+                            if (_upiAccounts.length > 1) ...[
+                              SingleChildScrollView(
+                                scrollDirection: Axis.horizontal,
+                                physics: const BouncingScrollPhysics(),
+                                child: Row(
+                                  children: _upiAccounts.map((acc) {
+                                    final isSel = acc.id == _selectedUpiAccountId;
+                                    return Padding(
+                                      padding: const EdgeInsets.only(right: 6, bottom: 10),
+                                      child: InkWell(
+                                        onTap: () {
+                                          HapticFeedback.selectionClick();
+                                          setState(() => _selectedUpiAccountId = acc.id);
+                                        },
+                                        borderRadius: BorderRadius.circular(8),
+                                        child: Container(
+                                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                                          decoration: BoxDecoration(
+                                            color: isSel ? const Color(0xFF10B981) : const Color(0xFF1E293B),
+                                            borderRadius: BorderRadius.circular(8),
+                                            border: Border.all(
+                                              color: isSel ? const Color(0xFF34D399) : const Color(0xFF334155),
+                                              width: isSel ? 1.4 : 1,
+                                            ),
+                                          ),
+                                          child: Row(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              Icon(
+                                                Icons.account_balance_wallet_rounded,
+                                                size: 12,
+                                                color: isSel ? Colors.white : const Color(0xFF94A3B8),
+                                              ),
+                                              const SizedBox(width: 5),
+                                              Text(
+                                                acc.label,
+                                                style: GoogleFonts.inter(
+                                                  fontSize: 11,
+                                                  fontWeight: isSel ? FontWeight.w800 : FontWeight.w600,
+                                                  color: isSel ? Colors.white : const Color(0xFFCBD5E1),
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                      ),
+                                    );
+                                  }).toList(),
+                                ),
+                              ),
+                            ],
+
                             // QR White Canvas Container
                             Container(
                               padding: const EdgeInsets.all(12),
@@ -2295,6 +2446,48 @@ class _PosCheckoutModalState extends State<PosCheckoutModal> {
                                     ),
                                   ),
                                 ],
+                              ),
+                            ),
+                            const SizedBox(height: 10),
+
+                            // Copyable UPI ID Chip
+                            InkWell(
+                              onTap: () {
+                                Clipboard.setData(ClipboardData(text: _activeUpiVpa));
+                                HapticFeedback.selectionClick();
+                                InAppNotification.success('UPI ID copied: $_activeUpiVpa', context: context);
+                              },
+                              borderRadius: BorderRadius.circular(20),
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFF1E293B),
+                                  borderRadius: BorderRadius.circular(20),
+                                  border: Border.all(color: const Color(0xFF334155)),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    const Icon(Icons.copy_rounded, size: 12, color: Color(0xFF34D399)),
+                                    const SizedBox(width: 6),
+                                    Text(
+                                      'UPI: $_activeUpiVpa',
+                                      style: GoogleFonts.jetBrainsMono(
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w700,
+                                        color: const Color(0xFFE2E8F0),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 6),
+                                    Text(
+                                      '• Tap to copy',
+                                      style: GoogleFonts.inter(
+                                        fontSize: 10,
+                                        color: const Color(0xFF94A3B8),
+                                      ),
+                                    ),
+                                  ],
+                                ),
                               ),
                             ),
                             const SizedBox(height: 12),
@@ -2737,6 +2930,17 @@ class _PosCheckoutModalState extends State<PosCheckoutModal> {
               _splitCreditController.text = '0';
             }
           });
+          if (mode == 'upi' || mode == 'split') {
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (_bodyScrollController.hasClients) {
+                _bodyScrollController.animateTo(
+                  _bodyScrollController.position.maxScrollExtent.clamp(0.0, 480.0),
+                  duration: const Duration(milliseconds: 320),
+                  curve: Curves.easeOutCubic,
+                );
+              }
+            });
+          }
         },
         borderRadius: BorderRadius.circular(10),
         child: Container(
@@ -2970,6 +3174,97 @@ class _PosCheckoutModalState extends State<PosCheckoutModal> {
               ],
             ),
           ),
+
+          // Dynamic Split UPI QR Card when UPI portion is > 0
+          if (splitUpiPaise > 0 && _activeUpiVpa.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: const Color(0xFFF0FDF4),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: const Color(0xFFBBF7D0)),
+              ),
+              child: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(6),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: const Color(0xFF86EFAC)),
+                    ),
+                    child: QrImageView(
+                      data: 'upi://pay?pa=$_activeUpiVpa&pn=${Uri.encodeComponent(_activeStoreName)}&am=${(splitUpiPaise / 100.0).toStringAsFixed(2)}&cu=INR&tn=Split+Bill',
+                      version: QrVersions.auto,
+                      size: 90,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF16A34A),
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              child: Text(
+                                'ONLINE PORTION',
+                                style: GoogleFonts.plusJakartaSans(
+                                  fontSize: 9,
+                                  fontWeight: FontWeight.w800,
+                                  color: Colors.white,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          '₹${(splitUpiPaise / 100.0).toStringAsFixed(2)}',
+                          style: GoogleFonts.jetBrainsMono(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w900,
+                            color: const Color(0xFF15803D),
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        InkWell(
+                          onTap: () {
+                            Clipboard.setData(ClipboardData(text: _activeUpiVpa));
+                            HapticFeedback.selectionClick();
+                            InAppNotification.success('UPI ID copied: $_activeUpiVpa', context: context);
+                          },
+                          child: Row(
+                            children: [
+                              const Icon(Icons.copy_rounded, size: 11, color: Color(0xFF047857)),
+                              const SizedBox(width: 4),
+                              Flexible(
+                                child: Text(
+                                  _activeUpiVpa,
+                                  style: GoogleFonts.jetBrainsMono(
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w600,
+                                    color: const Color(0xFF047857),
+                                  ),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
         ],
       ),
     );

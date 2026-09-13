@@ -132,6 +132,9 @@ class _SignupStoreScreenState extends State<SignupStoreScreen> {
         }
       }
 
+      final now = DateTime.now();
+      final freeTrialExpiry = now.add(const Duration(days: 7));
+
       final profile = StoreProfileModel(
         storeName: storeName.isNotEmpty ? storeName : 'My Store',
         tagline: 'Always Fresh, Best Wholesale Rates',
@@ -146,6 +149,10 @@ class _SignupStoreScreenState extends State<SignupStoreScreen> {
         gstin: '',
         fssai: '',
         upiAccountsJson: jsonEncode(upiAccounts),
+        isPro: true,
+        proPlan: 'trial',
+        proExpiry: freeTrialExpiry.toIso8601String(),
+        razorpayPaymentId: 'free_trial_7d',
       );
 
       // Save to SQLite
@@ -163,6 +170,7 @@ class _SignupStoreScreenState extends State<SignupStoreScreen> {
       final businessId = 'biz_$currentUserId';
       await prefs.setBool('is_logged_in', true);
       await prefs.setBool('is_onboarded', true);
+      await prefs.setBool('is_pro', true);
       await prefs.setString('business_name', storeName);
       await prefs.setString('merchant_phone', phone);
       await prefs.setString('business_type', businessTypeId);
@@ -174,7 +182,7 @@ class _SignupStoreScreenState extends State<SignupStoreScreen> {
 
       InAppNotification.show(
         context: context,
-        message: 'Swagat hai $storeName! Aapka store setup poora hua.',
+        message: '🎉 Swagat hai $storeName! 7 Days FREE Pro Membership activated!',
         customIcon: Icons.stars_rounded,
         customColor: const Color(0xFFFBBF24),
       );

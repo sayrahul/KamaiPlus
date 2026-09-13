@@ -1664,20 +1664,35 @@ class _StoreProfileScreenState extends State<StoreProfileScreen> {
               ),
               const SizedBox(height: 12),
 
-              // Active UPI ID Pill
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFF1F5F9),
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: const Color(0xFFCBD5E1)),
-                ),
-                child: Text(
-                  activeVpa,
-                  style: GoogleFonts.inter(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w700,
-                    color: const Color(0xFF0F172A),
+              // Active UPI ID Pill (Tap to Copy)
+              InkWell(
+                onTap: () {
+                  Clipboard.setData(ClipboardData(text: activeVpa));
+                  HapticFeedback.selectionClick();
+                  InAppNotification.success('UPI ID copied: $activeVpa', context: context);
+                },
+                borderRadius: BorderRadius.circular(20),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF1F5F9),
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(color: const Color(0xFFCBD5E1)),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.copy_rounded, size: 12, color: Color(0xFF2563EB)),
+                      const SizedBox(width: 6),
+                      Text(
+                        activeVpa,
+                        style: GoogleFonts.inter(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                          color: const Color(0xFF0F172A),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ),
@@ -1695,6 +1710,35 @@ class _StoreProfileScreenState extends State<StoreProfileScreen> {
                   const SizedBox(width: 6),
                   _buildBrandBadge('Paytm', const Color(0xFF06B6D4), const Color(0xFFECFEFF)),
                 ],
+              ),
+              const SizedBox(height: 16),
+
+              // Print & Share Standee Full-Width Action
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  onPressed: () {
+                    HapticFeedback.lightImpact();
+                    UpiStandeeModal.show(context);
+                  },
+                  icon: const Icon(Icons.print_rounded, size: 18, color: Colors.white),
+                  label: Text(
+                    'Print & Share Shop QR Standee (PDF)',
+                    style: GoogleFonts.outfit(
+                      fontSize: 13.5,
+                      fontWeight: FontWeight.w700,
+                      color: Colors.white,
+                    ),
+                  ),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF0F172A),
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    elevation: 0,
+                  ),
+                ),
               ),
             ],
           ),

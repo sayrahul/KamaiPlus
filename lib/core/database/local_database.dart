@@ -2508,6 +2508,44 @@ class LocalDatabase {
     await saveStoreProfile(updated);
   }
 
+  /// Grants a 7-day free Pro trial if the store has never had any Pro plan or trial before
+  Future<StoreProfileModel> ensureFreeTrialGranted() async {
+    final current = await getStoreProfile();
+    // If they already have an active pro or an existing pro plan/expiry, do not override
+    if (current.isProEffective || (current.proPlan.isNotEmpty && current.proPlan != 'free') || current.proExpiry.isNotEmpty) {
+      return current;
+    }
+    // Grant 7 days free trial
+    final now = DateTime.now();
+    final expiry = now.add(const Duration(days: 7));
+    final updated = StoreProfileModel(
+      storeName: current.storeName,
+      tagline: current.tagline,
+      ownerName: current.ownerName,
+      phone: current.phone,
+      email: current.email,
+      upiVpa: current.upiVpa,
+      category: current.category,
+      businessType: current.businessType,
+      address: current.address,
+      pincode: current.pincode,
+      gstin: current.gstin,
+      fssai: current.fssai,
+      logoUrl: current.logoUrl,
+      upiAccountsJson: current.upiAccountsJson,
+      isPro: true,
+      proPlan: 'trial',
+      proExpiry: expiry.toIso8601String(),
+      razorpayPaymentId: 'free_trial_7d',
+    );
+    await saveStoreProfile(updated);
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool('is_pro', true);
+    } catch (_) {}
+    return updated;
+  }
+
   Future<void> deactivateProMembership() async {
     final current = await getStoreProfile();
     final updated = StoreProfileModel(

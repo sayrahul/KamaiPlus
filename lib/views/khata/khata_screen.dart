@@ -20,6 +20,7 @@ import 'package:qr_flutter/qr_flutter.dart';
 import '../transactions/sale_detail_modal.dart';
 import '../common/empty_state_card.dart';
 import '../common/in_app_notification.dart';
+import '../settings/store_profile_screen.dart';
 
 class KhataScreen extends StatefulWidget {
   const KhataScreen({super.key});
@@ -901,6 +902,7 @@ class _KhataScreenState extends State<KhataScreen> with DataBusRefresh<KhataScre
         ],
       ),
       child: TextField(
+        onTapOutside: (_) => FocusScope.of(context).unfocus(),
         onChanged: (val) => setState(() => _searchQuery = val),
         style: GoogleFonts.inter(fontSize: 13, color: const Color(0xFF0F172A)),
         decoration: InputDecoration(
@@ -3188,41 +3190,117 @@ class _KhataScreenState extends State<KhataScreen> with DataBusRefresh<KhataScre
                         ),
                       ],
                     ] else if (selectedMode == 'upi') ...[
-                      Center(
-                        child: Column(
-                          children: [
-                            Container(
-                              padding: const EdgeInsets.all(12),
-                              decoration: BoxDecoration(
-                                color: Colors.white,
-                                borderRadius: BorderRadius.circular(16),
-                                border: Border.all(color: const Color(0xFFE2E8F0)),
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: Colors.black.withValues(alpha: 0.04),
-                                    blurRadius: 8,
-                                    offset: const Offset(0, 2),
-                                  ),
-                                ],
+                      if (upiId.isEmpty) ...[
+                        Container(
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFFEF2F2),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: const Color(0xFFFECACA)),
+                          ),
+                          child: Column(
+                            children: [
+                              const Icon(Icons.error_outline_rounded, color: Color(0xFFDC2626), size: 32),
+                              const SizedBox(height: 8),
+                              Text(
+                                'Store UPI ID Not Configured',
+                                style: GoogleFonts.outfit(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w700,
+                                  color: const Color(0xFF991B1B),
+                                ),
                               ),
-                              child: QrImageView(
-                                data: upiPayUrl,
-                                version: QrVersions.auto,
-                                size: 160.0,
+                              const SizedBox(height: 4),
+                              Text(
+                                'Set up your shop UPI VPA in Store Profile to receive online payments.',
+                                textAlign: TextAlign.center,
+                                style: GoogleFonts.inter(
+                                  fontSize: 11,
+                                  color: const Color(0xFFB91C1C),
+                                ),
                               ),
-                            ),
-                            const SizedBox(height: 8),
-                            Text(
-                              'Scan with any UPI App (GPay, PhonePe, Paytm)',
-                              style: GoogleFonts.inter(fontSize: 11.5, fontWeight: FontWeight.w600, color: const Color(0xFF475569)),
-                            ),
-                            Text(
-                              'UPI ID: $upiId',
-                              style: GoogleFonts.inter(fontSize: 11, color: const Color(0xFF94A3B8)),
-                            ),
-                          ],
+                              const SizedBox(height: 10),
+                              ElevatedButton.icon(
+                                onPressed: () {
+                                  Navigator.pop(modalCtx);
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(builder: (_) => const StoreProfileScreen()),
+                                  );
+                                },
+                                icon: const Icon(Icons.settings_outlined, size: 16),
+                                label: const Text('Setup UPI ID Now'),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: const Color(0xFFDC2626),
+                                  foregroundColor: Colors.white,
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
-                      ),
+                      ] else ...[
+                        Center(
+                          child: Column(
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.all(12),
+                                decoration: BoxDecoration(
+                                  color: Colors.white,
+                                  borderRadius: BorderRadius.circular(16),
+                                  border: Border.all(color: const Color(0xFFE2E8F0)),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: Colors.black.withValues(alpha: 0.04),
+                                      blurRadius: 8,
+                                      offset: const Offset(0, 2),
+                                    ),
+                                  ],
+                                ),
+                                child: QrImageView(
+                                  data: upiPayUrl,
+                                  version: QrVersions.auto,
+                                  size: 160.0,
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              Text(
+                                'Scan with any UPI App (GPay, PhonePe, Paytm)',
+                                style: GoogleFonts.inter(fontSize: 11.5, fontWeight: FontWeight.w600, color: const Color(0xFF475569)),
+                              ),
+                              const SizedBox(height: 4),
+                              InkWell(
+                                onTap: () {
+                                  Clipboard.setData(ClipboardData(text: upiId));
+                                  HapticFeedback.selectionClick();
+                                  InAppNotification.success('UPI ID copied: $upiId', context: context);
+                                },
+                                borderRadius: BorderRadius.circular(16),
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFFF1F5F9),
+                                    borderRadius: BorderRadius.circular(16),
+                                    border: Border.all(color: const Color(0xFFCBD5E1)),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      const Icon(Icons.copy_rounded, size: 12, color: Color(0xFF2563EB)),
+                                      const SizedBox(width: 5),
+                                      Text(
+                                        'UPI ID: $upiId',
+                                        style: GoogleFonts.jetBrainsMono(fontSize: 11, fontWeight: FontWeight.w700, color: const Color(0xFF1E293B)),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
                     ] else if (selectedMode == 'split') ...[
                       Row(
                         children: [
@@ -3277,6 +3355,71 @@ class _KhataScreenState extends State<KhataScreen> with DataBusRefresh<KhataScre
                           ),
                         ],
                       ),
+                      if ((int.tryParse(splitUpiCtrl.text) ?? 0) > 0 && upiId.isNotEmpty) ...[
+                        const SizedBox(height: 12),
+                        Container(
+                          padding: const EdgeInsets.all(10),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFF0FDF4),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: const Color(0xFFBBF7D0)),
+                          ),
+                          child: Row(
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.all(4),
+                                decoration: BoxDecoration(
+                                  color: Colors.white,
+                                  borderRadius: BorderRadius.circular(8),
+                                  border: Border.all(color: const Color(0xFF86EFAC)),
+                                ),
+                                child: QrImageView(
+                                  data: 'upi://pay?pa=$upiId&pn=${Uri.encodeComponent(storeName)}&am=${(int.tryParse(splitUpiCtrl.text) ?? 0)}.00&cu=INR&tn=Khata+Split+Settle',
+                                  version: QrVersions.auto,
+                                  size: 80,
+                                ),
+                              ),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      'Scan to Pay UPI Split',
+                                      style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w700, color: const Color(0xFF15803D)),
+                                    ),
+                                    Text(
+                                      '₹${splitUpiCtrl.text}.00',
+                                      style: GoogleFonts.jetBrainsMono(fontSize: 15, fontWeight: FontWeight.w800, color: const Color(0xFF15803D)),
+                                    ),
+                                    const SizedBox(height: 2),
+                                    InkWell(
+                                      onTap: () {
+                                        Clipboard.setData(ClipboardData(text: upiId));
+                                        HapticFeedback.selectionClick();
+                                        InAppNotification.success('UPI ID copied: $upiId', context: context);
+                                      },
+                                      child: Row(
+                                        children: [
+                                          const Icon(Icons.copy_rounded, size: 10, color: Color(0xFF047857)),
+                                          const SizedBox(width: 3),
+                                          Flexible(
+                                            child: Text(
+                                              upiId,
+                                              style: GoogleFonts.jetBrainsMono(fontSize: 10, color: const Color(0xFF047857), fontWeight: FontWeight.w600),
+                                              overflow: TextOverflow.ellipsis,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
                     ],
 
                     const SizedBox(height: 20),

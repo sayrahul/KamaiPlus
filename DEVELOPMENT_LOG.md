@@ -45,6 +45,105 @@ hits (the screen's data-loading call), not just the data shape. See
 drives `LocalDatabase` through a real (in-memory FFI) SQLite database and asserts on what
 `getAllProducts`/`getAllCategories` actually return.
 
+---
+
+## 2026-09-13 — Universal Release APK Rebuild & Installation on Second Device (OnePlus CPH2691)
+
+**User Request:**
+"mere dusre phone me install karo"
+
+**Device Details & Environment:**
+- **Model:** OnePlus Nord CE4 Lite 5G (`CPH2691`)
+- **ADB Device ID:** `88e61059`
+- **Architecture:** 64-bit ARM (`arm64-v8a`) on Android 16 (API 36)
+- **Display:** 1264 × 2780 high-DPI display
+
+**Compilation & Packaging:**
+- Recompiled a full **Universal Release APK** (`flutter build apk --release`, 63.3MB) incorporating all recent updates:
+  - 7-Day Free Pro Welcome Reward & Live Ticking Countdown Timer
+  - POS Checkout Auto-scroll to Dynamic UPI QR + 1-tap copyable UPI ID
+  - Split Bill Dynamic QR generation
+  - Khata soft-keyboard outside-tap dismiss + Split settlement QR
+  - Counter QR Standee print & share button
+  - Thermal receipt store UPI ID printing
+- R8/ProGuard code shrinking and font icon tree-shaking completed with 0 errors.
+
+**On-Device Installation & Verification:**
+- Transferred and installed via `adb -s 88e61059 install -r "build/app/outputs/flutter-apk/app-release.apk"` $\rightarrow$ `Success` (2.27 MB/s, 66.3MB).
+- Launched app on device via `adb shell monkey -p com.kamaiplus.pos -c android.intent.category.LAUNCHER 1`.
+- Captured live on-device screenshot:
+  - App launched instantly into POS Counter Billing with Pharmacy vertical (`Rahul Jadhav`).
+  - Rendered POS Checkout modal with 9 items, quick cash chips, and payment method selector in full 1264×2780 resolution.
+  - Top `⭐ Pro` badge active and validated.
+
+---
+
+## 2026-09-13 — 7-Day Free Pro Subscription Welcome Reward & Live Countdown Timer
+
+**User Request:**
+"aur ek chij.. hame user sign karne ke baad use 7 days ka pro sucessbrption free dena hai.. free reward milege.. wo vaha dekh payga ki congrtaulation you got 7 day free Pro member ship and usme counter start ho jayga... Unlock Full Store Power ke modal me .. ise sahi tarikhese create karna.."
+
+**Root Cause & Implementation:**
+1. **Free Welcome Reward Auto-Granting (`LocalDatabase.instance.ensureFreeTrialGranted`):**
+   - *Problem:* New users who signed up started on a basic free tier without seeing the true power of KamaiPlus Pro (Barcode Studio, Cloud Backup, Unlimited billing).
+   - *Solution:* Every new store setup in `SignupStoreScreen._completeSetup()` automatically assigns `isPro = true`, `proPlan = 'trial'`, `proExpiry = DateTime.now().add(const Duration(days: 7))`, and `razorpayPaymentId = 'free_trial_7d'`.
+   - In `LocalDatabase.instance`, added `ensureFreeTrialGranted()`: If store has never had Pro or trial before, grants the 7 days free trial reward and sets `prefs.setBool('is_pro', true)`.
+2. **Unlock Full Store Power Modal (`ProUpgradeModal`):**
+   - *Celebratory Banner:* When trial is active, displays a rich emerald/gold card with `🎉 FREE WELCOME REWARD` badge, `Congratulations! You got 7 Days Free Pro Membership!`, and active feature highlights.
+   - *Live Digital Countdown Timer:* Running a 1-second interval periodic timer (`_countdownTimer`), updating a 4-box digital ticker: `[Days] : [Hours] : [Mins] : [Secs] Left`.
+   - *Trial Extension / Upgrade CTA:* Cashiers can still view Annual (₹1,499/yr, 50% OFF) and Monthly (₹199/mo) plans. The primary action button says `Extend Pro Validity • ₹1,499/yr` to encourage locking in long-term validity without billing interruption.
+   - *Trial Expired Notice:* If the 7 days pass, shows `⚠️ Your 7-Day Free Trial Has Ended` with renew options.
+
+**Verification:**
+- `flutter analyze`: **0 issues found** across all modified files.
+- `flutter test test/vertical_product_leak_test.dart`: **All 6 tests passed**.
+
+---
+
+## 2026-09-13 — Comprehensive UPI Workflow Audit & UX Hardening
+
+**User Request:**
+"mera mobile screen acess karke pata lagao kya kya upi improvement change kar sakte hai.. kya kya bugs hai.. har ek page har ek function har ek modal.. sab kuch.. jo bhi aap ke end se possible hai.. maximun wo wo karo.. workflow, wiring, if possible, try best that you can do"
+
+**Device Inspected via ADB:**
+- Device: Xiaomi Redmi 6 (`de7ea8af7d29`), 720×1440, Android 9.
+- Screens Audited: POS Billing, PosCheckoutModal (Cash, UPI/QR, Split tabs), Digital Khata (dashboard, customer list, search bar, settlement modal), Store Profile (UPI QR & Banking tab, Standee generator), Thermal Receipts.
+
+**Root Causes & Solutions:**
+1. **POS Checkout Modal (`lib/views/pos/pos_checkout_modal.dart`):**
+   - *Friction/Bug 1: QR Below the Fold:* On compact retail displays (720×1440), selecting UPI/Split pushed the dynamic QR code off-screen below cart items, requiring cashier to manually scroll down every sale.
+     - *Fix:* Attached `_bodyScrollController` to `SingleChildScrollView` and added smooth auto-scroll to the payment card whenever UPI or Split mode is clicked.
+   - *Friction/Bug 2: UPI ID Not Displayed or Copyable:* When customer camera fails to scan and they ask for UPI ID, cashiers had no way to view or copy it.
+     - *Fix:* Added high-contrast copyable chip `📌 UPI: $_activeUpiVpa [Copy]` with 1-tap clipboard copy and toast.
+   - *Friction/Bug 3: Missing Empty UPI ID Guard:* If store has no UPI ID configured, rendered broken URI `upi://pay?pa=&...`.
+     - *Fix:* Displays friendly warning card with direct `Setup Store UPI ID` button navigating directly to `StoreProfileScreen`.
+   - *Friction/Bug 4: Multiple UPI Accounts Inaccessible:* Multi-account merchants could not choose receiving account during billing.
+     - *Fix:* Added ChoiceChip account switcher when merchant has configured >1 UPI account.
+   - *Friction/Bug 5: Split Payment UPI QR Missing:* Split mode allowed entering ₹ amounts for Cash and UPI, but gave no scannable QR code for the UPI portion!
+     - *Fix:* Automatically generates and displays a live dynamic QR code for the online portion (`splitUpiPaise`) with 1-tap copy when `splitUpiPaise > 0`.
+
+2. **Digital Khata (`lib/views/khata/khata_screen.dart`):**
+   - *Friction/Bug 1: Keyboard Trapping:* Customer search `TextField` did not unfocus on outside taps, leaving the soft keyboard open over customer ledger cards.
+     - *Fix:* Added `onTapOutside: (_) => FocusScope.of(context).unfocus()`.
+   - *Friction/Bug 2: Broken Settle QR on Empty VPA:* UPI settlement rendered empty black square when UPI ID was not set.
+     - *Fix:* Added empty guard with `Setup UPI ID Now` button navigating to `StoreProfileScreen`.
+   - *Friction/Bug 3: Uncopyable UPI ID:* Added 1-tap copy chip with clipboard toast.
+   - *Friction/Bug 4: Split Settlement Missing QR:* Added live compact QR code for the split online portion.
+
+3. **Store Profile & Settings (`lib/views/settings/store_profile_screen.dart`):**
+   - *Friction 1: Standee CTA Hidden:* The official counter standee was only accessible via a tiny header icon.
+     - *Fix:* Added full-width high-contrast button `🖨️ Print & Share Shop QR Standee (PDF)` below the live QR preview card, invoking `UpiStandeeModal.show(context)`.
+   - *Friction 2: Active UPI Pill Uncopyable:* Wrapped with `InkWell` to copy on 1-tap.
+
+4. **Thermal Bill Printing (`lib/services/thermal_printer_service.dart`):**
+   - *Friction: UPI ID omitted on receipts:* Added `storeUpiVpa` to `generateReceiptBytes` and print centered `UPI: $storeUpiVpa` above the footer.
+
+**Verification:**
+- `flutter analyze` on all modified files: **0 issues found** (passed with 0 errors/warnings).
+- `flutter test test/vertical_product_leak_test.dart`: **All 6 tests passed** (0 regressions).
+
+---
+
 ## 2026-09-13 — Complete Removal of WhatsApp Payment Links & Universal Multi-Device APK (arm64-v8a + armeabi-v7a)
 
 **User Request:**

@@ -1299,3 +1299,27 @@ Comprehensive enterprise-grade retail UX upgrade suite aligned with PhonePe Busi
 77. **Universal Multi-Architecture APK Compatibility (LOCKED):**
     - Distribution APKs must always be compiled as Universal Release APKs (`flutter build apk --release`, 63.2MB) containing all ABIs (`arm64-v8a`, `armeabi-v7a`, and `x86_64`).
     - Targeted single-ABI builds (`--target-platform android-arm`) lack 64-bit binaries and fail/crash on 64-bit phones (`INSTALL_FAILED_NO_MATCHING_ABIS`). Universal Release APK ensures 100% compatibility across all Android devices.
+
+78. **End-to-End Retail UPI Workflow & UX Hardening (LOCKED):**
+    - **POS Checkout Modal (`PosCheckoutModal`):**
+      - Selecting UPI or Split payment automatically scrolls down via `_bodyScrollController` to bring the dynamic QR code directly into view on smaller retail screens (720×1440).
+      - Added 1-tap copyable UPI ID chip (`UPI: $vpa`) with clipboard feedback toast.
+      - Handled empty store UPI VPA gracefully: displays error card with direct `Setup Store UPI ID` button leading to `StoreProfileScreen`.
+      - Supports multi-account merchants: ChoiceChip selector dynamically displayed if merchant has configured >1 UPI account.
+      - Split Payment UPI Dynamic QR: When customer splits bill (e.g. ₹100 Cash + ₹199 UPI), automatically renders a live scannable QR code for the exact online portion (`splitUpiPaise`) with 1-tap copy.
+    - **Digital Khata (`KhataScreen`):**
+      - Customer search `TextField` uses `onTapOutside: (_) => FocusScope.of(context).unfocus()` to prevent the soft keyboard from trapping clicks or obscuring customer cards.
+      - Settle modal in UPI mode verifies if store UPI ID is configured; if missing, displays setup prompt rather than empty black square; if present, provides 1-tap copy chip.
+      - Settle modal in Split mode renders dynamic UPI QR for the exact online portion when `splitUpiCtrl > 0`.
+    - **Store Profile & Settings (`StoreProfileScreen`):**
+      - Active UPI ID pill in live preview card has 1-tap copy with clipboard feedback.
+79. **7-Day Free Pro Subscription Welcome Reward & Live Countdown (LOCKED):**
+    - **Welcome Reward Auto-Granting:**
+      - Every new store registration via `SignupStoreScreen` or user setup is automatically granted **7 Days Free Pro Subscription** (`isPro = true`, `proPlan = 'trial'`, `proExpiry = DateTime.now().add(const Duration(days: 7))`, `razorpayPaymentId = 'free_trial_7d'`).
+      - `LocalDatabase.instance.ensureFreeTrialGranted()` ensures any existing or returning store that never had Pro/trial also receives this 7-day reward automatically without requiring manual action.
+      - Sets `prefs.setBool('is_pro', true)` and announces via celebration toast: `🎉 Swagat hai! 7 Days FREE Pro Membership activated!`.
+    - **Unlock Full Store Power Modal (`ProUpgradeModal`):**
+      - **Celebratory Reward Banner:** Renders emerald/gold card with `🎉 FREE WELCOME REWARD` badge, `Congratulations! You got 7 Days Free Pro Membership!`, and active feature highlights.
+      - **Live Digital Ticker Countdown:** A 1-second interval real-time digital timer displaying remaining trial validity: `[06] DAYS : [23] HOURS : [42] MINS : [15] SECS`.
+      - **Dual Plan Selection & Validity Extension:** While on trial, merchants can still see Annual (₹1,499/yr, 50% OFF) and Monthly (₹199/mo) plans. The primary action button says `Extend Pro Validity • ₹1,499/yr` to incentivize early lock-in of discounts without billing interruption.
+      - **Trial Expired State:** If trial expires, shows clear notice prompting to renew before locking Pro features.
