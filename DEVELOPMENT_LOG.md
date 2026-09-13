@@ -47,15 +47,18 @@ drives `LocalDatabase` through a real (in-memory FFI) SQLite database and assert
 
 ---
 
-## 2026-09-13 — Version 4.21.0 (Code 42200) Google Play Production App Bundle (.aab) Build & Official Signing
+## 2026-09-13 — Version 4.21.0 (Code 42201, Target SDK 36) Google Play Production App Bundle (.aab) Build & Official Signing
 
 **User Request:**
 "chalo playstore me update karte hai app.. give me systematic procersss and create bundle accordingly..."
-And resolved: "Version code 42100 has already been used. Try another version code."
+And resolved:
+1. "Version code 42100 has already been used. Try another version code."
+2. "Your app currently targets API level 34 and must target at least API level 36 to ensure that it is built on the latest APIs"
 
 **Release Details & Signing Specifications:**
 - **App Version:** `4.21.0`
-- **Version Code:** `42200` (incremented from `42100` to prevent Google Play duplicate version code collision)
+- **Version Code:** `42201` (incremented to prevent collision)
+- **Compile SDK & Target SDK:** `36` (Android 16 / latest Play Store policy compliance)
 - **Output Artifact:** `build/app/outputs/bundle/release/app-release.aab` (95.2 MB)
 - **Keystore File:** `android/app/kamai-release-key.jks`
 - **Key Alias:** `kamaiplus`
