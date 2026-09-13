@@ -57,6 +57,8 @@ google-services.json
 
 # Firebase CLI local deploy cache (per-machine, not project state)
 .firebase/
+scratch/
+.serena/
 
 # Local tool overrides
 .serena/project.local.yml

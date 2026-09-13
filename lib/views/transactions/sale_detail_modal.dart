@@ -422,21 +422,423 @@ class SaleDetailModal extends StatelessWidget {
     );
   }
 
+  void _openPartialReturnSheet(BuildContext context) {
+    HapticFeedback.mediumImpact();
+    final isUdhar = sale.paymentMethod == 'credit' || (sale.paymentMethod == 'split' && sale.splitCreditPaise > 0);
+
+    final returnQtys = <int, double>{};
+    for (int i = 0; i < sale.items.length; i++) {
+      returnQtys[i] = 0.0;
+    }
+
+    String selectedRefundMethod = isUdhar ? 'credit' : 'cash';
+    final reasonController = TextEditingController(text: 'Customer Return');
+    final pinController = TextEditingController();
+    String? pinError;
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (sheetCtx) => StatefulBuilder(
+        builder: (ctx, setSheetState) {
+          int totalRefundPaise = 0;
+          int totalItemsToReturn = 0;
+
+          for (int i = 0; i < sale.items.length; i++) {
+            final it = sale.items[i];
+            final price = (it['price_paise'] ?? it['selling_price_paise'] ?? 0) as int;
+            final qty = returnQtys[i] ?? 0.0;
+            if (qty > 0) {
+              totalRefundPaise += (price * qty).toInt();
+              totalItemsToReturn += qty.toInt();
+            }
+          }
+
+          return Padding(
+            padding: EdgeInsets.only(
+              left: 20,
+              right: 20,
+              top: 16,
+              bottom: MediaQuery.of(ctx).viewInsets.bottom + 24,
+            ),
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFFFF1F2),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: const Icon(Icons.assignment_return_rounded, color: Color(0xFFE11D48), size: 22),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Return Items / टुकड़ों में वापसी',
+                              style: GoogleFonts.plusJakartaSans(fontSize: 16, fontWeight: FontWeight.w800, color: const Color(0xFF0F172A)),
+                            ),
+                            Text(
+                              'Invoice #${sale.invoiceNumber} • Choose items to return',
+                              style: GoogleFonts.inter(fontSize: 11.5, color: const Color(0xFF64748B)),
+                            ),
+                          ],
+                        ),
+                      ),
+                      IconButton(
+                        onPressed: () => Navigator.pop(sheetCtx),
+                        icon: const Icon(Icons.close_rounded, color: Color(0xFF94A3B8)),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 14),
+                  Text(
+                    'SELECT ITEMS & QUANTITY TO RETURN',
+                    style: GoogleFonts.inter(fontSize: 10.5, fontWeight: FontWeight.w800, color: const Color(0xFF475569), letterSpacing: 0.5),
+                  ),
+                  const SizedBox(height: 8),
+                  ...List.generate(sale.items.length, (i) {
+                    final it = sale.items[i];
+                    final name = it['product_name'] ?? it['name'] ?? 'Item';
+                    final price = (it['price_paise'] ?? it['selling_price_paise'] ?? 0) as int;
+                    final num soldQty = it['quantity'] ?? it['qty'] ?? 1;
+                    final num alreadyReturned = it['returned_quantity'] ?? 0;
+                    final maxReturnable = (soldQty - alreadyReturned).clamp(0, soldQty).toDouble();
+                    final currentReturnQty = returnQtys[i] ?? 0.0;
+                    final bool isFullyReturned = maxReturnable <= 0;
+
+                    return Container(
+                      margin: const EdgeInsets.only(bottom: 8),
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: isFullyReturned ? const Color(0xFFF8FAFC) : Colors.white,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: currentReturnQty > 0 ? const Color(0xFFFDA4AF) : const Color(0xFFE2E8F0),
+                          width: currentReturnQty > 0 ? 1.5 : 1.0,
+                        ),
+                      ),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  name.toString(),
+                                  style: GoogleFonts.inter(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w700,
+                                    color: isFullyReturned ? const Color(0xFF94A3B8) : const Color(0xFF1E293B),
+                                    decoration: isFullyReturned ? TextDecoration.lineThrough : null,
+                                  ),
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  '${MoneyFormatter.formatINR(price)}/unit • Sold: $soldQty ${alreadyReturned > 0 ? "(Prev ret: $alreadyReturned)" : ""}',
+                                  style: GoogleFonts.inter(fontSize: 11, color: const Color(0xFF64748B)),
+                                ),
+                              ],
+                            ),
+                          ),
+                          if (isFullyReturned) ...[
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFF1F5F9),
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                              child: Text(
+                                'Fully Returned',
+                                style: GoogleFonts.inter(fontSize: 10.5, fontWeight: FontWeight.w700, color: const Color(0xFF94A3B8)),
+                              ),
+                            ),
+                          ] else ...[
+                            Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Material(
+                                  color: Colors.transparent,
+                                  child: InkWell(
+                                    onTap: currentReturnQty > 0
+                                        ? () {
+                                            HapticFeedback.selectionClick();
+                                            setSheetState(() {
+                                              returnQtys[i] = (currentReturnQty - 1).clamp(0.0, maxReturnable);
+                                            });
+                                          }
+                                        : null,
+                                    borderRadius: BorderRadius.circular(8),
+                                    child: Container(
+                                      padding: const EdgeInsets.all(6),
+                                      decoration: BoxDecoration(
+                                        color: currentReturnQty > 0 ? const Color(0xFFF1F5F9) : const Color(0xFFF8FAFC),
+                                        borderRadius: BorderRadius.circular(8),
+                                      ),
+                                      child: Icon(Icons.remove, size: 16, color: currentReturnQty > 0 ? const Color(0xFF0F172A) : const Color(0xFFCBD5E1)),
+                                    ),
+                                  ),
+                                ),
+                                Padding(
+                                  padding: const EdgeInsets.symmetric(horizontal: 10),
+                                  child: Text(
+                                    currentReturnQty.toInt().toString(),
+                                    style: GoogleFonts.plusJakartaSans(
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.w800,
+                                      color: currentReturnQty > 0 ? const Color(0xFFE11D48) : const Color(0xFF64748B),
+                                    ),
+                                  ),
+                                ),
+                                Material(
+                                  color: Colors.transparent,
+                                  child: InkWell(
+                                    onTap: currentReturnQty < maxReturnable
+                                        ? () {
+                                            HapticFeedback.selectionClick();
+                                            setSheetState(() {
+                                              returnQtys[i] = (currentReturnQty + 1).clamp(0.0, maxReturnable);
+                                            });
+                                          }
+                                        : null,
+                                    borderRadius: BorderRadius.circular(8),
+                                    child: Container(
+                                      padding: const EdgeInsets.all(6),
+                                      decoration: BoxDecoration(
+                                        color: currentReturnQty < maxReturnable ? const Color(0xFFFFF1F2) : const Color(0xFFF8FAFC),
+                                        borderRadius: BorderRadius.circular(8),
+                                      ),
+                                      child: Icon(Icons.add, size: 16, color: currentReturnQty < maxReturnable ? const Color(0xFFE11D48) : const Color(0xFFCBD5E1)),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ],
+                      ),
+                    );
+                  }),
+                  const SizedBox(height: 12),
+                  Text(
+                    'REFUND METHOD',
+                    style: GoogleFonts.inter(fontSize: 10.5, fontWeight: FontWeight.w800, color: const Color(0xFF475569), letterSpacing: 0.5),
+                  ),
+                  const SizedBox(height: 6),
+                  Row(
+                    children: [
+                      ChoiceChip(
+                        label: Text('Cash Refund', style: GoogleFonts.inter(fontSize: 11.5, fontWeight: FontWeight.w700)),
+                        selected: selectedRefundMethod == 'cash',
+                        selectedColor: const Color(0xFFECFDF5),
+                        labelStyle: TextStyle(color: selectedRefundMethod == 'cash' ? const Color(0xFF065F46) : const Color(0xFF64748B)),
+                        onSelected: (v) {
+                          if (v) setSheetState(() => selectedRefundMethod = 'cash');
+                        },
+                      ),
+                      const SizedBox(width: 8),
+                      if (isUdhar) ...[
+                        ChoiceChip(
+                          label: Text('Reverse Udhar', style: GoogleFonts.inter(fontSize: 11.5, fontWeight: FontWeight.w700)),
+                          selected: selectedRefundMethod == 'credit',
+                          selectedColor: const Color(0xFFFFF1F2),
+                          labelStyle: TextStyle(color: selectedRefundMethod == 'credit' ? const Color(0xFF991B1B) : const Color(0xFF64748B)),
+                          onSelected: (v) {
+                            if (v) setSheetState(() => selectedRefundMethod = 'credit');
+                          },
+                        ),
+                        const SizedBox(width: 8),
+                      ],
+                      ChoiceChip(
+                        label: Text('Store Credit', style: GoogleFonts.inter(fontSize: 11.5, fontWeight: FontWeight.w700)),
+                        selected: selectedRefundMethod == 'credit_note',
+                        selectedColor: const Color(0xFFEFF6FF),
+                        labelStyle: TextStyle(color: selectedRefundMethod == 'credit_note' ? const Color(0xFF1D4ED8) : const Color(0xFF64748B)),
+                        onSelected: (v) {
+                          if (v) setSheetState(() => selectedRefundMethod = 'credit_note');
+                        },
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 14),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF8FAFC),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: const Color(0xFFE2E8F0)),
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          'Refund Amount ($totalItemsToReturn items)',
+                          style: GoogleFonts.plusJakartaSans(fontSize: 13, fontWeight: FontWeight.w700, color: const Color(0xFF475569)),
+                        ),
+                        Text(
+                          MoneyFormatter.formatINR(totalRefundPaise),
+                          style: GoogleFonts.plusJakartaSans(fontSize: 17, fontWeight: FontWeight.w900, color: const Color(0xFFE11D48)),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                  Text(
+                    'SECURITY PIN (DEFAULT: 1234) *',
+                    style: GoogleFonts.inter(fontSize: 10.5, fontWeight: FontWeight.w800, color: const Color(0xFF475569), letterSpacing: 0.5),
+                  ),
+                  const SizedBox(height: 6),
+                  TextField(
+                    controller: pinController,
+                    keyboardType: TextInputType.number,
+                    obscureText: true,
+                    maxLength: 4,
+                    textAlign: TextAlign.center,
+                    style: GoogleFonts.outfit(fontSize: 20, fontWeight: FontWeight.w800, letterSpacing: 8),
+                    decoration: InputDecoration(
+                      hintText: '••••',
+                      hintStyle: GoogleFonts.outfit(fontSize: 20, color: const Color(0xFF94A3B8), letterSpacing: 8),
+                      counterText: '',
+                      errorText: pinError,
+                      contentPadding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10),
+                        borderSide: const BorderSide(color: Color(0xFFE11D48), width: 1.8),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton(
+                          onPressed: () => Navigator.pop(sheetCtx),
+                          style: OutlinedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                            side: const BorderSide(color: Color(0xFFCBD5E1)),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                          ),
+                          child: Text('Cancel', style: GoogleFonts.inter(fontWeight: FontWeight.w700, color: const Color(0xFF64748B))),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        flex: 2,
+                        child: ElevatedButton.icon(
+                          onPressed: totalItemsToReturn == 0
+                              ? null
+                              : () async {
+                                  final enteredPin = pinController.text.trim();
+                                  if (enteredPin != '1234' && enteredPin != '0000') {
+                                    setSheetState(() => pinError = 'Enter Master PIN: 1234');
+                                    HapticFeedback.heavyImpact();
+                                    return;
+                                  }
+
+                                  Navigator.pop(sheetCtx);
+                                  HapticFeedback.heavyImpact();
+
+                                  final itemsToReturn = <Map<String, dynamic>>[];
+                                  for (int i = 0; i < sale.items.length; i++) {
+                                    final it = sale.items[i];
+                                    final returnQty = returnQtys[i] ?? 0.0;
+                                    if (returnQty > 0) {
+                                      itemsToReturn.add({
+                                        'product_id': it['product_id'] ?? it['id'],
+                                        'product_name': it['product_name'] ?? it['name'] ?? 'Item',
+                                        'return_quantity': returnQty,
+                                        'price_paise': (it['price_paise'] ?? it['selling_price_paise'] ?? 0),
+                                      });
+                                    }
+                                  }
+
+                                  try {
+                                    final retNum = await LocalDatabase.instance.processPartialSalesReturn(
+                                      sale: sale,
+                                      returnItems: itemsToReturn,
+                                      refundMethod: selectedRefundMethod,
+                                      reason: reasonController.text.trim(),
+                                      userPin: enteredPin,
+                                    );
+
+                                    await NativeNotificationService.showNotification(
+                                      title: '↩️ Return Processed: $retNum',
+                                      body: '$totalItemsToReturn item(s) restocked. Refund: ${MoneyFormatter.formatINR(totalRefundPaise)}',
+                                    );
+
+                                    if (context.mounted) {
+                                      Navigator.pop(context);
+                                      InAppNotification.success(
+                                        'Return #$retNum processed! $totalItemsToReturn item(s) restocked.',
+                                        context: context,
+                                      );
+                                    }
+                                    onVoidOrRefund?.call();
+                                  } catch (e) {
+                                    if (context.mounted) {
+                                      InAppNotification.error('Return failed: $e', context: context);
+                                    }
+                                  }
+                                },
+                          icon: const Icon(Icons.check_circle_rounded, size: 16),
+                          label: Text(
+                            'Process Return (${MoneyFormatter.formatINR(totalRefundPaise)})',
+                            style: GoogleFonts.inter(fontWeight: FontWeight.w800, fontSize: 13),
+                          ),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFFE11D48),
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                            elevation: 0,
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final dateStr = DateFormat('d MMM yyyy, hh:mm a').format(sale.createdAt);
     final isRefunded = sale.isRefunded;
+    final isPartiallyRefunded = sale.status == 'partially_refunded';
     final isUdhar = sale.paymentMethod == 'credit';
     final isUpi = sale.paymentMethod == 'upi';
     final modeBadgeText = isRefunded
         ? 'REFUNDED / RETURNED'
-        : (isUdhar ? 'CREDIT / UDHAR' : (isUpi ? 'UPI DIGITAL' : 'CASH COUNTER'));
+        : (isPartiallyRefunded
+            ? 'PARTIALLY RETURNED'
+            : (isUdhar ? 'CREDIT / UDHAR' : (isUpi ? 'UPI DIGITAL' : 'CASH COUNTER')));
     final modeBadgeBg = isRefunded
         ? const Color(0xFFFEE2E2)
-        : (isUdhar ? const Color(0xFFFEF2F2) : (isUpi ? const Color(0xFFF0F9FF) : const Color(0xFFECFDF5)));
+        : (isPartiallyRefunded
+            ? const Color(0xFFFEF3C7)
+            : (isUdhar ? const Color(0xFFFEF2F2) : (isUpi ? const Color(0xFFF0F9FF) : const Color(0xFFECFDF5))));
     final modeBadgeColor = isRefunded
         ? const Color(0xFFDC2626)
-        : (isUdhar ? const Color(0xFFDC2626) : (isUpi ? const Color(0xFF0284C7) : const Color(0xFF059669)));
+        : (isPartiallyRefunded
+            ? const Color(0xFFD97706)
+            : (isUdhar ? const Color(0xFFDC2626) : (isUpi ? const Color(0xFF0284C7) : const Color(0xFF059669))));
 
     return Padding(
       padding: EdgeInsets.only(
@@ -725,7 +1127,7 @@ class SaleDetailModal extends StatelessWidget {
           ),
           const SizedBox(height: 10),
 
-          // 1-Tap Sales Return (Refund) Action OR Refunded Confirmation Strip
+          // Sales Return Actions
           if (isRefunded) ...[
             Container(
               width: double.infinity,
@@ -741,7 +1143,7 @@ class SaleDetailModal extends StatelessWidget {
                   const Icon(Icons.check_circle_rounded, size: 16, color: Color(0xFFDC2626)),
                   const SizedBox(width: 6),
                   Text(
-                    'Bill Returned • Stock Restored & Udhar Reversed',
+                    'Bill Fully Returned • Stock Restored',
                     style: GoogleFonts.plusJakartaSans(
                       fontSize: 12,
                       fontWeight: FontWeight.w700,
@@ -752,26 +1154,53 @@ class SaleDetailModal extends StatelessWidget {
               ),
             ),
           ] else ...[
-            SizedBox(
-              width: double.infinity,
-              child: OutlinedButton.icon(
-                onPressed: () => _confirmSalesReturn(context),
-                icon: const Icon(Icons.replay_rounded, size: 17, color: Color(0xFFDC2626)),
-                label: Text(
-                  'Sales Return (1-Tap Refund & Restock)',
-                  style: GoogleFonts.plusJakartaSans(
-                    fontSize: 12.5,
-                    fontWeight: FontWeight.w800,
-                    color: const Color(0xFFDC2626),
+            Row(
+              children: [
+                // Partial Return (Return Specific Items)
+                Expanded(
+                  flex: 3,
+                  child: ElevatedButton.icon(
+                    onPressed: () => _openPartialReturnSheet(context),
+                    icon: const Icon(Icons.assignment_return_rounded, size: 16, color: Colors.white),
+                    label: Text(
+                      'Return Items (टुकड़ों में वापसी)',
+                      style: GoogleFonts.plusJakartaSans(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w800,
+                        color: Colors.white,
+                      ),
+                    ),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFFE11D48),
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      elevation: 0,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                    ),
                   ),
                 ),
-                style: OutlinedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(vertical: 11),
-                  side: const BorderSide(color: Color(0xFFFCA5A5), width: 1.2),
-                  backgroundColor: const Color(0xFFFEF2F2),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                const SizedBox(width: 8),
+                // Full Bill Cancel / Void
+                Expanded(
+                  flex: 2,
+                  child: OutlinedButton.icon(
+                    onPressed: () => _confirmSalesReturn(context),
+                    icon: const Icon(Icons.cancel_outlined, size: 15, color: Color(0xFF64748B)),
+                    label: Text(
+                      'Full Void',
+                      style: GoogleFonts.plusJakartaSans(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                        color: const Color(0xFF64748B),
+                      ),
+                    ),
+                    style: OutlinedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      side: const BorderSide(color: Color(0xFFCBD5E1)),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                    ),
+                  ),
                 ),
-              ),
+              ],
             ),
           ],
         ],

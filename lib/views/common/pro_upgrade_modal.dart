@@ -1029,7 +1029,7 @@ class _ProUpgradeModalState extends State<ProUpgradeModal> {
                         child: OutlinedButton.icon(
                           onPressed: () async {
                             HapticFeedback.lightImpact();
-                            final uri = Uri.parse('https://wa.me/919595997711?text=Hello%20KamaiPlus%20Team%2C%20I%20am%20a%20Pro%20Subscriber%20for%20store%20$businessTitle');
+                            final uri = Uri.parse('https://wa.me/918669997711?text=Hello%20KamaiPlus%20Team%2C%20I%20am%20a%20Pro%20Subscriber%20for%20store%20$businessTitle');
                             try {
                               await launchUrl(uri, mode: LaunchMode.externalApplication);
                             } catch (_) {}

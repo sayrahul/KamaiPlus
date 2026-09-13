@@ -20,6 +20,7 @@ class InvoicePdfService {
     String? gstin,
     String? logoPath,
     String? customerPhone,
+    bool skipDownloadsFolder = false,
   }) async {
     try {
       final prefs = await SharedPreferences.getInstance();
@@ -190,6 +191,7 @@ class InvoicePdfService {
         'showDynamicUpiQr': showDynamicUpiQr,
         'upiId': upiId,
         'qrBytes': qrBytes,
+        'skipDownloadsFolder': skipDownloadsFolder,
       });
 
       return filePath;
@@ -268,6 +270,7 @@ class InvoicePdfService {
       gstin: gstin,
       logoPath: logoPath,
       customerPhone: customerPhone,
+      skipDownloadsFolder: true,
     );
     if (path == null || path.isEmpty) return false;
     return await sharePdf(

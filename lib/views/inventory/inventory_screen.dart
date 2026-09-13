@@ -68,8 +68,7 @@ class _InventoryScreenState extends State<InventoryScreen> with DataBusRefresh<I
       // Real per-batch near-expiry data (pharmacy only) — see
       // getNearExpiryBatches' doc comment for why this replaced computing
       // it from each product's single denormalized expiryDate field.
-      final showExpiry = BusinessVerticals.resolve(activeType).toggles.showBatchExpiry;
-      final nearExpiry = showExpiry ? await LocalDatabase.instance.getNearExpiryBatches(activeType) : <Map<String, dynamic>>[];
+      final nearExpiry = await LocalDatabase.instance.getNearExpiryBatches(activeType);
       if (mounted) {
         setState(() {
           _products = products;

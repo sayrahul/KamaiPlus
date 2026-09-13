@@ -14,6 +14,7 @@ import 'rapid_barcode_inward_screen.dart';
 
 class AddProductModal extends StatefulWidget {
   final ProductModel? existingProduct;
+  final String? parentIdForNewVariant;
   final List<CategoryModel> categories;
   final VoidCallback onSaved;
   final VoidCallback onSwitchToAiInward;
@@ -21,6 +22,7 @@ class AddProductModal extends StatefulWidget {
   const AddProductModal({
     super.key,
     this.existingProduct,
+    this.parentIdForNewVariant,
     required this.categories,
     required this.onSaved,
     required this.onSwitchToAiInward,
@@ -29,6 +31,7 @@ class AddProductModal extends StatefulWidget {
   static Future<void> show(
     BuildContext context, {
     ProductModel? existingProduct,
+    String? parentIdForNewVariant,
     required List<CategoryModel> categories,
     required VoidCallback onSaved,
     required VoidCallback onSwitchToAiInward,
@@ -40,6 +43,7 @@ class AddProductModal extends StatefulWidget {
       backgroundColor: Colors.transparent,
       builder: (ctx) => AddProductModal(
         existingProduct: existingProduct,
+        parentIdForNewVariant: parentIdForNewVariant,
         categories: categories,
         onSaved: onSaved,
         onSwitchToAiInward: onSwitchToAiInward,
@@ -78,6 +82,9 @@ class _AddProductModalState extends State<AddProductModal> {
   bool _isStockExpanded = false;
   bool _isFavorite = false;
   bool _isResolvingBarcode = false;
+  bool _enableVariants = false;
+  final Set<String> _selectedVariants = {};
+  late final TextEditingController _customVariantCtrl;
 
   late final List<Map<String, String>> _units;
 
@@ -128,6 +135,7 @@ class _AddProductModalState extends State<AddProductModal> {
     _fitNotesCtrl = TextEditingController(text: p?.fitNotes ?? '');
     _imeiCtrl = TextEditingController(text: p?.imeiSerial ?? '');
     _warrantyCtrl = TextEditingController();
+    _customVariantCtrl = TextEditingController();
 
     // Deduplicate categories by ID
     final uniqueCats = <String, CategoryModel>{};
@@ -208,6 +216,7 @@ class _AddProductModalState extends State<AddProductModal> {
     _fitNotesCtrl.dispose();
     _imeiCtrl.dispose();
     _warrantyCtrl.dispose();
+    _customVariantCtrl.dispose();
     super.dispose();
   }
 
@@ -242,9 +251,10 @@ class _AddProductModalState extends State<AddProductModal> {
       },
     );
     if (picked != null) {
+      final dayStr = picked.day.toString().padLeft(2, '0');
       final monthStr = picked.month.toString().padLeft(2, '0');
       setState(() {
-        _expiryDateCtrl.text = '$monthStr/${picked.year}';
+        _expiryDateCtrl.text = '$dayStr/$monthStr/${picked.year}';
       });
     }
   }
@@ -271,7 +281,7 @@ class _AddProductModalState extends State<AddProductModal> {
       final activeType = BusinessVerticals.activeBusinessTypeNotifier.value;
 
       // 0. Check if this product already exists in merchant's own store database
-      final existingStoreItem = await LocalDatabase.instance.findProductByBarcode(barcode);
+      final existingStoreItem = await LocalDatabase.instance.findProductByBarcode(barcode, businessType: activeType);
       if (existingStoreItem != null && mounted) {
         setState(() {
           _nameCtrl.text = existingStoreItem.name;
@@ -509,6 +519,11 @@ class _AddProductModalState extends State<AddProductModal> {
       final costPaise = ((double.tryParse(_costPriceCtrl.text.trim()) ?? 0.0) * 100).round();
       final stockQty = _isUnlimitedStock ? 999999.0 : (double.tryParse(_stockCtrl.text.trim()) ?? 0.0);
 
+      final shouldCreateVariants = widget.existingProduct == null &&
+          widget.parentIdForNewVariant == null &&
+          _enableVariants &&
+          _selectedVariants.isNotEmpty;
+
       final p = ProductModel(
         id: widget.existingProduct?.id ?? const Uuid().v4(),
         businessId: widget.existingProduct?.businessId ?? FirestoreSyncService.instance.activeBusinessId,
@@ -534,24 +549,40 @@ class _AddProductModalState extends State<AddProductModal> {
         subUnitsPerPack: _selectedUnit == 'strip' && _subUnitsPerPackCtrl.text.trim().isNotEmpty
             ? int.tryParse(_subUnitsPerPackCtrl.text.trim())
             : (_selectedUnit == 'strip' ? widget.existingProduct?.subUnitsPerPack : null),
+        parentId: widget.parentIdForNewVariant ?? widget.existingProduct?.parentId,
+        hasVariants: shouldCreateVariants ? true : (widget.existingProduct?.hasVariants ?? false),
+        variantLabel: widget.parentIdForNewVariant != null
+            ? (_sizeCtrl.text.trim().isNotEmpty ? _sizeCtrl.text.trim() : null)
+            : widget.existingProduct?.variantLabel,
       );
 
-      await LocalDatabase.instance.upsertProduct(p);
-      if (p.barcode != null && p.barcode!.isNotEmpty) {
-        try {
-          await LocalDatabase.instance.insertMasterProduct(MasterProductModel(
-            barcode: p.barcode!,
-            name: p.name,
-            category: 'General',
-            unit: p.unit,
-            mrpPaise: p.mrpPaise,
-            sellingPricePaise: p.sellingPricePaise,
-            taxRate: p.taxRate,
-            businessType: p.businessType,
-          ));
-        } catch (_) {}
+      if (shouldCreateVariants) {
+        final variants = await LocalDatabase.instance.createProductWithVariants(
+          parentProduct: p,
+          variantLabels: _selectedVariants.toList(),
+        );
+        for (final v in variants) {
+          FirestoreSyncService.instance.pushProductToCloud(v).catchError((_) {});
+        }
+        FirestoreSyncService.instance.pushProductToCloud(p).catchError((_) {});
+      } else {
+        await LocalDatabase.instance.upsertProduct(p);
+        if (p.barcode != null && p.barcode!.isNotEmpty) {
+          try {
+            await LocalDatabase.instance.insertMasterProduct(MasterProductModel(
+              barcode: p.barcode!,
+              name: p.name,
+              category: 'General',
+              unit: p.unit,
+              mrpPaise: p.mrpPaise,
+              sellingPricePaise: p.sellingPricePaise,
+              taxRate: p.taxRate,
+              businessType: p.businessType,
+            ));
+          } catch (_) {}
+        }
+        FirestoreSyncService.instance.pushProductToCloud(p).catchError((_) {});
       }
-      FirestoreSyncService.instance.pushProductToCloud(p).catchError((_) {});
 
       if (!mounted) return;
 
@@ -1307,6 +1338,12 @@ class _AddProductModalState extends State<AddProductModal> {
                         const SizedBox(height: 12),
                       ],
 
+                      // Variant Matrix Generator (Sizes / Colors)
+                      if (widget.existingProduct == null && widget.parentIdForNewVariant == null) ...[
+                        _buildVariantMatrixSection(),
+                        const SizedBox(height: 12),
+                      ],
+
                       // Row 6: IMEI / Serial + Warranty (Hardware/Electrical only)
                       if (vert.toggles.showImeiWarranty) ...[
                         Row(
@@ -1725,6 +1762,201 @@ class _AddProductModalState extends State<AddProductModal> {
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(12),
         borderSide: const BorderSide(color: Color(0xFF0284C7), width: 1.5),
+      ),
+    );
+  }
+
+  Widget _buildVariantMatrixSection() {
+    final garmentSizes = ['S', 'M', 'L', 'XL', 'XXL', '3XL'];
+    final numberSizes = ['28', '30', '32', '34', '36', '38', '40', '42'];
+    final commonColors = ['Red', 'Blue', 'Black', 'White', 'Green', 'Yellow'];
+
+    return Container(
+      decoration: BoxDecoration(
+        color: _enableVariants ? const Color(0xFFFAF5FF) : Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: _enableVariants ? const Color(0xFFD8B4FE) : const Color(0xFFE2E8F0),
+          width: 1.2,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(6),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF3E8FF),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Icon(Icons.style_rounded, size: 16, color: Color(0xFF7E22CE)),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Variants Matrix (साइज / कलर मैट्रिक्स)',
+                        style: GoogleFonts.outfit(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w800,
+                          color: const Color(0xFF0F172A),
+                        ),
+                      ),
+                      Text(
+                        'Create multiple sizes or colors under this item',
+                        style: GoogleFonts.inter(fontSize: 10.5, color: const Color(0xFF64748B)),
+                      ),
+                    ],
+                  ),
+                ),
+                Switch.adaptive(
+                  value: _enableVariants,
+                  activeThumbColor: const Color(0xFF7E22CE),
+                  onChanged: (val) {
+                    HapticFeedback.selectionClick();
+                    setState(() => _enableVariants = val);
+                  },
+                ),
+              ],
+            ),
+          ),
+          if (_enableVariants) ...[
+            const Divider(height: 1, color: Color(0xFFE9D5FF)),
+            Padding(
+              padding: const EdgeInsets.all(12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Quick Presets (Tap to Add):',
+                    style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w700, color: const Color(0xFF475569)),
+                  ),
+                  const SizedBox(height: 6),
+                  Wrap(
+                    spacing: 6,
+                    runSpacing: 6,
+                    children: [
+                      ...garmentSizes.map((s) => _buildPresetChip(s)),
+                      ...numberSizes.map((s) => _buildPresetChip(s)),
+                      ...commonColors.map((c) => _buildPresetChip(c)),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: SizedBox(
+                          height: 36,
+                          child: TextField(
+                            controller: _customVariantCtrl,
+                            style: GoogleFonts.inter(fontSize: 12),
+                            decoration: InputDecoration(
+                              hintText: 'Custom variant (e.g. 500g, Red-XL)...',
+                              hintStyle: GoogleFonts.inter(fontSize: 11, color: const Color(0xFF94A3B8)),
+                              contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(8),
+                                borderSide: const BorderSide(color: Color(0xFFCBD5E1)),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      ElevatedButton(
+                        onPressed: () {
+                          final text = _customVariantCtrl.text.trim();
+                          if (text.isNotEmpty) {
+                            setState(() {
+                              _selectedVariants.add(text);
+                              _customVariantCtrl.clear();
+                            });
+                          }
+                        },
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF7E22CE),
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(horizontal: 12),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                        ),
+                        child: const Text('Add', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                      ),
+                    ],
+                  ),
+                  if (_selectedVariants.isNotEmpty) ...[
+                    const SizedBox(height: 10),
+                    Text(
+                      'Selected Variants (${_selectedVariants.length}):',
+                      style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w800, color: const Color(0xFF7E22CE)),
+                    ),
+                    const SizedBox(height: 6),
+                    Wrap(
+                      spacing: 6,
+                      runSpacing: 6,
+                      children: _selectedVariants.map((label) {
+                        return Chip(
+                          label: Text(label, style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w700, color: const Color(0xFF7E22CE))),
+                          backgroundColor: const Color(0xFFF3E8FF),
+                          deleteIconColor: const Color(0xFF7E22CE),
+                          onDeleted: () {
+                            setState(() => _selectedVariants.remove(label));
+                          },
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                            side: const BorderSide(color: Color(0xFFD8B4FE)),
+                          ),
+                          materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          padding: const EdgeInsets.symmetric(horizontal: 4),
+                        );
+                      }).toList(),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPresetChip(String label) {
+    final isSelected = _selectedVariants.contains(label);
+    return InkWell(
+      onTap: () {
+        HapticFeedback.selectionClick();
+        setState(() {
+          if (isSelected) {
+            _selectedVariants.remove(label);
+          } else {
+            _selectedVariants.add(label);
+          }
+        });
+      },
+      borderRadius: BorderRadius.circular(8),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        decoration: BoxDecoration(
+          color: isSelected ? const Color(0xFF7E22CE) : Colors.white,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(
+            color: isSelected ? const Color(0xFF7E22CE) : const Color(0xFFCBD5E1),
+          ),
+        ),
+        child: Text(
+          label,
+          style: GoogleFonts.inter(
+            fontSize: 11,
+            fontWeight: isSelected ? FontWeight.w800 : FontWeight.w600,
+            color: isSelected ? Colors.white : const Color(0xFF334155),
+          ),
+        ),
       ),
     );
   }

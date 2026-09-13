@@ -27,7 +27,9 @@ class _GrowthCampaignsScreenState extends State<GrowthCampaignsScreen> {
   bool _isPro = false;
   String _storeUpiVpa = '';
 
-  // Voucher Customizer State
+  // Mode & Voucher Customizer State
+  bool _isCustomMessageMode = false;
+  late final TextEditingController _customMessageController;
   final _discountController = TextEditingController(text: '10%');
   final _minOrderController = TextEditingController(text: '₹499');
   final _couponCodeController = TextEditingController(text: 'SPECIAL10');
@@ -36,12 +38,16 @@ class _GrowthCampaignsScreenState extends State<GrowthCampaignsScreen> {
   @override
   void initState() {
     super.initState();
+    _customMessageController = TextEditingController(
+      text: 'Namaste {name} ji! 🙏\n🏪 *{store}*\n\nAapke liye special shopping discount offer ready hai! Aaj hi store par visit karein ya WhatsApp par order karein.',
+    );
     _loadData();
   }
 
   @override
   void dispose() {
     _campaignPageController.dispose();
+    _customMessageController.dispose();
     _discountController.dispose();
     _minOrderController.dispose();
     _couponCodeController.dispose();
@@ -354,8 +360,20 @@ class _GrowthCampaignsScreenState extends State<GrowthCampaignsScreen> {
   }
 
   String _buildFormattedMessage(CustomerModel? customer) {
-    final camp = _campaignTemplates[_selectedCampaignIndex];
     final custName = customer?.name ?? 'Customer Ji';
+
+    if (_isCustomMessageMode) {
+      final customRaw = _customMessageController.text.trim();
+      if (customRaw.isEmpty) {
+        return 'Namaste $custName ji! 🙏\n🏪 *$_storeName*\n\nApna custom broadcast message yahan type karein...';
+      }
+      return customRaw
+          .replaceAll('{name}', custName)
+          .replaceAll('{store}', _storeName)
+          .replaceAll('{upi}', _storeUpiVpa);
+    }
+
+    final camp = _campaignTemplates[_selectedCampaignIndex];
     final discount = _discountController.text.trim();
     final minOrder = _minOrderController.text.trim();
     final code = _couponCodeController.text.trim();
@@ -574,19 +592,104 @@ Aapka Swagat Hai! Visit store today.
           ),
           const SizedBox(height: 14),
 
-          // 2. 2x2 HORIZONTALLY SCROLLABLE CAMPAIGN SELECTION (4 CARDS PER PAGE)
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                'CHOOSE CAMPAIGN GOAL (24 TEMPLATES)',
-                style: GoogleFonts.inter(
-                  fontSize: 10.5,
-                  fontWeight: FontWeight.w800,
-                  color: const Color(0xFF64748B),
-                  letterSpacing: 0.6,
+          // 2. CAMPAIGN MODE SWITCH: READY TEMPLATES VS CUSTOM MESSAGE
+          Container(
+            padding: const EdgeInsets.all(4),
+            decoration: BoxDecoration(
+              color: const Color(0xFFF1F5F9),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Row(
+              children: [
+                Expanded(
+                  child: InkWell(
+                    onTap: () {
+                      HapticFeedback.selectionClick();
+                      setState(() => _isCustomMessageMode = false);
+                    },
+                    borderRadius: BorderRadius.circular(9),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(vertical: 8),
+                      decoration: BoxDecoration(
+                        color: !_isCustomMessageMode ? Colors.white : Colors.transparent,
+                        borderRadius: BorderRadius.circular(9),
+                        boxShadow: !_isCustomMessageMode
+                            ? [const BoxShadow(color: Color(0x10000000), blurRadius: 4, offset: Offset(0, 1))]
+                            : null,
+                      ),
+                      alignment: Alignment.center,
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(Icons.auto_awesome_rounded, size: 14, color: !_isCustomMessageMode ? const Color(0xFF0F172A) : const Color(0xFF64748B)),
+                          const SizedBox(width: 5),
+                          Text(
+                            'Ready Templates (24)',
+                            style: GoogleFonts.outfit(
+                              fontSize: 12,
+                              fontWeight: !_isCustomMessageMode ? FontWeight.w800 : FontWeight.w600,
+                              color: !_isCustomMessageMode ? const Color(0xFF0F172A) : const Color(0xFF64748B),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
                 ),
-              ),
+                Expanded(
+                  child: InkWell(
+                    onTap: () {
+                      HapticFeedback.selectionClick();
+                      setState(() => _isCustomMessageMode = true);
+                    },
+                    borderRadius: BorderRadius.circular(9),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(vertical: 8),
+                      decoration: BoxDecoration(
+                        color: _isCustomMessageMode ? Colors.white : Colors.transparent,
+                        borderRadius: BorderRadius.circular(9),
+                        boxShadow: _isCustomMessageMode
+                            ? [const BoxShadow(color: Color(0x10000000), blurRadius: 4, offset: Offset(0, 1))]
+                            : null,
+                      ),
+                      alignment: Alignment.center,
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(Icons.edit_note_rounded, size: 16, color: _isCustomMessageMode ? const Color(0xFF10B981) : const Color(0xFF64748B)),
+                          const SizedBox(width: 5),
+                          Text(
+                            'Type Custom Message ✍️',
+                            style: GoogleFonts.outfit(
+                              fontSize: 12,
+                              fontWeight: _isCustomMessageMode ? FontWeight.w800 : FontWeight.w600,
+                              color: _isCustomMessageMode ? const Color(0xFF0F172A) : const Color(0xFF64748B),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 14),
+
+          if (!_isCustomMessageMode) ...[
+            // 2. 2x2 HORIZONTALLY SCROLLABLE CAMPAIGN SELECTION (4 CARDS PER PAGE)
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  'CHOOSE CAMPAIGN GOAL (24 TEMPLATES)',
+                  style: GoogleFonts.inter(
+                    fontSize: 10.5,
+                    fontWeight: FontWeight.w800,
+                    color: const Color(0xFF64748B),
+                    letterSpacing: 0.6,
+                  ),
+                ),
               Row(
                 children: List.generate((_campaignTemplates.length / 4).ceil(), (dotIdx) {
                   final isCur = _campaignPageIndex == dotIdx;
@@ -798,6 +901,103 @@ Aapka Swagat Hai! Visit store today.
             ),
           ),
           const SizedBox(height: 14),
+          ] else ...[
+            // 2b. CUSTOM MESSAGE COMPOSER
+            Container(
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: const Color(0xFF10B981).withValues(alpha: 0.35), width: 1.2),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        'TYPE CUSTOM BROADCAST MESSAGE',
+                        style: GoogleFonts.inter(
+                          fontSize: 10.5,
+                          fontWeight: FontWeight.w800,
+                          color: const Color(0xFF059669),
+                          letterSpacing: 0.6,
+                        ),
+                      ),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFECFDF5),
+                          borderRadius: BorderRadius.circular(6),
+                          border: Border.all(color: const Color(0xFFA7F3D0)),
+                        ),
+                        child: Text(
+                          'Live Preview Below',
+                          style: GoogleFonts.inter(fontSize: 9.5, color: const Color(0xFF059669), fontWeight: FontWeight.w700),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Insert dynamic tags (automatically replaced for each customer):',
+                    style: GoogleFonts.inter(fontSize: 10.5, color: const Color(0xFF64748B)),
+                  ),
+                  const SizedBox(height: 6),
+                  Wrap(
+                    spacing: 6,
+                    runSpacing: 6,
+                    children: [
+                      ActionChip(
+                        label: Text('+ {name}', style: GoogleFonts.inter(fontSize: 10.5, fontWeight: FontWeight.w700)),
+                        backgroundColor: const Color(0xFFF1F5F9),
+                        onPressed: () {
+                          _customMessageController.text += ' {name}';
+                          setState(() {});
+                        },
+                      ),
+                      ActionChip(
+                        label: Text('+ {store}', style: GoogleFonts.inter(fontSize: 10.5, fontWeight: FontWeight.w700)),
+                        backgroundColor: const Color(0xFFF1F5F9),
+                        onPressed: () {
+                          _customMessageController.text += ' {store}';
+                          setState(() {});
+                        },
+                      ),
+                      if (_storeUpiVpa.isNotEmpty)
+                        ActionChip(
+                          label: Text('+ {upi}', style: GoogleFonts.inter(fontSize: 10.5, fontWeight: FontWeight.w700)),
+                          backgroundColor: const Color(0xFFF1F5F9),
+                          onPressed: () {
+                            _customMessageController.text += ' {upi}';
+                            setState(() {});
+                          },
+                        ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  TextField(
+                    controller: _customMessageController,
+                    maxLines: 5,
+                    minLines: 3,
+                    onChanged: (_) => setState(() {}),
+                    style: GoogleFonts.inter(fontSize: 13, color: const Color(0xFF0F172A), height: 1.4),
+                    decoration: InputDecoration(
+                      hintText: 'Apna custom WhatsApp broadcast message yahan type karein...',
+                      isDense: true,
+                      filled: true,
+                      fillColor: const Color(0xFFF8FAFC),
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Color(0xFFCBD5E1))),
+                      enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Color(0xFFE2E8F0))),
+                      focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Color(0xFF10B981), width: 1.5)),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 14),
+          ],
 
           // 4. REALISTIC WHATSAPP LIVE PREVIEW (SCREENSHOT 3 & 4)
           Text(

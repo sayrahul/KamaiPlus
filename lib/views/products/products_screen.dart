@@ -101,8 +101,13 @@ class _ProductsScreenState extends State<ProductsScreen> with DataBusRefresh<Pro
 
   List<ProductModel> get _filteredProducts {
     final list = _products.where((p) {
+      // Hide child variants from main listing unless specifically searching
+      if (_searchQuery.isEmpty && p.isVariant) {
+        return false;
+      }
       final matchesSearch = _searchQuery.isEmpty ||
           p.name.toLowerCase().contains(_searchQuery.toLowerCase()) ||
+          (p.variantLabel != null && p.variantLabel!.toLowerCase().contains(_searchQuery.toLowerCase())) ||
           (p.barcode != null && p.barcode!.contains(_searchQuery));
       final matchesCategory = _selectedCategory == 'ALL' || p.categoryId == _selectedCategory;
       final matchesLowStock = !_filterLowStockOnly || p.stockQuantity <= 15;
@@ -163,10 +168,11 @@ class _ProductsScreenState extends State<ProductsScreen> with DataBusRefresh<Pro
     );
   }
 
-  void _openAddProductSheet({ProductModel? existingProduct}) {
+  void _openAddProductSheet({ProductModel? existingProduct, String? parentIdForNewVariant}) {
     AddProductModal.show(
       context,
       existingProduct: existingProduct,
+      parentIdForNewVariant: parentIdForNewVariant,
       categories: _categories,
       onSaved: () => _loadData(),
       onSwitchToAiInward: () => _openAiInwardSheet(),
@@ -180,7 +186,7 @@ class _ProductsScreenState extends State<ProductsScreen> with DataBusRefresh<Pro
     );
     if (scanned != null && scanned.isNotEmpty && mounted) {
       final activeType = BusinessVerticals.activeBusinessTypeNotifier.value;
-      final existing = await LocalDatabase.instance.findProductByBarcode(scanned);
+      final existing = await LocalDatabase.instance.findProductByBarcode(scanned, businessType: activeType);
       if (existing != null) {
         setState(() {
           _searchCtrl.text = scanned;
@@ -252,6 +258,179 @@ class _ProductsScreenState extends State<ProductsScreen> with DataBusRefresh<Pro
       context,
       product: product,
       onUpdated: () => _loadData(),
+    );
+  }
+
+  void _showProductVariantsSheet(ProductModel parent) async {
+    HapticFeedback.mediumImpact();
+    final variants = await LocalDatabase.instance.getVariantsForProduct(parent.id);
+    if (!mounted) return;
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
+      ),
+      builder: (ctx) {
+        return Padding(
+          padding: const EdgeInsets.only(left: 20, right: 20, top: 18, bottom: 28),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF3E8FF),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: const Icon(Icons.style_rounded, color: Color(0xFF7E22CE), size: 20),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          parent.name,
+                          style: GoogleFonts.outfit(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w800,
+                            color: const Color(0xFF0F172A),
+                          ),
+                        ),
+                        Text(
+                          '${variants.length} Variants (साइज / कलर)',
+                          style: GoogleFonts.inter(fontSize: 11.5, color: const Color(0xFF64748B)),
+                        ),
+                      ],
+                    ),
+                  ),
+                  IconButton(
+                    onPressed: () => Navigator.pop(ctx),
+                    icon: const Icon(Icons.close_rounded, color: Color(0xFF94A3B8)),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              if (variants.isEmpty)
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 20),
+                  child: Center(
+                    child: Text(
+                      'No child variants found yet.',
+                      style: GoogleFonts.inter(fontSize: 13, color: const Color(0xFF94A3B8)),
+                    ),
+                  ),
+                )
+              else
+                ConstrainedBox(
+                  constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.45),
+                  child: ListView.separated(
+                    shrinkWrap: true,
+                    itemCount: variants.length,
+                    separatorBuilder: (context, index) => const SizedBox(height: 8),
+                    itemBuilder: (context, i) {
+                      final v = variants[i];
+                      final sizeText = (v.size != null && v.size!.isNotEmpty)
+                          ? v.size!
+                          : (v.variantLabel ?? 'V${i + 1}');
+                      return Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFF8FAFC),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: const Color(0xFFE2E8F0)),
+                        ),
+                        child: Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF7E22CE),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Text(
+                                sizeText,
+                                style: GoogleFonts.inter(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w900,
+                                  color: Colors.white,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    MoneyFormatter.formatINR(v.sellingPricePaise),
+                                    style: GoogleFonts.outfit(
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.w800,
+                                      color: const Color(0xFF0F172A),
+                                    ),
+                                  ),
+                                  Text(
+                                    'Stock: ${v.stockQuantity.toInt()} ${v.unit}',
+                                    style: GoogleFonts.inter(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w600,
+                                      color: v.stockQuantity > 0 ? const Color(0xFF16A34A) : const Color(0xFFDC2626),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            // Quick Stock Update
+                            IconButton(
+                              icon: const Icon(Icons.bolt_rounded, size: 18, color: Color(0xFF2563EB)),
+                              onPressed: () {
+                                Navigator.pop(ctx);
+                                _openQuickUpdateDialog(v);
+                              },
+                            ),
+                            // Edit
+                            IconButton(
+                              icon: const Icon(Icons.edit_outlined, size: 16, color: Color(0xFF475569)),
+                              onPressed: () {
+                                Navigator.pop(ctx);
+                                _openAddProductSheet(existingProduct: v);
+                              },
+                            ),
+                          ],
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              const SizedBox(height: 14),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  onPressed: () {
+                    Navigator.pop(ctx);
+                    _openAddProductSheet(parentIdForNewVariant: parent.id);
+                  },
+                  icon: const Icon(Icons.add_rounded, size: 18),
+                  label: const Text('+ Add Another Variant', style: TextStyle(fontWeight: FontWeight.bold)),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF7E22CE),
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 
@@ -1140,6 +1319,50 @@ class _ProductsScreenState extends State<ProductsScreen> with DataBusRefresh<Pro
                   ),
                 ),
               ),
+              if (product.hasVariants)
+                GestureDetector(
+                  onTap: () => _showProductVariantsSheet(product),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF3E8FF),
+                      borderRadius: BorderRadius.circular(6),
+                      border: Border.all(color: const Color(0xFFD8B4FE)),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.style_rounded, size: 10, color: Color(0xFF7E22CE)),
+                        const SizedBox(width: 3),
+                        Text(
+                          'Variants',
+                          style: GoogleFonts.inter(
+                            fontSize: 9.5,
+                            fontWeight: FontWeight.w800,
+                            color: const Color(0xFF7E22CE),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              if (product.isVariant && product.variantLabel != null)
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFEFF6FF),
+                    borderRadius: BorderRadius.circular(6),
+                    border: Border.all(color: const Color(0xFFBFDBFE)),
+                  ),
+                  child: Text(
+                    product.variantLabel!,
+                    style: GoogleFonts.inter(
+                      fontSize: 9.5,
+                      fontWeight: FontWeight.w800,
+                      color: const Color(0xFF1D4ED8),
+                    ),
+                  ),
+                ),
               InkWell(
                 onTap: () => _openQuickUpdateDialog(product),
                 borderRadius: BorderRadius.circular(6),

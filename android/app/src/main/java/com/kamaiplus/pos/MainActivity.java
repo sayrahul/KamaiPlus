@@ -1075,75 +1075,79 @@ public class MainActivity extends FlutterFragmentActivity implements TextToSpeec
                                 fos.flush();
                                 fos.close();
                                 document.close();
+                                                     Boolean skipDownloadsFolder = call.argument("skipDownloadsFolder");
+                                if (skipDownloadsFolder == null) skipDownloadsFolder = false;
 
-                                // 2. Also copy to public Downloads for user visibility across Files app
-                                try {
-                                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                                        ContentValues values = new ContentValues();
-                                        values.put(MediaStore.MediaColumns.DISPLAY_NAME, fileName);
-                                        values.put(MediaStore.MediaColumns.MIME_TYPE, "application/pdf");
-                                        values.put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS + "/KamaiPlus");
-                                        Uri downloadUri = getContentResolver().insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values);
-                                        if (downloadUri != null) {
-                                            OutputStream os = getContentResolver().openOutputStream(downloadUri);
-                                            if (os != null) {
+                                if (!skipDownloadsFolder) {
+                                    // 2. Also copy to public Downloads for user visibility across Files app
+                                    try {
+                                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                                            ContentValues values = new ContentValues();
+                                            values.put(MediaStore.MediaColumns.DISPLAY_NAME, fileName);
+                                            values.put(MediaStore.MediaColumns.MIME_TYPE, "application/pdf");
+                                            values.put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS + "/KamaiPlus");
+                                            Uri downloadUri = getContentResolver().insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values);
+                                            if (downloadUri != null) {
+                                                OutputStream os = getContentResolver().openOutputStream(downloadUri);
+                                                if (os != null) {
+                                                    FileInputStream fis = new FileInputStream(pdfFile);
+                                                    byte[] buf = new byte[8192];
+                                                    int len;
+                                                    while ((len = fis.read(buf)) > 0) {
+                                                        os.write(buf, 0, len);
+                                                    }
+                                                    fis.close();
+                                                    os.flush();
+                                                    os.close();
+                                                }
+                                            }
+                                        } else {
+                                            File pubDownloads = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS);
+                                            if (pubDownloads != null) {
+                                                if (!pubDownloads.exists()) pubDownloads.mkdirs();
+                                                File pubFile = new File(pubDownloads, fileName);
                                                 FileInputStream fis = new FileInputStream(pdfFile);
+                                                FileOutputStream pubFos = new FileOutputStream(pubFile);
                                                 byte[] buf = new byte[8192];
                                                 int len;
                                                 while ((len = fis.read(buf)) > 0) {
-                                                    os.write(buf, 0, len);
+                                                    pubFos.write(buf, 0, len);
                                                 }
                                                 fis.close();
-                                                os.flush();
-                                                os.close();
+                                                pubFos.flush();
+                                                pubFos.close();
                                             }
                                         }
-                                    } else {
-                                        File pubDownloads = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS);
-                                        if (pubDownloads != null) {
-                                            if (!pubDownloads.exists()) pubDownloads.mkdirs();
-                                            File pubFile = new File(pubDownloads, fileName);
-                                            FileInputStream fis = new FileInputStream(pdfFile);
-                                            FileOutputStream pubFos = new FileOutputStream(pubFile);
-                                            byte[] buf = new byte[8192];
-                                            int len;
-                                            while ((len = fis.read(buf)) > 0) {
-                                                pubFos.write(buf, 0, len);
-                                            }
-                                            fis.close();
-                                            pubFos.flush();
-                                            pubFos.close();
-                                        }
+                                    } catch (Exception ignored) {
+                                        // Primary file in docsDir is guaranteed saved
                                     }
-                                } catch (Exception ignored) {
-                                    // Primary file in docsDir is guaranteed saved
-                                }
 
-                                // Trigger Native Download Notification with Tap-to-Open
-                                Intent viewIntent = new Intent(Intent.ACTION_VIEW);
-                                Uri fileUri = FileProvider.getUriForFile(MainActivity.this, getPackageName() + ".fileprovider", pdfFile);
-                                viewIntent.setDataAndType(fileUri, "application/pdf");
-                                viewIntent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_ACTIVITY_NEW_TASK);
+                                    // Trigger Native Download Notification with Tap-to-Open
+                                    Intent viewIntent = new Intent(Intent.ACTION_VIEW);
+                                    Uri fileUri = FileProvider.getUriForFile(MainActivity.this, getPackageName() + ".fileprovider", pdfFile);
+                                    viewIntent.setDataAndType(fileUri, "application/pdf");
+                                    viewIntent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_ACTIVITY_NEW_TASK);
 
-                                PendingIntent openPendingIntent = PendingIntent.getActivity(
-                                        MainActivity.this,
-                                        (int) System.currentTimeMillis(),
-                                        viewIntent,
-                                        Build.VERSION.SDK_INT >= Build.VERSION_CODES.M ? PendingIntent.FLAG_IMMUTABLE : 0
-                                );
+                                    PendingIntent openPendingIntent = PendingIntent.getActivity(
+                                            MainActivity.this,
+                                            (int) System.currentTimeMillis(),
+                                            viewIntent,
+                                            Build.VERSION.SDK_INT >= Build.VERSION_CODES.M ? PendingIntent.FLAG_IMMUTABLE : 0
+                                    );
 
-                                NotificationCompat.Builder notif = new NotificationCompat.Builder(MainActivity.this, CHANNEL_ID)
-                                        .setSmallIcon(R.mipmap.ic_launcher)
-                                        .setContentTitle("Tax Invoice Downloaded 📥")
-                                        .setContentText("Invoice #" + invoiceNumber + " (" + totalAmount + ") saved to Downloads.")
-                                        .setStyle(new NotificationCompat.BigTextStyle().bigText("Invoice #" + invoiceNumber + " (" + totalAmount + ") saved to Downloads. Tap to view."))
-                                        .setPriority(NotificationCompat.PRIORITY_HIGH)
-                                        .setAutoCancel(true)
-                                        .setContentIntent(openPendingIntent);
+                                    NotificationCompat.Builder notif = new NotificationCompat.Builder(MainActivity.this, CHANNEL_ID)
+                                            .setSmallIcon(R.mipmap.ic_launcher)
+                                            .setContentTitle("Tax Invoice Downloaded 📥")
+                                            .setContentText("Invoice #" + invoiceNumber + " (" + totalAmount + ") saved to Downloads.")
+                                            .setStyle(new NotificationCompat.BigTextStyle().bigText("Invoice #" + invoiceNumber + " (" + totalAmount + ") saved to Downloads. Tap to view."))
+                                            .setPriority(NotificationCompat.PRIORITY_HIGH)
+                                            .setAutoCancel(true)
+                                            .setContentIntent(openPendingIntent);
 
-                                NotificationManager nm = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
-                                if (nm != null) {
-                                    nm.notify((int) System.currentTimeMillis(), notif.build());
+                                    NotificationManager nm = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
+                                    if (nm != null) {
+                                        nm.notify((int) System.currentTimeMillis(), notif.build());
+                                    }
                                 }
 
                                 result.success(pdfFile.getAbsolutePath());

@@ -284,21 +284,15 @@ class _InvoiceThemesScreenState extends State<InvoiceThemesScreen> {
           const SizedBox(height: 14),
 
           // =================================================================
-          // 3. PLATFORM BRANDING (FREE TIER) - SCREENSHOT 4
+          // 3. TERMS & FOOTER NOTE
           // =================================================================
-          _buildSection3PlatformBranding(),
-          const SizedBox(height: 14),
-
-          // =================================================================
-          // 4. TERMS & FOOTER NOTE - SCREENSHOT 4
-          // =================================================================
-          _buildSection4TermsAndFooter(),
+          _buildSection3TermsAndFooter(),
           const SizedBox(height: 16),
 
           // =================================================================
-          // 5. LIVE INTERACTIVE A4 PREVIEW - SCREENSHOT 4 & 5
+          // 4. LIVE INTERACTIVE A4 PREVIEW
           // =================================================================
-          _buildSection5LiveA4Preview(activeColor),
+          _buildSection4LiveA4Preview(activeColor),
         ],
       ),
       bottomNavigationBar: const KamaiBottomNav(),
@@ -611,85 +605,9 @@ class _InvoiceThemesScreenState extends State<InvoiceThemesScreen> {
   }
 
   // =========================================================================
-  // SECTION 3: PLATFORM BRANDING (SCREENSHOT 4)
+  // SECTION 3: TERMS & FOOTER NOTE
   // =========================================================================
-  Widget _buildSection3PlatformBranding() {
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: const Color(0xFFEEF2F6)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Row(
-                children: [
-                  Container(
-                    width: 22,
-                    height: 22,
-                    decoration: const BoxDecoration(color: Color(0xFF0F172A), shape: BoxShape.circle),
-                    alignment: Alignment.center,
-                    child: Text('3', style: GoogleFonts.outfit(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w800)),
-                  ),
-                  const SizedBox(width: 8),
-                  const Icon(Icons.campaign_outlined, size: 16, color: Color(0xFFD97706)),
-                  const SizedBox(width: 4),
-                  Text('Platform Branding', style: GoogleFonts.outfit(fontSize: 14.5, fontWeight: FontWeight.w800)),
-                ],
-              ),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                decoration: BoxDecoration(color: const Color(0xFFF1F5F9), borderRadius: BorderRadius.circular(6)),
-                child: Text('Free Tier', style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.w700, color: const Color(0xFF64748B))),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-            decoration: BoxDecoration(
-              color: const Color(0xFFFFFBEB),
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: const Color(0xFFFDE68A)),
-            ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Row(
-                  children: [
-                    const Icon(Icons.auto_awesome_rounded, size: 14, color: Color(0xFFD97706)),
-                    const SizedBox(width: 6),
-                    Text(
-                      'Free Tier includes footer promotion strip',
-                      style: GoogleFonts.inter(fontSize: 11, color: const Color(0xFF92400E), fontWeight: FontWeight.w600),
-                    ),
-                  ],
-                ),
-                InkWell(
-                  onTap: () => ProUpgradeModal.show(context),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                    decoration: BoxDecoration(color: const Color(0xFFF59E0B), borderRadius: BorderRadius.circular(6)),
-                    child: Text('Remove Ads', style: GoogleFonts.outfit(fontSize: 11, fontWeight: FontWeight.w800, color: Colors.white)),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // =========================================================================
-  // SECTION 4: TERMS & FOOTER NOTE (SCREENSHOT 4)
-  // =========================================================================
-  Widget _buildSection4TermsAndFooter() {
+  Widget _buildSection3TermsAndFooter() {
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
@@ -707,7 +625,7 @@ class _InvoiceThemesScreenState extends State<InvoiceThemesScreen> {
                 height: 22,
                 decoration: const BoxDecoration(color: Color(0xFF0F172A), shape: BoxShape.circle),
                 alignment: Alignment.center,
-                child: Text('4', style: GoogleFonts.outfit(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w800)),
+                child: Text('3', style: GoogleFonts.outfit(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w800)),
               ),
               const SizedBox(width: 8),
               Text('Terms & Footer Note', style: GoogleFonts.outfit(fontSize: 14.5, fontWeight: FontWeight.w800)),
@@ -743,15 +661,31 @@ class _InvoiceThemesScreenState extends State<InvoiceThemesScreen> {
               enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: Color(0xFFE2E8F0))),
             ),
           ),
+          const SizedBox(height: 12),
+          Text('Custom Footer Message', style: GoogleFonts.inter(fontSize: 11.5, fontWeight: FontWeight.w700, color: const Color(0xFF334155))),
+          const SizedBox(height: 4),
+          TextField(
+            controller: _footerCtrl,
+            maxLines: 2,
+            style: GoogleFonts.inter(fontSize: 12),
+            decoration: InputDecoration(
+              hintText: 'e.g. Thank you for shopping with us! Visit again.',
+              isDense: true,
+              filled: true,
+              fillColor: const Color(0xFFF8FAFC),
+              border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: Color(0xFFE2E8F0))),
+              enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: Color(0xFFE2E8F0))),
+            ),
+          ),
         ],
       ),
     );
   }
 
   // =========================================================================
-  // SECTION 5: LIVE INTERACTIVE A4 PREVIEW (SCREENSHOT 4 & 5)
+  // SECTION 4: LIVE INTERACTIVE A4 PREVIEW
   // =========================================================================
-  Widget _buildSection5LiveA4Preview(Color activeColor) {
+  Widget _buildSection4LiveA4Preview(Color activeColor) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [

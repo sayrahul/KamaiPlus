@@ -163,6 +163,13 @@ class ProductModel {
   /// choosing between sizes.
   final String? fitNotes;
 
+  /// Parent product ID if this product is a child variant (e.g. Size M, Color Red).
+  final String? parentId;
+  /// True if this product is a parent master SKU with child variants.
+  final bool hasVariants;
+  /// Human-readable label of the variant (e.g. "Size: M • Color: Blue").
+  final String? variantLabel;
+
   ProductModel({
     required this.id,
     required this.businessId,
@@ -188,6 +195,9 @@ class ProductModel {
     this.businessType = 'grocery',
     this.subUnitsPerPack,
     this.fitNotes,
+    this.parentId,
+    this.hasVariants = false,
+    this.variantLabel,
   });
 
   Map<String, dynamic> toMap() => {
@@ -215,6 +225,9 @@ class ProductModel {
     'business_type': businessType,
     'sub_units_per_pack': subUnitsPerPack,
     'fit_notes': fitNotes,
+    'parent_id': parentId,
+    'has_variants': hasVariants ? 1 : 0,
+    'variant_label': variantLabel,
   };
 
   factory ProductModel.fromMap(Map<String, dynamic> map) => ProductModel(
@@ -244,6 +257,9 @@ class ProductModel {
         : inferBusinessType(map['name'], map['category_id']),
     subUnitsPerPack: (map['sub_units_per_pack'] as num?)?.toInt(),
     fitNotes: map['fit_notes'] as String?,
+    parentId: map['parent_id'] as String?,
+    hasVariants: (map['has_variants'] == 1 || map['has_variants'] == true),
+    variantLabel: map['variant_label'] as String?,
   );
 
   ProductModel copyWith({
@@ -269,6 +285,9 @@ class ProductModel {
     String? businessType,
     int? subUnitsPerPack,
     String? fitNotes,
+    String? parentId,
+    bool? hasVariants,
+    String? variantLabel,
   }) => ProductModel(
     id: id,
     businessId: businessId,
@@ -294,7 +313,13 @@ class ProductModel {
     businessType: businessType ?? this.businessType,
     subUnitsPerPack: subUnitsPerPack ?? this.subUnitsPerPack,
     fitNotes: fitNotes ?? this.fitNotes,
+    parentId: parentId ?? this.parentId,
+    hasVariants: hasVariants ?? this.hasVariants,
+    variantLabel: variantLabel ?? this.variantLabel,
   );
+
+  /// True if this item is a child variant of a parent product.
+  bool get isVariant => parentId != null && parentId!.isNotEmpty;
 
 
   /// Returns true if item has uncounted / infinite stock (stock quantity >= 99990).

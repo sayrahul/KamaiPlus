@@ -4,6 +4,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../dashboard/home_dashboard_screen.dart';
 import '../menu/menu_screen.dart';
 import '../../core/constants/business_vertical_config.dart';
+import '../../core/localization/app_language_service.dart';
 
 class KamaiBottomNav extends StatelessWidget {
   final int currentIndex;
@@ -55,37 +56,42 @@ class KamaiBottomNav extends StatelessWidget {
       ),
       child: SafeArea(
         child: ValueListenableBuilder<String>(
-          valueListenable: BusinessVerticals.activeBusinessTypeNotifier,
-          builder: (context, activeType, _) {
-            final vert = BusinessVerticals.resolve(activeType);
-            return Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceAround,
-                crossAxisAlignment: CrossAxisAlignment.center,
-                children: [
-                  // 0: Home
-                  _buildNavItem(context, 0, Icons.home_rounded, Icons.home_outlined, 'Home'),
+          valueListenable: AppLanguageService.instance.currentLanguageNotifier,
+          builder: (context, currentLang, child) {
+            return ValueListenableBuilder<String>(
+              valueListenable: BusinessVerticals.activeBusinessTypeNotifier,
+              builder: (context, activeType, _) {
+                final vert = BusinessVerticals.resolve(activeType);
+                return Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceAround,
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      // 0: Home
+                      _buildNavItem(context, 0, Icons.home_rounded, Icons.home_outlined, 'nav_home'.tr),
 
-                  // 1: Dynamic Product / Menu / Medicines / Apparel / Items
-                  _buildNavItem(
-                    context,
-                    1,
-                    vert.navActiveIcon,
-                    vert.navInactiveIcon,
-                    vert.bottomNavLabel,
+                      // 1: Dynamic Product / Menu / Medicines / Apparel / Items
+                      _buildNavItem(
+                        context,
+                        1,
+                        vert.navActiveIcon,
+                        vert.navInactiveIcon,
+                        'nav_products'.tr,
+                      ),
+
+                      // 2: Center Billing
+                      _buildCenterBillingButton(context),
+
+                      // 3: Khata
+                      _buildNavItem(context, 3, Icons.menu_book_rounded, Icons.menu_book_outlined, 'nav_khata'.tr),
+
+                      // 4: Menu
+                      _buildNavItem(context, 4, Icons.grid_view_rounded, Icons.grid_view_outlined, 'nav_menu'.tr),
+                    ],
                   ),
-
-                  // 2: Center Billing
-                  _buildCenterBillingButton(context),
-
-                  // 3: Khata
-                  _buildNavItem(context, 3, Icons.menu_book_rounded, Icons.menu_book_outlined, 'Khata'),
-
-                  // 4: Menu
-                  _buildNavItem(context, 4, Icons.grid_view_rounded, Icons.grid_view_outlined, 'Menu'),
-                ],
-              ),
+                );
+              },
             );
           },
         ),
@@ -182,7 +188,7 @@ class KamaiBottomNav extends StatelessWidget {
               ),
               const SizedBox(height: 3),
               Text(
-                'Billing',
+                'nav_billing'.tr,
                 style: GoogleFonts.plusJakartaSans(
                   fontSize: 11,
                   fontWeight: isSelected ? FontWeight.w800 : FontWeight.w600,

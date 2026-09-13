@@ -494,12 +494,27 @@ class _KhataScreenState extends State<KhataScreen> with DataBusRefresh<KhataScre
       );
     }
 
+    final selectedBills = _customerBills.where((b) => _selectedBillIds.contains(b.id)).toList();
+    final selectedTotalPaise = selectedBills.fold<int>(0, (sum, b) => sum + b.totalAmountPaise);
+    final showFloatingSettle = _selectedCustomer != null && _activeCustomerSubTab == 1 && _selectedBillIds.isNotEmpty;
+
     return Scaffold(
       backgroundColor: const Color(0xFFF8FAFC),
       body: SafeArea(
-        child: _selectedCustomer == null
-            ? _buildMainKhataDashboard()
-            : _buildCustomerDetailView(_selectedCustomer!),
+        child: Stack(
+          children: [
+            _selectedCustomer == null
+                ? _buildMainKhataDashboard()
+                : _buildCustomerDetailView(_selectedCustomer!),
+            if (showFloatingSettle)
+              Positioned(
+                left: 16,
+                right: 16,
+                bottom: 14,
+                child: _buildFloatingSettleBar(_selectedCustomer!, selectedBills, selectedTotalPaise),
+              ),
+          ],
+        ),
       ),
     );
   }
@@ -667,109 +682,213 @@ class _KhataScreenState extends State<KhataScreen> with DataBusRefresh<KhataScre
     );
   }
 
+  // =========================================================================
+  // 2. UNIFIED 2x2 METRIC RIBBON GRID (PRODUCT SCREEN DESIGN STYLE)
+  // =========================================================================
   Widget _buildMarketUdharHeroCard() {
     final udharPaise = _totalMarketUdharPaise;
     final dueCount = _dueCustomersCount;
+    final clearCount = _customers.length - dueCount;
 
     return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: [Color(0xFF0F172A), Color(0xFF1E293B)],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: const Color(0xFFEEF2F6), width: 1),
+      ),
+      child: Column(
+        children: [
+          Row(
+            children: [
+              // Card 1: Market Udhar
+              Expanded(
+                child: _buildMetricTile(
+                  icon: Icons.account_balance_wallet_rounded,
+                  iconColor: const Color(0xFFDC2626),
+                  title: 'Market Udhar',
+                  tag: 'Market Due',
+                  value: MoneyFormatter.formatINR(udharPaise),
+                  valueColor: const Color(0xFFDC2626),
+                  subtitle: 'Total pending balance',
+                ),
+              ),
+              Container(width: 1, height: 60, color: const Color(0xFFF1F5F9)),
+              // Card 2: Due Customers Count
+              Expanded(
+                child: _buildMetricTile(
+                  icon: Icons.group_rounded,
+                  iconColor: const Color(0xFFD97706),
+                  title: 'Due Customers',
+                  tag: 'Borrowers',
+                  value: dueCount.toString(),
+                  valueColor: dueCount > 0 ? const Color(0xFFD97706) : const Color(0xFF0F172A),
+                  subtitle: 'Accounts with balance',
+                  onTap: () => setState(() => _selectedFilter = _selectedFilter == 'Due' ? 'All' : 'Due'),
+                ),
+              ),
+            ],
+          ),
+          const Divider(color: Color(0xFFF1F5F9), height: 16),
+          Row(
+            children: [
+              // Card 3: Settled Accounts
+              Expanded(
+                child: _buildMetricTile(
+                  icon: Icons.verified_rounded,
+                  iconColor: const Color(0xFF059669),
+                  title: 'Settled Accounts',
+                  tag: 'Clean',
+                  value: clearCount.toString(),
+                  valueColor: const Color(0xFF059669),
+                  subtitle: 'Zero dues cleared',
+                  onTap: () => setState(() => _selectedFilter = _selectedFilter == 'Clear' ? 'All' : 'Clear'),
+                ),
+              ),
+              Container(width: 1, height: 60, color: const Color(0xFFF1F5F9)),
+              // Card 4: Total Ledger
+              Expanded(
+                child: _buildMetricTile(
+                  icon: Icons.menu_book_rounded,
+                  iconColor: const Color(0xFF0F172A),
+                  title: 'Total Ledger',
+                  tag: 'All Khata',
+                  value: _customers.length.toString(),
+                  valueColor: const Color(0xFF0F172A),
+                  subtitle: 'Customer accounts',
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMetricTile({
+    required IconData icon,
+    required Color iconColor,
+    required String title,
+    required String tag,
+    required String value,
+    required Color valueColor,
+    required String subtitle,
+    VoidCallback? onTap,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(10),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Expanded(
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(icon, size: 12, color: iconColor),
+                      const SizedBox(width: 3),
+                      Flexible(
+                        child: Text(
+                          title,
+                          style: GoogleFonts.inter(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w700,
+                            color: iconColor,
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 2),
+                Text(
+                  tag,
+                  style: GoogleFonts.inter(fontSize: 9, color: const Color(0xFF94A3B8), fontWeight: FontWeight.w500),
+                ),
+              ],
+            ),
+            const SizedBox(height: 4),
+            Text(
+              value,
+              style: GoogleFonts.outfit(
+                fontSize: 16.5,
+                fontWeight: FontWeight.w900,
+                color: valueColor,
+              ),
+            ),
+            Text(
+              subtitle,
+              style: GoogleFonts.inter(fontSize: 9.5, color: const Color(0xFF94A3B8)),
+              overflow: TextOverflow.ellipsis,
+            ),
+          ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildFloatingSettleBar(CustomerModel customer, List<SaleModel> selectedBills, int totalPaise) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      decoration: BoxDecoration(
+        color: const Color(0xFF0F172A),
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: const Color(0xFF0F172A).withValues(alpha: 0.14),
-            blurRadius: 10,
+            color: Colors.black.withValues(alpha: 0.25),
+            blurRadius: 12,
             offset: const Offset(0, 4),
           ),
         ],
       ),
       child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          // Left: Label + Outstanding Amount
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: [
-                Row(
-                  children: [
-                    Container(
-                      width: 6,
-                      height: 6,
-                      decoration: const BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: Color(0xFFEF4444),
-                      ),
-                    ),
-                    const SizedBox(width: 6),
-                    Text(
-                      'TOTAL MARKET UDHAR',
-                      style: GoogleFonts.inter(
-                        fontSize: 9.5,
-                        fontWeight: FontWeight.w800,
-                        color: const Color(0xFF94A3B8),
-                        letterSpacing: 0.8,
-                      ),
-                    ),
-                  ],
+                Text(
+                  '${selectedBills.length} BILLS SELECTED',
+                  style: GoogleFonts.inter(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w800,
+                    color: const Color(0xFF94A3B8),
+                    letterSpacing: 0.5,
+                  ),
                 ),
-                const SizedBox(height: 3),
-                FittedBox(
-                  fit: BoxFit.scaleDown,
-                  alignment: Alignment.centerLeft,
-                  child: Text(
-                    MoneyFormatter.formatINR(udharPaise),
-                    style: GoogleFonts.outfit(
-                      fontSize: 24,
-                      fontWeight: FontWeight.w900,
-                      color: Colors.white,
-                      letterSpacing: -0.5,
-                    ),
+                const SizedBox(height: 2),
+                Text(
+                  MoneyFormatter.formatINR(totalPaise),
+                  style: GoogleFonts.outfit(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w900,
+                    color: Colors.white,
                   ),
                 ),
               ],
             ),
           ),
-          const SizedBox(width: 10),
-
-          // Right: Compact Badges
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 3.5),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFEF4444).withValues(alpha: 0.2),
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: const Color(0xFFEF4444).withValues(alpha: 0.4)),
-                ),
-                child: Text(
-                  '$dueCount Due',
-                  style: GoogleFonts.outfit(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w700,
-                    color: const Color(0xFFFCA5A5),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 3),
-              Text(
-                '${_customers.length} Accounts',
-                style: GoogleFonts.inter(
-                  fontSize: 10.5,
-                  fontWeight: FontWeight.w500,
-                  color: const Color(0xFF94A3B8),
-                ),
-              ),
-            ],
+          ElevatedButton.icon(
+            onPressed: () => _openSelectiveBillSettlementModal(customer, selectedBills),
+            icon: const Icon(Icons.flash_on_rounded, size: 16, color: Colors.white),
+            label: Text(
+              'Settle Bills ⚡',
+              style: GoogleFonts.outfit(fontSize: 13, fontWeight: FontWeight.w800, color: Colors.white),
+            ),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF059669),
+              foregroundColor: Colors.white,
+              elevation: 0,
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            ),
           ),
         ],
       ),
@@ -1735,8 +1854,6 @@ class _KhataScreenState extends State<KhataScreen> with DataBusRefresh<KhataScre
     }).toList();
 
     final unpaidBills = _customerBills.where((b) => b.paymentMethod == 'credit' && b.status != 'settled').toList();
-    final selectedBills = _customerBills.where((b) => _selectedBillIds.contains(b.id)).toList();
-    final selectedTotalPaise = selectedBills.fold<int>(0, (sum, b) => sum + b.totalAmountPaise);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1789,60 +1906,6 @@ class _KhataScreenState extends State<KhataScreen> with DataBusRefresh<KhataScre
                     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                     minimumSize: Size.zero,
                     tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                  ),
-                ),
-              ],
-            ),
-          ),
-
-        // Floating / Sticky Selection Bar
-        if (_selectedBillIds.isNotEmpty)
-          Container(
-            margin: const EdgeInsets.only(bottom: 14),
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-            decoration: BoxDecoration(
-              gradient: const LinearGradient(
-                colors: [Color(0xFF0F172A), Color(0xFF1E293B)],
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-              ),
-              borderRadius: BorderRadius.circular(16),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.12),
-                  blurRadius: 10,
-                  offset: const Offset(0, 4),
-                ),
-              ],
-            ),
-            child: Row(
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        '${_selectedBillIds.length} BILLS SELECTED',
-                        style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.w800, color: const Color(0xFF94A3B8), letterSpacing: 0.5),
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        MoneyFormatter.formatINR(selectedTotalPaise),
-                        style: GoogleFonts.outfit(fontSize: 19, fontWeight: FontWeight.w900, color: Colors.white),
-                      ),
-                    ],
-                  ),
-                ),
-                ElevatedButton.icon(
-                  onPressed: () => _openSelectiveBillSettlementModal(customer, selectedBills),
-                  icon: const Icon(Icons.flash_on_rounded, size: 16, color: Colors.white),
-                  label: Text('Settle Bills ⚡', style: GoogleFonts.outfit(fontSize: 13, fontWeight: FontWeight.w800, color: Colors.white)),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF059669),
-                    foregroundColor: Colors.white,
-                    elevation: 0,
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                   ),
                 ),
               ],

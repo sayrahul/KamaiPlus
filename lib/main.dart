@@ -16,6 +16,7 @@ import 'services/workmanager_sync_service.dart';
 import 'services/in_app_update_service.dart';
 import 'views/splash/splash_screen.dart';
 import 'views/auth/login_screen.dart';
+import 'core/localization/app_language_service.dart';
 
 final GlobalKey<NavigatorState> rootNavigatorKey = GlobalKey<NavigatorState>();
 
@@ -60,6 +61,9 @@ void main() async {
       }
     } catch (_) {}
   }
+
+  // 2c. Initialize App Language / Regional UI Localization Service
+  await AppLanguageService.instance.init();
 
   // 3. Initialize Voice Soundbox Audio Engine
   await SoundboxService.instance.init();
@@ -117,14 +121,19 @@ class KamaiPlusApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      navigatorKey: rootNavigatorKey,
-      title: 'KamaiPlus POS',
-      debugShowCheckedModeBanner: false,
-      theme: AppTheme.lightTheme,
-      darkTheme: AppTheme.darkTheme,
-      themeMode: ThemeMode.light,
-      home: const SplashScreen(),
+    return ValueListenableBuilder<String>(
+      valueListenable: AppLanguageService.instance.currentLanguageNotifier,
+      builder: (context, currentLanguage, _) {
+        return MaterialApp(
+          navigatorKey: rootNavigatorKey,
+          title: 'KamaiPlus POS',
+          debugShowCheckedModeBanner: false,
+          theme: AppTheme.lightTheme,
+          darkTheme: AppTheme.darkTheme,
+          themeMode: ThemeMode.light,
+          home: const SplashScreen(),
+        );
+      },
     );
   }
 }

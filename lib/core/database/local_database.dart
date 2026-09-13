@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:convert';
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart' as p;
 import 'package:uuid/uuid.dart';
@@ -527,6 +528,34 @@ class LocalDatabase {
     ''');
     await db.execute('CREATE INDEX IF NOT EXISTS idx_audit_created ON audit_logs(created_at)');
 
+    // Sale Returns (Partial & Full Returns / Credit Notes)
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS sale_returns (
+        id TEXT PRIMARY KEY,
+        sale_id TEXT NOT NULL,
+        return_number TEXT NOT NULL,
+        items_returned_json TEXT NOT NULL,
+        total_refund_paise INTEGER NOT NULL,
+        refund_method TEXT NOT NULL,
+        reason TEXT,
+        created_at TEXT NOT NULL,
+        sync_status TEXT NOT NULL
+      )
+    ''');
+    await db.execute('CREATE INDEX IF NOT EXISTS idx_sale_returns_sale_id ON sale_returns(sale_id)');
+
+    // Product Variant support (Parent-Child multi-SKU matrix)
+    try {
+      await db.execute('ALTER TABLE products ADD COLUMN parent_id TEXT');
+    } catch (_) {}
+    try {
+      await db.execute('ALTER TABLE products ADD COLUMN has_variants INTEGER DEFAULT 0');
+    } catch (_) {}
+    try {
+      await db.execute('ALTER TABLE products ADD COLUMN variant_label TEXT');
+    } catch (_) {}
+    await db.execute('CREATE INDEX IF NOT EXISTS idx_products_parent_id ON products(parent_id)');
+
     await _seedMasterCatalogIfEmpty(db);
     await _backfillBusinessVerticals(db);
   }
@@ -759,7 +788,10 @@ class LocalDatabase {
         sync_status TEXT NOT NULL,
         business_type TEXT DEFAULT 'grocery',
         sub_units_per_pack INTEGER,
-        fit_notes TEXT
+        fit_notes TEXT,
+        parent_id TEXT,
+        has_variants INTEGER DEFAULT 0,
+        variant_label TEXT
       )
     ''');
 
@@ -815,6 +847,21 @@ class LocalDatabase {
         sync_status TEXT NOT NULL
       )
     ''');
+
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS sale_returns (
+        id TEXT PRIMARY KEY,
+        sale_id TEXT NOT NULL,
+        return_number TEXT NOT NULL,
+        items_returned_json TEXT NOT NULL,
+        total_refund_paise INTEGER NOT NULL,
+        refund_method TEXT NOT NULL,
+        reason TEXT,
+        created_at TEXT NOT NULL,
+        sync_status TEXT NOT NULL
+      )
+    ''');
+    await db.execute('CREATE INDEX IF NOT EXISTS idx_sale_returns_sale_id ON sale_returns(sale_id)');
 
     await db.execute('''
       CREATE TABLE ledger_transactions (
@@ -1094,12 +1141,20 @@ class LocalDatabase {
     return result.map((json) => CustomerModel.fromMap(json)).toList();
   }
 
-  Future<ProductModel?> findProductByBarcode(String barcode) async {
+  Future<ProductModel?> findProductByBarcode(String barcode, {String? businessType}) async {
+    final cleanBarcode = barcode.trim();
+    if (cleanBarcode.isEmpty) return null;
     final db = await instance.database;
+    String whereClause = 'barcode = ?';
+    List<dynamic> whereArgs = [cleanBarcode];
+    if (businessType != null && businessType.isNotEmpty) {
+      whereClause += " AND (business_type = ? OR business_type = 'both')";
+      whereArgs.add(businessType);
+    }
     final result = await db.query(
       'products',
-      where: 'barcode = ?',
-      whereArgs: [barcode.trim()],
+      where: whereClause,
+      whereArgs: whereArgs,
       limit: 1,
     );
     if (result.isNotEmpty) {
@@ -1570,6 +1625,253 @@ class LocalDatabase {
     AppDataBus.instance.bumpSaleCompleted(affectsCustomer: true, affectsCash: true);
   }
 
+  /// Processes partial sales return (Tukdo me wapsi):
+  /// - Restocks only the returned items into SQLite inventory
+  /// - Reverses customer credit/udhar or records cash drawer outflow
+  /// - Inserts record into `sale_returns`
+  /// - Updates cumulative returned quantities on the sale invoice
+  Future<String> processPartialSalesReturn({
+    required SaleModel sale,
+    required List<Map<String, dynamic>> returnItems,
+    required String refundMethod, // 'cash', 'credit', 'credit_note'
+    String reason = 'Partial Customer Return',
+    String? userPin,
+  }) async {
+    final db = await instance.database;
+    final returnId = _uuid.v4();
+    final returnNumber = 'RET-${_uuid.v4().substring(0, 8).toUpperCase()}';
+
+    int totalRefundPaise = 0;
+    for (final it in returnItems) {
+      final num price = it['price_paise'] ?? it['selling_price_paise'] ?? 0;
+      final num qty = it['return_quantity'] ?? it['quantity'] ?? 1;
+      totalRefundPaise += (price * qty).toInt();
+    }
+
+    await db.transaction((txn) async {
+      // 1. Restock only returned items into inventory & record audit movement
+      for (final it in returnItems) {
+        final prodId = it['product_id'] ?? it['id'];
+        final prodName = (it['product_name'] ?? it['name'] ?? 'Item').toString();
+        final num rawQty = it['return_quantity'] ?? it['quantity'] ?? 1;
+        final double qty = rawQty.toDouble();
+        if (qty <= 0) continue;
+
+        List<Map<String, dynamic>> prodRows = [];
+        if (prodId != null && prodId.toString().isNotEmpty) {
+          prodRows = await txn.query('products', where: 'id = ?', whereArgs: [prodId.toString()]);
+        }
+        if (prodRows.isEmpty && prodName.isNotEmpty) {
+          prodRows = await txn.query('products', where: 'name = ?', whereArgs: [prodName]);
+        }
+
+        if (prodRows.isNotEmpty) {
+          final pMap = prodRows.first;
+          final currentStock = (pMap['stock_quantity'] as num).toDouble();
+          final targetProdId = pMap['id'].toString();
+          final newStock = currentStock + qty;
+
+          await txn.rawUpdate('''
+            UPDATE products
+            SET stock_quantity = stock_quantity + ?
+            WHERE id = ?
+          ''', [qty, targetProdId]);
+
+          final movement = InventoryMovementModel(
+            id: _uuid.v4(),
+            businessId: sale.businessId,
+            productId: targetProdId,
+            productName: prodName,
+            movementType: 'PARTIAL_RETURN',
+            quantity: qty,
+            previousStock: currentStock,
+            newStock: newStock,
+            referenceId: returnNumber,
+            createdAt: DateTime.now(),
+          );
+          await txn.insert('inventory_movements', movement.toMap());
+        }
+      }
+
+      // 2. Insert into sale_returns table
+      await txn.insert('sale_returns', {
+        'id': returnId,
+        'sale_id': sale.id,
+        'return_number': returnNumber,
+        'items_returned_json': jsonEncode(returnItems),
+        'total_refund_paise': totalRefundPaise,
+        'refund_method': refundMethod,
+        'reason': reason,
+        'created_at': DateTime.now().toIso8601String(),
+        'sync_status': 'pending',
+      });
+
+      // 3. Update original sale items_json to record cumulative returned_quantity per item
+      final List<dynamic> currentItems = List<dynamic>.from(sale.items);
+      bool allFullyReturned = true;
+
+      for (int i = 0; i < currentItems.length; i++) {
+        final currentIt = Map<String, dynamic>.from(currentItems[i]);
+        final cProdId = currentIt['product_id'] ?? currentIt['id'];
+        final cProdName = currentIt['product_name'] ?? currentIt['name'];
+        final num soldQty = currentIt['quantity'] ?? currentIt['qty'] ?? 1;
+        num previouslyReturned = currentIt['returned_quantity'] ?? 0;
+
+        for (final retIt in returnItems) {
+          final rProdId = retIt['product_id'] ?? retIt['id'];
+          final rProdName = retIt['product_name'] ?? retIt['name'];
+          if ((cProdId != null && cProdId == rProdId) || (cProdName != null && cProdName == rProdName)) {
+            final num retQty = retIt['return_quantity'] ?? retIt['quantity'] ?? 0;
+            previouslyReturned += retQty;
+            break;
+          }
+        }
+
+        currentIt['returned_quantity'] = previouslyReturned;
+        currentItems[i] = currentIt;
+
+        if (previouslyReturned < soldQty) {
+          allFullyReturned = false;
+        }
+      }
+
+      final newStatus = allFullyReturned ? 'refunded' : 'partially_refunded';
+      await txn.update(
+        'sales',
+        {
+          'status': newStatus,
+          'items_json': jsonEncode(currentItems),
+          'sync_status': 'pending',
+        },
+        where: 'id = ?',
+        whereArgs: [sale.id],
+      );
+
+      // 4. Handle Customer Udhar / Credit Reversal
+      if (refundMethod == 'credit' && sale.customerId != null && sale.customerId!.isNotEmpty) {
+        final custRows = await txn.query('customers', where: 'id = ?', whereArgs: [sale.customerId]);
+        if (custRows.isNotEmpty) {
+          final currentBal = custRows.first['current_balance_paise'] as int;
+          final newBal = (currentBal - totalRefundPaise).clamp(0, 999999999999);
+
+          await txn.rawUpdate('''
+            UPDATE customers
+            SET current_balance_paise = ?
+            WHERE id = ?
+          ''', [newBal, sale.customerId]);
+
+          final ledgerEntry = LedgerTransactionModel(
+            id: _uuid.v4(),
+            businessId: sale.businessId,
+            customerId: sale.customerId!,
+            type: 'debit',
+            amountPaise: totalRefundPaise,
+            balanceAfterPaise: newBal,
+            description: 'Partial Return #$returnNumber (Inv #${sale.invoiceNumber})',
+            referenceId: returnId,
+            createdAt: DateTime.now(),
+            syncStatus: 'pending',
+          );
+          await txn.insert('ledger_transactions', ledgerEntry.toMap());
+        }
+      } else if (refundMethod == 'cash' && totalRefundPaise > 0) {
+        // Record cash drawer refund outflow
+        final refundExpense = ExpenseModel(
+          id: _uuid.v4(),
+          businessId: sale.businessId,
+          title: 'Cash Refund: #$returnNumber (Inv #${sale.invoiceNumber})',
+          amountPaise: totalRefundPaise,
+          category: 'Refund',
+          createdAt: DateTime.now(),
+          note: reason,
+        );
+        await txn.insert('expenses', refundExpense.toMap());
+      }
+    });
+
+    AppDataBus.instance.bumpSaleCompleted(
+      affectsCustomer: refundMethod == 'credit',
+      affectsCash: refundMethod == 'cash',
+    );
+    AppDataBus.instance.bumpProducts();
+
+    return returnNumber;
+  }
+
+  /// Returns all partial/full return receipts recorded for a specific sale.
+  Future<List<Map<String, dynamic>>> getSaleReturns(String saleId) async {
+    final db = await instance.database;
+    return await db.query(
+      'sale_returns',
+      where: 'sale_id = ?',
+      whereArgs: [saleId],
+      orderBy: 'created_at DESC',
+    );
+  }
+
+  /// Fetches all child variants belonging to a parent product.
+  Future<List<ProductModel>> getVariantsForProduct(String parentId) async {
+    final db = await instance.database;
+    final rows = await db.query(
+      'products',
+      where: 'parent_id = ?',
+      whereArgs: [parentId],
+      orderBy: 'name ASC',
+    );
+    return rows.map((r) => ProductModel.fromMap(r)).toList();
+  }
+
+  /// Atomically saves a parent product and creates its child variants.
+  Future<List<ProductModel>> createProductWithVariants({
+    required ProductModel parentProduct,
+    required List<String> variantLabels,
+  }) async {
+    final db = await instance.database;
+    final List<ProductModel> createdVariants = [];
+
+    await db.transaction((txn) async {
+      final parentToSave = parentProduct.copyWith(hasVariants: true);
+      await txn.insert(
+        'products',
+        parentToSave.toMap(),
+        conflictAlgorithm: ConflictAlgorithm.replace,
+      );
+
+      for (final label in variantLabels) {
+        final variantId = _uuid.v4();
+        final childVariant = ProductModel(
+          id: variantId,
+          businessId: parentToSave.businessId,
+          name: '${parentToSave.name} ($label)',
+          categoryId: parentToSave.categoryId,
+          sellingPricePaise: parentToSave.sellingPricePaise,
+          mrpPaise: parentToSave.mrpPaise,
+          purchasePricePaise: parentToSave.purchasePricePaise,
+          stockQuantity: parentToSave.stockQuantity,
+          taxRate: parentToSave.taxRate,
+          isTaxInclusive: parentToSave.isTaxInclusive,
+          unit: parentToSave.unit,
+          size: label,
+          color: parentToSave.color,
+          fitNotes: parentToSave.fitNotes,
+          parentId: parentToSave.id,
+          hasVariants: false,
+          variantLabel: label,
+          syncStatus: 'pending',
+          businessType: parentToSave.businessType,
+        );
+        await txn.insert(
+          'products',
+          childVariant.toMap(),
+          conflictAlgorithm: ConflictAlgorithm.replace,
+        );
+        createdVariants.add(childVariant);
+      }
+    });
+    AppDataBus.instance.bumpProducts();
+    return createdVariants;
+  }
+
   Future<void> upsertProduct(ProductModel product) async {
     final db = await instance.database;
     await db.insert(
@@ -1672,6 +1974,47 @@ class LocalDatabase {
 
     for (final product in products) {
       final batches = await getBatchesForProduct(product.id);
+      if (batches.isEmpty) {
+        final expiryStr = product.expiryDate?.trim();
+        if (expiryStr != null && expiryStr.isNotEmpty) {
+          DateTime? expiry = DateTime.tryParse(expiryStr);
+          if (expiry == null && expiryStr.contains('/')) {
+            final parts = expiryStr.split('/');
+            if (parts.length == 2) {
+              final month = int.tryParse(parts[0]);
+              var year = int.tryParse(parts[1]);
+              if (month != null && year != null) {
+                if (year < 100) year += 2000;
+                expiry = DateTime(year, month, 28);
+              }
+            } else if (parts.length == 3) {
+              final day = int.tryParse(parts[0]);
+              final month = int.tryParse(parts[1]);
+              final year = int.tryParse(parts[2]);
+              if (day != null && month != null && year != null) {
+                expiry = DateTime(year, month, day);
+              }
+            }
+          }
+          if (expiry != null) {
+            final daysLeft = expiry.difference(now).inDays;
+            if (daysLeft <= withinDays) {
+              results.add({
+                'product_name': product.name,
+                'batch_no': product.batchNumber?.isNotEmpty == true ? product.batchNumber! : 'MAIN',
+                'qty': product.stockQuantity.toInt(),
+                'unit': product.unit,
+                'expiry_date': expiry,
+                'days_left': daysLeft,
+                'cost_paise': product.purchasePricePaise,
+                'status': daysLeft <= 0 ? 'Expired' : (daysLeft <= 30 ? 'Expiring Soon (<30d)' : 'Under 90 Days'),
+                'is_urgent': daysLeft <= 30,
+              });
+            }
+          }
+        }
+        continue;
+      }
       for (final batch in batches) {
         final expiryStr = batch.expiryDate?.trim();
         if (expiryStr == null || expiryStr.isEmpty) continue;
@@ -2383,3 +2726,4 @@ class LocalDatabase {
     }
   }
 }
+

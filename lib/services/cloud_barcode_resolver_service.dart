@@ -39,7 +39,7 @@ class CloudBarcodeResolverService {
     }
 
     // 2. High-Frequency Offline Indian Retail & Pharmacy Barcode Dictionary (<1ms)
-    final offlineMatch = _lookupFastOfflineDictionary(cleanBarcode);
+    final offlineMatch = _lookupFastOfflineDictionary(cleanBarcode, targetVertical: targetVertical);
     if (offlineMatch != null) {
       await LocalDatabase.instance.insertMasterProduct(offlineMatch);
       return offlineMatch;
@@ -90,9 +90,15 @@ class CloudBarcodeResolverService {
     '8901117001187': {'name': 'Ascoril LS Expectorant Cough Syrup 100ml', 'cat': 'Syrups & Suspensions', 'unit': 'bottle', 'mrp': 11800, 'sell': 11000, 'type': 'pharmacy'},
   };
 
-  MasterProductModel? _lookupFastOfflineDictionary(String barcode) {
+  MasterProductModel? _lookupFastOfflineDictionary(String barcode, {String? targetVertical}) {
     final entry = _kFastIndianDict[barcode];
     if (entry == null) return null;
+    final itemType = (entry['type'] as String?)?.toLowerCase() ?? 'grocery';
+    if (targetVertical != null && targetVertical.isNotEmpty) {
+      if (itemType != targetVertical.toLowerCase() && itemType != 'both') {
+        return null;
+      }
+    }
     return MasterProductModel(
       barcode: barcode,
       name: entry['name'] as String,

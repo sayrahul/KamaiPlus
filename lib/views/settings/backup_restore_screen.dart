@@ -356,60 +356,65 @@ class _BackupRestoreScreenState extends State<BackupRestoreScreen> {
               physics: const BouncingScrollPhysics(parent: AlwaysScrollableScrollPhysics()),
               padding: const EdgeInsets.fromLTRB(16, 16, 16, 40),
               children: [
-                // Header Card
+                // Master Vault Header Card
                 Container(
-                  padding: const EdgeInsets.all(16),
+                  padding: const EdgeInsets.all(14),
                   decoration: BoxDecoration(
                     color: Colors.white,
-                    borderRadius: BorderRadius.circular(20),
-                    border: Border.all(color: const Color(0xFFEEF2F6)),
+                    borderRadius: BorderRadius.circular(18),
+                    border: Border.all(color: const Color(0xFFEEF2F6), width: 1),
                   ),
-                  child: Column(
+                  child: Row(
                     children: [
-                      Row(
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.all(8),
-                            decoration: BoxDecoration(color: const Color(0xFFFFFBEB), borderRadius: BorderRadius.circular(10)),
-                            child: const Icon(Icons.save_as_rounded, color: Color(0xFFD97706), size: 22),
-                          ),
-                          const SizedBox(width: 10),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text('Data Backup & Reset Vault', style: GoogleFonts.outfit(fontSize: 15, fontWeight: FontWeight.w700)),
-                                Text('Snapshots, Tally Prime, Cloud Sync & Data Management', style: GoogleFonts.inter(fontSize: 11, color: const Color(0xFF64748B))),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 12),
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        width: 44,
+                        height: 44,
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFFFFBEB),
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                        child: const Icon(Icons.save_as_rounded, color: Color(0xFFD97706), size: 22),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Data Backup & Reset Vault',
+                              style: GoogleFonts.outfit(fontSize: 16, fontWeight: FontWeight.w800, color: const Color(0xFF0F172A)),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              'Offline SQLite & Cloud Snapshot Security',
+                              style: GoogleFonts.inter(fontSize: 11, color: const Color(0xFF64748B)),
+                            ),
+                          ],
+                        ),
+                      ),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                         decoration: BoxDecoration(
                           color: const Color(0xFFF0FDF4),
-                          borderRadius: BorderRadius.circular(10),
+                          borderRadius: BorderRadius.circular(8),
                           border: Border.all(color: const Color(0xFFBBF7D0)),
                         ),
                         child: Row(
+                          mainAxisSize: MainAxisSize.min,
                           children: [
-                            Container(width: 8, height: 8, decoration: const BoxDecoration(color: Color(0xFF10B981), shape: BoxShape.circle)),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: Text(
-                                'Offline Active • $_itemCount items • $_saleCount bills • $_customerCount customers',
-                                style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w600, color: const Color(0xFF166534)),
-                              ),
-                            ),
-                            Text('Live', style: GoogleFonts.inter(fontSize: 10, color: const Color(0xFF15803D))),
+                            Container(width: 6, height: 6, decoration: const BoxDecoration(color: Color(0xFF10B981), shape: BoxShape.circle)),
+                            const SizedBox(width: 4),
+                            Text('Live', style: GoogleFonts.inter(fontSize: 10.5, fontWeight: FontWeight.w700, color: const Color(0xFF15803D))),
                           ],
                         ),
                       ),
                     ],
                   ),
                 ),
+                const SizedBox(height: 12),
+
+                // 2x2 Metric Ribbon Grid (Matching Product Screen Standard)
+                _buildMetricsGrid(),
                 const SizedBox(height: 20),
 
                 // Section 1: STORE DATA BACKUP & RESTORE
@@ -717,6 +722,153 @@ class _BackupRestoreScreenState extends State<BackupRestoreScreen> {
               elevation: 0,
             ),
             child: Text(buttonLabel, style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w700)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMetricsGrid() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: const Color(0xFFEEF2F6), width: 1),
+      ),
+      child: Column(
+        children: [
+          Row(
+            children: [
+              // Tile 1: Catalog Items
+              Expanded(
+                child: _buildMetricTile(
+                  icon: Icons.inventory_2_rounded,
+                  iconColor: const Color(0xFF2563EB),
+                  title: 'Catalog Items',
+                  tag: 'Stored',
+                  value: '$_itemCount',
+                  valueColor: const Color(0xFF0F172A),
+                  subtitle: 'Active inventory',
+                ),
+              ),
+              Container(width: 1, height: 56, color: const Color(0xFFF1F5F9)),
+              // Tile 2: Sales Bills
+              Expanded(
+                child: _buildMetricTile(
+                  icon: Icons.receipt_long_rounded,
+                  iconColor: const Color(0xFF059669),
+                  title: 'Sales Bills',
+                  tag: 'Vault',
+                  value: '$_saleCount',
+                  valueColor: const Color(0xFF059669),
+                  subtitle: 'Issued invoices',
+                ),
+              ),
+            ],
+          ),
+          const Divider(color: Color(0xFFF1F5F9), height: 16),
+          Row(
+            children: [
+              // Tile 3: Customer CRM
+              Expanded(
+                child: _buildMetricTile(
+                  icon: Icons.people_alt_rounded,
+                  iconColor: const Color(0xFFD97706),
+                  title: 'Customers CRM',
+                  tag: 'Ledger',
+                  value: '$_customerCount',
+                  valueColor: const Color(0xFF0F172A),
+                  subtitle: 'Buyer profiles',
+                ),
+              ),
+              Container(width: 1, height: 56, color: const Color(0xFFF1F5F9)),
+              // Tile 4: Cloud Sync
+              Expanded(
+                child: _buildMetricTile(
+                  icon: Icons.cloud_done_rounded,
+                  iconColor: _isPro ? const Color(0xFF10B981) : const Color(0xFF64748B),
+                  title: 'Cloud Vault',
+                  tag: _isPro ? 'Pro Live' : 'Free',
+                  value: _isPro ? 'Synced ☁️' : 'Local Only',
+                  valueColor: _isPro ? const Color(0xFF10B981) : const Color(0xFF64748B),
+                  subtitle: _isPro ? 'Realtime Firestore' : 'On-device SQLite',
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMetricTile({
+    required IconData icon,
+    required Color iconColor,
+    required String title,
+    required String tag,
+    required String value,
+    required Color valueColor,
+    required String subtitle,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 24,
+                height: 24,
+                decoration: BoxDecoration(
+                  color: iconColor.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Icon(icon, size: 14, color: iconColor),
+              ),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  title,
+                  style: GoogleFonts.inter(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    color: const Color(0xFF64748B),
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF1F5F9),
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: Text(
+                  tag,
+                  style: GoogleFonts.inter(
+                    fontSize: 8.5,
+                    fontWeight: FontWeight.w700,
+                    color: const Color(0xFF475569),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Text(
+            value,
+            style: GoogleFonts.outfit(
+              fontSize: 15.5,
+              fontWeight: FontWeight.w900,
+              color: valueColor,
+            ),
+          ),
+          const SizedBox(height: 1),
+          Text(
+            subtitle,
+            style: GoogleFonts.inter(fontSize: 10, color: const Color(0xFF94A3B8)),
           ),
         ],
       ),

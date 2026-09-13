@@ -38,6 +38,12 @@ The Bottom Navigation Bar has 5 items. The navigation contract is strictly defin
 * **Edit Product:** Pencil icon button has dedicated touch target; clicking it calls `AddProductModal(existingProduct: product)` with all fields pre-filled.
 * **Add Product:** Top "+" button and AI Vision bill OCR trigger.
 * **Bottom Nav:** Must NOT have its own `bottomNavigationBar` inside its Scaffold when displayed inside `HomeDashboardScreen`.
+* **Rapid Barcode Inward (`lib/views/products/rapid_barcode_inward_screen.dart`):**
+  - Category dropdown auto-seeds fallback "General" category if vertical has no categories, preventing blank dropdowns.
+  - Automatically creates and selects resolved categories in SQLite so the category dropdown is always populated.
+  - Barcode search strictly filters by active store vertical (`businessType`), preventing cross-vertical product leaks.
+  - Restocking an existing product strictly ADDS (`existingStock + inwardQty`) rather than overwriting previous inventory.
+  - "Add Star" / Favorite toggle is fully wired to SQLite, Firestore, and prioritizes items to the top of POS billing.
 
 ### 3. 🧾 Billing POS (`lib/views/pos/pos_billing_screen.dart`)
 * Fast retail grid/list view with instant search and barcode scan.
@@ -58,6 +64,10 @@ The Bottom Navigation Bar has 5 items. The navigation contract is strictly defin
   2. *Stock & Inventory* (Products & FMCG, Inventory & Alerts, Wholesale Purchases, Barcode Studio)
   3. *Customers & Khata* (Digital Khata, Customers Directory, WhatsApp Growth, Pro Plans)
   4. *Tax, Backup & Settings* (GSTR-1 Reports, Invoice Themes, Cloud Backup, Store Profile & UPI)
+* **Footer:** 
+  - **WhatsApp Support Button:** Direct 1-tap WhatsApp chat with merchant support number `8669997711` (`https://wa.me/918669997711`) prefilled with support greeting.
+  - **Version Badge:** Synchronized with Play Store release version (`v4.20.0` matching `pubspec.yaml: 4.20.0+42001`).
+  - **Sign Out Button:** Red outlined button with confirmation dialog.
 * Clicking any sub-screen dismisses the modal and pushes that screen.
 
 ### 6. 💵 Cash Register (`lib/views/cash_register/cash_register_screen.dart`)
@@ -1221,4 +1231,57 @@ Comprehensive enterprise-grade retail UX upgrade suite aligned with PhonePe Busi
       - Added Firestore restoration loops for `sales` and `customers` collections, ensuring sales history and khata ledgers survive re-installs and multi-device logins.
     - **Verified:** `flutter analyze lib/` (0 errors), `flutter test` (all 87/87 tests passed).
 
+72. **Universal 2×2 Metric Ribbon, Draft Cart Invariant, POS Checkout Refinements, Loose Quantities & WhatsApp Growth (LOCKED):**
+    - **Universal 2×2 Metric Ribbon Standard:**
+      - Applied the clean white rounded 2×2 metric ribbon design (`borderRadius: 18`, light border `Color(0xFFE2E8F0)`, subtle horizontal & vertical dividers) uniformly across:
+        1. *Transaction History* (`transactions_screen.dart`): Turnover, Total Invoices, Cash & UPI, Market Udhar. Interactive Date Range picker (`showDateRangePicker`).
+        2. *Cash Register* (`cash_register_screen.dart`): Opening Till, Cash Sales, Cash Expenses, Expected Drawer Cash.
+        3. *Digital Khata* (`khata_screen.dart`): Total Market Udhar, Due Customers, Settle Ledger, Overdue Accounts.
+        4. *Customers Directory* (`customers_screen.dart`): Total Directory, VIP Club, Total Udhar, Due Customers.
+        5. *Data Backup & Reset Vault* (`backup_restore_screen.dart`): Catalog Items, Sales Bills, Customers CRM, Cloud Vault Status.
+    - **Strict Draft Cart Preservation (`PosBillingSessionStore`):**
+      - Tab switching between POS Billing and any other bottom-nav tabs (Home, Products, Khata, Menu) preserves cart items and billing state in memory via `AutomaticKeepAliveClientMixin` and `PosBillingSessionStore`.
+      - "Clear Bill" completely clears the cart items and active tab customer.
+      - "Hold Bill" button removed; `+ New` bill handles parallel drafts cleanly.
+    - **POS Checkout Modal Customer Selection & Doctors:**
+      - Inline `+ New` customer creation directly inside customer search field with instant selection.
+      - Customer deselect/reselect immediately re-queries and restores the full customer list without leaving the modal.
+      - Doctor Directory: Permanent SQLite-backed doctor directory with inline `+ Add Doctor` in search field.
+    - **Loose / Fractional Quantity Chips (`quantity_config.dart`):**
+      - Weight (kg): 10g, 25g, 50g, 100g, 250g, 500g, 750g, 1 kg, 2 kg, 5 kg.
+      - Pharmacy (strip): Loose tablet chips (`1 Tablet`, `$n Tablets`) when strip tablet count is specified; fallback to `½ Strip` and whole strips when unspecified.
+    - **Digital Khata Settle Bar:**
+      - Floating bottom bar anchored at `bottom: 14` with `${selectedBills.length} BILLS SELECTED`, total paise, and `Settle Bills ⚡` button.
+    - **Inventory Expiry Radar Fallback:**
+      - `getNearExpiryBatches` falls back to `product.expiryDate` when `product_batches` has no entries, ensuring products expiring soon appear in the radar.
+      - `AddProductModal` formats exact day `dd/MM/yyyy`.
+    - **Purchases Clean Slate:**
+      - Hardcoded dummy purchase orders removed (`_purchases = []`).
+    - **Invoice PDF WhatsApp Sharing:**
+      - WhatsApp share writes PDF only to app-internal storage (`skipDownloadsFolder: true`) preventing duplicate downloads and loud system notifications on share.
+      - Statutory Invoice platform branding toggle removed from settings; compulsory "Powered by KamaiPlus POS" enforced.
+    - **WhatsApp Growth Hub Custom Composer:**
+      - ✍️ Custom Message Composer tab alongside 24 Ready Templates with live green WhatsApp chat bubble preview and tags (`{name}`, `{store}`, `{upi}`).
 
+73. **Partial Sales Return (Tukdo me Wapsi & Credit Note) (LOCKED):**
+    - `sale_returns` table in SQLite schema (`_ensureExtraTables` & `_createDB`).
+    - `processPartialSalesReturn` in `LocalDatabase.instance`: Restocks only returned item quantities in `products`, creates `PARTIAL_RETURN` log in `inventory_movements`, recalculates sale status (`partially_refunded` vs `refunded`), records cumulative `returned_quantity` in `sales.items_json`, reverses Udhar ledger if credit sale, logs cash drawer outflow if cash refund, writes audit trail, bumps `AppDataBus`.
+    - `_openPartialReturnSheet` modal in `SaleDetailModal`: Item-by-item quantity steppers (`0` to `max_returnable`), live Integer Paise refund calculation, refund mode chips (Cash, Reverse Udhar, Store Credit), reason textfield, Master PIN (`1234`) authorization. Amber badge for partially refunded sales.
+    - **Verified:** `test/partial_sales_return_test.dart` passed 100%.
+
+74. **Parent-Child Variant Matrix (Sizes, Colors, Multi-SKU) (LOCKED):**
+    - `ProductModel` fields: `parentId`, `hasVariants`, `variantLabel`, getter `isVariant`.
+    - SQLite schema migration: `parent_id`, `has_variants`, `variant_label` columns with index on `parent_id`.
+    - `AddProductModal`: Variant Matrix Generator with presets for Garments (`S, M, L, XL, XXL, 3XL`), Pants/Shoes (`28, 30, 32... 42`), Colors (`Red, Blue, Black...`), and custom tag entry. Atomically inserts parent and all child variants via `createProductWithVariants`.
+    - Clean catalog: Child variants hidden from main list when browsing, but searchable by name, barcode, or variant label. Parent product cards display purple `Variants` chip opening `_showProductVariantsSheet` (view stock per size, quick bolt stock update, edit variant, or add child variant).
+    - POS Counter Billing: Tapping parent product opens `_showVariantPicker` modal to pick size/color with live stock check before adding to cart. Direct variant barcode scan adds variant instantly.
+    - **Verified:** `test/product_variants_test.dart` passed 100%.
+
+75. **Multi-Language App UI (Regional Bhashayein) (LOCKED):**
+    - `AppStrings`: Full translation dictionaries for English (`en`), हिंदी (`hi`), मराठी (`mr`), and ગુજરાતી (`gu`).
+    - `AppLanguageService`: Reactive `ValueNotifier<String>` singleton persisted in `SharedPreferences` (`app_selected_language`). `.tr` string extension.
+    - `LanguageSelectionModal`: Bottom sheet modal with native names, flags, and `isScrollControlled: true` + `SafeArea` with direct `Column` tiles preventing touch conflicts or pixel overflow.
+    - `KamaiBottomNav`: Bound to `currentLanguageNotifier` via `ValueListenableBuilder`. Labels switch dynamically with zero layout shift.
+    - `MenuScreen`: Responsive 2-row bottom footer with WhatsApp Support on the left, Flag + Native Language dropdown button on the right, and version + logout below.
+    - `StoreProfileScreen`: "Language / भाषा" configuration card in Store Profile tab.
+    - **Verified:** `test/localization_test.dart` passed 100%, verified on real Redmi 6 device.

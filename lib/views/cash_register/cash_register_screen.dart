@@ -1190,136 +1190,143 @@ Generated via KamaiPlus Retail POS
   // 4-METRIC MICRO GRID
   // =========================================================================
   Widget _buildMetricGrid() {
-    return Row(
-      children: [
-        // Left Column: Opening Float & Cash Out
-        Expanded(
-          child: Column(
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: const Color(0xFFEEF2F6), width: 1),
+      ),
+      child: Column(
+        children: [
+          Row(
             children: [
-              _buildMicroMetricCard(
-                title: 'Opening Float',
-                amount: _formatAmount(_openingFloatPaise),
-                tag: 'Morning Base',
-                tagColor: const Color(0xFF0284C7),
-                icon: Icons.wb_sunny_rounded,
-                onTap: _showEditOpeningFloatDialog,
+              // Card 1: Opening Till
+              Expanded(
+                child: _buildMetricTile(
+                  icon: Icons.wb_sunny_rounded,
+                  iconColor: const Color(0xFF0284C7),
+                  title: 'Opening Till',
+                  tag: 'Morning',
+                  value: _formatAmount(_openingFloatPaise),
+                  valueColor: const Color(0xFF0284C7),
+                  subtitle: 'Base cash in till',
+                  onTap: _showEditOpeningFloatDialog,
+                ),
               ),
-              const SizedBox(height: 8),
-              _buildMicroMetricCard(
-                title: 'Petty Outflow',
-                amount: '-${_formatAmount(_cashOutExpensesPaise)}',
-                tag: '${_expenses.length} expenses',
-                tagColor: const Color(0xFFDC2626),
-                icon: Icons.coffee_rounded,
-                onTap: _showAddExpenseDialog,
+              Container(width: 1, height: 60, color: const Color(0xFFF1F5F9)),
+              // Card 2: Cash Sales
+              Expanded(
+                child: _buildMetricTile(
+                  icon: Icons.point_of_sale_rounded,
+                  iconColor: const Color(0xFF059669),
+                  title: 'Cash Sales',
+                  tag: 'POS Cash',
+                  value: '+${_formatAmount(_cashInSalesPaise)}',
+                  valueColor: const Color(0xFF059669),
+                  subtitle: "Today's cash billing",
+                ),
               ),
             ],
           ),
-        ),
-        const SizedBox(width: 8),
-
-        // Right Column: Cash In & Expected Net
-        Expanded(
-          child: Column(
+          const Divider(color: Color(0xFFF1F5F9), height: 16),
+          Row(
             children: [
-              _buildMicroMetricCard(
-                title: 'Cash Sales',
-                amount: '+${_formatAmount(_cashInSalesPaise)}',
-                tag: 'From POS Bills',
-                tagColor: const Color(0xFF059669),
-                icon: Icons.point_of_sale_rounded,
+              // Card 3: Petty Expenses
+              Expanded(
+                child: _buildMetricTile(
+                  icon: Icons.coffee_rounded,
+                  iconColor: const Color(0xFFDC2626),
+                  title: 'Cash Expenses',
+                  tag: '${_expenses.length} paid',
+                  value: '-${_formatAmount(_cashOutExpensesPaise)}',
+                  valueColor: const Color(0xFFDC2626),
+                  subtitle: 'Petty cash outflow',
+                  onTap: _showAddExpenseDialog,
+                ),
               ),
-              const SizedBox(height: 8),
-              _buildMicroMetricCard(
-                title: 'Expected Cash',
-                amount: _formatAmount(_expectedCashPaise),
-                tag: 'In Physical Till',
-                tagColor: const Color(0xFF0F172A),
-                icon: Icons.account_balance_wallet_rounded,
-                isHighlighted: true,
+              Container(width: 1, height: 60, color: const Color(0xFFF1F5F9)),
+              // Card 4: Drawer Cash
+              Expanded(
+                child: _buildMetricTile(
+                  icon: Icons.account_balance_wallet_rounded,
+                  iconColor: const Color(0xFF0F172A),
+                  title: 'Drawer Cash',
+                  tag: 'In Till',
+                  value: _formatAmount(_expectedCashPaise),
+                  valueColor: const Color(0xFF0F172A),
+                  subtitle: 'Expected closing',
+                  onTap: _showDenominationCalculator,
+                ),
               ),
             ],
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 
-  Widget _buildMicroMetricCard({
-    required String title,
-    required String amount,
-    required String tag,
-    required Color tagColor,
+  Widget _buildMetricTile({
     required IconData icon,
-    bool isHighlighted = false,
+    required Color iconColor,
+    required String title,
+    required String tag,
+    required String value,
+    required Color valueColor,
+    required String subtitle,
     VoidCallback? onTap,
   }) {
     return InkWell(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(12),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(
-            color: isHighlighted ? const Color(0xFF0F172A) : const Color(0xFFEEF2F6),
-            width: isHighlighted ? 1.2 : 1.0,
-          ),
-          boxShadow: const [
-            BoxShadow(
-              color: Color(0x050F172A),
-              blurRadius: 4,
-              offset: Offset(0, 1),
-            ),
-          ],
-        ),
+      borderRadius: BorderRadius.circular(10),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Row(
-                  children: [
-                    Icon(icon, size: 13, color: tagColor),
-                    const SizedBox(width: 4),
-                    Text(
-                      title,
-                      style: GoogleFonts.inter(
-                        fontSize: 10.5,
-                        fontWeight: FontWeight.w700,
-                        color: const Color(0xFF64748B),
+                Expanded(
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(icon, size: 12, color: iconColor),
+                      const SizedBox(width: 3),
+                      Flexible(
+                        child: Text(
+                          title,
+                          style: GoogleFonts.inter(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w700,
+                            color: iconColor,
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
-                if (onTap != null)
-                  const Icon(Icons.edit_outlined, size: 12, color: Color(0xFF94A3B8)),
+                const SizedBox(width: 2),
+                Text(
+                  tag,
+                  style: GoogleFonts.inter(fontSize: 9, color: const Color(0xFF94A3B8), fontWeight: FontWeight.w500),
+                ),
               ],
             ),
             const SizedBox(height: 4),
-            FittedBox(
-              fit: BoxFit.scaleDown,
-              alignment: Alignment.centerLeft,
-              child: Text(
-                amount,
-                style: GoogleFonts.outfit(
-                  fontSize: 15.5,
-                  fontWeight: FontWeight.w800,
-                  color: tagColor,
-                  letterSpacing: -0.2,
-                ),
+            Text(
+              value,
+              style: GoogleFonts.outfit(
+                fontSize: 16.5,
+                fontWeight: FontWeight.w900,
+                color: valueColor,
               ),
             ),
-            const SizedBox(height: 2),
             Text(
-              tag,
-              style: GoogleFonts.inter(
-                fontSize: 9.5,
-                fontWeight: FontWeight.w600,
-                color: const Color(0xFF94A3B8),
-              ),
+              subtitle,
+              style: GoogleFonts.inter(fontSize: 9.5, color: const Color(0xFF94A3B8)),
+              overflow: TextOverflow.ellipsis,
             ),
           ],
         ),

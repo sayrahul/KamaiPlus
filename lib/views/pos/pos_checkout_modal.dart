@@ -135,6 +135,7 @@ class _PosCheckoutModalState extends State<PosCheckoutModal> {
   // Customer search
   final TextEditingController _customerSearchController = TextEditingController();
   bool _isSearchingCustomer = false;
+  List<CustomerModel> _liveCustomers = [];
   List<CustomerModel> _filteredCustomers = [];
 
   // Pharmacy: Doctor Management
@@ -200,9 +201,10 @@ class _PosCheckoutModalState extends State<PosCheckoutModal> {
     _splitUpiController = TextEditingController(text: other.toString());
     _splitCreditController = TextEditingController(text: '0');
 
+    _liveCustomers = List.from(widget.allCustomers);
     if (widget.autoOpenCustomerDropdown) {
       _isSearchingCustomer = true;
-      _filteredCustomers = widget.allCustomers;
+      _filteredCustomers = _liveCustomers;
     }
     if (widget.autoOpenSplit) {
       _paymentMode = 'split';
@@ -404,9 +406,9 @@ class _PosCheckoutModalState extends State<PosCheckoutModal> {
     setState(() {
       _isSearchingCustomer = true;
       if (q.isEmpty) {
-        _filteredCustomers = widget.allCustomers;
+        _filteredCustomers = _liveCustomers;
       } else {
-        _filteredCustomers = widget.allCustomers.where((c) {
+        _filteredCustomers = _liveCustomers.where((c) {
           return c.name.toLowerCase().contains(q) || c.phone.contains(q);
         }).toList();
       }
@@ -414,10 +416,14 @@ class _PosCheckoutModalState extends State<PosCheckoutModal> {
   }
 
   void _selectCustomer(CustomerModel cust) {
+    if (!_liveCustomers.any((c) => c.id == cust.id)) {
+      _liveCustomers.add(cust);
+    }
     setState(() {
       _currentCustomer = cust;
       _isSearchingCustomer = false;
       _customerSearchController.clear();
+      _filteredCustomers = _liveCustomers;
     });
     widget.onCustomerChanged(cust);
   }
@@ -499,6 +505,9 @@ class _PosCheckoutModalState extends State<PosCheckoutModal> {
                 phone: cleanPhone,
               );
               await LocalDatabase.instance.upsertCustomer(newCust);
+              if (!_liveCustomers.any((c) => c.id == newCust.id)) {
+                _liveCustomers.add(newCust);
+              }
               if (ctx.mounted) {
                 Navigator.of(ctx).pop();
               }
@@ -705,21 +714,31 @@ class _PosCheckoutModalState extends State<PosCheckoutModal> {
                   ),
                 ],
               ),
-              GestureDetector(
+              InkWell(
                 onTap: _showAddDoctorDialog,
-                child: Row(
-                  children: [
-                    const Icon(Icons.add_circle_outline, size: 14, color: Color(0xFF2563EB)),
-                    const SizedBox(width: 4),
-                    Text(
-                      '+ Add Doctor',
-                      style: GoogleFonts.plusJakartaSans(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w700,
-                        color: const Color(0xFF2563EB),
+                borderRadius: BorderRadius.circular(6),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFEFF6FF),
+                    borderRadius: BorderRadius.circular(6),
+                    border: Border.all(color: const Color(0xFFBFDBFE)),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.add, size: 12, color: Color(0xFF2563EB)),
+                      const SizedBox(width: 3),
+                      Text(
+                        '+ Add Doctor',
+                        style: GoogleFonts.plusJakartaSans(
+                          fontSize: 10.5,
+                          fontWeight: FontWeight.w700,
+                          color: const Color(0xFF2563EB),
+                        ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
             ],
@@ -1263,27 +1282,6 @@ class _PosCheckoutModalState extends State<PosCheckoutModal> {
                                   color: isCustomerCompulsoryMissing ? const Color(0xFFEF4444) : const Color(0xFF64748B),
                                 ),
                               ),
-                              GestureDetector(
-                                onTap: _showNewCustomerDialog,
-                                child: Row(
-                                  children: [
-                                    Icon(
-                                      Icons.person_add_alt_1,
-                                      size: 14,
-                                      color: isCustomerCompulsoryMissing ? const Color(0xFFEF4444) : const Color(0xFF2563EB),
-                                    ),
-                                    const SizedBox(width: 4),
-                                    Text(
-                                      '+ New Customer',
-                                      style: GoogleFonts.plusJakartaSans(
-                                        fontSize: 11,
-                                        fontWeight: FontWeight.w700,
-                                        color: isCustomerCompulsoryMissing ? const Color(0xFFEF4444) : const Color(0xFF2563EB),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
                             ],
                           ),
                           const SizedBox(height: 6),
@@ -1347,8 +1345,15 @@ class _PosCheckoutModalState extends State<PosCheckoutModal> {
                                   ),
                                   IconButton(
                                     icon: const Icon(Icons.close, size: 18, color: Color(0xFF64748B)),
-                                    onPressed: () {
-                                      setState(() => _currentCustomer = null);
+                                    onPressed: () async {
+                                      _customerSearchController.clear();
+                                      final freshCusts = await LocalDatabase.instance.getAllCustomers();
+                                      setState(() {
+                                        _currentCustomer = null;
+                                        _isSearchingCustomer = false;
+                                        _liveCustomers = freshCusts;
+                                        _filteredCustomers = freshCusts;
+                                      });
                                       widget.onCustomerChanged(null);
                                     },
                                   ),
@@ -1380,11 +1385,13 @@ class _PosCheckoutModalState extends State<PosCheckoutModal> {
                                   Expanded(
                                     child: TextField(
                                       controller: _customerSearchController,
-                                      onTap: () {
+                                      onTap: () async {
+                                        final freshCusts = await LocalDatabase.instance.getAllCustomers();
                                         setState(() {
+                                          _liveCustomers = freshCusts;
                                           _isSearchingCustomer = true;
                                           if (_customerSearchController.text.trim().isEmpty) {
-                                            _filteredCustomers = widget.allCustomers;
+                                            _filteredCustomers = freshCusts;
                                           } else {
                                             _onCustomerSearch(_customerSearchController.text);
                                           }
@@ -1419,10 +1426,38 @@ class _PosCheckoutModalState extends State<PosCheckoutModal> {
                                         });
                                       },
                                       child: const Padding(
-                                        padding: EdgeInsets.all(4),
+                                        padding: EdgeInsets.symmetric(horizontal: 4),
                                         child: Icon(Icons.close, size: 16, color: Color(0xFF64748B)),
                                       ),
                                     ),
+                                  const SizedBox(width: 4),
+                                  InkWell(
+                                    onTap: _showNewCustomerDialog,
+                                    borderRadius: BorderRadius.circular(6),
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                      decoration: BoxDecoration(
+                                        color: const Color(0xFFEFF6FF),
+                                        borderRadius: BorderRadius.circular(6),
+                                        border: Border.all(color: const Color(0xFFBFDBFE)),
+                                      ),
+                                      child: Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          const Icon(Icons.person_add_alt_1, size: 12, color: Color(0xFF2563EB)),
+                                          const SizedBox(width: 3),
+                                          Text(
+                                            '+ New',
+                                            style: GoogleFonts.plusJakartaSans(
+                                              fontSize: 10.5,
+                                              fontWeight: FontWeight.w700,
+                                              color: const Color(0xFF2563EB),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
                                 ],
                               ),
                             ),
@@ -1552,40 +1587,33 @@ class _PosCheckoutModalState extends State<PosCheckoutModal> {
                       Row(
                         children: [
                           InkWell(
-                            onTap: widget.onHoldBill,
+                            onTap: () {
+                              HapticFeedback.mediumImpact();
+                              widget.onClearCart();
+                              Navigator.of(context).pop();
+                            },
                             borderRadius: BorderRadius.circular(6),
                             child: Container(
                               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                               decoration: BoxDecoration(
-                                color: const Color(0xFFFEF3C7),
+                                color: const Color(0xFFFEF2F2),
                                 borderRadius: BorderRadius.circular(6),
-                                border: Border.all(color: const Color(0xFFFDE68A)),
+                                border: Border.all(color: const Color(0xFFFECACA)),
                               ),
                               child: Row(
+                                mainAxisSize: MainAxisSize.min,
                                 children: [
-                                  const Icon(Icons.pause_circle_outline, size: 13, color: Color(0xFFD97706)),
-                                  const SizedBox(width: 4),
+                                  const Icon(Icons.delete_sweep_rounded, size: 13, color: Color(0xFFDC2626)),
+                                  const SizedBox(width: 3),
                                   Text(
-                                    'Hold Bill',
+                                    'Clear Bill',
                                     style: GoogleFonts.plusJakartaSans(
                                       fontSize: 11,
                                       fontWeight: FontWeight.w700,
-                                      color: const Color(0xFFD97706),
+                                      color: const Color(0xFFDC2626),
                                     ),
                                   ),
                                 ],
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          InkWell(
-                            onTap: widget.onClearCart,
-                            child: Text(
-                              'Clear',
-                              style: GoogleFonts.plusJakartaSans(
-                                fontSize: 11,
-                                fontWeight: FontWeight.w700,
-                                color: const Color(0xFFEF4444),
                               ),
                             ),
                           ),

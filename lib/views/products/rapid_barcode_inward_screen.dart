@@ -60,6 +60,7 @@ class _RapidBarcodeInwardScreenState extends State<RapidBarcodeInwardScreen> wit
   bool _torchEnabled = false;
   String? _scannedBarcode;
   String? _existingProductId;
+  double _existingProductStock = 0.0;
 
   late String _selectedUnit;
   late String _selectedCategoryId;
@@ -103,11 +104,21 @@ class _RapidBarcodeInwardScreenState extends State<RapidBarcodeInwardScreen> wit
 
   Future<void> _loadCategories() async {
     final activeType = BusinessVerticals.activeBusinessTypeNotifier.value;
-    final cats = await LocalDatabase.instance.getAllCategories(businessType: activeType);
+    var cats = await LocalDatabase.instance.getAllCategories(businessType: activeType);
+    if (cats.isEmpty) {
+      final genCat = CategoryModel(
+        id: 'cat_gen_${activeType}_${DateTime.now().millisecondsSinceEpoch}',
+        businessId: FirestoreSyncService.instance.activeBusinessId,
+        name: 'General',
+        businessType: activeType,
+      );
+      await LocalDatabase.instance.upsertCategory(genCat);
+      cats = [genCat];
+    }
     if (mounted) {
       setState(() {
         _categories = cats;
-        if (cats.isNotEmpty) {
+        if (cats.isNotEmpty && (_selectedCategoryId.isEmpty || !_categories.any((c) => c.id == _selectedCategoryId))) {
           _selectedCategoryId = cats.first.id;
         }
       });
@@ -141,10 +152,11 @@ class _RapidBarcodeInwardScreenState extends State<RapidBarcodeInwardScreen> wit
     final activeType = BusinessVerticals.activeBusinessTypeNotifier.value;
 
     // 1. Check Store Database (<2ms)
-    final storeItem = await LocalDatabase.instance.findProductByBarcode(barcode);
+    final storeItem = await LocalDatabase.instance.findProductByBarcode(barcode, businessType: activeType);
     if (storeItem != null && mounted) {
       setState(() {
         _existingProductId = storeItem.id;
+        _existingProductStock = storeItem.stockQuantity;
         _nameCtrl.text = storeItem.name;
         _selectedUnit = storeItem.unit;
         _selectedCategoryId = storeItem.categoryId ?? (_categories.isNotEmpty ? _categories.first.id : '');
@@ -162,7 +174,7 @@ class _RapidBarcodeInwardScreenState extends State<RapidBarcodeInwardScreen> wit
     // 2. Check Master Catalog (<2ms)
     final master = await LocalDatabase.instance.findMasterProductByBarcode(barcode, businessType: activeType);
     if (master != null && mounted) {
-      _applyResolvedData(
+      await _applyResolvedData(
         name: master.name,
         category: master.category,
         unit: master.unit,
@@ -175,7 +187,7 @@ class _RapidBarcodeInwardScreenState extends State<RapidBarcodeInwardScreen> wit
     // 3. Parallel Cloud Resolver (<1.5s)
     final cloudItem = await CloudBarcodeResolverService.instance.resolveBarcode(barcode, businessType: activeType);
     if (cloudItem != null && mounted) {
-      _applyResolvedData(
+      await _applyResolvedData(
         name: cloudItem.name,
         category: cloudItem.category,
         unit: cloudItem.unit,
@@ -202,36 +214,52 @@ class _RapidBarcodeInwardScreenState extends State<RapidBarcodeInwardScreen> wit
     }
   }
 
-  void _applyResolvedData({
+  Future<void> _applyResolvedData({
     required String name,
     required String category,
     required String unit,
     required int mrpPaise,
     required int sellingPricePaise,
-  }) {
-    // Match category
-    if (category.isNotEmpty && _categories.isNotEmpty) {
-      final matchCat = _categories.firstWhere(
-        (c) => c.name.toLowerCase() == category.toLowerCase(),
-        orElse: () => _categories.first,
+  }) async {
+    final activeType = BusinessVerticals.activeBusinessTypeNotifier.value;
+    String targetCatId = _selectedCategoryId;
+
+    final catName = category.trim().isNotEmpty ? category.trim() : 'General';
+    final existingCatIndex = _categories.indexWhere(
+      (c) => c.name.toLowerCase() == catName.toLowerCase(),
+    );
+
+    if (existingCatIndex != -1) {
+      targetCatId = _categories[existingCatIndex].id;
+    } else {
+      final newCat = CategoryModel(
+        id: 'cat_${DateTime.now().millisecondsSinceEpoch}',
+        businessId: FirestoreSyncService.instance.activeBusinessId,
+        name: catName,
+        businessType: activeType,
       );
-      _selectedCategoryId = matchCat.id;
+      await LocalDatabase.instance.upsertCategory(newCat);
+      _categories.add(newCat);
+      targetCatId = newCat.id;
     }
 
-    setState(() {
-      _nameCtrl.text = name;
-      _selectedUnit = unit;
-      _mrpCtrl.text = mrpPaise > 0 ? (mrpPaise / 100).toStringAsFixed(0) : '';
-      _sellPriceCtrl.text = sellingPricePaise > 0
-          ? (sellingPricePaise / 100).toStringAsFixed(0)
-          : (mrpPaise > 0 ? (mrpPaise / 100).toStringAsFixed(0) : '');
-      _costPriceCtrl.text = '';
-      _stockCtrl.text = '10';
-      _isFavorite = false;
-      _isResolving = false;
-    });
+    if (mounted) {
+      setState(() {
+        _selectedCategoryId = targetCatId;
+        _nameCtrl.text = name;
+        _selectedUnit = unit;
+        _mrpCtrl.text = mrpPaise > 0 ? (mrpPaise / 100).toStringAsFixed(0) : '';
+        _sellPriceCtrl.text = sellingPricePaise > 0
+            ? (sellingPricePaise / 100).toStringAsFixed(0)
+            : (mrpPaise > 0 ? (mrpPaise / 100).toStringAsFixed(0) : '');
+        _costPriceCtrl.text = '';
+        _stockCtrl.text = '10';
+        _isFavorite = false;
+        _isResolving = false;
+      });
 
-    _sellPriceFocusNode.requestFocus();
+      _sellPriceFocusNode.requestFocus();
+    }
   }
 
   Future<void> _saveAndScanNext() async {
@@ -254,10 +282,19 @@ class _RapidBarcodeInwardScreenState extends State<RapidBarcodeInwardScreen> wit
     final mrpPaise = (mrpNum * 100).round();
     final costNum = double.tryParse(_costPriceCtrl.text.trim()) ?? 0.0;
     final costPaise = (costNum * 100).round();
-    final qty = double.tryParse(_stockCtrl.text.trim()) ?? 10.0;
+    final inwardQty = double.tryParse(_stockCtrl.text.trim()) ?? 10.0;
+    final totalStock = _existingProductId != null
+        ? (_existingProductStock + inwardQty)
+        : inwardQty;
 
     final activeType = BusinessVerticals.activeBusinessTypeNotifier.value;
     final bizId = FirestoreSyncService.instance.activeBusinessId;
+
+    String selectedCategoryName = 'General';
+    final matchedCat = _categories.where((c) => c.id == _selectedCategoryId);
+    if (matchedCat.isNotEmpty) {
+      selectedCategoryName = matchedCat.first.name;
+    }
 
     final product = ProductModel(
       id: _existingProductId ?? const Uuid().v4(),
@@ -268,7 +305,7 @@ class _RapidBarcodeInwardScreenState extends State<RapidBarcodeInwardScreen> wit
       sellingPricePaise: sellPaise,
       mrpPaise: mrpPaise > 0 ? mrpPaise : sellPaise,
       purchasePricePaise: costPaise,
-      stockQuantity: qty,
+      stockQuantity: totalStock,
       taxRate: 0.0,
       isTaxInclusive: true,
       unit: _selectedUnit,
@@ -283,7 +320,7 @@ class _RapidBarcodeInwardScreenState extends State<RapidBarcodeInwardScreen> wit
         await LocalDatabase.instance.insertMasterProduct(MasterProductModel(
           barcode: _scannedBarcode!,
           name: name,
-          category: _categories.isNotEmpty ? _categories.first.name : 'General',
+          category: selectedCategoryName,
           unit: _selectedUnit,
           mrpPaise: mrpPaise,
           sellingPricePaise: sellPaise,
@@ -303,6 +340,7 @@ class _RapidBarcodeInwardScreenState extends State<RapidBarcodeInwardScreen> wit
       _isResolving = false;
       _scannedBarcode = null;
       _existingProductId = null;
+      _existingProductStock = 0.0;
       _nameCtrl.clear();
       _sellPriceCtrl.clear();
       _mrpCtrl.clear();
@@ -322,6 +360,7 @@ class _RapidBarcodeInwardScreenState extends State<RapidBarcodeInwardScreen> wit
       _isResolving = false;
       _scannedBarcode = null;
       _existingProductId = null;
+      _existingProductStock = 0.0;
       _nameCtrl.clear();
       _sellPriceCtrl.clear();
       _mrpCtrl.clear();
@@ -813,11 +852,15 @@ class _RapidBarcodeInwardScreenState extends State<RapidBarcodeInwardScreen> wit
                           ? _selectedCategoryId
                           : (_categories.isNotEmpty ? _categories.first.id : null),
                       isExpanded: true,
-                      icon: const Icon(Icons.keyboard_arrow_down_rounded, size: 18),
+                      hint: Text(
+                        'Select Category',
+                        style: GoogleFonts.inter(fontSize: 11.5, color: const Color(0xFF94A3B8), fontWeight: FontWeight.w600),
+                      ),
+                      icon: const Icon(Icons.keyboard_arrow_down_rounded, size: 18, color: Color(0xFF64748B)),
                       items: _categories.map((c) {
                         return DropdownMenuItem<String>(
                           value: c.id,
-                          child: Text(c.name, style: GoogleFonts.inter(fontSize: 11.5, fontWeight: FontWeight.w600), overflow: TextOverflow.ellipsis),
+                          child: Text(c.name, style: GoogleFonts.inter(fontSize: 11.5, fontWeight: FontWeight.w600, color: const Color(0xFF0F172A)), overflow: TextOverflow.ellipsis),
                         );
                       }).toList(),
                       onChanged: (val) {
@@ -908,7 +951,9 @@ class _RapidBarcodeInwardScreenState extends State<RapidBarcodeInwardScreen> wit
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Text(
-                    'Inward Stock Quantity',
+                    _existingProductId != null
+                        ? 'Inward Qty (Current: ${_existingProductStock.toInt()} $_selectedUnit)'
+                        : 'Inward Stock Quantity',
                     style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w800, color: const Color(0xFF0F172A)),
                   ),
                   Row(

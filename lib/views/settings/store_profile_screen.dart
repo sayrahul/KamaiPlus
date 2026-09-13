@@ -19,6 +19,9 @@ import '../auth/login_screen.dart';
 import '../../services/auth_service.dart';
 import '../../services/firestore_sync_service.dart';
 import 'printer_settings_screen.dart';
+import '../../core/localization/app_language_service.dart';
+import '../../core/localization/app_strings.dart';
+import '../common/language_selection_modal.dart';
 
 class StoreProfileScreen extends StatefulWidget {
   final int initialTab;
@@ -811,6 +814,61 @@ class _StoreProfileScreenState extends State<StoreProfileScreen> {
       physics: const BouncingScrollPhysics(parent: AlwaysScrollableScrollPhysics()),
       padding: const EdgeInsets.fromLTRB(14, 14, 14, 90),
       children: [
+        // CARD 0: Regional Language Setting
+        _buildSectionCard(
+          icon: Icons.language_rounded,
+          iconColor: const Color(0xFF2563EB),
+          title: 'Language / भाषा',
+          child: ValueListenableBuilder<String>(
+            valueListenable: AppLanguageService.instance.currentLanguageNotifier,
+            builder: (context, currentLang, _) {
+              final activeLang = AppStrings.supportedLanguages.firstWhere(
+                (l) => l.code == currentLang,
+                orElse: () => AppStrings.supportedLanguages.first,
+              );
+              return InkWell(
+                onTap: () => LanguageSelectionModal.show(context),
+                borderRadius: BorderRadius.circular(12),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFEFF6FF),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: const Color(0xFFBFDBFE)),
+                  ),
+                  child: Row(
+                    children: [
+                      Text(activeLang.flag, style: const TextStyle(fontSize: 22)),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              '${activeLang.nativeName} (${activeLang.name})',
+                              style: GoogleFonts.outfit(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w800,
+                                color: const Color(0xFF1D4ED8),
+                              ),
+                            ),
+                            Text(
+                              'Tap to switch language (English, हिंदी, मराठी, ગુજરાતી)',
+                              style: GoogleFonts.inter(fontSize: 11, color: const Color(0xFF64748B)),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const Icon(Icons.arrow_forward_ios_rounded, size: 14, color: Color(0xFF2563EB)),
+                    ],
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+        const SizedBox(height: 14),
+
         // CARD 1: Store Identity & Branding (Screenshot 2)
         _buildSectionCard(
           icon: Icons.storefront_rounded,

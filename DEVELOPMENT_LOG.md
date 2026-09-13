@@ -47,6 +47,113 @@ drives `LocalDatabase` through a real (in-memory FFI) SQLite database and assert
 
 ---
 
+## 2026-09-13 — Partial Sales Return (Tukdo me Wapsi), Parent-Child Variant Matrix & Multi-Language App UI
+
+**User Request:**
+1. Parent-Child Variant Matrix (Sizes, Colors, multi-SKU parent products, quick variant picker in POS, variant barcode resolution).
+2. Partial Sales Return (Tukdo me Wapsi & Credit Note) (Item-by-item selection, quantity steppers, restocking returned items only, Udhar/Cash reversal, credit note generation).
+3. Multi-Language App UI (Regional Bhashayein: English, Hindi, Marathi, Gujarati instant switching with zero layout breakage).
+"ye implement karo is se related jo jo wiring aur connection h usme bigad nahi hona chahiye.. carefully sab kuch systematic karo.."
+
+**Root Causes & Solutions:**
+1. **Partial Sales Return (Tukdo me Wapsi & Credit Note) (`local_database.dart:1730-1810`, `sale_detail_modal.dart:400-650`):**
+   - *Problem:* Previous sales returns only supported an all-or-nothing "Full Void", leaving shopkeepers unable to accept 1 item back from a multi-item invoice.
+   - *Solution:*
+     - Added `sale_returns` table definition in SQLite.
+     - Implemented atomic `processPartialSalesReturn` in `LocalDatabase`: Restocks only the returned item quantities into SQLite `products`, writes `PARTIAL_RETURN` inventory ledger movements, updates cumulative `returned_quantity` in `sales.items_json`, recalculates `sale.status` (`partially_refunded` vs `refunded`), reverses Udhar on customer account if credit, writes cash outflow if cash, logs audit trail, and bumps `AppDataBus`.
+     - Replaced full-void button in `SaleDetailModal` with dual actions: `Return Items (टुकड़ों में वापसी)` and `Full Void`.
+     - Created `_openPartialReturnSheet` modal with item quantity steppers (0 to remaining returnable), live integer paise refund calculation, refund mode chips, reason input, and Master Security PIN authorization (1234).
+   - *Verification:* `test/partial_sales_return_test.dart` simulating multi-step partial returns (all tests passed).
+
+2. **Parent-Child Variant Matrix (Sizes, Colors, Multi-SKU) (`models.dart`, `local_database.dart:1812-1845`, `products_screen.dart`, `add_product_modal.dart`, `pos_billing_screen.dart`):**
+   - *Problem:* Retail merchants selling apparel, shoes, or multi-pack goods had to enter each size as a completely separate product, cluttering the catalog and lacking variant groupings in billing.
+   - *Solution:*
+     - Extended `ProductModel` with `parentId`, `hasVariants`, `variantLabel`, and getter `isVariant`.
+     - Added SQLite schema migrations (`parent_id`, `has_variants`, `variant_label`) and indexing.
+     - Implemented `getVariantsForProduct(parentId)` and `createProductWithVariants(parentProduct, variantLabels)`.
+     - Updated `AddProductModal`: Added collapsible "Variants Matrix" generator card with instant preset chips (`S, M, L, XL, XXL`, `28, 30, 32...`, `Red, Blue...`) and custom tags. Saving automatically generates child SKUs atomically under the parent.
+     - Updated `ProductsScreen`: Clean browsing hides child variants from cluttering main catalog; search immediately matches variant labels and barcodes; parent cards display purple `Variants` badge opening `_showProductVariantsSheet` for instant viewing, stock adjustment, editing, or adding variants.
+     - Updated `PosBillingScreen`: Tapping parent product intercepts and opens `_showVariantPicker` modal with large touch targets, live prices, and stock indicators before adding directly to cart; barcode scanning of variant directly resolves to that specific variant.
+   - *Verification:* `test/product_variants_test.dart` (all tests passed).
+
+3. **Multi-Language App UI (Regional Bhashayein) (`app_strings.dart`, `app_language_service.dart`, `language_selection_modal.dart`, `kamai_bottom_nav.dart`, `menu_screen.dart`, `store_profile_screen.dart`, `main.dart`):**
+   - *Problem:* POS was locked to English/Hinglish text, creating friction for regional counter cashiers in Maharashtra, Gujarat, and Hindi-speaking states.
+   - *Solution:*
+     - Created `AppStrings` translation dictionary supporting English (`en`), हिंदी (Hindi - `hi`), मराठी (Marathi - `mr`), and ગુજરાતી (Gujarati - `gu`).
+     - Created `AppLanguageService` singleton with `ValueNotifier<String>` persisted in SharedPreferences (`app_selected_language`).
+     - Created `LanguageSelectionModal` with native language labels and country/state flags.
+     - Integrated switcher into `MenuScreen` bottom footer and `StoreProfileScreen` settings card.
+     - Wrapped `MaterialApp` and `KamaiBottomNav` with `ValueListenableBuilder` so language changes switch instantly with 0 lag and 0 layout shifts.
+     - *Real-Device Verification & UX Polish (Redmi 6 - Android 9 / MIUI 11):*
+       - Performed complete clean install: `adb -s de7ea8af7d29 uninstall com.kamaiplus.pos` -> Success.
+       - Fresh universal debug APK built and installed -> Success.
+       - Verified startup, Firebase Auth login, SQLite schema creation, and POS screen boot.
+       - Real-device layout defect fixes:
+         1. `menu_screen.dart:901-1010`: Resolved 79px horizontal overflow in Menu footer on 720px width devices by designing a clean 2-row responsive layout (WhatsApp Support + Language switcher with dropdown arrow on row 1; v4.20.0 badge + Logout on row 2).
+         2. `language_selection_modal.dart:11-140`: Resolved 11px bottom overflow by adding `isScrollControlled: true` to `showModalBottomSheet`, wrapping in `SafeArea` + `SingleChildScrollView`, and converting the inner `ListView.separated` into a direct `Column` loop with `GestureDetector(behavior: HitTestBehavior.opaque)` to eliminate nested scroll contention and ensure instant 1-tap touch responsiveness.
+       - All 91 automated unit and integration tests across all 19 test suites passed (`0 errors, 100% pass rate`).
+   - *Verification:* `test/localization_test.dart` (all tests passed).
+
+---
+
+## 2026-09-12 — Rapid Inward Category Dropdown Fix, Master SKU Strict Vertical Isolation & Inward Stock Addition Math
+
+**Request / Symptoms:**
+1. In Rapid Inward, the field to the right of `pcs` was appearing as an empty blank box with an arrow (as seen in user screenshot when scanning Dettol Sanitizer).
+2. User requested strict vertical isolation for Master SKU and confirmation that barcode scan auto-populates product name, category, unit, price, and MRP.
+3. User requested audit of "Add to Star" / Favorite across the entire project.
+4. User requested deep study and verification of the Admin Panel (`admin_console/`).
+5. User requested verification of full Inward functionality.
+
+**Root Causes & Solutions:**
+1. **Rapid Inward `pcs` Right-Side Blank Dropdown (`rapid_barcode_inward_screen.dart:800-829`):**
+   - *Root Cause:* The field to the right of `pcs` is the Category dropdown. When the active store vertical (e.g. `clothing`) had 0 categories in SQLite `categories` table (`_categories.isEmpty`), `DropdownButton` received empty items `[]` and `null` value with no hint, rendering as an empty white rectangle. When scanning an item, `_applyResolvedData` did not create or seed the category if `_categories.isEmpty`.
+   - *Fix:* In `_loadCategories()`, ensure categories are seeded or a default `"General"` category is created. In `_applyResolvedData`, if the resolved category is not present in `_categories`, create it via `LocalDatabase.instance.upsertCategory`, add it to `_categories`, and select it. Added `hint: Text('Select Category')` to `DropdownButton`.
+2. **Master SKU Cross-Vertical Leak (`local_database.dart:1097` & `cloud_barcode_resolver_service.dart:42`):**
+   - *Root Cause:* `LocalDatabase.findProductByBarcode` only checked `where: 'barcode = ?'`, completely ignoring `business_type`. Scanning an existing product from another vertical found it and marked it as "RESTOCKING" in an Apparel store. Also `_lookupFastOfflineDictionary` in `CloudBarcodeResolverService` did not check `targetVertical`.
+   - *Fix:* Added `{String? businessType}` parameter to `findProductByBarcode` with `AND (business_type = ? OR business_type = 'both')`. Passed `businessType: activeType` in `rapid_barcode_inward_screen.dart`, `pos_billing_screen.dart`, `products_screen.dart`, and `add_product_modal.dart`. Updated `_lookupFastOfflineDictionary` to filter by `targetVertical`. Added regression tests in `test/vertical_product_leak_test.dart`.
+3. **Inward Stock Overwrite Bug (`rapid_barcode_inward_screen.dart:271`):**
+   - *Root Cause:* Restocking an existing product overwrote previous stock (`stockQuantity: qty`) rather than adding to it (`existingStock + qty`).
+   - *Fix:* Added `_existingProductStock` state variable. On save, computed `totalStock = _existingProductId != null ? (_existingProductStock + inwardQty) : inwardQty`. Updated UI label to show `Inward Qty (Current: X pcs)`.
+4. **Favorite Star Audit:**
+   - Verified end-to-end across `ProductModel`, SQLite `products.is_favorite`, `LocalDatabase.toggleProductFavorite`, `AppDataBus.instance.productsRevision`, `ProductsScreen` sorting, `PosBillingScreen` priority sorting & badges, `AddProductModal`, and `RapidBarcodeInwardScreen`. Confirmed 100% functional.
+5. **Admin Panel Deep Study:**
+   - Deeply studied `admin_console/` (Dashboard, Merchants, Coupons, Broadcast, Revenue Trend). Verified with `flutter analyze` — 0 compile errors.
+
+**Verification:**
+- `flutter test test/vertical_product_leak_test.dart` — 6/6 tests passed.
+- `flutter test test/cloud_barcode_resolver_test.dart` — 5/5 tests passed.
+- `flutter analyze` on all modified files — 0 issues found.
+
+---
+
+## 2026-09-12 — POS Checkout, 2×2 Metric Ribbons, Draft Cart, Loose Fractions, Khata Settle Bar & WhatsApp Polish
+
+**Request:** Comprehensive suite of retail improvements:
+1. Universal 2×2 metric ribbon design from Product screen applied across Transaction History, Cash Register, Digital Khata, Customers Directory, and Backup/Reset Vault.
+2. POS Checkout modal: Clear Bill clears whole bill; Hold Bill removed (parallel tabs used instead); inline `+ New` customer and `+ Add Doctor`; customer deselect/reselect immediately reappears.
+3. Cart strictly draft: tab switching never wipes cart items.
+4. Loose & fractional quantities: 1-15 loose pharmacy tablets, grocery gram chips (10g, 25g, 50g, 100g, 250g, 500g, 750g, 1kg).
+5. Digital Khata floating bottom settle bar with total paise and Settle Bills button.
+6. Transactions Date Range picker without 7-day limit popup block.
+7. Inventory Expiry Radar fallback to `product.expiryDate` when no batch table rows exist; exact day `dd/MM/yyyy`.
+8. Purchase Orders clean slate (hardcoded dummy data removed).
+9. WhatsApp invoice PDF sharing writes only to internal storage (`skipDownloadsFolder: true`) without download notifications.
+10. Compulsory "Powered by KamaiPlus POS" platform branding on statutory GST invoices.
+11. WhatsApp Growth Hub custom composer with green bubble live preview and dynamic tags.
+
+**Root Causes & Solutions:**
+1. **Cart Wipe on Tab Switch**: POS billing was rebuilding its state from scratch on tab change. Solved with `AutomaticKeepAliveClientMixin` and `PosBillingSessionStore`.
+2. **Customer Disappear on Deselect**: The checkout modal filtered the customer list with stale search queries. Fixed to re-fetch customer list immediately when search is cleared or selection removed.
+3. **Expiry Radar Missing Products**: `LocalDatabase.getNearExpiryBatches` only checked `product_batches` table. For products created without an explicit batch row, `batches` was empty. Added fallback to parse `product.expiryDate`.
+4. **WhatsApp PDF Notification Clutter**: `MainActivity.java` unconditionally inserted every generated PDF into `MediaStore.Downloads` and fired a notification. Added `skipDownloadsFolder: true` flag for WhatsApp shares.
+
+**Verification:**
+- `flutter analyze lib/ test/` — 0 compile errors.
+- `flutter test` — All unit and integration tests passing.
+
+---
+
 ## 2026-09-12 — Product Page Grid View Removed; Locked to Dense List View
 
 **Request:** "1)product page se.. Grid view wala nikal dalo.. list view se hi continue karenge hum" — remove Grid view toggle and grid layout from Products screen; continue exclusively with the standard List view without breaking any existing workflow or function.
@@ -1289,6 +1396,26 @@ isolation. `flutter analyze` clean, full `flutter test` suite passes (28 tests t
   `customers/customers_screen.dart`
 - `test/app_data_bus_test.dart` (new), `test/vertical_product_leak_test.dart` (new)
 - `pubspec.yaml` (added `sqflite_common_ffi` dev dependency, for DB-backed tests)
+
+
+---
+
+## 2026-09-12 — Menu WhatsApp Support Integration (8669997711) & Version Sync to Play Store (v4.20.0)
+
+**Request / Symptoms:**
+1. In Menu screen footer, replace Assistant button with WhatsApp Support pointing directly to the merchant's number: `8669997711`.
+2. App version badge in Menu footer (and Splash screen) was displaying hardcoded `v4.18.0`, whereas Google Play Store release is `v4.20.0` (`pubspec.yaml: 4.20.0+42001`).
+3. User requested a comprehensive, real-world comparison of KamaiPlus vs market competitors (Vyapar, Petpooja, myBillBook, Khatabook, Marg ERP) across features, functions, and workflows.
+
+**Root Causes & Solutions:**
+1. **WhatsApp Support Button (`lib/views/menu/menu_screen.dart:905-937`):**
+   - Added `_openWhatsAppSupport()` using `url_launcher` targeting `https://wa.me/918669997711` with prefilled Hindi greeting and graceful in-app fallback notification.
+   - Replaced "Assistant" label with "WhatsApp Support".
+   - Aligned Pro Upgrade Modal VIP Support button (`lib/views/common/pro_upgrade_modal.dart:1032`) to the same verified number `918669997711`.
+2. **Version Badge Alignment (`lib/views/menu/menu_screen.dart:949`, `lib/views/splash/splash_screen.dart:329`):**
+   - Updated display badge from `v4.18.0` to `v4.20.0`, matching `pubspec.yaml`'s `version: 4.20.0+42001`.
+3. **Verification:**
+   - `dart analyze lib/views/menu/menu_screen.dart lib/views/splash/splash_screen.dart lib/views/common/pro_upgrade_modal.dart` passed with **0 errors, 0 warnings** ("No issues found!").
 
 ---
 

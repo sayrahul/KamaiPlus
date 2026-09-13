@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../core/constants/business_vertical_config.dart';
 import '../common/in_app_notification.dart';
 import '../cash_register/cash_register_screen.dart';
@@ -22,6 +23,9 @@ import '../../models/models.dart';
 import '../../services/auth_service.dart';
 import '../../services/firestore_sync_service.dart';
 import '../../main.dart';
+import '../../core/localization/app_language_service.dart';
+import '../../core/localization/app_strings.dart';
+import '../common/language_selection_modal.dart';
 
 class MenuScreen extends StatefulWidget {
   final bool isModal;
@@ -213,13 +217,24 @@ class _MenuScreenState extends State<MenuScreen> {
     );
   }
 
-  void _openAssistant() {
+  Future<void> _openWhatsAppSupport() async {
     HapticFeedback.lightImpact();
-    InAppNotification.show(
-      context: context,
-      message: 'KamaiPlus AI Assistant active: WhatsApp support ready!',
-      customIcon: Icons.support_agent_rounded,
-    );
+    final url = Uri.parse('https://wa.me/918669997711?text=${Uri.encodeComponent("Namaste KamaiPlus Team, mujhe support chahiye.")}');
+    try {
+      if (await canLaunchUrl(url)) {
+        await launchUrl(url, mode: LaunchMode.externalApplication);
+      } else {
+        await launchUrl(url, mode: LaunchMode.platformDefault);
+      }
+    } catch (_) {
+      if (mounted) {
+        InAppNotification.show(
+          context: context,
+          message: 'WhatsApp Support: +91 8669997711',
+          customIcon: Icons.support_agent_rounded,
+        );
+      }
+    }
   }
 
   @override
@@ -890,90 +905,144 @@ class _MenuScreenState extends State<MenuScreen> {
         color: Colors.white,
         border: Border(top: BorderSide(color: Color(0xFFE2E8F0), width: 1.1)),
       ),
-      child: Row(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
         children: [
-          // Assistant Button
-          Material(
-            color: Colors.transparent,
-            child: InkWell(
-              onTap: _openAssistant,
-              borderRadius: BorderRadius.circular(10),
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFECFDF5),
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: const Color(0xFFA7F3D0)),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Image.asset('assets/images/whatsapp_logo.png', width: 16, height: 16),
-                    const SizedBox(width: 6),
-                    Text(
-                      'Assistant',
-                      style: GoogleFonts.inter(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w700,
-                        color: const Color(0xFF065F46),
+          Row(
+            children: [
+              // WhatsApp Support Button
+              Expanded(
+                child: Material(
+                  color: Colors.transparent,
+                  child: InkWell(
+                    onTap: _openWhatsAppSupport,
+                    borderRadius: BorderRadius.circular(10),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFECFDF5),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: const Color(0xFFA7F3D0)),
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Image.asset('assets/images/whatsapp_logo.png', width: 16, height: 16),
+                          const SizedBox(width: 6),
+                          Text(
+                            'WhatsApp Support',
+                            style: GoogleFonts.inter(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w700,
+                              color: const Color(0xFF065F46),
+                            ),
+                          ),
+                        ],
                       ),
                     ),
-                  ],
+                  ),
                 ),
               ),
-            ),
-          ),
-          const SizedBox(width: 8),
+              const SizedBox(width: 10),
 
-          // Version Badge
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-            decoration: BoxDecoration(
-              color: const Color(0xFFF8FAFC),
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: const Color(0xFFE2E8F0)),
-            ),
-            child: Text(
-              'v4.18.0',
-              style: GoogleFonts.inter(
-                fontSize: 11,
-                fontWeight: FontWeight.w600,
-                color: const Color(0xFF64748B),
-              ),
-            ),
-          ),
-          const Spacer(),
-
-          // Logout Button
-          Material(
-            color: Colors.transparent,
-            child: InkWell(
-              onTap: _showLogoutDialog,
-              borderRadius: BorderRadius.circular(10),
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFFFF1F2),
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: const Color(0xFFFECDD3)),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Icon(Icons.logout_rounded, color: Color(0xFFE11D48), size: 16),
-                    const SizedBox(width: 6),
-                    Text(
-                      'Logout',
-                      style: GoogleFonts.inter(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w700,
-                        color: const Color(0xFFBE123C),
+              // Language Switcher Button
+              ValueListenableBuilder<String>(
+                valueListenable: AppLanguageService.instance.currentLanguageNotifier,
+                builder: (context, langCode, _) {
+                  final activeLang = AppStrings.supportedLanguages.firstWhere(
+                    (l) => l.code == langCode,
+                    orElse: () => AppStrings.supportedLanguages.first,
+                  );
+                  return Material(
+                    color: Colors.transparent,
+                    child: InkWell(
+                      onTap: () => LanguageSelectionModal.show(context),
+                      borderRadius: BorderRadius.circular(10),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFEFF6FF),
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: const Color(0xFFBFDBFE)),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(activeLang.flag, style: const TextStyle(fontSize: 14)),
+                            const SizedBox(width: 6),
+                            Text(
+                              activeLang.nativeName,
+                              style: GoogleFonts.inter(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w700,
+                                color: const Color(0xFF1D4ED8),
+                              ),
+                            ),
+                            const SizedBox(width: 4),
+                            const Icon(Icons.arrow_drop_down_rounded, size: 18, color: Color(0xFF1D4ED8)),
+                          ],
+                        ),
                       ),
                     ),
-                  ],
+                  );
+                },
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              // Version Badge
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF8FAFC),
+                  borderRadius: BorderRadius.circular(6),
+                  border: Border.all(color: const Color(0xFFE2E8F0)),
+                ),
+                child: Text(
+                  'v4.20.0',
+                  style: GoogleFonts.inter(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    color: const Color(0xFF64748B),
+                  ),
                 ),
               ),
-            ),
+              const Spacer(),
+
+              // Logout Button
+              Material(
+                color: Colors.transparent,
+                child: InkWell(
+                  onTap: _showLogoutDialog,
+                  borderRadius: BorderRadius.circular(8),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFFFF1F2),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: const Color(0xFFFECDD3)),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.logout_rounded, color: Color(0xFFE11D48), size: 14),
+                        const SizedBox(width: 5),
+                        Text(
+                          'Logout',
+                          style: GoogleFonts.inter(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
+                            color: const Color(0xFFBE123C),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ],
           ),
         ],
       ),

@@ -37,11 +37,12 @@ class _TransactionsScreenState extends State<TransactionsScreen> with DataBusRef
   bool _isLoading = true;
   bool _isPro = false;
   String _searchQuery = '';
-  String _selectedDateFilter = 'All'; // 'All' | 'Today' | 'Yesterday' | '7 Days' | 'Month'
+  String _selectedDateFilter = 'All'; // 'All' | 'Today' | 'Yesterday' | '7 Days' | 'Month' | 'Custom'
+  DateTimeRange? _customDateRange;
   String _selectedModeFilter = 'All'; // 'All' | 'Cash' | 'UPI' | 'Udhar'
   String _sortOrder = 'Newest'; // 'Newest' | 'Highest'
 
-  final List<String> _dateFilters = ['All', 'Today', 'Yesterday', '7 Days', 'Month'];
+  final List<String> _dateFilters = ['All', 'Today', 'Yesterday', '7 Days', 'Month', 'Pick Date 📅'];
   final List<String> _modeFilters = ['All', 'Cash', 'UPI', 'Udhar'];
 
   @override
@@ -63,6 +64,38 @@ class _TransactionsScreenState extends State<TransactionsScreen> with DataBusRef
       }
     } catch (_) {
       if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  Future<void> _pickCustomDateRange() async {
+    final now = DateTime.now();
+    final picked = await showDateRangePicker(
+      context: context,
+      firstDate: DateTime(2022),
+      lastDate: now.add(const Duration(days: 1)),
+      initialDateRange: _customDateRange ??
+          DateTimeRange(
+            start: now.subtract(const Duration(days: 7)),
+            end: now,
+          ),
+      builder: (context, child) {
+        return Theme(
+          data: Theme.of(context).copyWith(
+            colorScheme: const ColorScheme.light(
+              primary: Color(0xFF059669),
+              onPrimary: Colors.white,
+              onSurface: Color(0xFF0F172A),
+            ),
+          ),
+          child: child!,
+        );
+      },
+    );
+    if (picked != null) {
+      setState(() {
+        _customDateRange = picked;
+        _selectedDateFilter = 'Custom';
+      });
     }
   }
 
@@ -161,6 +194,12 @@ class _TransactionsScreenState extends State<TransactionsScreen> with DataBusRef
         if (now.difference(sale.createdAt).inDays > 7) return false;
       } else if (_selectedDateFilter == 'Month') {
         if (sale.createdAt.year != now.year || sale.createdAt.month != now.month) {
+          return false;
+        }
+      } else if (_selectedDateFilter == 'Custom' && _customDateRange != null) {
+        final start = DateTime(_customDateRange!.start.year, _customDateRange!.start.month, _customDateRange!.start.day);
+        final end = DateTime(_customDateRange!.end.year, _customDateRange!.end.month, _customDateRange!.end.day, 23, 59, 59);
+        if (sale.createdAt.isBefore(start) || sale.createdAt.isAfter(end)) {
           return false;
         }
       }
@@ -623,119 +662,91 @@ class _TransactionsScreenState extends State<TransactionsScreen> with DataBusRef
   }
 
   // =========================================================================
-  // 1. COMPACT HERO REVENUE BANNER (SPACE SAVING, ZERO OVERFLOW, INTERACTIVE)
+  // 1. UNIFIED 2x2 METRIC RIBBON GRID (PRODUCT SCREEN DESIGN STYLE)
   // =========================================================================
   Widget _buildRevenueHeroBanner() {
     return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: [Color(0xFF0F172A), Color(0xFF1E293B)],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: const Color(0xFF0F172A).withValues(alpha: 0.12),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: const Color(0xFFEEF2F6), width: 1),
       ),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
         children: [
-          // Top Row: Total Revenue & Bill count
           Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              Row(
-                children: [
-                  Container(
-                    width: 7,
-                    height: 7,
-                    decoration: const BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: Color(0xFF10B981),
-                    ),
-                  ),
-                  const SizedBox(width: 6),
-                  Text(
-                    'TOTAL REVENUE',
-                    style: GoogleFonts.inter(
-                      fontSize: 10.5,
-                      fontWeight: FontWeight.w800,
-                      color: const Color(0xFF94A3B8),
-                      letterSpacing: 0.8,
-                    ),
-                  ),
-                  const SizedBox(width: 6),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF334155),
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: Text(
-                      '${_filteredSales.length} bills',
-                      style: GoogleFonts.inter(
-                        fontSize: 9.5,
-                        fontWeight: FontWeight.w700,
-                        color: const Color(0xFFE2E8F0),
-                      ),
-                    ),
-                  ),
-                ],
+              // Card 1: Total Revenue
+              Expanded(
+                child: _buildMetricTile(
+                  icon: Icons.trending_up_rounded,
+                  iconColor: const Color(0xFF059669),
+                  title: 'Total Revenue',
+                  tag: 'Turnover',
+                  value: MoneyFormatter.formatINR(_totalRevenuePaise),
+                  valueColor: const Color(0xFF059669),
+                  subtitle: 'Net sales volume',
+                ),
               ),
-              Text(
-                MoneyFormatter.formatINR(_totalRevenuePaise),
-                style: GoogleFonts.outfit(
-                  fontSize: 22,
-                  fontWeight: FontWeight.w900,
-                  color: Colors.white,
-                  letterSpacing: -0.5,
-                ).copyWith(fontFeatures: MoneyFormatter.tabularFeatures),
+              Container(width: 1, height: 60, color: const Color(0xFFF1F5F9)),
+              // Card 2: Invoices Issued
+              Expanded(
+                child: _buildMetricTile(
+                  icon: Icons.receipt_long_rounded,
+                  iconColor: const Color(0xFF2563EB),
+                  title: 'Invoices Issued',
+                  tag: 'Bills',
+                  value: _filteredSales.length.toString(),
+                  valueColor: const Color(0xFF0F172A),
+                  subtitle: 'Total billed receipts',
+                ),
               ),
             ],
           ),
-          const SizedBox(height: 10),
-          Container(height: 1, color: Colors.white.withValues(alpha: 0.08)),
-          const SizedBox(height: 9),
-
-          // Bottom Row: 3 Interactive Split Cards (Cash, UPI, Udhar)
+          const Divider(color: Color(0xFFF1F5F9), height: 16),
           Row(
             children: [
+              // Card 3: Cash / UPI Collected
               Expanded(
-                child: _buildInteractiveModeMetric(
-                  icon: '💵',
-                  title: 'Cash',
-                  amount: MoneyFormatter.formatINR(_cashRevenuePaise),
-                  color: const Color(0xFF34D399),
-                  modeKey: 'Cash',
+                child: _buildMetricTile(
+                  icon: Icons.payments_rounded,
+                  iconColor: const Color(0xFF0284C7),
+                  title: 'Cash & UPI',
+                  tag: 'Liquid',
+                  value: MoneyFormatter.formatINR(_cashRevenuePaise + _upiRevenuePaise),
+                  valueColor: const Color(0xFF0284C7),
+                  subtitle: 'Direct collections',
+                  onTap: () {
+                    HapticFeedback.selectionClick();
+                    setState(() {
+                      if (_selectedModeFilter == 'Cash') {
+                        _selectedModeFilter = 'UPI';
+                      } else if (_selectedModeFilter == 'UPI') {
+                        _selectedModeFilter = 'All';
+                      } else {
+                        _selectedModeFilter = 'Cash';
+                      }
+                    });
+                  },
                 ),
               ),
-              const SizedBox(width: 8),
+              Container(width: 1, height: 60, color: const Color(0xFFF1F5F9)),
+              // Card 4: Market Udhar Dues
               Expanded(
-                child: _buildInteractiveModeMetric(
-                  icon: '📱',
-                  title: 'UPI',
-                  amount: MoneyFormatter.formatINR(_upiRevenuePaise),
-                  color: const Color(0xFF38BDF8),
-                  modeKey: 'UPI',
-                ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: _buildInteractiveModeMetric(
-                  icon: '📒',
-                  title: 'Udhar',
-                  amount: MoneyFormatter.formatINR(_creditDuePaise),
-                  color: const Color(0xFFF87171),
-                  modeKey: 'Udhar',
+                child: _buildMetricTile(
+                  icon: Icons.menu_book_rounded,
+                  iconColor: const Color(0xFFE11D48),
+                  title: 'Market Udhar',
+                  tag: 'Udhar',
+                  value: MoneyFormatter.formatINR(_creditDuePaise),
+                  valueColor: _creditDuePaise > 0 ? const Color(0xFFE11D48) : const Color(0xFF0F172A),
+                  subtitle: 'Uncollected credit',
+                  onTap: () {
+                    HapticFeedback.selectionClick();
+                    setState(() {
+                      _selectedModeFilter = _selectedModeFilter == 'Udhar' ? 'All' : 'Udhar';
+                    });
+                  },
                 ),
               ),
             ],
@@ -745,68 +756,67 @@ class _TransactionsScreenState extends State<TransactionsScreen> with DataBusRef
     );
   }
 
-  Widget _buildInteractiveModeMetric({
-    required String icon,
+  Widget _buildMetricTile({
+    required IconData icon,
+    required Color iconColor,
     required String title,
-    required String amount,
-    required Color color,
-    required String modeKey,
+    required String tag,
+    required String value,
+    required Color valueColor,
+    required String subtitle,
+    VoidCallback? onTap,
   }) {
-    final isSelected = _selectedModeFilter == modeKey;
     return InkWell(
-      onTap: () {
-        HapticFeedback.selectionClick();
-        setState(() {
-          if (_selectedModeFilter == modeKey) {
-            _selectedModeFilter = 'All';
-          } else {
-            _selectedModeFilter = modeKey;
-          }
-        });
-      },
+      onTap: onTap,
       borderRadius: BorderRadius.circular(10),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-        decoration: BoxDecoration(
-          color: isSelected
-              ? color.withValues(alpha: 0.22)
-              : Colors.white.withValues(alpha: 0.07),
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(
-            color: isSelected ? color : Colors.white.withValues(alpha: 0.12),
-            width: isSelected ? 1.4 : 1.0,
-          ),
-        ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
           children: [
             Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text(icon, style: const TextStyle(fontSize: 11)),
-                const SizedBox(width: 4),
-                Text(
-                  title,
-                  style: GoogleFonts.inter(
-                    fontSize: 10,
-                    fontWeight: FontWeight.w600,
-                    color: isSelected ? Colors.white : const Color(0xFF94A3B8),
+                Expanded(
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(icon, size: 12, color: iconColor),
+                      const SizedBox(width: 3),
+                      Flexible(
+                        child: Text(
+                          title,
+                          style: GoogleFonts.inter(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w700,
+                            color: iconColor,
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
                   ),
+                ),
+                const SizedBox(width: 2),
+                Text(
+                  tag,
+                  style: GoogleFonts.inter(fontSize: 9, color: const Color(0xFF94A3B8), fontWeight: FontWeight.w500),
                 ),
               ],
             ),
-            const SizedBox(height: 3),
-            FittedBox(
-              fit: BoxFit.scaleDown,
-              alignment: Alignment.centerLeft,
-              child: Text(
-                amount,
-                style: GoogleFonts.outfit(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w800,
-                  color: color,
-                ),
+            const SizedBox(height: 4),
+            Text(
+              value,
+              style: GoogleFonts.outfit(
+                fontSize: 16.5,
+                fontWeight: FontWeight.w900,
+                color: valueColor,
               ),
+            ),
+            Text(
+              subtitle,
+              style: GoogleFonts.inter(fontSize: 9.5, color: const Color(0xFF94A3B8)),
+              overflow: TextOverflow.ellipsis,
             ),
           ],
         ),
@@ -864,50 +874,83 @@ class _TransactionsScreenState extends State<TransactionsScreen> with DataBusRef
           scrollDirection: Axis.horizontal,
           physics: const BouncingScrollPhysics(),
           child: Row(
-            children: _dateFilters.map((df) {
-              final isSel = _selectedDateFilter == df;
-              final label = df == 'All'
-                  ? 'All Dates ($totalAccounts)'
-                  : df == 'Today'
-                      ? '⚡ Today'
-                      : df == 'Yesterday'
-                          ? '◀ Yesterday'
-                          : df == '7 Days'
-                              ? '📅 7 Days'
-                              : '📊 $df';
-              return Padding(
-                padding: const EdgeInsets.only(right: 6),
-                child: FilterChip(
-                  selected: isSel,
-                  showCheckmark: false,
-                  label: Text(
-                    label,
-                    style: GoogleFonts.outfit(
-                      fontSize: 11,
-                      fontWeight: isSel ? FontWeight.w700 : FontWeight.w600,
-                      color: isSel ? Colors.white : const Color(0xFF475569),
+            children: [
+              ..._dateFilters.map((df) {
+                final isSel = _selectedDateFilter == df;
+                final label = df == 'All'
+                    ? 'All Dates ($totalAccounts)'
+                    : df == 'Today'
+                        ? '⚡ Today'
+                        : df == 'Yesterday'
+                            ? '◀ Yesterday'
+                            : df == '7 Days'
+                                ? '📅 7 Days'
+                                : df == 'Month'
+                                    ? '📊 This Month'
+                                    : '📅 $df';
+                return Padding(
+                  padding: const EdgeInsets.only(right: 6),
+                  child: FilterChip(
+                    selected: isSel,
+                    showCheckmark: false,
+                    label: Text(
+                      label,
+                      style: GoogleFonts.outfit(
+                        fontSize: 11,
+                        fontWeight: isSel ? FontWeight.w700 : FontWeight.w600,
+                        color: isSel ? Colors.white : const Color(0xFF475569),
+                      ),
                     ),
+                    backgroundColor: Colors.white,
+                    selectedColor: const Color(0xFF0F172A),
+                    side: BorderSide(
+                      color: isSel ? const Color(0xFF0F172A) : const Color(0xFFE2E8F0),
+                      width: 1.1,
+                    ),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 0),
+                    visualDensity: VisualDensity.compact,
+                    onSelected: (_) async {
+                      HapticFeedback.selectionClick();
+                      if (df == 'Pick Date 📅') {
+                        await _pickCustomDateRange();
+                        return;
+                      }
+                      setState(() => _selectedDateFilter = df);
+                    },
                   ),
-                  backgroundColor: Colors.white,
-                  selectedColor: const Color(0xFF0F172A),
-                  side: BorderSide(
-                    color: isSel ? const Color(0xFF0F172A) : const Color(0xFFE2E8F0),
-                    width: 1.1,
+                );
+              }),
+              if (_selectedDateFilter == 'Custom' && _customDateRange != null)
+                Padding(
+                  padding: const EdgeInsets.only(right: 6),
+                  child: FilterChip(
+                    selected: true,
+                    showCheckmark: false,
+                    label: Text(
+                      '${DateFormat('dd MMM').format(_customDateRange!.start)} - ${DateFormat('dd MMM').format(_customDateRange!.end)} ✕',
+                      style: GoogleFonts.outfit(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                        color: Colors.white,
+                      ),
+                    ),
+                    backgroundColor: const Color(0xFF059669),
+                    selectedColor: const Color(0xFF059669),
+                    side: const BorderSide(color: Color(0xFF059669), width: 1.1),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 0),
+                    visualDensity: VisualDensity.compact,
+                    onSelected: (_) {
+                      HapticFeedback.selectionClick();
+                      setState(() {
+                        _selectedDateFilter = 'All';
+                        _customDateRange = null;
+                      });
+                    },
                   ),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 0),
-                  visualDensity: VisualDensity.compact,
-                  onSelected: (_) {
-                    HapticFeedback.selectionClick();
-                    if (!_isPro && (df == 'Month' || df == 'All')) {
-                      _show7DayLimitDialog();
-                      return;
-                    }
-                    setState(() => _selectedDateFilter = df);
-                  },
                 ),
-              );
-            }).toList(),
+            ],
           ),
         ),
         const SizedBox(height: 6),

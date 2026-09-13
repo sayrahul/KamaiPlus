@@ -51,6 +51,7 @@ QuantityUnitConfig quantityConfigForUnit(String unit, {int? subUnitsPerPack}) {
         QuantityChip('100g', 0.1),
         QuantityChip('250g', 0.25),
         QuantityChip('500g', 0.5),
+        QuantityChip('750g', 0.75),
         QuantityChip('1 kg', 1),
         QuantityChip('2 kg', 2),
         QuantityChip('5 kg', 5),
@@ -111,33 +112,29 @@ QuantityUnitConfig quantityConfigForUnit(String unit, {int? subUnitsPerPack}) {
     );
   }
 
-  if (norm == 'strip') {
-    // A real strip's pack size is known (10 / 15 / 20 / 30 tablets are all
-    // common) — offer per-tablet chips so a customer buying 3 out of a
-    // 15-tablet strip can actually be billed correctly, instead of forcing
-    // a whole or half strip. Quantity stays denominated in strips (the unit
-    // the price is set per), same as a 250g chip stays denominated in kg —
-    // a tablet count is just `count / subUnitsPerPack` strips.
+  if (norm == 'strip' || norm == 'tablets' || norm == 'tablet') {
+    // Pharmacy real-world ground reality: strips contain known tablets per pack (typically 10, 15, 20).
+    // When pack size is specified, offer 1 to pack-1 loose tablet chips so dispensing loose tablets
+    // auto-calculates the exact fractional price per tablet.
     if (subUnitsPerPack != null && subUnitsPerPack > 1) {
-      final tabletCounts = <int>{
-        1,
-        if (subUnitsPerPack >= 3) 2,
-        if (subUnitsPerPack >= 4) 3,
-        if (subUnitsPerPack >= 6) 5,
-        if (subUnitsPerPack ~/ 2 > 1 && subUnitsPerPack ~/ 2 < subUnitsPerPack) subUnitsPerPack ~/ 2,
-      }..removeWhere((n) => n >= subUnitsPerPack);
-      final sortedCounts = tabletCounts.toList()..sort();
+      final tabletCounts = <int>[
+        for (int i = 1; i < subUnitsPerPack && i <= 15; i++) i,
+      ];
 
       return QuantityUnitConfig(
         unitLabel: 'Quantity (Strip of $subUnitsPerPack)',
-        decimalNotice: 'Tap a tablet count or type strip count',
+        decimalNotice: 'Tap loose tablet count or full strips',
         chips: [
-          for (final n in sortedCounts)
+          for (final n in tabletCounts)
             QuantityChip(n == 1 ? '1 Tablet' : '$n Tablets', n / subUnitsPerPack),
           QuantityChip('1 Full Strip', 1),
+          QuantityChip('2 Strips', 2),
+          QuantityChip('3 Strips', 3),
+          QuantityChip('5 Strips', 5),
         ],
       );
     }
+
     return const QuantityUnitConfig(
       unitLabel: 'Quantity (Strips)',
       decimalNotice: 'Strip counts (0.5 for loose/half) — set the strip\'s tablet count on the product for exact tablet billing',
@@ -145,9 +142,7 @@ QuantityUnitConfig quantityConfigForUnit(String unit, {int? subUnitsPerPack}) {
         QuantityChip('1 Strip', 1),
         QuantityChip('2 Strips', 2),
         QuantityChip('3 Strips', 3),
-        QuantityChip('4 Strips', 4),
         QuantityChip('5 Strips', 5),
-        QuantityChip('10 Strips', 10),
         QuantityChip('½ Strip', 0.5),
       ],
     );

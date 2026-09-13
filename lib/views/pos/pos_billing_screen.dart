@@ -32,7 +32,15 @@ class PosBillingScreen extends StatefulWidget {
   State<PosBillingScreen> createState() => _PosBillingScreenState();
 }
 
-class _PosBillingScreenState extends State<PosBillingScreen> with DataBusRefresh<PosBillingScreen> {
+class PosBillingSessionStore {
+  static List<CartTab>? savedTabs;
+  static int activeTabIndex = 0;
+}
+
+class _PosBillingScreenState extends State<PosBillingScreen>
+    with DataBusRefresh<PosBillingScreen>, AutomaticKeepAliveClientMixin<PosBillingScreen> {
+  @override
+  bool get wantKeepAlive => true;
   // A price or stock edit made on the Products tab must reach the billing grid,
   // otherwise the cashier rings up a stale price and the out-of-stock guard
   // works off stock loaded at startup.
@@ -68,9 +76,17 @@ class _PosBillingScreenState extends State<PosBillingScreen> with DataBusRefresh
   @override
   void initState() {
     super.initState();
-    _tabs = [
-      CartTab(id: 'tab_1', name: 'Bill #1', number: 1, items: {}),
-    ];
+    if (PosBillingSessionStore.savedTabs != null && PosBillingSessionStore.savedTabs!.isNotEmpty) {
+      _tabs = PosBillingSessionStore.savedTabs!;
+      _activeTabIndex = PosBillingSessionStore.activeTabIndex;
+      if (_activeTabIndex >= _tabs.length) _activeTabIndex = 0;
+    } else {
+      _tabs = [
+        CartTab(id: 'tab_1', name: 'Bill #1', number: 1, items: {}),
+      ];
+      PosBillingSessionStore.savedTabs = _tabs;
+      PosBillingSessionStore.activeTabIndex = 0;
+    }
     _loadBusinessType();
     BusinessVerticals.activeBusinessTypeNotifier.addListener(_onBusinessTypeChanged);
     FirestoreSyncService.instance.liveSyncCounter.addListener(_handleCloudSyncUpdate);
@@ -237,6 +253,169 @@ class _PosBillingScreenState extends State<PosBillingScreen> with DataBusRefresh
   }
 
   void _addToCart(ProductModel product) {
+    if (product.hasVariants) {
+      _showVariantPicker(product);
+      return;
+    }
+    _addProductDirectlyToCart(product);
+  }
+
+  void _showVariantPicker(ProductModel parent) async {
+    HapticFeedback.mediumImpact();
+    final variants = await LocalDatabase.instance.getVariantsForProduct(parent.id);
+    if (!mounted) return;
+
+    if (variants.isEmpty) {
+      _addProductDirectlyToCart(parent);
+      return;
+    }
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
+      ),
+      builder: (ctx) {
+        return Padding(
+          padding: const EdgeInsets.only(left: 20, right: 20, top: 18, bottom: 28),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFEEF2FF),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: const Icon(Icons.style_rounded, color: Color(0xFF4F46E5), size: 20),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          parent.name,
+                          style: GoogleFonts.plusJakartaSans(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w800,
+                            color: const Color(0xFF0F172A),
+                          ),
+                        ),
+                        Text(
+                          'Select Variant (Size / Color) to Add',
+                          style: GoogleFonts.inter(fontSize: 11.5, color: const Color(0xFF64748B)),
+                        ),
+                      ],
+                    ),
+                  ),
+                  IconButton(
+                    onPressed: () => Navigator.pop(ctx),
+                    icon: const Icon(Icons.close_rounded, color: Color(0xFF94A3B8)),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              ConstrainedBox(
+                constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.5),
+                child: ListView.separated(
+                  shrinkWrap: true,
+                  itemCount: variants.length,
+                  separatorBuilder: (context, index) => const SizedBox(height: 8),
+                  itemBuilder: (ctx, i) {
+                    final v = variants[i];
+                    final isOutOfStock = v.stockQuantity <= 0 && v.stockQuantity < 900000;
+                    final sizeText = (v.size != null && v.size!.isNotEmpty) ? v.size! : 'V${i + 1}';
+                    return InkWell(
+                      onTap: isOutOfStock
+                          ? null
+                          : () {
+                              Navigator.pop(ctx);
+                              _addProductDirectlyToCart(v);
+                            },
+                      borderRadius: BorderRadius.circular(12),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                        decoration: BoxDecoration(
+                          color: isOutOfStock ? const Color(0xFFF8FAFC) : Colors.white,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                            color: isOutOfStock ? const Color(0xFFE2E8F0) : const Color(0xFFC7D2FE),
+                            width: 1.2,
+                          ),
+                        ),
+                        child: Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                              decoration: BoxDecoration(
+                                color: isOutOfStock ? const Color(0xFFE2E8F0) : const Color(0xFFEEF2FF),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Text(
+                                sizeText,
+                                style: GoogleFonts.plusJakartaSans(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w800,
+                                  color: isOutOfStock ? const Color(0xFF94A3B8) : const Color(0xFF4338CA),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    v.variantLabel ?? (v.color != null ? 'Color: ${v.color}' : v.name),
+                                    style: GoogleFonts.inter(
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w700,
+                                      color: isOutOfStock ? const Color(0xFF94A3B8) : const Color(0xFF1E293B),
+                                    ),
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    isOutOfStock ? 'Out of Stock' : 'Stock: ${v.stockQuantity.toInt()} units',
+                                    style: GoogleFonts.inter(
+                                      fontSize: 11,
+                                      color: isOutOfStock ? const Color(0xFFDC2626) : const Color(0xFF059669),
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            Text(
+                              MoneyFormatter.formatINR(v.sellingPricePaise),
+                              style: GoogleFonts.plusJakartaSans(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w800,
+                                color: const Color(0xFF0F172A),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            const Icon(Icons.add_circle_outline_rounded, size: 20, color: Color(0xFF4F46E5)),
+                          ],
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  void _addProductDirectlyToCart(ProductModel product) {
     final currentQty = _cart[product.id]?.quantity.toInt() ?? 0;
     final isUnlimited = product.stockQuantity >= 900000;
 
@@ -282,6 +461,7 @@ class _PosBillingScreenState extends State<PosBillingScreen> with DataBusRefresh
     HapticFeedback.mediumImpact();
     setState(() {
       _cart.clear();
+      currentTab.customer = null;
     });
   }
 
@@ -378,7 +558,7 @@ class _PosBillingScreenState extends State<PosBillingScreen> with DataBusRefresh
 
     if (barcode != null && barcode.isNotEmpty && mounted) {
       final activeType = BusinessVerticals.activeBusinessTypeNotifier.value;
-      final matched = await LocalDatabase.instance.findProductByBarcode(barcode);
+      final matched = await LocalDatabase.instance.findProductByBarcode(barcode, businessType: activeType);
       if (matched != null) {
         _addToCart(matched);
         if (mounted) {
@@ -445,6 +625,7 @@ class _PosBillingScreenState extends State<PosBillingScreen> with DataBusRefresh
 
   @override
   Widget build(BuildContext context) {
+    super.build(context);
     return Scaffold(
       backgroundColor: const Color(0xFFF8FAFC),
       body: SafeArea(

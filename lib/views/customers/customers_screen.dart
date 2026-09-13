@@ -718,93 +718,62 @@ class _CustomersScreenState extends State<CustomersScreen> with DataBusRefresh<C
                 physics: const BouncingScrollPhysics(parent: AlwaysScrollableScrollPhysics()),
                 padding: const EdgeInsets.fromLTRB(16, 16, 16, 40),
                 children: [
-                  // CRM Header Card
+                  // Master CRM Header Card
                   Container(
-                    padding: const EdgeInsets.all(16),
+                    padding: const EdgeInsets.all(14),
                     decoration: BoxDecoration(
                       color: Colors.white,
-                      borderRadius: BorderRadius.circular(20),
-                      border: Border.all(color: const Color(0xFFEEF2F6)),
+                      borderRadius: BorderRadius.circular(18),
+                      border: Border.all(color: const Color(0xFFEEF2F6), width: 1),
                     ),
-                    child: Column(
+                    child: Row(
                       children: [
-                        Row(
-                          children: [
-                            Container(
-                              padding: const EdgeInsets.all(8),
-                              decoration: BoxDecoration(
-                                color: const Color(0xFFEFF6FF),
-                                borderRadius: BorderRadius.circular(10),
-                              ),
-                              child: const Icon(Icons.people_alt_rounded, color: Color(0xFF0284C7), size: 22),
-                            ),
-                            const SizedBox(width: 10),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    'Customer Directory & CRM',
-                                    style: GoogleFonts.outfit(fontSize: 15, fontWeight: FontWeight.w700, color: const Color(0xFF0F172A)),
-                                  ),
-                                  Text(
-                                    '${_customers.length} registered customers • ${MoneyFormatter.formatPaise(_totalUdharPaise)} market dues',
-                                    style: GoogleFonts.inter(fontSize: 11, color: const Color(0xFF64748B)),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ],
+                        Container(
+                          width: 44,
+                          height: 44,
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFEFF6FF),
+                            borderRadius: BorderRadius.circular(14),
+                          ),
+                          child: const Icon(Icons.people_alt_rounded, color: Color(0xFF0284C7), size: 22),
                         ),
-                        const SizedBox(height: 14),
-                        Row(
-                          children: [
-                            Expanded(
-                              child: ElevatedButton.icon(
-                                onPressed: _showAddCustomerModal,
-                                icon: const Icon(Icons.person_add_rounded, size: 16),
-                                label: Text('+ Add Customer', style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w700)),
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: const Color(0xFF0F172A),
-                                  foregroundColor: Colors.white,
-                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                                  padding: const EdgeInsets.symmetric(vertical: 10),
-                                  elevation: 0,
-                                ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Customer Directory & CRM',
+                                style: GoogleFonts.outfit(fontSize: 16, fontWeight: FontWeight.w800, color: const Color(0xFF0F172A)),
                               ),
-                            ),
-                          ],
+                              const SizedBox(height: 2),
+                              Text(
+                                '${_customers.length} registered buyers • Ledger & Khata records',
+                                style: GoogleFonts.inter(fontSize: 11, color: const Color(0xFF64748B)),
+                              ),
+                            ],
+                          ),
+                        ),
+                        ElevatedButton.icon(
+                          onPressed: _showAddCustomerModal,
+                          icon: const Icon(Icons.person_add_rounded, size: 15),
+                          label: Text('+ Add', style: GoogleFonts.outfit(fontSize: 12, fontWeight: FontWeight.w800)),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFF0F172A),
+                            foregroundColor: Colors.white,
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                            elevation: 0,
+                          ),
                         ),
                       ],
                     ),
                   ),
-                  const SizedBox(height: 16),
-
-                  // 4-Metric Grid
-                  Row(
-                    children: [
-                      Expanded(
-                        child: _buildMetricBox('Customers', 'Total', '${_customers.length}', const Color(0xFF0284C7)),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: _buildMetricBox('VIP Members', 'High-Value', '${_customers.where((c) => c.isVip).length}', const Color(0xFFD97706)),
-                      ),
-                    ],
-                  ),
                   const SizedBox(height: 12),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: _buildMetricBox('Udhar Due', 'Pending', MoneyFormatter.formatPaise(_totalUdharPaise), const Color(0xFFEF4444)),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: _buildMetricBox('Active Udhar', 'Ledgers', '$_activeUdharCount', const Color(0xFF8B5CF6)),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 16),
+
+                  // 2x2 Metric Ribbon Grid (Matching Product Screen Standard)
+                  _buildMetricsGrid(),
+                  const SizedBox(height: 14),
 
                   // Search Bar & Filter Chips
                   TextField(
@@ -865,26 +834,149 @@ class _CustomersScreenState extends State<CustomersScreen> with DataBusRefresh<C
     );
   }
 
-  Widget _buildMetricBox(String title, String subtitle, String amount, Color color) {
+  Widget _buildMetricsGrid() {
+    final vipCount = _customers.where((c) => c.isVip).length;
     return Container(
-      padding: const EdgeInsets.all(14),
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFFEEF2F6)),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: const Color(0xFFEEF2F6), width: 1),
       ),
+      child: Column(
+        children: [
+          Row(
+            children: [
+              // Tile 1: Total Directory
+              Expanded(
+                child: _buildMetricTile(
+                  icon: Icons.people_alt_rounded,
+                  iconColor: const Color(0xFF0284C7),
+                  title: 'Total Directory',
+                  tag: 'CRM',
+                  value: '${_customers.length}',
+                  valueColor: const Color(0xFF0F172A),
+                  subtitle: 'Registered buyers',
+                ),
+              ),
+              Container(width: 1, height: 56, color: const Color(0xFFF1F5F9)),
+              // Tile 2: VIP Club
+              Expanded(
+                child: _buildMetricTile(
+                  icon: Icons.workspace_premium_rounded,
+                  iconColor: const Color(0xFFD97706),
+                  title: 'VIP Club',
+                  tag: 'Loyal',
+                  value: '$vipCount',
+                  valueColor: const Color(0xFFD97706),
+                  subtitle: 'Priority accounts',
+                ),
+              ),
+            ],
+          ),
+          const Divider(color: Color(0xFFF1F5F9), height: 16),
+          Row(
+            children: [
+              // Tile 3: Total Udhar
+              Expanded(
+                child: _buildMetricTile(
+                  icon: Icons.account_balance_wallet_rounded,
+                  iconColor: const Color(0xFFEF4444),
+                  title: 'Total Udhar',
+                  tag: 'Pending',
+                  value: MoneyFormatter.formatPaise(_totalUdharPaise),
+                  valueColor: _totalUdharPaise > 0 ? const Color(0xFFEF4444) : const Color(0xFF059669),
+                  subtitle: 'Market credit',
+                ),
+              ),
+              Container(width: 1, height: 56, color: const Color(0xFFF1F5F9)),
+              // Tile 4: Due Customers
+              Expanded(
+                child: _buildMetricTile(
+                  icon: Icons.assignment_late_rounded,
+                  iconColor: const Color(0xFF8B5CF6),
+                  title: 'Due Customers',
+                  tag: 'Collect',
+                  value: '$_activeUdharCount',
+                  valueColor: const Color(0xFF0F172A),
+                  subtitle: 'Pending ledgers',
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMetricTile({
+    required IconData icon,
+    required Color iconColor,
+    required String title,
+    required String tag,
+    required String value,
+    required Color valueColor,
+    required String subtitle,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(title, style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w700, color: const Color(0xFF64748B))),
-              Text(subtitle, style: GoogleFonts.inter(fontSize: 9, color: const Color(0xFF94A3B8))),
+              Container(
+                width: 24,
+                height: 24,
+                decoration: BoxDecoration(
+                  color: iconColor.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Icon(icon, size: 14, color: iconColor),
+              ),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  title,
+                  style: GoogleFonts.inter(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    color: const Color(0xFF64748B),
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF1F5F9),
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: Text(
+                  tag,
+                  style: GoogleFonts.inter(
+                    fontSize: 8.5,
+                    fontWeight: FontWeight.w700,
+                    color: const Color(0xFF475569),
+                  ),
+                ),
+              ),
             ],
           ),
           const SizedBox(height: 6),
-          Text(amount, style: GoogleFonts.outfit(fontSize: 17, fontWeight: FontWeight.w800, color: color)),
+          Text(
+            value,
+            style: GoogleFonts.outfit(
+              fontSize: 16,
+              fontWeight: FontWeight.w900,
+              color: valueColor,
+            ),
+          ),
+          const SizedBox(height: 1),
+          Text(
+            subtitle,
+            style: GoogleFonts.inter(fontSize: 10, color: const Color(0xFF94A3B8)),
+          ),
         ],
       ),
     );

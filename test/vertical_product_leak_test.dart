@@ -145,4 +145,44 @@ void main() {
       );
     }
   });
+
+  test('findProductByBarcode respects businessType filter and prevents cross-vertical leak', () async {
+    const testBarcode = '8901234567890';
+    await LocalDatabase.instance.upsertProduct(ProductModel(
+      id: 'p_bar_grocery',
+      businessId: 'biz_test',
+      name: 'Grocery Item With Barcode',
+      barcode: testBarcode,
+      sellingPricePaise: 5000,
+      mrpPaise: 5000,
+      stockQuantity: 10,
+      businessType: 'grocery',
+    ));
+
+    // When querying for clothing, it must return null (not match the grocery item)
+    final clothingMatch = await LocalDatabase.instance.findProductByBarcode(testBarcode, businessType: 'clothing');
+    expect(clothingMatch, isNull, reason: 'Scanning barcode in Clothing must NOT return a Grocery product');
+
+    // When querying for grocery, it must return the product
+    final groceryMatch = await LocalDatabase.instance.findProductByBarcode(testBarcode, businessType: 'grocery');
+    expect(groceryMatch, isNotNull);
+    expect(groceryMatch!.id, 'p_bar_grocery');
+
+    // Crossover product with businessType "both" matches any vertical
+    const crossoverBarcode = '8909999999999';
+    await LocalDatabase.instance.upsertProduct(ProductModel(
+      id: 'p_bar_crossover',
+      businessId: 'biz_test',
+      name: 'Sanitizer Crossover',
+      barcode: crossoverBarcode,
+      sellingPricePaise: 2500,
+      mrpPaise: 2500,
+      stockQuantity: 15,
+      businessType: 'both',
+    ));
+
+    final clothingCrossover = await LocalDatabase.instance.findProductByBarcode(crossoverBarcode, businessType: 'clothing');
+    expect(clothingCrossover, isNotNull);
+    expect(clothingCrossover!.id, 'p_bar_crossover');
+  });
 }
