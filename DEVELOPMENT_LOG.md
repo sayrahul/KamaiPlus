@@ -47,6 +47,25 @@ drives `LocalDatabase` through a real (in-memory FFI) SQLite database and assert
 
 ---
 
+## 2026-09-13 — Universal Release APK Rebuild & Installation on Redmi 6 (de7ea8af7d29)
+
+**User Request:**
+"naya mere mobile me install karo"
+
+**Device Details & Environment:**
+- **Model:** Xiaomi Redmi 6 (`cereus`)
+- **ADB Device ID:** `de7ea8af7d29`
+- **Architecture:** 64-bit ARM (`arm64-v8a`) on Android 9 (API 28)
+- **Display:** 720 × 1440 18:9 HD+ display
+
+**Actions & Verification:**
+1. Rebuilt clean Universal Release APK (`flutter build apk --release`, 63.3MB) incorporating all recent updates.
+2. Installed on device via `adb -s de7ea8af7d29 install -r "build/app/outputs/flutter-apk/app-release.apk"` $\rightarrow$ `Success` (2978 KB/s).
+3. Launched app via monkey runner.
+4. Captured live on-device screenshot: App running smoothly in POS Counter Billing screen with 46 items, tab switcher `Bill #1` / `+ New Bill`, category chips, and bottom cart bar.
+
+---
+
 ## 2026-09-13 — Vertical Variant Matrix, Minimalist POS UPI QR, Strict Pro Tier Locks & Swipeable Home Banner
 
 **User Request:**
