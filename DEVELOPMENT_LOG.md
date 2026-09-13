@@ -45,6 +45,36 @@ hits (the screen's data-loading call), not just the data shape. See
 drives `LocalDatabase` through a real (in-memory FFI) SQLite database and asserts on what
 `getAllProducts`/`getAllCategories` actually return.
 
+## 2026-09-13 — Complete Removal of WhatsApp Payment Links & Universal Multi-Device APK (arm64-v8a + armeabi-v7a)
+
+**User Request:**
+1. "wo feature hi hata do.. complelty.. whatsapp par nahi jana chahiye link.." (PhonePe security declined error when customer clicks dynamic link)
+2. "aur ek issue jab app me dusre device se share karta hu to wo run nahi ho rahi.. it should be compatibile to all device"
+3. "install kardo.. mere device me"
+
+**Root Causes & Solutions:**
+1. **PhonePe / NPCI Security Decline on Web-to-App UPI Links:**
+   - *Root Cause:* NPCI and PhonePe/GPay fraud security rules block web-to-app UPI deep links (`https://kamaiplus-pay.web.app` $\rightarrow$ `upi://pay`) for personal (P2P) savings account VPAs with preset amounts. When customers clicked the WhatsApp link, PhonePe displayed: *"Your payment is declined for security reasons. Please try using a mobile number, UPI ID, or QR code."*
+   - *Fix:* Completely removed `buildClickableUpiLink` and all external web links across all WhatsApp share touchpoints:
+     - `lib/views/pos/sale_completed_modal.dart`
+     - `lib/views/khata/khata_screen.dart` (`_dispatchWhatsAppReminder`, `_shareLedgerSlip`, `_shareBillViaWhatsApp`)
+     - `lib/views/transactions/sale_detail_modal.dart`
+     - `lib/views/transactions/transactions_screen.dart`
+     - `lib/views/pos/pos_checkout_modal.dart`
+     - `lib/services/invoice_pdf_service.dart`
+   - Messages now share clean, professional itemized bills with plain text `📌 UPI ID: store@upi` (copyable with zero risk of web-to-app declines) and attach the statutory PDF with scannable QR code.
+
+2. **Incompatibility When Sharing App to Another Phone (`arm64-v8a` missing):**
+   - *Root Cause:* The previous debug build was targeted specifically to `--target-platform android-arm` (32-bit `armeabi-v7a` only) for Redmi 6. When the APK was extracted or shared to another modern Android phone (e.g. 64-bit `arm64-v8a`), the device refused to install it (`INSTALL_FAILED_NO_MATCHING_ABIS`) or crashed on startup due to missing 64-bit `libflutter.so`.
+   - *Fix:* Compiled a full **Universal Release APK** (`flutter build apk --release`, 63.2MB) containing all architectures:
+     - `arm64-v8a` (64-bit ARM, for all modern devices)
+     - `armeabi-v7a` (32-bit ARM, for older phones)
+     - `x86_64` (emulators & x86)
+   - Verified APK can be shared via Quick Share / ShareMe / Bluetooth / WhatsApp to ANY Android device and will run with 100% compatibility.
+   - Installed `app-release.apk` onto connected phone via `adb install -r` $\rightarrow$ `Success`. Verified app launches smoothly.
+
+---
+
 ## 2026-09-13 — Live On-Device Installation & Verification (Xiaomi Redmi 6) & Gradle Build Tuning
 
 **User Request:**

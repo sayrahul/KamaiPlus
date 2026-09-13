@@ -1290,3 +1290,12 @@ Comprehensive enterprise-grade retail UX upgrade suite aligned with PhonePe Busi
     - `MenuScreen`: Responsive 2-row bottom footer with WhatsApp Support on the left, Flag + Native Language dropdown button on the right, and version + logout below.
     - `StoreProfileScreen`: "Language / भाषा" configuration card in Store Profile tab.
     - **Verified:** `test/localization_test.dart` passed 100%, verified on real Redmi 6 device.
+
+76. **No External Payment Web Links in WhatsApp / SMS Messages (LOCKED):**
+    - Removed `kamaiplus-pay.web.app` / `buildClickableUpiLink` / raw `upi://pay` from WhatsApp messages across all screens (`SaleCompletedModal`, `SaleDetailModal`, `TransactionsScreen`, `KhataScreen`, `PosCheckoutModal`, `InvoicePdfService`).
+    - NPCI and PhonePe/GPay security engines block external browser-to-app payment intents for personal/unverified VPAs ("Your payment is declined for security reasons").
+    - Messages now send clean, professional itemized bill summaries with plain text `📌 UPI ID: store@upi` and attached statutory PDF with scannable QR code.
+
+77. **Universal Multi-Architecture APK Compatibility (LOCKED):**
+    - Distribution APKs must always be compiled as Universal Release APKs (`flutter build apk --release`, 63.2MB) containing all ABIs (`arm64-v8a`, `armeabi-v7a`, and `x86_64`).
+    - Targeted single-ABI builds (`--target-platform android-arm`) lack 64-bit binaries and fail/crash on 64-bit phones (`INSTALL_FAILED_NO_MATCHING_ABIS`). Universal Release APK ensures 100% compatibility across all Android devices.

@@ -11,7 +11,6 @@ import '../../core/database/local_database.dart';
 import '../../core/utils/app_validators.dart';
 import '../../core/utils/datetime_utils.dart';
 import '../../core/utils/money_formatter.dart';
-import '../../core/utils/upi_link_utils.dart';
 import '../../models/models.dart';
 import '../../services/firestore_sync_service.dart';
 import '../../services/invoice_pdf_service.dart';
@@ -317,10 +316,8 @@ class _KhataScreenState extends State<KhataScreen> with DataBusRefresh<KhataScre
   void _dispatchWhatsAppReminder(CustomerModel customer, {required bool isFriendly}) async {
     HapticFeedback.lightImpact();
     final int rupees = customer.currentBalancePaise ~/ 100;
-    final totalRupeesStr = (customer.currentBalancePaise / 100.0).toStringAsFixed(2);
     final storeName = _storeProfile.storeName.isNotEmpty ? _storeProfile.storeName : 'KamaiPlus Store';
     final upiId = _storeProfile.upiVpa.trim();
-    final upiPayLink = upiId.isNotEmpty ? buildClickableUpiLink(upiId: upiId, payeeName: storeName, amountRupees: totalRupeesStr) : '';
 
     final buffer = StringBuffer();
     if (isFriendly) {
@@ -333,9 +330,8 @@ class _KhataScreenState extends State<KhataScreen> with DataBusRefresh<KhataScre
       buffer.writeln('Kindly clear the dues at your earliest convenience via cash counter or instant UPI.\n');
     }
 
-    if (upiPayLink.isNotEmpty) {
-      buffer.writeln('📲 *Instant UPI Pay:* $upiPayLink');
-      buffer.writeln('📌 UPI ID: $upiId\n');
+    if (upiId.isNotEmpty) {
+      buffer.writeln('📌 *UPI ID:* $upiId\n');
     }
     buffer.writeln('Dhanyawad!');
     final text = buffer.toString();
@@ -387,7 +383,6 @@ class _KhataScreenState extends State<KhataScreen> with DataBusRefresh<KhataScre
     final balRupees = tx.balanceAfterPaise ~/ 100;
     final storeName = _storeProfile.storeName.isNotEmpty ? _storeProfile.storeName : 'KamaiPlus Store';
     final upiId = _storeProfile.upiVpa.trim();
-    final upiPayLink = upiId.isNotEmpty ? buildClickableUpiLink(upiId: upiId, payeeName: storeName, amountRupees: balRupees.toString()) : '';
     final dateStr = DateFormat('d MMM yyyy, hh:mm a').format(tx.createdAt);
 
     final buffer = StringBuffer();
@@ -400,8 +395,8 @@ class _KhataScreenState extends State<KhataScreen> with DataBusRefresh<KhataScre
     buffer.writeln('📝 Note: ${tx.description.isNotEmpty ? tx.description : "Khata Transaction"}');
     buffer.writeln('--------------------------');
     buffer.writeln('💰 *Kul Baki (Balance): ₹$balRupees*');
-    if (upiPayLink.isNotEmpty) {
-      buffer.writeln('📲 *UPI Pay:* $upiPayLink');
+    if (upiId.isNotEmpty) {
+      buffer.writeln('📌 *UPI ID:* $upiId');
     }
     buffer.writeln('\nDhanyawad!');
     final text = buffer.toString();
@@ -418,12 +413,8 @@ class _KhataScreenState extends State<KhataScreen> with DataBusRefresh<KhataScre
   void _shareBillViaWhatsApp(SaleModel bill, CustomerModel customer) async {
     HapticFeedback.lightImpact();
     final amtRupees = bill.totalAmountPaise ~/ 100;
-    final totalRupees = (bill.totalAmountPaise / 100.0).toStringAsFixed(2);
     final storeName = _storeProfile.storeName.isNotEmpty ? _storeProfile.storeName : 'KamaiPlus Store';
     final upiId = _storeProfile.upiVpa.trim();
-    final upiPayLink = upiId.isNotEmpty
-        ? buildClickableUpiLink(upiId: upiId, payeeName: storeName, amountRupees: totalRupees, transactionNote: 'Bill_${bill.invoiceNumber}')
-        : '';
     final dateStr = DateFormat('d MMM yyyy, hh:mm a').format(bill.createdAt);
 
     final buffer = StringBuffer();
@@ -442,8 +433,8 @@ class _KhataScreenState extends State<KhataScreen> with DataBusRefresh<KhataScre
     buffer.writeln('--------------------------');
     buffer.writeln('💰 *Total Amount: ₹$amtRupees*');
     buffer.writeln('📌 Status: ${bill.status.toUpperCase()}');
-    if (upiPayLink.isNotEmpty) {
-      buffer.writeln('📲 *Instant UPI Pay / Receipt:* $upiPayLink');
+    if (upiId.isNotEmpty) {
+      buffer.writeln('📌 *UPI ID:* $upiId');
     }
     buffer.writeln('\nDhanyawad!');
 

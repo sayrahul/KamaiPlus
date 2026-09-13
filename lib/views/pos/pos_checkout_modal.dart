@@ -13,7 +13,6 @@ import '../../services/firestore_sync_service.dart';
 import '../../services/app_printer_service.dart';
 import '../../services/thermal_printer_service.dart';
 import '../../core/utils/money_formatter.dart';
-import '../../core/utils/upi_link_utils.dart';
 import '../../core/constants/business_vertical_config.dart';
 import 'pos_item_edit_modal.dart';
 import 'sale_completed_modal.dart';
@@ -2336,18 +2335,12 @@ class _PosCheckoutModalState extends State<PosCheckoutModal> {
                                 final phone = _currentCustomer!.phone.replaceAll(RegExp(r'\D'), '');
                                 final cleanPhone = phone.length == 10 ? '91$phone' : phone;
                                 final amountRupees = (grandTotalPaise / 100.0).toStringAsFixed(2);
-                                final upiUri = buildClickableUpiLink(
-                                  upiId: _activeUpiVpa,
-                                  payeeName: _activeStoreName,
-                                  amountRupees: amountRupees,
-                                  transactionNote: 'POS Bill',
-                                );
+                                final upiInfo = _activeUpiVpa.isNotEmpty ? '📌 UPI ID: $_activeUpiVpa\n' : '';
                                 final text = Uri.encodeComponent(
                                   '🙏 Namaste ${_currentCustomer!.name} Ji!\n\n'
-                                  'Aapka KamaiPlus Bill amount: ₹$amountRupees\n'
-                                  'Direct 1-Tap UPI se pay karne ke liye niche link par click karein:\n'
-                                  '$upiUri\n\n'
-                                  'Payment hone par bill turant update ho jayega. Dhanyawad! ✨'
+                                  'Aapka $_activeStoreName Bill amount: ₹$amountRupees\n'
+                                  '$upiInfo\n'
+                                  'Counter par bill ready hai. Dhanyawad! ✨'
                                 );
                                 final url = Uri.parse('https://wa.me/$cleanPhone?text=$text');
                                 if (await canLaunchUrl(url)) {
@@ -2370,7 +2363,7 @@ class _PosCheckoutModalState extends State<PosCheckoutModal> {
                                     const SizedBox(width: 6),
                                     Flexible(
                                       child: Text(
-                                        'Send 1-Tap UPI Link to ${_currentCustomer!.name}',
+                                        'Send Bill Summary to ${_currentCustomer!.name}',
                                         style: GoogleFonts.plusJakartaSans(
                                           fontSize: 11.5,
                                           fontWeight: FontWeight.w700,
@@ -2386,7 +2379,7 @@ class _PosCheckoutModalState extends State<PosCheckoutModal> {
                           ] else ...[
                             const SizedBox(height: 8),
                             Text(
-                              '💡 Select customer above to send 1-Tap UPI WhatsApp pay link',
+                              '💡 Select customer above to send bill summary via WhatsApp',
                               style: GoogleFonts.inter(
                                 fontSize: 10,
                                 fontStyle: FontStyle.italic,

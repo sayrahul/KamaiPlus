@@ -337,7 +337,7 @@ class InvoicePdfService {
 
       final defaultSubject = 'Khata Statement - $storeName';
       final upiSuffix = effectiveUpiId.isNotEmpty
-          ? '\n\n📲 *Pay via UPI:* upi://pay?pa=$effectiveUpiId&pn=${Uri.encodeComponent(storeName)}&am=${(customer.currentBalancePaise / 100).toStringAsFixed(2)}&cu=INR'
+          ? '\n\n📌 *UPI ID:* $effectiveUpiId'
           : '';
       final defaultMsg = customMessage ??
           'Namaste ${customer.name} ji! 🙏\n\n$storeName par aapka baki hisaab $totalBalance hai. Kripya samay par chukta karein.$upiSuffix\n\nDhanyawad!';

@@ -6,7 +6,6 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../core/database/local_database.dart';
 import '../../core/utils/money_formatter.dart';
-import '../../core/utils/upi_link_utils.dart';
 import '../../models/models.dart';
 import '../../services/native_notification_service.dart';
 import '../../services/notification_service.dart';
@@ -103,11 +102,7 @@ class _SaleCompletedModalState extends State<SaleCompletedModal> {
 
     final dateStr = DateFormat('dd MMM yyyy, hh:mm a').format(widget.sale.createdAt);
     final amountStr = MoneyFormatter.formatINR(widget.sale.totalAmountPaise);
-    final totalRupees = (widget.sale.totalAmountPaise / 100.0).toStringAsFixed(2);
     final upiId = _profile.upiVpa.trim();
-    final upiPayLink = upiId.isNotEmpty
-        ? buildClickableUpiLink(upiId: upiId, payeeName: _storeName, amountRupees: totalRupees, transactionNote: 'Bill_${widget.sale.invoiceNumber}')
-        : '';
 
     final itemLines = widget.sale.items.map((it) {
       final name = it['product_name'] ?? it['name'] ?? 'Item';
@@ -116,7 +111,7 @@ class _SaleCompletedModalState extends State<SaleCompletedModal> {
       return '• $name x $qty = ₹${(price * (qty as num)).toStringAsFixed(2)}';
     }).join('\n');
 
-    final upiLine = upiPayLink.isNotEmpty ? '📲 *Instant UPI Pay / Receipt:* $upiPayLink\n' : '';
+    final upiLine = upiId.isNotEmpty ? '📌 *UPI ID:* $upiId\n' : '';
 
     final vert = BusinessVerticals.resolve(BusinessVerticals.activeBusinessTypeNotifier.value);
     final message = '''

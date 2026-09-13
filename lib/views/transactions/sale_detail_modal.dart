@@ -5,7 +5,6 @@ import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../core/database/local_database.dart';
 import '../../core/utils/money_formatter.dart';
-import '../../core/utils/upi_link_utils.dart';
 import '../../models/models.dart';
 import '../../services/invoice_pdf_service.dart';
 import '../../services/native_notification_service.dart';
@@ -55,14 +54,10 @@ class SaleDetailModal extends StatelessWidget {
     HapticFeedback.selectionClick();
     final dateStr = DateFormat('d MMM yyyy, hh:mm a').format(sale.createdAt);
     final amtRupees = sale.totalAmountPaise ~/ 100;
-    final totalRupees = (sale.totalAmountPaise / 100.0).toStringAsFixed(2);
 
     final profile = await LocalDatabase.instance.getStoreProfile();
     final sName = profile.storeName.isNotEmpty ? profile.storeName : 'KamaiPlus Store';
     final upiId = profile.upiVpa.trim();
-    final upiPayLink = upiId.isNotEmpty
-        ? buildClickableUpiLink(upiId: upiId, payeeName: sName, amountRupees: totalRupees, transactionNote: 'Bill_${sale.invoiceNumber}')
-        : '';
 
     final buffer = StringBuffer();
     buffer.writeln('🧾 *INVOICE #${sale.invoiceNumber}*');
@@ -81,8 +76,8 @@ class SaleDetailModal extends StatelessWidget {
     buffer.writeln('--------------------------');
     buffer.writeln('💰 *Total Amount: ₹$amtRupees*');
     buffer.writeln('💳 Paid via: ${sale.paymentMethod.toUpperCase()}');
-    if (upiPayLink.isNotEmpty) {
-      buffer.writeln('📲 *Instant UPI Pay / Receipt:* $upiPayLink');
+    if (upiId.isNotEmpty) {
+      buffer.writeln('📌 *UPI ID:* $upiId');
     }
     buffer.writeln('\nDhanyawad! Phir Padhaarein 🙏');
 

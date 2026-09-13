@@ -8,7 +8,6 @@ import '../../core/state/app_data_bus.dart';
 import '../../core/state/data_bus_refresh.dart';
 import '../../core/utils/datetime_utils.dart';
 import '../../core/utils/money_formatter.dart';
-import '../../core/utils/upi_link_utils.dart';
 import '../../models/models.dart';
 import '../../services/invoice_pdf_service.dart';
 import '../../services/app_printer_service.dart';
@@ -255,15 +254,11 @@ class _TransactionsScreenState extends State<TransactionsScreen> with DataBusRef
 
   void _launchWhatsAppForSale(SaleModel sale, String phone) async {
     final amtRupees = sale.totalAmountPaise ~/ 100;
-    final totalRupees = (sale.totalAmountPaise / 100.0).toStringAsFixed(2);
     final dateStr = DateFormat('d MMM yyyy, hh:mm a').format(sale.createdAt);
 
     final profile = await LocalDatabase.instance.getStoreProfile();
     final sName = profile.storeName.isNotEmpty ? profile.storeName : 'KamaiPlus Store';
     final upiId = profile.upiVpa.trim();
-    final upiPayLink = upiId.isNotEmpty
-        ? buildClickableUpiLink(upiId: upiId, payeeName: sName, amountRupees: totalRupees, transactionNote: 'Bill_${sale.invoiceNumber}')
-        : '';
 
     final buffer = StringBuffer();
     buffer.writeln('🧾 *TAX INVOICE #${sale.invoiceNumber}*');
@@ -281,8 +276,8 @@ class _TransactionsScreenState extends State<TransactionsScreen> with DataBusRef
     buffer.writeln('--------------------------');
     buffer.writeln('💰 *Total Amount: ₹$amtRupees*');
     buffer.writeln('📌 Mode: ${sale.paymentMethod.toUpperCase()} (${sale.status.toUpperCase()})');
-    if (upiPayLink.isNotEmpty) {
-      buffer.writeln('📲 *Instant UPI Pay:* $upiPayLink');
+    if (upiId.isNotEmpty) {
+      buffer.writeln('📌 *UPI ID:* $upiId');
     }
     buffer.writeln('\nDhanyawad! Phir aaiyega! 🙏');
 
