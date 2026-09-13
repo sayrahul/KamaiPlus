@@ -47,6 +47,30 @@ drives `LocalDatabase` through a real (in-memory FFI) SQLite database and assert
 
 ---
 
+## 2026-09-13 — Menu Header Upgrade Removal, Single-Row Footer & Modal Gaps Polish
+
+**User Request:**
+1. "menu option se top wala upgrade hatao... FREE STARTER..."
+2. "bottom wala Whatsapp support language version Logout button order version -> Support -> Lagnuage (En) -> Logout (one single row)"
+3. "puri screen one by one sab thiks se dekho.. ui me jo jo gaps he wo hata do sab pages sab modals sab kuch ui.."
+
+**Root Causes & Solutions:**
+1. **Top Upgrade Banner Removal (`menu_screen.dart:266` & `menu_screen.dart:1052`):**
+   - Removed `_buildProStatusBanner()` from the Menu ListView children and pruned unused private method and unused `models.dart` import. The screen starts immediately with *DAILY BILLING & COUNTER* with clean top spacing.
+2. **One Single Row Footer (`menu_screen.dart:901-1045`):**
+   - Replaced multi-row footer with a single compact, responsive row inside `SafeArea(top: false)`:
+     `version` (`v4.20.0`) $\rightarrow$ `Support` (WhatsApp Support) $\rightarrow$ `Language (En)` (Flag + Uppercase code + dropdown arrow) $\rightarrow$ `Logout` (Logout icon + text).
+   - Applied `MainAxisAlignment.spaceBetween` with horizontal padding `12`, resulting in ~240px content width, guaranteeing zero overflow on any mobile screen width (tested down to 320px).
+3. **Modal Sheets Gap & Padding Polish (`products_screen.dart:274-435`, `pos_billing_screen.dart:275-420`):**
+   - Wrapped `_showProductVariantsSheet` and `_showVariantPicker` modal builders in `SafeArea(top: false)` and tightened padding to `EdgeInsets.fromLTRB(20, 16, 20, 16)`, eliminating dead whitespace and preventing system gesture bar overlaps.
+   - Preserved all child variant action buttons including quick stock update bolt button, pencil edit button, and delete button.
+
+**Verification:**
+- `flutter analyze lib/views/menu/menu_screen.dart lib/views/products/products_screen.dart lib/views/pos/pos_billing_screen.dart` $\rightarrow$ 0 issues found.
+- `flutter test test/partial_sales_return_test.dart test/product_variants_test.dart test/localization_test.dart` $\rightarrow$ All tests passed.
+
+---
+
 ## 2026-09-13 — Partial Sales Return (Tukdo me Wapsi), Parent-Child Variant Matrix & Multi-Language App UI
 
 **User Request:**

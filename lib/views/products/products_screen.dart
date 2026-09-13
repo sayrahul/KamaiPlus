@@ -274,160 +274,165 @@ class _ProductsScreenState extends State<ProductsScreen> with DataBusRefresh<Pro
         borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
       ),
       builder: (ctx) {
-        return Padding(
-          padding: const EdgeInsets.only(left: 20, right: 20, top: 18, bottom: 28),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFF3E8FF),
-                      borderRadius: BorderRadius.circular(10),
+        return SafeArea(
+          top: false,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(20, 16, 20, 16),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFF3E8FF),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: const Icon(Icons.style_rounded, color: Color(0xFF7E22CE), size: 20),
                     ),
-                    child: const Icon(Icons.style_rounded, color: Color(0xFF7E22CE), size: 20),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          parent.name,
-                          style: GoogleFonts.outfit(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w800,
-                            color: const Color(0xFF0F172A),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            parent.name,
+                            style: GoogleFonts.outfit(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w800,
+                              color: const Color(0xFF0F172A),
+                            ),
                           ),
-                        ),
-                        Text(
-                          '${variants.length} Variants (साइज / कलर)',
-                          style: GoogleFonts.inter(fontSize: 11.5, color: const Color(0xFF64748B)),
-                        ),
-                      ],
+                          Text(
+                            '${variants.length} Variants (साइज / कलर)',
+                            style: GoogleFonts.inter(fontSize: 11.5, color: const Color(0xFF64748B)),
+                          ),
+                        ],
+                      ),
                     ),
-                  ),
-                  IconButton(
-                    onPressed: () => Navigator.pop(ctx),
-                    icon: const Icon(Icons.close_rounded, color: Color(0xFF94A3B8)),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 12),
-              if (variants.isEmpty)
-                Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 20),
-                  child: Center(
-                    child: Text(
-                      'No child variants found yet.',
-                      style: GoogleFonts.inter(fontSize: 13, color: const Color(0xFF94A3B8)),
+                    IconButton(
+                      onPressed: () => Navigator.pop(ctx),
+                      icon: const Icon(Icons.close_rounded, color: Color(0xFF94A3B8)),
                     ),
-                  ),
-                )
-              else
-                ConstrainedBox(
-                  constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.45),
-                  child: ListView.separated(
-                    shrinkWrap: true,
-                    itemCount: variants.length,
-                    separatorBuilder: (context, index) => const SizedBox(height: 8),
-                    itemBuilder: (context, i) {
-                      final v = variants[i];
-                      final sizeText = (v.size != null && v.size!.isNotEmpty)
-                          ? v.size!
-                          : (v.variantLabel ?? 'V${i + 1}');
-                      return Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFF8FAFC),
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: const Color(0xFFE2E8F0)),
-                        ),
-                        child: Row(
-                          children: [
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                              decoration: BoxDecoration(
-                                color: const Color(0xFF7E22CE),
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                              child: Text(
-                                sizeText,
-                                style: GoogleFonts.inter(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w900,
-                                  color: Colors.white,
+                  ],
+                ),
+                const SizedBox(height: 12),
+                if (variants.isEmpty)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 20),
+                    child: Center(
+                      child: Text(
+                        'No child variants found yet.',
+                        style: GoogleFonts.inter(fontSize: 13, color: const Color(0xFF94A3B8)),
+                      ),
+                    ),
+                  )
+                else
+                  ConstrainedBox(
+                    constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.45),
+                    child: ListView.separated(
+                      shrinkWrap: true,
+                      itemCount: variants.length,
+                      separatorBuilder: (context, index) => const SizedBox(height: 8),
+                      itemBuilder: (context, i) {
+                        final v = variants[i];
+                        final sizeText = (v.size != null && v.size!.isNotEmpty)
+                            ? v.size!
+                            : (v.variantLabel ?? 'V${i + 1}');
+                        return Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFF8FAFC),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: const Color(0xFFE2E8F0)),
+                          ),
+                          child: Row(
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFF7E22CE),
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: Text(
+                                  sizeText,
+                                  style: GoogleFonts.inter(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w900,
+                                    color: Colors.white,
+                                  ),
                                 ),
                               ),
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    MoneyFormatter.formatINR(v.sellingPricePaise),
-                                    style: GoogleFonts.outfit(
-                                      fontSize: 14,
-                                      fontWeight: FontWeight.w800,
-                                      color: const Color(0xFF0F172A),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      MoneyFormatter.formatINR(v.sellingPricePaise),
+                                      style: GoogleFonts.outfit(
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.w800,
+                                        color: const Color(0xFF0F172A),
+                                      ),
                                     ),
-                                  ),
-                                  Text(
-                                    'Stock: ${v.stockQuantity.toInt()} ${v.unit}',
-                                    style: GoogleFonts.inter(
-                                      fontSize: 11,
-                                      fontWeight: FontWeight.w600,
-                                      color: v.stockQuantity > 0 ? const Color(0xFF16A34A) : const Color(0xFFDC2626),
+                                    Text(
+                                      'Stock: ${v.stockQuantity.toInt()} ${v.unit}',
+                                      style: GoogleFonts.inter(fontSize: 11.5, color: const Color(0xFF64748B)),
                                     ),
-                                  ),
-                                ],
+                                  ],
+                                ),
                               ),
-                            ),
-                            // Quick Stock Update
-                            IconButton(
-                              icon: const Icon(Icons.bolt_rounded, size: 18, color: Color(0xFF2563EB)),
-                              onPressed: () {
-                                Navigator.pop(ctx);
-                                _openQuickUpdateDialog(v);
-                              },
-                            ),
-                            // Edit
-                            IconButton(
-                              icon: const Icon(Icons.edit_outlined, size: 16, color: Color(0xFF475569)),
-                              onPressed: () {
-                                Navigator.pop(ctx);
-                                _openAddProductSheet(existingProduct: v);
-                              },
-                            ),
-                          ],
-                        ),
-                      );
+                              // Quick Stock Update
+                              IconButton(
+                                icon: const Icon(Icons.bolt_rounded, size: 18, color: Color(0xFF2563EB)),
+                                onPressed: () {
+                                  Navigator.pop(ctx);
+                                  _openQuickUpdateDialog(v);
+                                },
+                              ),
+                              IconButton(
+                                icon: const Icon(Icons.edit_outlined, size: 18, color: Color(0xFF475569)),
+                                onPressed: () {
+                                  Navigator.pop(ctx);
+                                  _openAddProductSheet(existingProduct: v);
+                                },
+                              ),
+                              IconButton(
+                                icon: const Icon(Icons.delete_outline_rounded, size: 18, color: Color(0xFFE11D48)),
+                                onPressed: () {
+                                  Navigator.pop(ctx);
+                                  _confirmDeleteProduct(v);
+                                },
+                              ),
+                            ],
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                const SizedBox(height: 14),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton.icon(
+                    onPressed: () {
+                      Navigator.pop(ctx);
+                      _openAddProductSheet(parentIdForNewVariant: parent.id);
                     },
+                    icon: const Icon(Icons.add_rounded, size: 18),
+                    label: const Text('+ Add Another Variant', style: TextStyle(fontWeight: FontWeight.bold)),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF7E22CE),
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    ),
                   ),
                 ),
-              const SizedBox(height: 14),
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton.icon(
-                  onPressed: () {
-                    Navigator.pop(ctx);
-                    _openAddProductSheet(parentIdForNewVariant: parent.id);
-                  },
-                  icon: const Icon(Icons.add_rounded, size: 18),
-                  label: const Text('+ Add Another Variant', style: TextStyle(fontWeight: FontWeight.bold)),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF7E22CE),
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                  ),
-                ),
-              ),
-            ],
+              ],
+            ),
           ),
         );
       },

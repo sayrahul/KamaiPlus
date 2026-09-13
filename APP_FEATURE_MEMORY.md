@@ -64,10 +64,15 @@ The Bottom Navigation Bar has 5 items. The navigation contract is strictly defin
   2. *Stock & Inventory* (Products & FMCG, Inventory & Alerts, Wholesale Purchases, Barcode Studio)
   3. *Customers & Khata* (Digital Khata, Customers Directory, WhatsApp Growth, Pro Plans)
   4. *Tax, Backup & Settings* (GSTR-1 Reports, Invoice Themes, Cloud Backup, Store Profile & UPI)
-* **Footer:** 
-  - **WhatsApp Support Button:** Direct 1-tap WhatsApp chat with merchant support number `8669997711` (`https://wa.me/918669997711`) prefilled with support greeting.
-  - **Version Badge:** Synchronized with Play Store release version (`v4.20.0` matching `pubspec.yaml: 4.20.0+42001`).
-  - **Sign Out Button:** Red outlined button with confirmation dialog.
+* **Top Banner:** Free Starter / Upgrade banner removed completely so screen starts cleanly with *Daily Billing & Counter*.
+* **Footer (Single Row Layout - Locked):** 
+  - All 4 bottom controls are strictly arranged in **ONE SINGLE ROW** with `MainAxisAlignment.spaceBetween` and `SafeArea(top: false)`:
+    1. **Version Badge:** `v4.20.0` text pill with light grey border.
+    2. **WhatsApp Support:** Official WhatsApp logo + "Support" text, opening wa.me merchant support.
+    3. **Language Switcher:** Country flag + uppercase language code (e.g. `🇺🇸 EN` / `🇮🇳 HI` / `🇮🇳 MR` / `🇮🇳 GU`) + dropdown arrow.
+    4. **Logout Button:** Logout icon + "Logout" in soft red pill with confirmation dialog.
+* **Modal Sheets & Gap Removal:**
+  - `ProductsScreen` variant sheet (`_showProductVariantsSheet`) and `PosBillingScreen` variant picker (`_showVariantPicker`) wrapped in `SafeArea(top: false)` with compact padding (`20, 16, 20, 16`) to eliminate dead space and prevent navigation bar overlaps.
 * Clicking any sub-screen dismisses the modal and pushes that screen.
 
 ### 6. 💵 Cash Register (`lib/views/cash_register/cash_register_screen.dart`)

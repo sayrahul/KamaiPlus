@@ -19,7 +19,6 @@ import '../growth/growth_campaigns_screen.dart';
 import '../common/pro_upgrade_modal.dart';
 import '../auth/login_screen.dart';
 import '../../core/database/local_database.dart';
-import '../../models/models.dart';
 import '../../services/auth_service.dart';
 import '../../services/firestore_sync_service.dart';
 import '../../main.dart';
@@ -263,8 +262,6 @@ class _MenuScreenState extends State<MenuScreen> {
                 physics: const BouncingScrollPhysics(parent: AlwaysScrollableScrollPhysics()),
                 padding: const EdgeInsets.fromLTRB(14, 16, 14, 20),
                 children: [
-                  // 0. PRO / FREE MEMBERSHIP STATUS BANNER
-                  _buildProStatusBanner(),
 
                   // 1. DAILY BILLING & COUNTER (Bento Hero + Grid)
                   _buildSectionTitle('DAILY BILLING & COUNTER', subtitle: 'Fast register checkout, day history & cash till'),
@@ -900,287 +897,143 @@ class _MenuScreenState extends State<MenuScreen> {
 
   Widget _buildBottomFooter() {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: const BoxDecoration(
         color: Colors.white,
         border: Border(top: BorderSide(color: Color(0xFFE2E8F0), width: 1.1)),
       ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Row(
-            children: [
-              // WhatsApp Support Button
-              Expanded(
-                child: Material(
+      child: SafeArea(
+        top: false,
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            // 1. Version Badge
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 5),
+              decoration: BoxDecoration(
+                color: const Color(0xFFF1F5F9),
+                borderRadius: BorderRadius.circular(6),
+                border: Border.all(color: const Color(0xFFCBD5E1)),
+              ),
+              child: Text(
+                'v4.20.0',
+                style: GoogleFonts.inter(
+                  fontSize: 10.5,
+                  fontWeight: FontWeight.w600,
+                  color: const Color(0xFF64748B),
+                ),
+              ),
+            ),
+
+            // 2. WhatsApp Support Button
+            Material(
+              color: Colors.transparent,
+              child: InkWell(
+                onTap: _openWhatsAppSupport,
+                borderRadius: BorderRadius.circular(8),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFECFDF5),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: const Color(0xFFA7F3D0)),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Image.asset('assets/images/whatsapp_logo.png', width: 14, height: 14),
+                      const SizedBox(width: 4),
+                      Text(
+                        'Support',
+                        style: GoogleFonts.inter(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                          color: const Color(0xFF065F46),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+
+            // 3. Language Switcher Button (En)
+            ValueListenableBuilder<String>(
+              valueListenable: AppLanguageService.instance.currentLanguageNotifier,
+              builder: (context, langCode, _) {
+                final activeLang = AppStrings.supportedLanguages.firstWhere(
+                  (l) => l.code == langCode,
+                  orElse: () => AppStrings.supportedLanguages.first,
+                );
+                return Material(
                   color: Colors.transparent,
                   child: InkWell(
-                    onTap: _openWhatsAppSupport,
-                    borderRadius: BorderRadius.circular(10),
+                    onTap: () => LanguageSelectionModal.show(context),
+                    borderRadius: BorderRadius.circular(8),
                     child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 5),
                       decoration: BoxDecoration(
-                        color: const Color(0xFFECFDF5),
-                        borderRadius: BorderRadius.circular(10),
-                        border: Border.all(color: const Color(0xFFA7F3D0)),
+                        color: const Color(0xFFEFF6FF),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: const Color(0xFFBFDBFE)),
                       ),
                       child: Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
+                        mainAxisSize: MainAxisSize.min,
                         children: [
-                          Image.asset('assets/images/whatsapp_logo.png', width: 16, height: 16),
-                          const SizedBox(width: 6),
+                          Text(activeLang.flag, style: const TextStyle(fontSize: 12)),
+                          const SizedBox(width: 4),
                           Text(
-                            'WhatsApp Support',
+                            activeLang.code.toUpperCase(),
                             style: GoogleFonts.inter(
-                              fontSize: 12,
+                              fontSize: 11,
                               fontWeight: FontWeight.w700,
-                              color: const Color(0xFF065F46),
+                              color: const Color(0xFF1D4ED8),
                             ),
                           ),
+                          const SizedBox(width: 2),
+                          const Icon(Icons.arrow_drop_down_rounded, size: 16, color: Color(0xFF1D4ED8)),
                         ],
                       ),
                     ),
                   ),
-                ),
-              ),
-              const SizedBox(width: 10),
+                );
+              },
+            ),
 
-              // Language Switcher Button
-              ValueListenableBuilder<String>(
-                valueListenable: AppLanguageService.instance.currentLanguageNotifier,
-                builder: (context, langCode, _) {
-                  final activeLang = AppStrings.supportedLanguages.firstWhere(
-                    (l) => l.code == langCode,
-                    orElse: () => AppStrings.supportedLanguages.first,
-                  );
-                  return Material(
-                    color: Colors.transparent,
-                    child: InkWell(
-                      onTap: () => LanguageSelectionModal.show(context),
-                      borderRadius: BorderRadius.circular(10),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFEFF6FF),
-                          borderRadius: BorderRadius.circular(10),
-                          border: Border.all(color: const Color(0xFFBFDBFE)),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Text(activeLang.flag, style: const TextStyle(fontSize: 14)),
-                            const SizedBox(width: 6),
-                            Text(
-                              activeLang.nativeName,
-                              style: GoogleFonts.inter(
-                                fontSize: 12,
-                                fontWeight: FontWeight.w700,
-                                color: const Color(0xFF1D4ED8),
-                              ),
-                            ),
-                            const SizedBox(width: 4),
-                            const Icon(Icons.arrow_drop_down_rounded, size: 18, color: Color(0xFF1D4ED8)),
-                          ],
-                        ),
-                      ),
-                    ),
-                  );
-                },
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          Row(
-            children: [
-              // Version Badge
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFF8FAFC),
-                  borderRadius: BorderRadius.circular(6),
-                  border: Border.all(color: const Color(0xFFE2E8F0)),
-                ),
-                child: Text(
-                  'v4.20.0',
-                  style: GoogleFonts.inter(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w600,
-                    color: const Color(0xFF64748B),
+            // 4. Logout Button
+            Material(
+              color: Colors.transparent,
+              child: InkWell(
+                onTap: _showLogoutDialog,
+                borderRadius: BorderRadius.circular(8),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFFFF1F2),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: const Color(0xFFFECDD3)),
                   ),
-                ),
-              ),
-              const Spacer(),
-
-              // Logout Button
-              Material(
-                color: Colors.transparent,
-                child: InkWell(
-                  onTap: _showLogoutDialog,
-                  borderRadius: BorderRadius.circular(8),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFFFF1F2),
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: const Color(0xFFFECDD3)),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const Icon(Icons.logout_rounded, color: Color(0xFFE11D48), size: 14),
-                        const SizedBox(width: 5),
-                        Text(
-                          'Logout',
-                          style: GoogleFonts.inter(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w700,
-                            color: const Color(0xFFBE123C),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildProStatusBanner() {
-    return ValueListenableBuilder<bool>(
-      valueListenable: FirestoreSyncService.isProNotifier,
-      builder: (context, isProLive, _) {
-        return FutureBuilder<StoreProfileModel>(
-          future: LocalDatabase.instance.getStoreProfile(),
-          builder: (context, snapshot) {
-            final profile = snapshot.data;
-            final isPro = (profile?.isProEffective ?? false) || isProLive;
-            final expiry = profile?.proExpiry ?? '';
-
-            return GestureDetector(
-              onTap: _handleProUpgrade,
-              child: Container(
-                margin: const EdgeInsets.only(bottom: 14),
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: isPro
-                        ? const [Color(0xFF047857), Color(0xFF059669), Color(0xFF10B981)]
-                        : const [Color(0xFF0F172A), Color(0xFF1E293B)],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                  ),
-                  borderRadius: BorderRadius.circular(16),
-                  boxShadow: [
-                    BoxShadow(
-                      color: isPro
-                          ? const Color(0xFF10B981).withValues(alpha: 0.3)
-                          : Colors.black.withValues(alpha: 0.15),
-                      blurRadius: 10,
-                      offset: const Offset(0, 3),
-                    ),
-                  ],
-                ),
-                child: Row(
-                  children: [
-                    Container(
-                      width: 42,
-                      height: 42,
-                      decoration: BoxDecoration(
-                        color: isPro
-                            ? Colors.white.withValues(alpha: 0.2)
-                            : const Color(0xFFF59E0B).withValues(alpha: 0.2),
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      child: Icon(
-                        isPro ? Icons.workspace_premium_rounded : Icons.stars_rounded,
-                        color: Colors.white,
-                        size: 24,
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            children: [
-                              Flexible(
-                                child: Text(
-                                  isPro ? '👑 PRO STORE ACTIVE' : 'FREE STARTER PLAN',
-                                  style: GoogleFonts.plusJakartaSans(
-                                    fontSize: 12.5,
-                                    fontWeight: FontWeight.w900,
-                                    color: Colors.white,
-                                  ),
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              ),
-                              const SizedBox(width: 6),
-                              Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                decoration: BoxDecoration(
-                                  color: isPro ? const Color(0xFF064E3B) : const Color(0xFFF59E0B),
-                                  borderRadius: BorderRadius.circular(4),
-                                  border: Border.all(
-                                    color: isPro ? const Color(0xFF34D399) : Colors.transparent,
-                                    width: 0.8,
-                                  ),
-                                ),
-                                child: Text(
-                                  isPro ? '● ACTIVE' : 'UPGRADE',
-                                  style: GoogleFonts.jetBrainsMono(
-                                    fontSize: 8.5,
-                                    fontWeight: FontWeight.w800,
-                                    color: Colors.white,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 2),
-                          Text(
-                            isPro
-                                ? (expiry.isNotEmpty
-                                    ? 'Renews: ${expiry.substring(0, 10)} • All 16 Features Unlocked'
-                                    : 'Unlimited Lifetime VIP License')
-                                : 'Razorpay Pro Upgrade • Unlimited Bills & WhatsApp',
-                            style: GoogleFonts.inter(
-                              fontSize: 10.5,
-                              color: isPro ? const Color(0xFFD1FAE5) : const Color(0xFF94A3B8),
-                            ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                      decoration: BoxDecoration(
-                        color: isPro ? Colors.white : const Color(0xFFF59E0B),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Text(
-                        isPro ? 'Manage' : 'Upgrade',
-                        style: GoogleFonts.plusJakartaSans(
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.logout_rounded, color: Color(0xFFE11D48), size: 13),
+                      const SizedBox(width: 4),
+                      Text(
+                        'Logout',
+                        style: GoogleFonts.inter(
                           fontSize: 11,
-                          fontWeight: FontWeight.w800,
-                          color: isPro ? const Color(0xFF065F46) : const Color(0xFF0F172A),
+                          fontWeight: FontWeight.w700,
+                          color: const Color(0xFFBE123C),
                         ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
-            );
-          },
-        );
-      },
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
