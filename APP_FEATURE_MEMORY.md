@@ -1385,6 +1385,25 @@ Comprehensive enterprise-grade retail UX upgrade suite aligned with PhonePe Busi
     - **Color System & Aesthetics:** Full obsidian dark theme (`AdminColors.bgDark = #090D16`, `bgSidebar = #0D1322`, `bgCard = #141D30`, `bgElevated = #1B263E`, `borderDark = #222F4C`), vibrant emerald accents (`#10B981`), and high-contrast typography (`textWhite = #F8FAFC`, `textMuted = #94A3B8`).
     - **Instant Cache Busting:** `index.html` unregisters any stale service workers and deletes caches on page load so browsers always render the fresh live build immediately.
     - **Device Heads-Up Push Alerts:** `lib/services/firestore_sync_service.dart` listens to `_broadcastSub`. When an alert/broadcast is published from the Admin Console, it triggers `NotificationService.instance.showLocalNotification(title: title, body: newMsg)` creating a system tray status-bar drop-down notification with ringtone and vibration even when the app is in the background.
-    - **Dual-Domain Hosting Deployment:** Both `https://kamaiplus.web.app` and `https://kamaiplus-admin.web.app` configured in `firebase.json` with `Cache-Control: no-cache, no-store, must-revalidate` serving `admin_console/build/web`.
+84. **Official KamaiPlus Web Platform, Multilingual Help Center & Free Domain Architecture (LOCKED):**
+    - **Separate Domain Hosting Architecture:**
+      - **Official Landing Website:** `https://kamaiplus.web.app/` serves `website/` (Fast Vanilla HTML5/CSS3/JS, zero build step overhead, sub-second load times).
+      - **Super Admin Operations Portal:** `https://kamaiplus-admin.web.app/` serves `admin_console/build/web` (Flutter Web Dark SaaS Console).
+      - **UPI Payment Gateway Redirect:** `https://kamaiplus-pay.web.app/` serves `pay_redirect/`.
+    - **Domain Clarification:** `*.web.app` and `*.firebaseapp.com` are 100% free lifetime hosting subdomains provided by Google Firebase, featuring pre-configured HTTPS (SSL) certificates, zero annual renewal fees, and global CDN edge caching.
+    - **Interactive Web Features (`website/index.html`):**
+      - **Brand System:** Emerald Green (`#10B981`) brand matching logo, Obsidian dark SaaS foundation (`#0B0F19`), and high-contrast typography (`Plus Jakarta Sans`).
+      - **Prominent Google Play CTAs:** Direct links to official Play Store listing: `https://play.google.com/store/apps/details?id=com.kamaiplus.pos`.
+      - **Playable POS Counter Simulator:** Live billing counter widget where visitors click sample grocery items, view integer paise cart calculation, select cash tender chips, and pop up an authentic 58mm thermal receipt preview modal.
+      - **Retail ROI & Loss Prevention Calculator:** Sliders for daily bills and average basket size computing hours saved per day and shrinkage/udhar leakage prevented per month.
+      - **5 Business Vertical Showcases:** Tailored tabs for Kirana, Garments, Pharmacy, Hardware, and Cafe operations with realistic app screenshots.
+      - **Sticky Mobile Download Bar:** Fixed bottom bar on mobile screens with 1-tap Google Play install button.
+    - **Dedicated Multilingual Help & Knowledge Base (`website/help.html`):**
+      - **Bilingual English $\leftrightarrow$ Hindi Switcher:** Instant 1-click toggle between English and Hindi across all guides and placeholders with zero page reload (`localStorage` persistent).
+      - **Live Instant Search:** Instant keyword filter finding troubleshooting guides as user types.
+      - **Vertical-Differentiated Documentation:** Specific sections for loose weight calculations (Kirana), size matrix (Apparel), batch & expiry (Pharmacy), B2B tax invoices (Hardware), and KOT printing (Cafe).
+      - **Shareable Deep Anchors:** Unique permalink IDs (`#printer-setup`, `#billing-flow`, `#khata-management`, `#printer-troubleshooting`, `#vertical-workflows`) with a 1-tap "🔗 Copy Link" button for support agents to directly message merchants on WhatsApp.
+      - **Direct WhatsApp Support:** Floating button and help card redirecting to WhatsApp tech support.
+    - **Google Play Compliant Legal Pages:** Official `privacy.html` and `terms.html` with explicit disclosure of offline SQLite storage, camera permissions for barcodes, Bluetooth permissions for ESC/POS thermal printers, and zero-data-selling guarantee.
 
 

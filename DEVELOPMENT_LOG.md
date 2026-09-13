@@ -45,6 +45,39 @@ hits (the screen's data-loading call), not just the data shape. See
 drives `LocalDatabase` through a real (in-memory FFI) SQLite database and asserts on what
 `getAllProducts`/`getAllCategories` actually return.
 
+## 2026-09-13 — Official KamaiPlus Website & Multilingual Help Center Launch (`https://kamaiplus.web.app`)
+
+**User Request:**
+"https://kamaiplus.web.app/ ye link par puri profesional website create karo... highly professional, modern, interactive and conversion-focused websit, profesional niche playstore ka link hai.. website should be interactive, creative multipage, beatutiful informative website, colour matches with logo, on help pages all infomration should be cover process feature functions everythin workflow will diffrentiate with vertical business category.. aisa deidcate hlp page rahega jab bhi konsa bhi issue aaye to user ko hum vaha redirect kar sakte hai.. multilanguage support ke sath.. niche diya huva plasystore ka link dalna chahiye. aur ye bhi bata do jo ye domain he wo kya free hota hai kya?? web.app wala. iska admin panel (https://kamaiplus.web.app/) ye link me chahiye -> https://kamaiplus-admin.web.app/"
+
+**Domain Clarification:**
+`*.web.app` and `*.firebaseapp.com` are 100% free lifetime hosting subdomains provided by Google Firebase. Zero purchase cost, zero annual renewal fee, with free automated SSL (HTTPS) certificates and worldwide edge CDN caching included.
+
+**Architecture Separation:**
+- `https://kamaiplus.web.app/` $\rightarrow$ Official Multi-Page Conversion Website & Multilingual Help Center (`website/`).
+- `https://kamaiplus-admin.web.app/` $\rightarrow$ Super Admin Console (`admin_console/build/web`).
+- `https://kamaiplus-pay.web.app/` $\rightarrow$ UPI Payment Gateway Redirect (`pay_redirect/`).
+
+**Deliverables & Key Features:**
+1. **Official Landing Experience (`website/index.html`):**
+   - Brand Alignment: Styled with KamaiPlus Emerald Green (`#10B981`) and Obsidian dark theme (`#0B0F19`), matching the app logo.
+   - Prominent Google Play Store CTA buttons linking to `https://play.google.com/store/apps/details?id=com.kamaiplus.pos`.
+   - Playable POS Billing Simulator: Users can click sample items, view integer paise arithmetic, select cash tender chips, and generate a simulated 58mm thermal receipt popup modal.
+   - Retail ROI & Loss Prevention Calculator: Interactive sliders for daily counter bills and basket values estimating daily time saved and monthly shrinkage prevented.
+   - 5 Business Vertical Showcases: Dedicated tabs for Kirana, Garments, Pharmacy, Hardware, and Cafe operations with realistic app screenshots.
+   - Sticky Mobile Download Bar: Persistent bottom bar on phone viewports with 1-tap Play Store installation button.
+2. **Dedicated Multilingual Help & Knowledge Base (`website/help.html`):**
+   - Instant 1-click bilingual toggle between English and Hindi (हिंदी) across all articles without full page reload.
+   - Live search input filtering troubleshooting guides instantly as the user types.
+   - Vertical-differentiated workflows (Kirana loose items, Apparel size matrix, Pharmacy batch/expiry, Hardware B2B tax invoices, Cafe KOTs).
+   - Deep Shareable Anchors (`#printer-setup`, `#billing-flow`, `#khata-management`, `#printer-troubleshooting`, `#vertical-workflows`) with a "🔗 Copy Link" button so support agents can easily paste permalinks to retailers on WhatsApp.
+   - Direct floating WhatsApp support button.
+3. **Legal Compliance (`website/privacy.html` & `website/terms.html`):**
+   - Full disclosure of offline SQLite database, barcode camera access, and Bluetooth thermal printer pairing.
+4. **Verification & Live Deployment:**
+   - Both `kamaiplus` (`website`) and `kamaiplus-admin` (`admin_console/build/web`) deployed via `firebase deploy --only hosting`.
+   - Verified live in browser using `browser_subagent`: Home page, billing simulator, receipt modal, vertical tab switching, help center Hindi toggle, live search, and admin login on `kamaiplus-admin.web.app`.
+
 ---
 
 ## 2026-09-13 — Admin Console Complete Dark SaaS UI Overhaul, Device Push Notification Trigger, and Live Multi-Domain Deployment

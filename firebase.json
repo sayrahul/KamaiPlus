@@ -31,7 +31,8 @@
     },
     {
       "site": "kamaiplus",
-      "public": "admin_console/build/web",
+      "public": "website",
+      "cleanUrls": true,
       "ignore": [
         "firebase.json",
         "**/.*",
@@ -43,15 +44,9 @@
           "headers": [
             {
               "key": "Cache-Control",
-              "value": "no-cache, no-store, must-revalidate"
+              "value": "public, max-age=3600, s-maxage=86400"
             }
           ]
-        }
-      ],
-      "rewrites": [
-        {
-          "source": "**",
-          "destination": "/index.html"
         }
       ]
     },

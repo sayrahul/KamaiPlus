@@ -1,0 +1,784 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>KamaiPlus POS — India's #1 Offline Retail POS, Billing & Khata App</title>
+  <meta name="description" content="Supercharge your retail store with KamaiPlus. 100% offline-first billing counter, instant barcode scanning, 0.8s thermal printing, digital khata & GST invoices for Kirana, Garments, Pharmacy, Hardware & Cafes.">
+  <meta name="keywords" content="POS App, Retail Billing Software, Kirana POS, Offline Billing Machine, Thermal Printer POS, Android POS App, Digital Khata, GST Billing App India">
+  <link rel="icon" type="image/png" href="assets/favicon.png">
+
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+  <!-- ==========================================================================
+       Header / Navigation Bar
+       ========================================================================== -->
+  <header class="site-header">
+    <div class="container header-inner">
+      <a href="index.html" class="brand-logo">
+        <img src="assets/logo.png" alt="KamaiPlus Logo">
+        <span>Kamai<span style="color: var(--primary);">Plus</span></span>
+        <span class="brand-badge">Retail POS</span>
+      </a>
+
+      <nav class="nav-links">
+        <a href="#features" class="nav-link">Features</a>
+        <a href="#simulator" class="nav-link">Live Demo</a>
+        <a href="#verticals" class="nav-link">Business Verticals</a>
+        <a href="#roi-calculator" class="nav-link">ROI Calculator</a>
+        <a href="#pricing" class="nav-link">Pricing</a>
+        <a href="help.html" class="nav-link">Help & Docs</a>
+      </nav>
+
+      <div class="header-actions">
+        <a href="https://kamaiplus-admin.web.app/" target="_blank" rel="noopener noreferrer" class="btn-admin-link">Admin Portal ↗</a>
+        <a href="https://play.google.com/store/apps/details?id=com.kamaiplus.pos" target="_blank" rel="noopener noreferrer" class="btn-playstore-nav">
+          <svg class="play-icon-svg" style="width: 18px; height: 18px;" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M3.609 1.814L13.793 12 3.61 22.186c-.23-.197-.373-.497-.373-.847V2.661c0-.35.143-.65.372-.847zM15.207 13.414l2.793-2.793-12.72-7.22 9.927 10.013zm0-2.828L5.28 20.599l12.72-7.22-2.793-2.793zm1.414-1.414l3.197 1.815c.667.378.667.994 0 1.372l-3.197 1.815-2.227-2.227 2.227-2.227z"/>
+          </svg>
+          <span>Download App</span>
+        </a>
+        <button class="mobile-menu-btn" id="mobile-menu-btn" aria-label="Toggle Navigation">☰</button>
+      </div>
+    </div>
+
+    <!-- Mobile Navigation Drawer -->
+    <div class="mobile-nav-drawer" id="mobile-nav-drawer">
+      <a href="#features" class="nav-link">Features</a>
+      <a href="#simulator" class="nav-link">Live Demo</a>
+      <a href="#verticals" class="nav-link">Business Verticals</a>
+      <a href="#roi-calculator" class="nav-link">ROI Calculator</a>
+      <a href="#pricing" class="nav-link">Pricing</a>
+      <a href="help.html" class="nav-link">Help & Docs</a>
+      <a href="https://kamaiplus-admin.web.app/" target="_blank" class="nav-link" style="color: var(--primary-light);">Super Admin Console ↗</a>
+    </div>
+  </header>
+
+  <!-- ==========================================================================
+       Hero Section
+       ========================================================================== -->
+  <section class="hero-section">
+    <div class="hero-glow"></div>
+    <div class="container hero-grid">
+      <div class="hero-content">
+        <div class="hero-pill">
+          <span>⚡</span>
+          <span>100% Offline-First SQLite • 0% Cloud Lag</span>
+        </div>
+        <h1 class="hero-title">
+          India's Fastest <span class="highlight-green">Retail POS & Billing</span> App
+        </h1>
+        <p class="hero-subtitle">
+          Designed for Kirana stores, apparel, medical shops & cafes. Fast counter billing, instant barcode scanning, 0.8s thermal printing, and automated WhatsApp khata reminders — fully functional without internet.
+        </p>
+
+        <div class="hero-cta-group">
+          <a href="https://play.google.com/store/apps/details?id=com.kamaiplus.pos" target="_blank" rel="noopener noreferrer" class="btn-playstore-hero">
+            <svg class="play-icon-svg" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M3.609 1.814L13.793 12 3.61 22.186c-.23-.197-.373-.497-.373-.847V2.661c0-.35.143-.65.372-.847zM15.207 13.414l2.793-2.793-12.72-7.22 9.927 10.013zm0-2.828L5.28 20.599l12.72-7.22-2.793-2.793zm1.414-1.414l3.197 1.815c.667.378.667.994 0 1.372l-3.197 1.815-2.227-2.227 2.227-2.227z"/>
+            </svg>
+            <div>
+              <span class="btn-text-small">GET IT ON</span>
+              <span class="btn-text-large">Google Play</span>
+            </div>
+          </a>
+
+          <a href="#simulator" class="btn-demo-hero">
+            <span>🎮 Try Interactive Demo</span>
+          </a>
+        </div>
+
+        <div class="hero-stats-row">
+          <div class="hero-stat-item">
+            <span class="hero-stat-num">0.8 sec</span>
+            <span class="hero-stat-label">Fastest Bill Print</span>
+          </div>
+          <div class="hero-stat-item">
+            <span class="hero-stat-num">100%</span>
+            <span class="hero-stat-label">Offline Billing Ready</span>
+          </div>
+          <div class="hero-stat-item">
+            <span class="hero-stat-num">4.8 ★</span>
+            <span class="hero-stat-label">Top Merchant Rating</span>
+          </div>
+          <div class="hero-stat-item">
+            <span class="hero-stat-num">₹0</span>
+            <span class="hero-stat-label">Zero Monthly Setup Fee</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="hero-mockup-wrap">
+        <div class="mockup-frame">
+          <img src="assets/screenshots/pos_billing.png" alt="KamaiPlus POS Billing Screen Mockup">
+          
+          <div class="floating-badge badge-top-right">
+            <div class="badge-icon">🖨️</div>
+            <div>
+              <div class="badge-text-title">Thermal Printer Connected</div>
+              <div class="badge-text-sub">Bluetooth 58mm / 80mm</div>
+            </div>
+          </div>
+
+          <div class="floating-badge badge-bottom-left">
+            <div class="badge-icon">💬</div>
+            <div>
+              <div class="badge-text-title">₹1,240 Udhar Reminder</div>
+              <div class="badge-text-sub">Sent via WhatsApp 1-Tap</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ==========================================================================
+       Interactive POS Billing Simulator (Experience Billing Live)
+       ========================================================================== -->
+  <section class="simulator-section" id="simulator">
+    <div class="container">
+      <div class="section-header">
+        <span class="section-pill">Interactive Counter Experience</span>
+        <h2 class="section-title">Try Billing Before You Download</h2>
+        <p class="section-desc">Experience the speed of KamaiPlus right in your browser. Tap products, adjust quantities, select cash chips, and generate a simulated 58mm thermal receipt.</p>
+      </div>
+
+      <div class="simulator-box">
+        <!-- Products Panel -->
+        <div class="sim-products-panel">
+          <div class="sim-panel-title">
+            <h3><span>🛒</span> Tap Products to Add to Bill</h3>
+            <span style="font-size: 0.82rem; color: var(--primary-light); font-weight: 600;">⚡ Instant 0.01s Cart Update</span>
+          </div>
+
+          <div class="sim-products-grid" id="sim-products-grid">
+            <!-- Populated dynamically by main.js -->
+          </div>
+
+          <div class="sim-barcode-box">
+            <span style="font-size: 1.2rem;">📷</span>
+            <input type="text" class="sim-barcode-input" id="sim-barcode-input" placeholder="Scan or type barcode (e.g. 8901030382941)...">
+            <button class="sim-barcode-btn" id="sim-barcode-btn">Scan Item</button>
+          </div>
+        </div>
+
+        <!-- Cart & Checkout Panel -->
+        <div class="sim-cart-panel">
+          <div class="sim-cart-header">
+            <h4 style="font-size: 1.15rem; font-weight: 800; color: #FFFFFF;">Current Bill</h4>
+            <span id="sim-cart-count" style="font-size: 0.85rem; color: var(--primary-light); font-weight: 700;">2 items</span>
+          </div>
+
+          <div class="sim-cart-items-list" id="sim-cart-list">
+            <!-- Items rendered by main.js -->
+          </div>
+
+          <!-- Cash Tender Chips -->
+          <div>
+            <span style="font-size: 0.78rem; font-weight: 700; color: #94A3B8; text-transform: uppercase; margin-bottom: 6px; display: block;">Customer Cash Tender:</span>
+            <div class="sim-tender-chips">
+              <span class="sim-chip active" data-val="exact">Exact</span>
+              <span class="sim-chip" data-val="100">₹100</span>
+              <span class="sim-chip" data-val="200">₹200</span>
+              <span class="sim-chip" data-val="500">₹500</span>
+              <span class="sim-chip" data-val="2000">₹2000</span>
+              <span class="sim-chip" data-val="upi">UPI QR</span>
+            </div>
+          </div>
+
+          <div class="sim-total-breakdown">
+            <div class="sim-breakdown-row">
+              <span>Subtotal:</span>
+              <span id="sim-subtotal-val">₹322.00</span>
+            </div>
+            <div class="sim-breakdown-row">
+              <span>Estimated Tax (5% GST):</span>
+              <span id="sim-tax-val">₹16.10</span>
+            </div>
+            <div class="sim-breakdown-row" id="sim-change-row" style="display: none; color: #34D399; font-weight: bold;">
+              <span>Change to Return:</span>
+              <span id="sim-change-val">₹0.00</span>
+            </div>
+            <div class="sim-breakdown-row sim-breakdown-total">
+              <span>Grand Total:</span>
+              <span id="sim-total-val" style="color: var(--primary);">₹338.10</span>
+            </div>
+          </div>
+
+          <button class="sim-btn-checkout" id="sim-checkout-btn">
+            <span>🖨️ Print Simulated Bill (0.8s)</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ==========================================================================
+       5 Business Verticals Deep-Dive
+       ========================================================================== -->
+  <section class="verticals-section" id="verticals">
+    <div class="container">
+      <div class="section-header">
+        <span class="section-pill">Customized Retail Architecture</span>
+        <h2 class="section-title">Built for Your Exact Retail Vertical</h2>
+        <p class="section-desc">KamaiPlus automatically adapts its workflow, inventory schema, and invoice layout to match your specific retail business category.</p>
+      </div>
+
+      <!-- Vertical Tabs Navigation -->
+      <div class="vertical-tabs-nav">
+        <button class="v-tab-btn active" data-tab="kirana">🛒 Kirana & Supermarket</button>
+        <button class="v-tab-btn" data-tab="apparel">👗 Garments & Apparel</button>
+        <button class="v-tab-btn" data-tab="pharmacy">💊 Pharmacy & Medical</button>
+        <button class="v-tab-btn" data-tab="hardware">🔧 Hardware & Electrical</button>
+        <button class="v-tab-btn" data-tab="cafe">☕ Cafe & Dine-in</button>
+      </div>
+
+      <!-- Tab 1: Kirana -->
+      <div class="v-tab-content active" id="v-tab-kirana">
+        <div class="v-info-col">
+          <h3 style="font-size: 1.8rem; margin-bottom: 0.75rem;">Kirana, Grocery & Provision Stores</h3>
+          <p>Tackle rush hours effortlessly with lightning-fast loose weight pricing, instant packaged barcode lookup, and digital udhar khata management.</p>
+          <ul class="v-feature-list">
+            <li class="v-feature-item">
+              <span class="v-check-icon">✓</span>
+              <div class="v-feature-text">
+                <h4>Loose Grain & Pulse Weight Calculator</h4>
+                <p>Sell 250g, 500g, 1.25kg with automatic price calculation down to the exact paisa.</p>
+              </div>
+            </li>
+            <li class="v-feature-item">
+              <span class="v-check-icon">✓</span>
+              <div class="v-feature-text">
+                <h4>Packaged FMCG Barcode Inward</h4>
+                <p>Scan soaps, biscuits, spices, and pulses with phone camera or handheld Bluetooth laser scanner.</p>
+              </div>
+            </li>
+            <li class="v-feature-item">
+              <span class="v-check-icon">✓</span>
+              <div class="v-feature-text">
+                <h4>Digital Udhar & Daily Khata Ledger</h4>
+                <p>Record customer credits and send automatic WhatsApp balance reminders with UPI payment links.</p>
+              </div>
+            </li>
+          </ul>
+        </div>
+        <div class="v-preview-card">
+          <img src="assets/screenshots/inventory.png" alt="Kirana Inventory & Billing Workflow">
+        </div>
+      </div>
+
+      <!-- Tab 2: Apparel -->
+      <div class="v-tab-content" id="v-tab-apparel">
+        <div class="v-info-col">
+          <h3 style="font-size: 1.8rem; margin-bottom: 0.75rem;">Garments, Footwear & Fashion Stores</h3>
+          <p>Manage size and color matrix variations, print custom barcode stickers, and handle customer exchanges seamlessly.</p>
+          <ul class="v-feature-list">
+            <li class="v-feature-item">
+              <span class="v-check-icon">✓</span>
+              <div class="v-feature-text">
+                <h4>Size & Color Variation Matrix</h4>
+                <p>Track S, M, L, XL, XXL, and color variations under a single master style code.</p>
+              </div>
+            </li>
+            <li class="v-feature-item">
+              <span class="v-check-icon">✓</span>
+              <div class="v-feature-text">
+                <h4>Custom Barcode Tag Generation</h4>
+                <p>Generate and print adhesive barcode price tags with MRP and discount labels.</p>
+              </div>
+            </li>
+            <li class="v-feature-item">
+              <span class="v-check-icon">✓</span>
+              <div class="v-feature-text">
+                <h4>Easy Exchange & Credit Notes</h4>
+                <p>Process sizing exchanges and customer store credit notes in under 10 seconds.</p>
+              </div>
+            </li>
+          </ul>
+        </div>
+        <div class="v-preview-card">
+          <img src="assets/screenshots/barcode_scan.png" alt="Apparel Size Variant & Barcode Tagging">
+        </div>
+      </div>
+
+      <!-- Tab 3: Pharmacy -->
+      <div class="v-tab-content" id="v-tab-pharmacy">
+        <div class="v-info-col">
+          <h3 style="font-size: 1.8rem; margin-bottom: 0.75rem;">Pharmacy, Chemists & Medical Stores</h3>
+          <p>Never sell expired medicine again. Maintain strict batch-wise inventory, doctor reference tags, and schedule drug compliance.</p>
+          <ul class="v-feature-list">
+            <li class="v-feature-item">
+              <span class="v-check-icon">✓</span>
+              <div class="v-feature-text">
+                <h4>Batch Number & Expiry Date Tracking</h4>
+                <p>Instant color alerts when inventory approaches 30/60/90 days to expiry date.</p>
+              </div>
+            </li>
+            <li class="v-feature-item">
+              <span class="v-check-icon">✓</span>
+              <div class="v-feature-text">
+                <h4>Strip vs Tablet Split Billing</h4>
+                <p>Sell individual tablets or whole blisters with auto-adjusted inventory units.</p>
+              </div>
+            </li>
+            <li class="v-feature-item">
+              <span class="v-check-icon">✓</span>
+              <div class="v-feature-text">
+                <h4>Prescription & Doctor Tagging</h4>
+                <p>Tag referring doctors and maintain patient medication history for quick refills.</p>
+              </div>
+            </li>
+          </ul>
+        </div>
+        <div class="v-preview-card">
+          <img src="assets/screenshots/receipt_print.png" alt="Medical Batch & Expiry POS Workflow">
+        </div>
+      </div>
+
+      <!-- Tab 4: Hardware -->
+      <div class="v-tab-content" id="v-tab-hardware">
+        <div class="v-info-col">
+          <h3 style="font-size: 1.8rem; margin-bottom: 0.75rem;">Hardware, Electricals & Sanitary Ware</h3>
+          <p>Handle complex B2B and B2C sales with multiple unit measurements (pieces, meters, bundles, boxes) and B2B GST tax invoices.</p>
+          <ul class="v-feature-list">
+            <li class="v-feature-item">
+              <span class="v-check-icon">✓</span>
+              <div class="v-feature-text">
+                <h4>Multi-Unit Packaging & Conversion</h4>
+                <p>Sell pipes by meter, wire bundles by roll, or screws by kilogram and packet.</p>
+              </div>
+            </li>
+            <li class="v-feature-item">
+              <span class="v-check-icon">✓</span>
+              <div class="v-feature-text">
+                <h4>Contractor & Plumber Credit Ledgers</h4>
+                <p>Maintain contractor running khata balances and settle payments milestone by milestone.</p>
+              </div>
+            </li>
+            <li class="v-feature-item">
+              <span class="v-check-icon">✓</span>
+              <div class="v-feature-text">
+                <h4>B2B GST Tax Invoices & E-Way Ready</h4>
+                <p>Generate formal tax invoices with HSN codes, CGST, SGST, IGST, and customer GSTIN.</p>
+              </div>
+            </li>
+          </ul>
+        </div>
+        <div class="v-preview-card">
+          <img src="assets/screenshots/khata_ledger.png" alt="Hardware Multi-Unit & Khata Ledger">
+        </div>
+      </div>
+
+      <!-- Tab 5: Cafe -->
+      <div class="v-tab-content" id="v-tab-cafe">
+        <div class="v-info-col">
+          <h3 style="font-size: 1.8rem; margin-bottom: 0.75rem;">Cafes, Quick Service & Bakeries</h3>
+          <p>Accelerate counter queues with 1-tap fast keys, instant Kitchen Order Ticket (KOT) printing, and quick UPI QR code billing.</p>
+          <ul class="v-feature-list">
+            <li class="v-feature-item">
+              <span class="v-check-icon">✓</span>
+              <div class="v-feature-text">
+                <h4>1-Tap Quick Menu Keys</h4>
+                <p>Preset popular items (Chai, Coffee, Samosa, Burger) for instant 1-touch checkout.</p>
+              </div>
+            </li>
+            <li class="v-feature-item">
+              <span class="v-check-icon">✓</span>
+              <div class="v-feature-text">
+                <h4>Split KOT & Receipt Printing</h4>
+                <p>Send KOT to the kitchen printer while handing the thermal receipt to the customer.</p>
+              </div>
+            </li>
+            <li class="v-feature-item">
+              <span class="v-check-icon">✓</span>
+              <div class="v-feature-text">
+                <h4>Instant Dynamic UPI QR Codes</h4>
+                <p>Display exact amount UPI QR directly on the bill for error-free scan & pay.</p>
+              </div>
+            </li>
+          </ul>
+        </div>
+        <div class="v-preview-card">
+          <img src="assets/screenshots/reports_analytics.png" alt="Cafe KOT & Fast Bill Checkout">
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ==========================================================================
+       ROI & Retail Loss Prevention Calculator
+       ========================================================================== -->
+  <section class="roi-section" id="roi-calculator">
+    <div class="container">
+      <div class="roi-box">
+        <div class="roi-controls-col">
+          <span class="section-pill">Profitability Calculator</span>
+          <h2 style="font-size: 2.2rem; margin-bottom: 1rem;">See How Much Time & Money You Save</h2>
+          <p style="margin-bottom: 2rem;">Unorganized paper billing leads to billing errors, long counter queues, and lost udhar. Move the sliders to calculate your monthly recovery.</p>
+
+          <div class="roi-slider-group">
+            <div class="roi-label-row">
+              <span>Daily Counter Bills:</span>
+              <span class="roi-val-badge" id="roi-bills-val">120 bills/day</span>
+            </div>
+            <input type="range" class="roi-range-input" id="roi-bills-slider" min="20" max="500" step="10" value="120">
+          </div>
+
+          <div class="roi-slider-group">
+            <div class="roi-label-row">
+              <span>Average Bill Amount:</span>
+              <span class="roi-val-badge" id="roi-basket-val">₹350</span>
+            </div>
+            <input type="range" class="roi-range-input" id="roi-basket-slider" min="50" max="2500" step="50" value="350">
+          </div>
+        </div>
+
+        <div class="roi-results-card">
+          <div class="roi-res-item">
+            <div class="roi-res-title">Counter Billing Time Saved</div>
+            <div class="roi-res-val" id="roi-hours-saved" style="color: var(--primary);">2.5 hrs / day</div>
+            <p style="font-size: 0.82rem; margin-top: 4px;">Zero customer drop-offs due to fast queue clearing.</p>
+          </div>
+
+          <div class="roi-res-item">
+            <div class="roi-res-title">Inventory & Billing Leakage Prevented</div>
+            <div class="roi-res-val" id="roi-loss-prevented" style="color: #38BDF8;">₹35,280 / mo</div>
+            <p style="font-size: 0.82rem; margin-top: 4px;">Eliminating miscalculations, price confusion & pilferage.</p>
+          </div>
+
+          <div class="roi-res-item">
+            <div class="roi-res-title">Estimated Monthly Business Volume</div>
+            <div class="roi-res-val" id="roi-monthly-rev" style="color: #FFFFFF;">₹12,60,000</div>
+            <p style="font-size: 0.82rem; margin-top: 4px;">100% recorded with Integer Paise financial precision.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ==========================================================================
+       Core Features Grid
+       ========================================================================== -->
+  <section class="features-section" id="features">
+    <div class="container">
+      <div class="section-header">
+        <span class="section-pill">Enterprise Capabilities</span>
+        <h2 class="section-title">Everything Your Counter Needs to Scale</h2>
+        <p class="section-desc">Engineered for intense retail environments with high-traffic footfalls and offline reliability.</p>
+      </div>
+
+      <div class="features-grid">
+        <div class="feature-card">
+          <div class="feature-icon-wrap">⚡</div>
+          <h3>100% Offline SQLite Core</h3>
+          <p>Never let bad internet pause your billing counter. Local SQLite database processes bills in &lt;10 milliseconds, guaranteed.</p>
+        </div>
+
+        <div class="feature-card">
+          <div class="feature-icon-wrap">🖨️</div>
+          <h3>Thermal Receipt Printing</h3>
+          <p>Direct ESC/POS driver support for 58mm and 80mm Bluetooth & USB printers. Prints clean bills with your store logo in 0.8s.</p>
+        </div>
+
+        <div class="feature-card">
+          <div class="feature-icon-wrap">📷</div>
+          <h3>Instant Barcode Scanning</h3>
+          <p>Use your phone's camera as a high-speed scanner or pair with any 1D/2D wireless handheld barcode gun.</p>
+        </div>
+
+        <div class="feature-card">
+          <div class="feature-icon-wrap">📖</div>
+          <h3>Khata & WhatsApp Reminders</h3>
+          <p>Track customer credit balances down to the paisa. Send friendly 1-tap WhatsApp payment reminders with UPI QR links.</p>
+        </div>
+
+        <div class="feature-card">
+          <div class="feature-icon-wrap">📑</div>
+          <h3>GST-Ready Tax Invoices</h3>
+          <p>Generate B2B and B2C invoices with HSN/SAC codes, CGST, SGST, IGST tax breakdown, and professional PDF sharing.</p>
+        </div>
+
+        <div class="feature-card">
+          <div class="feature-icon-wrap">☁️</div>
+          <h3>Automatic Cloud Backup</h3>
+          <p>Whenever Wi-Fi or mobile data is detected, KamaiPlus encrypts and backs up your store data to Firebase Cloud automatically.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ==========================================================================
+       App Showcase Screenshots
+       ========================================================================== -->
+  <section class="showcase-section">
+    <div class="container">
+      <div class="section-header">
+        <span class="section-pill">High-Speed Interface</span>
+        <h2 class="section-title">Designed for Fast Retail Counters</h2>
+        <p class="section-desc">Clean, high-contrast, professional mobile UI built for zero eye strain during 12-hour counter shifts.</p>
+      </div>
+
+      <div class="screenshots-row">
+        <div class="screen-card">
+          <img src="assets/screenshots/pos_billing.png" alt="POS Counter Billing Screen">
+          <div class="screen-caption">1-Tap POS Billing</div>
+        </div>
+        <div class="screen-card">
+          <img src="assets/screenshots/inventory.png" alt="Product & Inventory Management">
+          <div class="screen-caption">Live Stock & Barcodes</div>
+        </div>
+        <div class="screen-card">
+          <img src="assets/screenshots/khata_ledger.png" alt="Digital Khata Ledger Screen">
+          <div class="screen-caption">Digital Khata Ledger</div>
+        </div>
+        <div class="screen-card">
+          <img src="assets/screenshots/reports_analytics.png" alt="Sales Reports & Business Pulse">
+          <div class="screen-caption">Sales Analytics & GST</div>
+        </div>
+        <div class="screen-card">
+          <img src="assets/screenshots/receipt_print.png" alt="Thermal Receipt Preview">
+          <div class="screen-caption">58mm Receipt Print</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ==========================================================================
+       Transparent Pricing
+       ========================================================================== -->
+  <section class="pricing-section" id="pricing">
+    <div class="container">
+      <div class="section-header">
+        <span class="section-pill">Transparent & Fair</span>
+        <h2 class="section-title">Zero Hidden Setup Fees</h2>
+        <p class="section-desc">Start 100% free with core billing. Upgrade only when you want multi-counter cloud sync and remote reporting.</p>
+      </div>
+
+      <div class="pricing-grid">
+        <div class="pricing-card">
+          <div class="pricing-header">
+            <h3>Standard Retail</h3>
+            <p>Perfect for individual shopkeepers & single-counter stores.</p>
+          </div>
+          <div class="pricing-price">₹0 <span>/ forever</span></div>
+          <ul class="pricing-features-list">
+            <li><span>✓</span> Unlimited Counter Bills</li>
+            <li><span>✓</span> 100% Offline SQLite Core</li>
+            <li><span>✓</span> Bluetooth Thermal Printer Support</li>
+            <li><span>✓</span> Digital Customer Khata Ledger</li>
+            <li><span>✓</span> WhatsApp Balance Reminders</li>
+            <li><span>✓</span> Basic Daily Sales Reports</li>
+          </ul>
+          <a href="https://play.google.com/store/apps/details?id=com.kamaiplus.pos" target="_blank" class="btn-demo-hero" style="width: 100%; justify-content: center;">
+            Download Free App
+          </a>
+        </div>
+
+        <div class="pricing-card featured">
+          <span class="pricing-badge">Recommended</span>
+          <div class="pricing-header">
+            <h3>Enterprise Pro</h3>
+            <p>For high-volume retail stores needing cloud sync and super admin.</p>
+          </div>
+          <div class="pricing-price">₹199 <span>/ month</span></div>
+          <ul class="pricing-features-list">
+            <li><span>✓</span> Everything in Standard Free</li>
+            <li><span>✓</span> Automatic Background Cloud Backup</li>
+            <li><span>✓</span> Remote Super Admin Analytics Portal</li>
+            <li><span>✓</span> Full B2B GST Invoicing & HSN Reports</li>
+            <li><span>✓</span> Inactive Customer Retention Radar</li>
+            <li><span>✓</span> Priority WhatsApp Tech Support</li>
+          </ul>
+          <a href="https://play.google.com/store/apps/details?id=com.kamaiplus.pos" target="_blank" class="sim-btn-checkout" style="text-decoration: none;">
+            Start 14-Day Free Trial
+          </a>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ==========================================================================
+       Frequently Asked Questions (FAQ)
+       ========================================================================== -->
+  <section class="faq-section">
+    <div class="container">
+      <div class="section-header">
+        <span class="section-pill">Got Questions?</span>
+        <h2 class="section-title">Frequently Asked Questions</h2>
+        <p class="section-desc">Everything shopkeepers ask about hardware, offline data, and printer compatibility.</p>
+      </div>
+
+      <div class="faq-accordion">
+        <div class="faq-item active">
+          <div class="faq-question">
+            <span>Does KamaiPlus work when there is no internet connection?</span>
+            <span class="faq-icon">+</span>
+          </div>
+          <div class="faq-answer">
+            Yes! KamaiPlus is built with a local-first SQLite database architecture. Your items, prices, barcodes, customer khata, and billing counter function at 100% speed even if your shop has zero cellular network or Wi-Fi. When internet becomes available, data syncs safely to the cloud in the background.
+          </div>
+        </div>
+
+        <div class="faq-item">
+          <div class="faq-question">
+            <span>Which thermal printers are compatible with KamaiPlus?</span>
+            <span class="faq-icon">+</span>
+          </div>
+          <div class="faq-answer">
+            KamaiPlus supports all standard 58mm (2-inch) and 80mm (3-inch) Bluetooth, USB, and Wi-Fi ESC/POS thermal printers (such as Everycom, NGX, POSIFLEX, Rugtek, TVS, Epson, and generic Bluetooth printers from Amazon).
+          </div>
+        </div>
+
+        <div class="faq-item">
+          <div class="faq-question">
+            <span>How does KamaiPlus prevent billing calculation errors?</span>
+            <span class="faq-icon">+</span>
+          </div>
+          <div class="faq-answer">
+            Unlike other billing software that uses floating-point math (which causes rounding discrepancies like ₹0.10 or ₹0.20), KamaiPlus uses strict Integer Paise accounting (1 Rupee = 100 Paise). Every discount, tax, subtotal, and customer balance is exact to the nearest paisa.
+          </div>
+        </div>
+
+        <div class="faq-item">
+          <div class="faq-question">
+            <span>What happens if I change or lose my phone?</span>
+            <span class="faq-icon">+</span>
+          </div>
+          <div class="faq-answer">
+            Your data is continuously encrypted and backed up to Google Firebase Cloud. Whenever you install KamaiPlus on a new phone and sign in with your verified phone number, your entire product catalogue, khata balances, and past bills restore automatically in seconds.
+          </div>
+        </div>
+
+        <div class="faq-item">
+          <div class="faq-question">
+            <span>Where can I find step-by-step help and guides?</span>
+            <span class="faq-icon">+</span>
+          </div>
+          <div class="faq-answer">
+            Visit our dedicated <a href="help.html" style="color: var(--primary-light); text-decoration: underline;">KamaiPlus Help & Documentation Center</a>. It contains step-by-step guides with deep permalinks for printer setup, barcode scanning, vertical workflows, and bilingual (English/Hindi) support.
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ==========================================================================
+       CTA Banner
+       ========================================================================== -->
+  <section class="cta-banner-section">
+    <div class="container">
+      <div class="cta-banner-card">
+        <h2>Transform Your Retail Counter Today</h2>
+        <p>Join thousands of smart retailers across India who speed up counter billing, eliminate stock leakage, and recover udhar faster with KamaiPlus.</p>
+        <a href="https://play.google.com/store/apps/details?id=com.kamaiplus.pos" target="_blank" rel="noopener noreferrer" class="btn-playstore-hero" style="background: #000000; border-color: #000000; display: inline-flex;">
+          <svg class="play-icon-svg" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M3.609 1.814L13.793 12 3.61 22.186c-.23-.197-.373-.497-.373-.847V2.661c0-.35.143-.65.372-.847zM15.207 13.414l2.793-2.793-12.72-7.22 9.927 10.013zm0-2.828L5.28 20.599l12.72-7.22-2.793-2.793zm1.414-1.414l3.197 1.815c.667.378.667.994 0 1.372l-3.197 1.815-2.227-2.227 2.227-2.227z"/>
+          </svg>
+          <div>
+            <span class="btn-text-small">DOWNLOAD FREE ON</span>
+            <span class="btn-text-large">Google Play Store</span>
+          </div>
+        </a>
+      </div>
+    </div>
+  </section>
+
+  <!-- ==========================================================================
+       Footer
+       ========================================================================== -->
+  <footer class="site-footer">
+    <div class="container footer-grid">
+      <div class="footer-brand">
+        <div class="brand-logo">
+          <img src="assets/logo.png" alt="KamaiPlus Logo">
+          <span>Kamai<span style="color: var(--primary);">Plus</span></span>
+        </div>
+        <p>India's fastest offline-first retail POS & digital khata application, empowering retailers across Bharat with lightning-fast counter operations.</p>
+      </div>
+
+      <div class="footer-col">
+        <h4>Product & Features</h4>
+        <ul class="footer-links">
+          <li><a href="#features">POS Counter Billing</a></li>
+          <li><a href="#features">Bluetooth Thermal Printing</a></li>
+          <li><a href="#features">Inventory & Barcodes</a></li>
+          <li><a href="#features">Digital Udhar Khata</a></li>
+          <li><a href="#features">GST Tax Invoices</a></li>
+          <li><a href="#roi-calculator">ROI & Savings Calculator</a></li>
+        </ul>
+      </div>
+
+      <div class="footer-col">
+        <h4>Retail Verticals</h4>
+        <ul class="footer-links">
+          <li><a href="#verticals">Kirana & Supermarkets</a></li>
+          <li><a href="#verticals">Garments & Footwear</a></li>
+          <li><a href="#verticals">Pharmacy & Healthcare</a></li>
+          <li><a href="#verticals">Hardware & Electricals</a></li>
+          <li><a href="#verticals">Cafes & Restaurants</a></li>
+        </ul>
+      </div>
+
+      <div class="footer-col">
+        <h4>Support & Portals</h4>
+        <ul class="footer-links">
+          <li><a href="help.html">Help & Documentation Center</a></li>
+          <li><a href="help.html#printer-setup">Printer Setup Guide</a></li>
+          <li><a href="https://kamaiplus-admin.web.app/" target="_blank">Super Admin Console ↗</a></li>
+          <li><a href="privacy.html">Privacy Policy</a></li>
+          <li><a href="terms.html">Terms of Service</a></li>
+          <li><a href="https://play.google.com/store/apps/details?id=com.kamaiplus.pos" target="_blank" style="color: var(--primary-light); font-weight: bold;">Google Play Store ↗</a></li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="container footer-bottom">
+      <div>© 2026 KamaiPlus (com.kamaiplus.pos). All rights reserved. Built for Bharat Retailers.</div>
+      <div>
+        <a href="privacy.html" style="margin-right: 1.5rem;">Privacy</a>
+        <a href="terms.html" style="margin-right: 1.5rem;">Terms</a>
+        <a href="help.html">Help Desk</a>
+      </div>
+    </div>
+  </footer>
+
+  <!-- Sticky Mobile Download Bar (Visible on mobile viewports) -->
+  <div class="mobile-sticky-bar">
+    <div class="mobile-sticky-inner">
+      <div class="sticky-app-info">
+        <img src="assets/logo.png" alt="KamaiPlus App Icon">
+        <div>
+          <div class="sticky-text-title">KamaiPlus POS</div>
+          <div class="sticky-text-sub">Free Retail Billing App</div>
+        </div>
+      </div>
+      <a href="https://play.google.com/store/apps/details?id=com.kamaiplus.pos" target="_blank" class="btn-sticky-download">
+        Install Now
+      </a>
+    </div>
+  </div>
+
+  <!-- Simulated Receipt Modal -->
+  <div class="modal-overlay" id="receipt-modal">
+    <div class="receipt-modal-box">
+      <button class="receipt-close-btn" id="receipt-close-btn">&times;</button>
+      <div id="receipt-modal-content"></div>
+    </div>
+  </div>
+
+  <!-- WhatsApp Floating Support Button -->
+  <a href="https://wa.me/919999999999?text=Hello%20KamaiPlus%20Team%2C%20I%20need%20assistance%20with%20my%20store%20setup" target="_blank" rel="noopener noreferrer" class="whatsapp-float-btn" title="Chat with KamaiPlus Support on WhatsApp">
+    <img src="assets/whatsapp.png" alt="WhatsApp" class="whatsapp-icon">
+    <span>Need Help?</span>
+  </a>
+
+  <script src="js/main.js"></script>
+</body>
+</html>

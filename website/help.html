@@ -1,0 +1,395 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>KamaiPlus Help & Documentation Center — Retail Guides & Troubleshooting</title>
+  <meta name="description" content="Official KamaiPlus Help Center. Step-by-step guides for billing, thermal printer setup, barcode scanning, digital khata, and vertical-specific workflows for Kirana, Garments, Pharmacy, Hardware and Cafes.">
+  <link rel="icon" type="image/png" href="assets/favicon.png">
+
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+  <!-- ==========================================================================
+       Header / Navigation Bar
+       ========================================================================== -->
+  <header class="site-header">
+    <div class="container header-inner">
+      <a href="index.html" class="brand-logo">
+        <img src="assets/logo.png" alt="KamaiPlus Logo">
+        <span>Kamai<span style="color: var(--primary);">Plus</span></span>
+        <span class="brand-badge" data-en="Help Center" data-hi="सहायता केंद्र">Help Center</span>
+      </a>
+
+      <nav class="nav-links">
+        <a href="index.html" class="nav-link" data-en="Home" data-hi="होम">Home</a>
+        <a href="index.html#features" class="nav-link" data-en="Features" data-hi="सुविधाएं">Features</a>
+        <a href="index.html#verticals" class="nav-link" data-en="Verticals" data-hi="व्यापार श्रेणियां">Verticals</a>
+        <a href="help.html" class="nav-link active" data-en="Help & Guides" data-hi="गाइड और सहायता">Help & Guides</a>
+      </nav>
+
+      <div class="header-actions">
+        <!-- Language Switcher Button -->
+        <button class="btn-lang-toggle" title="Switch Language / भाषा बदलें">
+          <span>🌐</span> <span style="font-weight: bold;">हिंदी</span>
+        </button>
+
+        <a href="https://play.google.com/store/apps/details?id=com.kamaiplus.pos" target="_blank" rel="noopener noreferrer" class="btn-playstore-nav">
+          <svg class="play-icon-svg" style="width: 18px; height: 18px;" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M3.609 1.814L13.793 12 3.61 22.186c-.23-.197-.373-.497-.373-.847V2.661c0-.35.143-.65.372-.847zM15.207 13.414l2.793-2.793-12.72-7.22 9.927 10.013zm0-2.828L5.28 20.599l12.72-7.22-2.793-2.793zm1.414-1.414l3.197 1.815c.667.378.667.994 0 1.372l-3.197 1.815-2.227-2.227 2.227-2.227z"/>
+          </svg>
+          <span data-en="Download App" data-hi="ऐप डाउनलोड करें">Download App</span>
+        </a>
+      </div>
+    </div>
+  </header>
+
+  <!-- ==========================================================================
+       Help Hero & Live Search
+       ========================================================================== -->
+  <section class="help-hero">
+    <div class="container">
+      <span class="section-pill" data-en="Support & Knowledge Base" data-hi="सहायता एवं ज्ञानकोश">Support & Knowledge Base</span>
+      <h1 style="font-size: 2.8rem; margin: 0.75rem 0;" data-en="How can we help your store today?" data-hi="आज हम आपकी दुकान की क्या मदद कर सकते हैं?">
+        How can we help your store today?
+      </h1>
+      <p style="font-size: 1.1rem; max-width: 650px; margin: 0 auto;" data-en="Search step-by-step guides, solve printer issues, or explore customized retail workflows." data-hi="प्रिंटर समस्या का समाधान, बारकोड स्कैनिंग या अपनी दुकान श्रेणी के अनुसार आसान गाइड खोजें।">
+        Search step-by-step guides, solve printer issues, or explore customized retail workflows.
+      </p>
+
+      <div class="help-search-container">
+        <span class="help-search-icon">🔍</span>
+        <input type="text" class="help-search-input" id="help-search-input" placeholder="Search guides (e.g. Printer setup, Barcode scan, Khata, GST bill)...">
+      </div>
+    </div>
+  </section>
+
+  <!-- ==========================================================================
+       Help Articles & Category Layout
+       ========================================================================== -->
+  <section class="help-content-wrap">
+    <div class="container help-layout-grid">
+      
+      <!-- Sticky Sidebar Category Links -->
+      <aside class="help-sidebar">
+        <div class="help-nav-title" data-en="Categories" data-hi="श्रेणियां">Categories</div>
+        <ul class="help-nav-links">
+          <li><a href="#all" class="help-nav-link active" data-category="all" data-en="All Guides" data-hi="सभी गाइड">All Guides</a></li>
+          <li><a href="#billing-flow" class="help-nav-link" data-category="billing" data-en="🧾 Counter Billing & POS" data-hi="🧾 काउंटर बिलिंग और POS">🧾 Counter Billing & POS</a></li>
+          <li><a href="#printer-setup" class="help-nav-link" data-category="hardware" data-en="🖨️ Thermal Printer Setup" data-hi="🖨️ थर्मल प्रिंटर सेटअप">🖨️ Thermal Printer Setup</a></li>
+          <li><a href="#barcode-inventory" class="help-nav-link" data-category="inventory" data-en="📦 Barcodes & Inventory" data-hi="📦 बारकोड और इन्वेंटरी">📦 Barcodes & Inventory</a></li>
+          <li><a href="#khata-management" class="help-nav-link" data-category="khata" data-en="📖 Digital Khata & Udhar" data-hi="📖 डिजिटल खाता व उधार">📖 Digital Khata & Udhar</a></li>
+          <li><a href="#gst-invoicing" class="help-nav-link" data-category="tax" data-en="📑 GST Invoices & Reports" data-hi="📑 GST बिल और रिपोर्ट्स">📑 GST Invoices & Reports</a></li>
+          <li><a href="#cloud-backup" class="help-nav-link" data-category="cloud" data-en="☁️ Offline Mode & Sync" data-hi="☁️ ऑफलाइन मोड और बैकअप">☁️ Offline Mode & Sync</a></li>
+          <li><a href="#vertical-workflows" class="help-nav-link" data-category="verticals" data-en="🏬 Business Verticals" data-hi="🏬 व्यापार श्रेणियां">🏬 Business Verticals</a></li>
+        </ul>
+
+        <div style="margin-top: 2rem; padding-top: 1.5rem; border-top: 1px solid var(--border-dark);">
+          <div class="help-nav-title" data-en="Need Instant Help?" data-hi="तुरंत मदद चाहिए?">Need Instant Help?</div>
+          <p style="font-size: 0.82rem; margin-bottom: 1rem;" data-en="Chat directly with our tech support team on WhatsApp." data-hi="व्हाट्सएप पर हमारी तकनीकी टीम से सीधे बात करें।">Chat directly with our tech support team on WhatsApp.</p>
+          <a href="https://wa.me/919999999999" target="_blank" class="sim-btn-checkout" style="padding: 10px; font-size: 0.85rem; text-decoration: none;">
+            <span>💬 WhatsApp Support</span>
+          </a>
+        </div>
+      </aside>
+
+      <!-- Main Help Articles Column -->
+      <main class="help-articles-col">
+        
+        <div id="help-no-results" style="display: none; text-align: center; padding: 3rem; background: #111827; border-radius: var(--radius-lg); border: 1px solid var(--border-dark);">
+          <div style="font-size: 2.5rem; margin-bottom: 0.5rem;">🔎</div>
+          <h3 data-en="No matching guides found" data-hi="कोई गाइड नहीं मिली">No matching guides found</h3>
+          <p data-en="Try searching for terms like 'printer', 'barcode', 'khata', or 'GST'." data-hi="कृपया 'printer', 'barcode', 'khata' या 'GST' जैसे शब्द खोजें।">Try searching for terms like 'printer', 'barcode', 'khata', or 'GST'.</p>
+        </div>
+
+        <!-- Article 1: High-Speed Counter Billing -->
+        <article class="help-article-section" id="billing-flow" data-category="billing" data-keywords="billing counter cart cash tender discount checkout speed">
+          <div class="help-article-header">
+            <div>
+              <span class="section-pill">POS Counter</span>
+              <h2 data-en="How to Create Fast Counter Bills in 3 Seconds" data-hi="3 सेकंड में सुपरफास्ट काउंटर बिल कैसे बनाएं">How to Create Fast Counter Bills in 3 Seconds</h2>
+            </div>
+            <button class="help-anchor-btn" data-anchor="billing-flow" title="Copy shareable link for WhatsApp">🔗 Copy Link</button>
+          </div>
+
+          <p data-en="KamaiPlus is designed for rush hours. You can add items via instant barcode scan, tap favorites, or search loose items." data-hi="KamaiPlus भीड़-भाड़ वाले समय के लिए बनाया गया है। आप बारकोड स्कैन, पसंदीदा आइटम टैप करके या नाम से तुरंत बिलिंग कर सकते हैं।">
+            KamaiPlus is designed for rush hours. You can add items via instant barcode scan, tap favorites, or search loose items.
+          </p>
+
+          <div class="help-step-box">
+            <div class="help-step-title" data-en="Step 1: Open POS Billing Tab" data-hi="कदम 1: POS बिलिंग टैब खोलें">Step 1: Open POS Billing Tab</div>
+            <p data-en="Tap the elevated green <b>Billing</b> button in the bottom center of your navigation bar." data-hi="नीचे नेविगेशन बार के बीच में दिए गए हरे <b>Billing</b> बटन को दबाएं।">Tap the elevated green <b>Billing</b> button in the bottom center of your navigation bar.</p>
+          </div>
+
+          <div class="help-step-box">
+            <div class="help-step-title" data-en="Step 2: Add Items to Cart" data-hi="कदम 2: कार्ट में सामान जोड़ें">Step 2: Add Items to Cart</div>
+            <p data-en="Either point your camera/scanner at any barcode, or tap the item card from the quick grid. Use +/- buttons to adjust quantity." data-hi="कैमरा या बारकोड स्कैनर से बारकोड स्कैन करें, या स्क्रीन पर आइटम टैप करें। +/- से मात्रा बदलें।">Either point your camera/scanner at any barcode, or tap the item card from the quick grid. Use +/- buttons to adjust quantity.</p>
+          </div>
+
+          <div class="help-step-box">
+            <div class="help-step-title" data-en="Step 3: Fast Tender Selection & 1-Tap Print" data-hi="कदम 3: कैश या UPI चुनें और प्रिंट करें">Step 3: Fast Tender Selection & 1-Tap Print</div>
+            <p data-en="Tap cash chips (₹100, ₹200, ₹500) to see change due, or tap 'Exact/UPI'. Tap 'Charge & Print' to print receipt in 0.8 seconds." data-hi="कैश चिप्स (₹100, ₹200, ₹500) दबाकर ग्राहक को लौटाने वाला खुला पैसा देखें। 'Charge & Print' दबाते ही 0.8 सेकंड में बिल प्रिंट हो जाएगा।">Tap cash chips (₹100, ₹200, ₹500) to see change due, or tap 'Exact/UPI'. Tap 'Charge & Print' to print receipt in 0.8 seconds.</p>
+          </div>
+        </article>
+
+        <!-- Article 2: Thermal Printer Setup & Pairing -->
+        <article class="help-article-section" id="printer-setup" data-category="hardware" data-keywords="printer bluetooth thermal 58mm 80mm esc pos pairing print setup">
+          <div class="help-article-header">
+            <div>
+              <span class="section-pill">Hardware Setup</span>
+              <h2 data-en="How to Connect a Bluetooth Thermal Printer (58mm / 80mm)" data-hi="ब्लूटूथ थर्मल प्रिंटर कैसे कनेक्ट करें (58mm / 80mm)">How to Connect a Bluetooth Thermal Printer (58mm / 80mm)</h2>
+            </div>
+            <button class="help-anchor-btn" data-anchor="printer-setup" title="Copy shareable link for WhatsApp">🔗 Copy Link</button>
+          </div>
+
+          <p data-en="KamaiPlus supports all standard ESC/POS Bluetooth and USB receipt printers without any drivers or third-party apps." data-hi="KamaiPlus सभी स्टैंडर्ड ESC/POS ब्लूटूथ और USB प्रिंटर को बिना किसी ड्राइवर के सीधे सपोर्ट करता है।">
+            KamaiPlus supports all standard ESC/POS Bluetooth and USB receipt printers without any drivers or third-party apps.
+          </p>
+
+          <div class="help-step-box">
+            <div class="help-step-title" data-en="1. Pair Printer in Android Bluetooth Settings" data-hi="1. मोबाइल की ब्लूटूथ सेटिंग्स में प्रिंटर पेयर करें">1. Pair Printer in Android Bluetooth Settings</div>
+            <p data-en="Turn on your thermal printer. Open your phone's <b>Settings &gt; Bluetooth</b>, search for the printer (e.g. MPT-II, POS-58, Everycom), and enter PIN <b>0000</b> or <b>1234</b>." data-hi="प्रिंटर चालू करें। मोबाइल की <b>ब्लूटूथ सेटिंग्स</b> खोलें, प्रिंटर का नाम चुनें और पिन <b>0000</b> या <b>1234</b> डालकर पेयर करें।">Turn on your thermal printer. Open your phone's <b>Settings &gt; Bluetooth</b>, search for the printer (e.g. MPT-II, POS-58, Everycom), and enter PIN <b>0000</b> or <b>1234</b>.</p>
+          </div>
+
+          <div class="help-step-box">
+            <div class="help-step-title" data-en="2. Select Printer in KamaiPlus App" data-hi="2. KamaiPlus ऐप में प्रिंटर चुनें">2. Select Printer in KamaiPlus App</div>
+            <p data-en="Open KamaiPlus &gt; Tap <b>Menu</b> (bottom right) &gt; Select <b>Printer Settings</b>. Choose your paired printer from the dropdown list and select <b>58mm</b> or <b>80mm</b> paper size." data-hi="KamaiPlus खोलें &gt; नीचे दाएँ <b>Menu</b> दबाएं &gt; <b>Printer Settings</b> चुनें। लिस्ट में से अपना प्रिंटर और 58mm या 80mm पेपर साइज चुनें।">Open KamaiPlus &gt; Tap <b>Menu</b> (bottom right) &gt; Select <b>Printer Settings</b>. Choose your paired printer from the dropdown list and select <b>58mm</b> or <b>80mm</b> paper size.</p>
+          </div>
+
+          <div class="help-step-box">
+            <div class="help-step-title" data-en="3. Test Print Receipt" data-hi="3. टेस्ट प्रिंट निकालें">3. Test Print Receipt</div>
+            <p data-en="Tap the <b>'Print Test Receipt'</b> button. If the paper feeds and prints the store header, your setup is complete!" data-hi="'Print Test Receipt' दबाएं। अगर टेस्ट बिल निकल जाए तो प्रिंटर सफलतापूर्वक सेट हो चुका है!">Tap the <b>'Print Test Receipt'</b> button. If the paper feeds and prints the store header, your setup is complete!</p>
+          </div>
+
+          <div class="help-troubleshoot-alert" id="printer-troubleshooting">
+            <strong data-en="⚠️ Printer Troubleshooting:" data-hi="⚠️ प्रिंटर समस्या समाधान:">⚠️ Printer Troubleshooting:</strong>
+            <ul style="margin: 0.5rem 0 0 1.25rem;">
+              <li data-en="<b>Printer not showing in list:</b> Ensure Location/Nearby Devices permission is granted to KamaiPlus in Android App Info." data-hi="<b>लिस्ट में प्रिंटर न दिखे:</b> मोबाइल सेटिंग्स में जाकर KamaiPlus को 'Nearby Devices / Location' की परमिशन दें।">Ensure Location/Nearby Devices permission is granted to KamaiPlus in Android App Info.</li>
+              <li data-en="<b>Blank paper coming out:</b> The thermal paper roll is inserted upside down. Flip the paper roll around." data-hi="<b>सफेद कागज निकल रहा है:</b> थर्मल रोल उल्टा लगा है। रोल को पलटकर सीधा लगाएं।">The thermal paper roll is inserted upside down. Flip the paper roll around.</li>
+            </ul>
+          </div>
+        </article>
+
+        <!-- Article 3: Products, Inventory & Barcodes -->
+        <article class="help-article-section" id="barcode-inventory" data-category="inventory" data-keywords="inventory stock barcode add item mrp selling price purchase price">
+          <div class="help-article-header">
+            <div>
+              <span class="section-pill">Inventory Master</span>
+              <h2 data-en="Managing Products, Barcodes & Low Stock Alerts" data-hi="आइटम जोड़ना, बारकोड स्कैनिंग और स्टॉक ट्रैकिंग">Managing Products, Barcodes & Low Stock Alerts</h2>
+            </div>
+            <button class="help-anchor-btn" data-anchor="barcode-inventory" title="Copy shareable link for WhatsApp">🔗 Copy Link</button>
+          </div>
+
+          <p data-en="Add items with purchase price, selling price, tax rate, and barcode. KamaiPlus automatically deducts stock upon every bill." data-hi="खरीद मूल्य, बिक्री मूल्य, GST और बारकोड के साथ सामान जोड़ें। हर बिलिंग पर स्टॉक अपने आप कम हो जाता है।">
+            Add items with purchase price, selling price, tax rate, and barcode. KamaiPlus automatically deducts stock upon every bill.
+          </p>
+
+          <div class="help-step-box">
+            <div class="help-step-title" data-en="How to Add an Item with Barcode" data-hi="बारकोड के साथ नया सामान कैसे जोड़ें">How to Add an Item with Barcode</div>
+            <p data-en="Go to <b>Products Tab</b> &gt; Tap the <b>'+ Add Product'</b> button. Tap the Camera icon next to Barcode field to scan product packet, enter Item Name, Selling Price, and current stock." data-hi="<b>Products टैब</b> में जाएं &gt; <b>'+ Add Product'</b> दबाएं। बारकोड बॉक्स के बगल में कैमरा आइकॉन दबाकर पैकेट स्कैन करें, नाम और रेट डालकर सेव करें।">Go to <b>Products Tab</b> &gt; Tap the <b>'+ Add Product'</b> button. Tap the Camera icon next to Barcode field to scan product packet, enter Item Name, Selling Price, and current stock.</p>
+          </div>
+
+          <div class="help-step-box">
+            <div class="help-step-title" data-en="Low Stock Radar Alerts" data-hi="कम स्टॉक की चेतावनी (लो स्टॉक अलर्ट)">Low Stock Radar Alerts</div>
+            <p data-en="Set a 'Minimum Stock Level' (e.g. 5 units). When inventory dips below this threshold, KamaiPlus flags the item in yellow so you can reorder before stock runs out." data-hi="न्यूनतम स्टॉक सीमा (जैसे 5 पीस) सेट करें। स्टॉक 5 से कम होते ही ऐप आपको अलर्ट कर देगा ताकि ग्राहक वापस न जाए।">Set a 'Minimum Stock Level' (e.g. 5 units). When inventory dips below this threshold, KamaiPlus flags the item in yellow so you can reorder before stock runs out.</p>
+          </div>
+        </article>
+
+        <!-- Article 4: Digital Khata & WhatsApp Reminders -->
+        <article class="help-article-section" id="khata-management" data-category="khata" data-keywords="khata udhar credit customer balance whatsapp reminder upi payment">
+          <div class="help-article-header">
+            <div>
+              <span class="section-pill">Credit Ledger</span>
+              <h2 data-en="Customer Khata (Udhar) & WhatsApp Payment Reminders" data-hi="ग्राहक खाता (उधार) और व्हाट्सएप पेमेंट रिमाइंडर">Customer Khata (Udhar) & WhatsApp Payment Reminders</h2>
+            </div>
+            <button class="help-anchor-btn" data-anchor="khata-management" title="Copy shareable link for WhatsApp">🔗 Copy Link</button>
+          </div>
+
+          <p data-en="Never lose a single rupee to forgotten udhar. Track customer debit/credit transactions with exact date, time, and bill references." data-hi="उधार भूलने का झंझट खत्म। ग्राहक का पुराना बकाया, नया उधार और जमा राशि तारीख व बिल नंबर के साथ रखें।">
+            Never lose a single rupee to forgotten udhar. Track customer debit/credit transactions with exact date, time, and bill references.
+          </p>
+
+          <div class="help-step-box">
+            <div class="help-step-title" data-en="Billing on Credit (Udhar Bill)" data-hi="उधार में बिल कैसे बनाएं">Billing on Credit (Udhar Bill)</div>
+            <p data-en="In POS Billing, tap <b>'Select Customer'</b>. Choose or add customer name & phone number. In payment tender, select <b>'Udhar / Credit'</b>. The bill amount is instantly added to their ledger." data-hi="POS बिलिंग स्क्रीन पर <b>'Select Customer'</b> दबाएं। ग्राहक का नाम और नंबर चुनें। पेमेंट में <b>'Udhar / Credit'</b> चुनें। बिल उनके खाते में जुड़ जाएगा।">In POS Billing, tap <b>'Select Customer'</b>. Choose or add customer name & phone number. In payment tender, select <b>'Udhar / Credit'</b>. The bill amount is instantly added to their ledger.</p>
+          </div>
+
+          <div class="help-step-box">
+            <div class="help-step-title" data-en="Sending WhatsApp Reminder with UPI Link" data-hi="व्हाट्सएप पर UPI लिंक के साथ तकादा (रिमाइंडर) भेजें">Sending WhatsApp Reminder with UPI Link</div>
+            <p data-en="Go to <b>Khata Tab</b> &gt; Tap the customer &gt; Tap the green <b>'WhatsApp Reminder'</b> button. An automated, polite message with their exact outstanding balance and your store UPI QR link is sent in 1 tap." data-hi="<b>Khata टैब</b> में जाएं &gt; ग्राहक के नाम पर टैप करें &gt; हरे रंग का <b>'WhatsApp Reminder'</b> बटन दबाएं। बकाया राशि और आपकी दुकान के UPI पेमेंट लिंक के साथ तुरंत मैसेज चला जाएगा।">Go to <b>Khata Tab</b> &gt; Tap the customer &gt; Tap the green <b>'WhatsApp Reminder'</b> button. An automated, polite message with their exact outstanding balance and your store UPI QR link is sent in 1 tap.</p>
+          </div>
+        </article>
+
+        <!-- Article 5: Vertical-Specific Retail Workflows -->
+        <article class="help-article-section" id="vertical-workflows" data-category="verticals" data-keywords="vertical kirana garments pharmacy medical hardware electrical cafe restaurant">
+          <div class="help-article-header">
+            <div>
+              <span class="section-pill">Customized Retail Workflows</span>
+              <h2 data-en="Vertical-Specific Workflows & Best Practices" data-hi="विभिन्न व्यापार श्रेणियों के लिए विशेष कार्यप्रणाली">Vertical-Specific Workflows & Best Practices</h2>
+            </div>
+            <button class="help-anchor-btn" data-anchor="vertical-workflows" title="Copy shareable link for WhatsApp">🔗 Copy Link</button>
+          </div>
+
+          <!-- Kirana Section -->
+          <div style="margin-bottom: 2rem;" id="vertical-kirana">
+            <h3 style="color: var(--primary-light); margin-bottom: 0.5rem;">🛒 1. Kirana & General Store Workflow</h3>
+            <p data-en="<b>Loose Items:</b> Add items with unit 'kg', 'g', or 'litre'. At checkout, enter weight (e.g. 0.75 for 750 grams) and the app computes exact paise price without rounding loss." data-hi="<b>खुला सामान:</b> सामान को 'kg' या 'लीटर' में जोड़ें। बिलिंग के समय वजन डालें (जैसे 750 ग्राम के लिए 0.75), ऐप पैसे-पैसे का सटीक हिसाब करेगा।">
+              <b>Loose Items:</b> Add items with unit 'kg', 'g', or 'litre'. At checkout, enter weight (e.g. 0.75 for 750 grams) and the app computes exact paise price without rounding loss.
+            </p>
+          </div>
+
+          <!-- Garments Section -->
+          <div style="margin-bottom: 2rem;" id="vertical-garments">
+            <h3 style="color: var(--primary-light); margin-bottom: 0.5rem;">👗 2. Garments & Apparel Workflow</h3>
+            <p data-en="<b>Variants & Exchange:</b> Under a style (e.g. Denim Jeans), create Size variants (30, 32, 34, 36). For exchanges, add returned size with negative quantity or use 'Exchange' mode on the billing screen." data-hi="<b>साइज वेरिएंट्स और एक्सचेंज:</b> एक डिजाइन के अंदर विभिन्न साइज (30, 32, 34, 36) बनाएं। एक्सचेंज करने के लिए बिलिंग में 'Exchange' मोड का उपयोग करें।">
+              <b>Variants & Exchange:</b> Under a style (e.g. Denim Jeans), create Size variants (30, 32, 34, 36). For exchanges, add returned size with negative quantity or use 'Exchange' mode on the billing screen.
+            </p>
+          </div>
+
+          <!-- Pharmacy Section -->
+          <div style="margin-bottom: 2rem;" id="vertical-pharmacy">
+            <h3 style="color: var(--primary-light); margin-bottom: 0.5rem;">💊 3. Pharmacy & Medical Store Workflow</h3>
+            <p data-en="<b>Batch & Expiry:</b> When adding medicines, enter Batch No and Expiry MM/YY. The POS warns the cashier if an item has expired and prevents illegal sale automatically." data-hi="<b>बैच और एक्सपायरी:</b> दवाई जोड़ते समय बैच नंबर और एक्सपायरी डालें। एक्सपायरी के करीब आने पर ऐप लाल अलर्ट दिखाएगा।">
+              <b>Batch & Expiry:</b> When adding medicines, enter Batch No and Expiry MM/YY. The POS warns the cashier if an item has expired and prevents illegal sale automatically.
+            </p>
+          </div>
+
+          <!-- Hardware Section -->
+          <div style="margin-bottom: 2rem;" id="vertical-hardware">
+            <h3 style="color: var(--primary-light); margin-bottom: 0.5rem;">🔧 4. Hardware & Electrical Store Workflow</h3>
+            <p data-en="<b>B2B GST Invoices:</b> Select customer with registered GSTIN. KamaiPlus formats formal Tax Invoices with HSN code, CGST, SGST, IGST, and prints on 3-inch or A4 format." data-hi="<b>B2B GST पक्का बिल:</b> ग्राहक का GSTIN नंबर दर्ज करें। ऐप HSN कोड और टैक्स ब्रेकडाउन के साथ पक्का इनवॉइस बनाएगा।">
+              <b>B2B GST Invoices:</b> Select customer with registered GSTIN. KamaiPlus formats formal Tax Invoices with HSN code, CGST, SGST, IGST, and prints on 3-inch or A4 format.
+            </p>
+          </div>
+
+          <!-- Cafe Section -->
+          <div id="vertical-cafe">
+            <h3 style="color: var(--primary-light); margin-bottom: 0.5rem;">☕ 5. Cafe & Fast Food Workflow</h3>
+            <p data-en="<b>KOT Printing:</b> When order is confirmed, tap 'Print KOT' to print kitchen preparation slips while keeping bill open until customer checkout." data-hi="<b>KOT किचन पर्ची:</b> आर्डर आते ही 'Print KOT' दबाएं ताकि रसोई में पर्ची निकल जाए और काउंटर पर कस्टमर बिल चालू रहे।">
+              <b>KOT Printing:</b> When order is confirmed, tap 'Print KOT' to print kitchen preparation slips while keeping bill open until customer checkout.
+            </p>
+          </div>
+        </article>
+
+        <!-- Article 6: Offline-First Architecture & Cloud Sync -->
+        <article class="help-article-section" id="cloud-backup" data-category="cloud" data-keywords="offline sqlite cloud sync firebase backup new phone restore internet">
+          <div class="help-article-header">
+            <div>
+              <span class="section-pill">Data Safety</span>
+              <h2 data-en="How Offline Mode & Automatic Cloud Sync Works" data-hi="ऑफलाइन मोड और ऑटोमैटिक क्लाउड बैकअप कैसे काम करता है">How Offline Mode & Automatic Cloud Sync Works</h2>
+            </div>
+            <button class="help-anchor-btn" data-anchor="cloud-backup" title="Copy shareable link for WhatsApp">🔗 Copy Link</button>
+          </div>
+
+          <p data-en="KamaiPlus stores all shop data directly inside your Android device in an ultra-fast SQLite database. This means zero loading spinners and zero dependence on cell reception." data-hi="KamaiPlus सारा डाटा सीधे आपके मोबाइल की SQLite मेमोरी में रखता है। इससे नेटवर्क न होने पर भी बिलिंग 1 सेकंड में हो जाती है।">
+            KamaiPlus stores all shop data directly inside your Android device in an ultra-fast SQLite database. This means zero loading spinners and zero dependence on cell reception.
+          </p>
+
+          <div class="help-step-box">
+            <div class="help-step-title" data-en="Automatic Background Cloud Sync" data-hi="बैकग्राउंड में क्लाउड सिंक">Automatic Background Cloud Sync</div>
+            <p data-en="As soon as your phone connects to Wi-Fi or cellular network, KamaiPlus securely uploads bill records and stock changes to Google Cloud Firebase. You do not need to press any manual sync button." data-hi="जैसे ही मोबाइल इंटरनेट से जुड़ता है, सारा नया हिसाब गूगल क्लाउड पर बैकअप हो जाता है। आपको कोई बटन दबाने की जरूरत नहीं है।">As soon as your phone connects to Wi-Fi or cellular network, KamaiPlus securely uploads bill records and stock changes to Google Cloud Firebase. You do not need to press any manual sync button.</p>
+          </div>
+
+          <div class="help-step-box">
+            <div class="help-step-title" data-en="Restoring Data on a New Phone" data-hi="नया मोबाइल बदलने पर डाटा वापस पाना">Restoring Data on a New Phone</div>
+            <p data-en="Download KamaiPlus on your new phone and sign in with your registered phone number. Tap 'Restore Shop Data' and your entire business history will appear on your new screen in seconds." data-hi="नए मोबाइल में ऐप डाउनलोड करें, अपना पुराना नंबर डालें। 'Restore' दबाते ही सारा स्टॉक और ग्राहकों का खाता तुरंत वापस आ जाएगा।">Download KamaiPlus on your new phone and sign in with your registered phone number. Tap 'Restore Shop Data' and your entire business history will appear on your new screen in seconds.</p>
+          </div>
+        </article>
+
+      </main>
+    </div>
+  </section>
+
+  <!-- ==========================================================================
+       Download App Call to Action
+       ========================================================================== -->
+  <section class="cta-banner-section">
+    <div class="container">
+      <div class="cta-banner-card">
+        <h2 data-en="Ready to Speed Up Your Store Counter?" data-hi="क्या आप अपनी दुकान की बिलिंग तेज करने के लिए तैयार हैं?">Ready to Speed Up Your Store Counter?</h2>
+        <p data-en="Download the official KamaiPlus Android app now from Google Play Store. 100% Free to start." data-hi="गूगल प्ले स्टोर से अभी KamaiPlus डाउनलोड करें। शुरू करने के लिए 100% मुफ्त।">Download the official KamaiPlus Android app now from Google Play Store. 100% Free to start.</p>
+        <a href="https://play.google.com/store/apps/details?id=com.kamaiplus.pos" target="_blank" rel="noopener noreferrer" class="btn-playstore-hero" style="background: #000000; border-color: #000000; display: inline-flex;">
+          <svg class="play-icon-svg" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M3.609 1.814L13.793 12 3.61 22.186c-.23-.197-.373-.497-.373-.847V2.661c0-.35.143-.65.372-.847zM15.207 13.414l2.793-2.793-12.72-7.22 9.927 10.013zm0-2.828L5.28 20.599l12.72-7.22-2.793-2.793zm1.414-1.414l3.197 1.815c.667.378.667.994 0 1.372l-3.197 1.815-2.227-2.227 2.227-2.227z"/>
+          </svg>
+          <div>
+            <span class="btn-text-small">DOWNLOAD OFFICIAL APP ON</span>
+            <span class="btn-text-large">Google Play Store</span>
+          </div>
+        </a>
+      </div>
+    </div>
+  </section>
+
+  <!-- ==========================================================================
+       Footer
+       ========================================================================== -->
+  <footer class="site-footer">
+    <div class="container footer-grid">
+      <div class="footer-brand">
+        <div class="brand-logo">
+          <img src="assets/logo.png" alt="KamaiPlus Logo">
+          <span>Kamai<span style="color: var(--primary);">Plus</span></span>
+        </div>
+        <p>Official Help Center & Knowledge Base for KamaiPlus POS retailers.</p>
+      </div>
+
+      <div class="footer-col">
+        <h4>Popular Guides</h4>
+        <ul class="footer-links">
+          <li><a href="#billing-flow">Counter Billing Guide</a></li>
+          <li><a href="#printer-setup">Bluetooth Printer Setup</a></li>
+          <li><a href="#printer-troubleshooting">Printer Troubleshooting</a></li>
+          <li><a href="#barcode-inventory">Adding Products & Barcodes</a></li>
+          <li><a href="#khata-management">Khata & WhatsApp Reminders</a></li>
+        </ul>
+      </div>
+
+      <div class="footer-col">
+        <h4>Retail Verticals</h4>
+        <ul class="footer-links">
+          <li><a href="#vertical-kirana">Kirana & Grocery</a></li>
+          <li><a href="#vertical-garments">Garments & Footwear</a></li>
+          <li><a href="#vertical-pharmacy">Pharmacy & Healthcare</a></li>
+          <li><a href="#vertical-hardware">Hardware & Electricals</a></li>
+          <li><a href="#vertical-cafe">Cafe & Dine-in</a></li>
+        </ul>
+      </div>
+
+      <div class="footer-col">
+        <h4>Portals & Legal</h4>
+        <ul class="footer-links">
+          <li><a href="index.html">Home Website</a></li>
+          <li><a href="https://kamaiplus-admin.web.app/" target="_blank">Super Admin Console ↗</a></li>
+          <li><a href="privacy.html">Privacy Policy</a></li>
+          <li><a href="terms.html">Terms of Service</a></li>
+          <li><a href="https://play.google.com/store/apps/details?id=com.kamaiplus.pos" target="_blank" style="color: var(--primary-light); font-weight: bold;">Google Play Store ↗</a></li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="container footer-bottom">
+      <div>© 2026 KamaiPlus (com.kamaiplus.pos). All rights reserved.</div>
+      <div>
+        <a href="privacy.html" style="margin-right: 1.5rem;">Privacy</a>
+        <a href="terms.html" style="margin-right: 1.5rem;">Terms</a>
+        <a href="index.html">Back to Home</a>
+      </div>
+    </div>
+  </footer>
+
+  <!-- WhatsApp Floating Support Button -->
+  <a href="https://wa.me/919999999999?text=Hello%20KamaiPlus%20Team%2C%20I%20need%20help%20with%20my%20store%20setup" target="_blank" rel="noopener noreferrer" class="whatsapp-float-btn" title="Chat on WhatsApp">
+    <img src="assets/whatsapp.png" alt="WhatsApp" class="whatsapp-icon">
+    <span>WhatsApp Help</span>
+  </a>
+
+  <script src="js/help.js"></script>
+</body>
+</html>
