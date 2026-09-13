@@ -47,14 +47,15 @@ drives `LocalDatabase` through a real (in-memory FFI) SQLite database and assert
 
 ---
 
-## 2026-09-13 — Version 4.21.0 (Code 42100) Google Play Production App Bundle (.aab) Build & Official Signing
+## 2026-09-13 — Version 4.21.0 (Code 42200) Google Play Production App Bundle (.aab) Build & Official Signing
 
 **User Request:**
 "chalo playstore me update karte hai app.. give me systematic procersss and create bundle accordingly..."
+And resolved: "Version code 42100 has already been used. Try another version code."
 
 **Release Details & Signing Specifications:**
-- **App Version:** `4.21.0` (incremented from `4.20.0`)
-- **Version Code:** `42100` (incremented from `42001`, meeting Google Play's monotonic version code requirement)
+- **App Version:** `4.21.0`
+- **Version Code:** `42200` (incremented from `42100` to prevent Google Play duplicate version code collision)
 - **Output Artifact:** `build/app/outputs/bundle/release/app-release.aab` (95.2 MB)
 - **Keystore File:** `android/app/kamai-release-key.jks`
 - **Key Alias:** `kamaiplus`
