@@ -12,6 +12,40 @@ import '../views/cash_register/cash_register_screen.dart';
 @pragma('vm:entry-point')
 Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   debugPrint('Handling FCM background message: ${message.messageId} - ${message.notification?.title}');
+  try {
+    // If notification object is absent (data-only push), trigger local notification display
+    final notification = message.notification;
+    final title = notification?.title ?? message.data['title'] ?? 'KamaiPlus Alert';
+    final body = notification?.body ?? message.data['body'] ?? message.data['message'] ?? '';
+    
+    if (body.isNotEmpty) {
+      final FlutterLocalNotificationsPlugin localNotifs = FlutterLocalNotificationsPlugin();
+      const AndroidInitializationSettings androidSettings = AndroidInitializationSettings('@mipmap/ic_launcher');
+      await localNotifs.initialize(settings: const InitializationSettings(android: androidSettings));
+
+      const AndroidNotificationDetails androidDetails = AndroidNotificationDetails(
+        NotificationService.channelId,
+        NotificationService.channelName,
+        channelDescription: NotificationService.channelDescription,
+        importance: Importance.max,
+        priority: Priority.high,
+        showWhen: true,
+        enableVibration: true,
+        playSound: true,
+        icon: '@mipmap/ic_launcher',
+      );
+      const NotificationDetails platformDetails = NotificationDetails(android: androidDetails);
+      await localNotifs.show(
+        id: message.hashCode,
+        title: title,
+        body: body,
+        notificationDetails: platformDetails,
+        payload: jsonEncode(message.data),
+      );
+    }
+  } catch (e) {
+    debugPrint('Error in firebaseMessagingBackgroundHandler: $e');
+  }
 }
 
 class NotificationService {
@@ -65,6 +99,11 @@ class NotificationService {
       await _localNotifications
           .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()
           ?.createNotificationChannel(channel);
+
+      // Explicitly request Android 13+ runtime POST_NOTIFICATIONS permission
+      await _localNotifications
+          .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()
+          ?.requestNotificationsPermission();
 
       // 3. Request Notification Permission (Android 13+ & iOS)
       final NotificationSettings settings = await _fcm.requestPermission(

@@ -1406,4 +1406,17 @@ Comprehensive enterprise-grade retail UX upgrade suite aligned with PhonePe Busi
       - **Direct WhatsApp Support:** Floating button and help card redirecting to WhatsApp tech support.
     - **Google Play Compliant Legal Pages:** Official `privacy.html` and `terms.html` with explicit disclosure of offline SQLite storage, camera permissions for barcodes, Bluetooth permissions for ESC/POS thermal printers, and zero-data-selling guarantee.
 
+85. **Native Mobile App Light Retail Theme for Website & Android FCM Channel Invariants (LOCKED):**
+    - **Website Theme Synchronization (`AppTheme.lightTheme`):** The official landing page and help center at `https://kamaiplus.web.app` strictly follows the native mobile app's light retail theme:
+      - Canvas Background: Slate 50 (`#F8FAFC`).
+      - Card Surfaces: Pure White (`#FFFFFF`) with subtle border (`#E2E8F0`) and retail drop shadows.
+      - Typography: Deep Slate Charcoal (`#0F172A`) for primary headlines, Medium Slate Gray (`#64748B`) for body text.
+      - Accents: Emerald Green (`#10B981` / `#059669`).
+      - Footer: Authoritative Deep Navy (`#0F172A`) providing high-contrast fintech grounding.
+    - **Android FCM Push Alert Delivery Invariants:**
+      - Default Channel Metadata: `com.google.firebase.messaging.default_notification_channel_id` MUST remain declared in `android/app/src/main/AndroidManifest.xml` set to `kamai_pos_channel`.
+      - Notification Icon: `com.google.firebase.messaging.default_notification_icon` MUST remain declared in `android/app/src/main/AndroidManifest.xml` set to `@mipmap/ic_launcher`.
+      - Android 13+ Runtime Permission: `NotificationService.init()` MUST call `_localNotifications.resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()?.requestNotificationsPermission()`.
+      - Background Data Payloads: `firebaseMessagingBackgroundHandler` MUST instantiate `FlutterLocalNotificationsPlugin` and show notifications for any message lacking a system notification block.
+
 

@@ -20,8 +20,16 @@ class AdminAuthService {
   Future<String?> signInWithGoogle() async {
     try {
       final provider = GoogleAuthProvider();
-      await _auth.signInWithPopup(provider);
-      return null;
+      provider.addScope('email');
+      provider.addScope('profile');
+      try {
+        await _auth.signInWithPopup(provider);
+        return null;
+      } catch (popupErr) {
+        // Fallback to redirect on mobile browsers where popups are blocked
+        await _auth.signInWithRedirect(provider);
+        return null;
+      }
     } on FirebaseAuthException catch (e) {
       return e.message ?? 'Google sign-in failed';
     } catch (e) {

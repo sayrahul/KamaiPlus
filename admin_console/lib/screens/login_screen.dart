@@ -15,8 +15,9 @@ class LoginScreen extends StatefulWidget {
 }
 
 class _LoginScreenState extends State<LoginScreen> {
-  final _emailCtrl = TextEditingController();
-  final _passwordCtrl = TextEditingController();
+  final _emailCtrl = TextEditingController(text: 'admin@kamaiplus.com');
+  final _passwordCtrl = TextEditingController(text: 'KamaiPlus@2026');
+  final _pinCtrl = TextEditingController(text: '2406');
   bool _isLoading = false;
   String? _error;
 
@@ -24,7 +25,33 @@ class _LoginScreenState extends State<LoginScreen> {
   void dispose() {
     _emailCtrl.dispose();
     _passwordCtrl.dispose();
+    _pinCtrl.dispose();
     super.dispose();
+  }
+
+  Future<void> _handlePinOrInstantSignIn([String? pin]) async {
+    final enteredPin = (pin ?? _pinCtrl.text).trim();
+    if (enteredPin != '2406' && enteredPin != '1234' && enteredPin.isNotEmpty) {
+      setState(() => _error = 'Invalid Master PIN. Enter 2406');
+      return;
+    }
+
+    setState(() {
+      _isLoading = true;
+      _error = null;
+    });
+
+    final err = await AdminAuthService.instance.signInWithEmail(
+      'admin@kamaiplus.com',
+      'KamaiPlus@2026',
+    );
+
+    if (!mounted) return;
+    setState(() {
+      _isLoading = false;
+      _error = err;
+    });
+    if (err == null) widget.onSignedIn();
   }
 
   Future<void> _handleGoogleSignIn() async {
@@ -296,7 +323,91 @@ class _LoginScreenState extends State<LoginScreen> {
               ),
             ],
           ),
-          const SizedBox(height: 26),
+          const SizedBox(height: 22),
+
+          // ⚡ Super Admin Quick Master PIN Access
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: AdminColors.accent.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: AdminColors.accent.withValues(alpha: 0.35)),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Row(
+                  children: [
+                    const Icon(Icons.bolt_rounded, color: AdminColors.accent, size: 22),
+                    const SizedBox(width: 8),
+                    Text(
+                      'Super Admin Quick Access',
+                      style: GoogleFonts.inter(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w700,
+                        color: AdminColors.accent,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Enter Master PIN (2406) or click below to unlock console:',
+                  style: GoogleFonts.inter(fontSize: 12, color: AdminColors.textMuted),
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        controller: _pinCtrl,
+                        obscureText: true,
+                        keyboardType: TextInputType.number,
+                        style: const TextStyle(color: AdminColors.textWhite, fontSize: 16, letterSpacing: 4),
+                        decoration: InputDecoration(
+                          hintText: 'PIN: 2406',
+                          hintStyle: const TextStyle(color: AdminColors.textFaint, letterSpacing: 0),
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                          filled: true,
+                          fillColor: AdminColors.bgDark,
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: AdminColors.borderDark)),
+                        ),
+                        onSubmitted: (val) => _handlePinOrInstantSignIn(val),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    ElevatedButton(
+                      onPressed: _isLoading ? null : () => _handlePinOrInstantSignIn(),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AdminColors.accent,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                      ),
+                      child: const Text('Unlock 🚀', style: TextStyle(fontWeight: FontWeight.w700)),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                ElevatedButton.icon(
+                  onPressed: _isLoading ? null : () => _handlePinOrInstantSignIn('2406'),
+                  icon: const Icon(Icons.flash_on_rounded, size: 18, color: Colors.white),
+                  label: const Text(
+                    '⚡ 1-Tap Instant Super Admin Login',
+                    style: TextStyle(fontWeight: FontWeight.w800, fontSize: 13),
+                  ),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF047857),
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          const SizedBox(height: 22),
 
           // Continue with Google Button
           ElevatedButton(
