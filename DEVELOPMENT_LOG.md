@@ -45,7 +45,34 @@ hits (the screen's data-loading call), not just the data shape. See
 drives `LocalDatabase` through a real (in-memory FFI) SQLite database and asserts on what
 `getAllProducts`/`getAllCategories` actually return.
 
+## 2026-09-14 — Firebase Cloud Function (Admin Panel FCM Bridge) Deployment & IAM Resolution
+
+**User Request:**
+"jab apne test message phs kiya FCM wo working huva tha.. lening jab me admin panel se karta hu to aa nahi raha"
+"nahi already blaze par hai"
+
+**Root Cause Analysis:**
+- Test push message dispatched via direct FCM v1 HTTP API (`projects/kamaiplus/messages/3730173702983316063`) reached merchant phone immediately.
+- When sending from Admin Panel (`https://kamaiplus-admin.web.app/`), the action wrote documents to `admin_push_notifications` in Firestore, expecting a Cloud Function trigger `onAdminPushCreated` to forward the payload to FCM.
+- However, Cloud Functions were never deployed due to:
+  1. Missing GCP IAM Service Agent permissions for Cloud Functions Gen 2:
+     - `roles/iam.serviceAccountTokenCreator` on `service-714323283488@gcp-sa-pubsub.iam.gserviceaccount.com`
+     - `roles/run.invoker` on `714323283488-compute@developer.gserviceaccount.com`
+     - `roles/eventarc.eventReceiver` on `714323283488-compute@developer.gserviceaccount.com`
+     - `roles/eventarc.serviceAgent` on `service-714323283488@gcp-sa-eventarc.iam.gserviceaccount.com`
+  2. Outdated `firebase-functions` (v5) throwing Node 26 package subpath export errors during discovery (`ERR_PACKAGE_PATH_NOT_EXPORTED` / timeout after 10000ms).
+
+**Fixes Applied:**
+1. Granted all 4 missing IAM policy bindings via `gcloud projects add-iam-policy-binding`.
+2. Upgraded `functions/package.json` to latest `firebase-functions@^7.3.2`.
+3. Configured modern Cloud Functions v2 Firestore trigger `onAdminPushCreated` listening to `admin_push_notifications/{notificationId}`.
+4. Deployed `onAdminPushCreated` to `us-central1` (v2, trigger: `google.cloud.firestore.document.v1.created`).
+5. Verified live via `firebase functions:list`: `onAdminPushCreated` is live and active.
+
+---
+
 ## 2026-09-14 — FCM Background Push Alert Fix, Native Mobile App Light Retail Theme for Website, & Admin Auth Resilience
+
 
 **User Request:**
 "Shayad FCM kaam nahi kar raha.. in App to kaam kar raha hai lekin push alert nahi. apne app ka jaise UI jai vahi theme Foloow karo.. landing page ke liye"

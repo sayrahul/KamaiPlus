@@ -416,6 +416,19 @@ Comprehensive enterprise-grade retail UX upgrade suite aligned with PhonePe Busi
       - **Invoice PDF Service (`lib/services/invoice_pdf_service.dart`):** Passes `logoPath` to native PDF generator for printable tax invoices.
     - **Verified:** `flutter analyze` — 0 issues.
 
+86. **Firebase Cloud Functions & Admin Console FCM Dispatch Bridge (LOCKED):**
+    - **Trigger Architecture:**
+      - The Admin Console (`https://kamaiplus-admin.web.app`) dispatches push notifications by creating a document in Firestore collection `admin_push_notifications/{notificationId}`.
+      - Firebase Cloud Function `onAdminPushCreated` (Node.js 20, 2nd Gen, `us-central1`, Firestore Document Created trigger) automatically intercepts new documents.
+      - Constructs an Android FCM payload with high priority, targeting topic `all_merchants` on notification channel `kamai_pos_channel` with sound and vibration.
+      - Calls `getMessaging().send(payload)`, delivering drop-down push alerts to the system tray of merchant devices even when the app is closed.
+      - Updates the Firestore document with `status: "delivered"` and `fcm_message_id`.
+    - **Required IAM & Infrastructure Invariants:**
+      - `roles/iam.serviceAccountTokenCreator` on `service-714323283488@gcp-sa-pubsub.iam.gserviceaccount.com`
+      - `roles/run.invoker` & `roles/eventarc.eventReceiver` on `714323283488-compute@developer.gserviceaccount.com`
+      - `roles/eventarc.serviceAgent` on `service-714323283488@gcp-sa-eventarc.iam.gserviceaccount.com`
+      - Artifact cleanup policy configured in `us-central1` (deleting images older than 1 day to ensure zero recurring storage fees).
+
 25. **Production Launch-Readiness & Multi-Page A4 Invoice Architecture (LOCKED):**
     - **Multi-Page Native A4 PDF Engine (`MainActivity.java` + `InvoicePdfService.dart`):**
       - Built using Android native `PdfDocument` (595 x 842 points standard A4).
