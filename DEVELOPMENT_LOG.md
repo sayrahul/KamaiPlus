@@ -45,6 +45,29 @@ hits (the screen's data-loading call), not just the data shape. See
 drives `LocalDatabase` through a real (in-memory FFI) SQLite database and asserts on what
 `getAllProducts`/`getAllCategories` actually return.
 
+## 2026-09-14 — Landing Page & Domain Polish (https://kamaiplus.web.app/) — Desktop & Mobile Full Audit
+
+**User Request:**
+"ok lets final this admin panel.. we can to polish our domain now https://kamaiplus.web.app/ we have to work.. check everything from your end by taking live preview.. mobile version alos.. and do ncessary changes"
+
+**Root Causes & Issues Identified in Live Preview:**
+1. Desktop Header Nav Overcrowding: At 1280px standard screen width, the 6 nav links, logo, brand badge, admin link, and CTA button collided, causing the "RETAIL POS" badge to overlap the "Features" link.
+2. Mobile Header Squeezing: On 390px mobile screens, the logo, brand badge, full Download App button, and hamburger menu competed for horizontal space.
+3. Mobile Sticky Download Bar & Floating WhatsApp Collision: The persistent sticky download bar (bottom: 0) and the floating WhatsApp "Need Help?" pill (bottom: 28px) overlapped directly over the "Install Now" button.
+4. Dark Slate Footer Logo Contrast: The word "Kamai" inherited the default dark charcoal text color on a #0F172A dark background, rendering it invisible so only "Plus" was visible.
+5. Cache Invalidation: Browser cached style.css with max-age=3600 without asset query versioning.
+
+**Fixes Applied & Verified:**
+1. Upgraded container max-width to 1280px, reduced nav-links gap to 1.25rem, added white-space: nowrap and flex-shrink rules so desktop navigation has clean, generous whitespace.
+2. Configured tablet breakpoint at 1080px to smoothly transition to a clean hamburger menu.
+3. On mobile (<=768px), hid brand badge and large top download button, leaving a clean logo on left and touch-friendly hamburger on right. Added full-width Google Play button inside the mobile drawer.
+4. Repositioned floating WhatsApp button to bottom: 76px on mobile, perfectly clearing the sticky download bar so "Install Now" is 100% accessible.
+5. Added .site-footer .brand-logo { color: #FFFFFF; } so "Kamai" appears in crisp white and "Plus" in emerald green.
+6. Added mobile hamburger navigation to help.html with bilingual toggle and verified with live Chrome DevTools emulation on both desktop (1280x800) and mobile (390x844).
+7. Deployed to Firebase Hosting (https://kamaiplus.web.app/) with cache-busting version tags (?v=2.2).
+
+---
+
 ## 2026-09-14 — Admin Console FCM & Push Notification Engine Settings Overhaul
 
 **User Request:**
