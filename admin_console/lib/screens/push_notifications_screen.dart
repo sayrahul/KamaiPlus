@@ -14,6 +14,8 @@ class PushNotificationsScreen extends StatefulWidget {
 }
 
 class _PushNotificationsScreenState extends State<PushNotificationsScreen> {
+  int _activeTab = 0; // 0: Campaign Dispatch, 1: FCM & Engine Settings, 2: History
+
   final _titleCtrl = TextEditingController();
   final _bodyCtrl = TextEditingController();
   final _urlCtrl = TextEditingController();
@@ -22,13 +24,137 @@ class _PushNotificationsScreenState extends State<PushNotificationsScreen> {
   String _actionRoute = 'home'; // 'home', 'billing', 'products', 'pro_upgrade', 'external'
   bool _sending = false;
 
+  // FCM Settings State
+  final _channelNameCtrl = TextEditingController(text: 'KamaiPlus POS Alerts & Invoices');
+  final _defaultTopicCtrl = TextEditingController(text: 'all_merchants');
+  bool _highPriority = true;
+  bool _soundEnabled = true;
+  bool _vibrateEnabled = true;
+  bool _mirrorInAppBanner = true;
+  bool _autoClosingReminder = true;
+  bool _autoInactiveNudge = true;
+  bool _autoLowStockAlert = true;
+
+  bool _loadingSettings = true;
+  bool _savingSettings = false;
+  bool _sendingTestPing = false;
+
   final DateFormat _dateFmt = DateFormat('dd MMM yyyy, hh:mm a');
+
+  @override
+  void initState() {
+    super.initState();
+    _loadFcmSettings();
+  }
+
+  Future<void> _loadFcmSettings() async {
+    try {
+      final config = await AdminFirestoreService.instance.getFcmConfig();
+      if (mounted) {
+        setState(() {
+          _channelNameCtrl.text = config['channel_name'] ?? 'KamaiPlus POS Alerts & Invoices';
+          _defaultTopicCtrl.text = config['default_topic'] ?? 'all_merchants';
+          _highPriority = config['high_priority'] ?? true;
+          _soundEnabled = config['sound_enabled'] ?? true;
+          _vibrateEnabled = config['vibration_enabled'] ?? true;
+          _mirrorInAppBanner = config['mirror_in_app_banner'] ?? true;
+          _autoClosingReminder = config['auto_closing_reminder'] ?? true;
+          _autoInactiveNudge = config['auto_inactive_nudge'] ?? true;
+          _autoLowStockAlert = config['auto_low_stock_alert'] ?? true;
+          _loadingSettings = false;
+        });
+      }
+    } catch (_) {
+      if (mounted) setState(() => _loadingSettings = false);
+    }
+  }
+
+  Future<void> _saveFcmSettings() async {
+    setState(() => _savingSettings = true);
+    try {
+      await AdminFirestoreService.instance.saveFcmConfig({
+        'channel_name': _channelNameCtrl.text.trim(),
+        'default_topic': _defaultTopicCtrl.text.trim(),
+        'high_priority': _highPriority,
+        'sound_enabled': _soundEnabled,
+        'vibration_enabled': _vibrateEnabled,
+        'mirror_in_app_banner': _mirrorInAppBanner,
+        'auto_closing_reminder': _autoClosingReminder,
+        'auto_inactive_nudge': _autoInactiveNudge,
+        'auto_low_stock_alert': _autoLowStockAlert,
+      });
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('✅ FCM Settings & Automation Policies saved successfully!'),
+            backgroundColor: AdminColors.accent,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to save settings: $e'), backgroundColor: AdminColors.red),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _savingSettings = false);
+    }
+  }
+
+  Future<void> _sendTestPing() async {
+    setState(() => _sendingTestPing = true);
+    try {
+      final notif = AdminPushNotification(
+        id: '',
+        title: '🔔 KamaiPlus FCM Live Test Alert',
+        body: 'Admin Panel se push notification test bilkul safal raha! Sound, vibration & status bar drop working perfectly.',
+        targetAudience: 'all',
+        actionRoute: 'home',
+        sentAt: DateTime.now(),
+      );
+      await AdminFirestoreService.instance.sendPushNotification(notif);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('⚡ Test push alert dispatched to topic "all_merchants"! Check your phone notification tray.'),
+            backgroundColor: AdminColors.accent,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Test ping failed: $e'), backgroundColor: AdminColors.red),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _sendingTestPing = false);
+    }
+  }
+
+  void _applyTemplate(String title, String body, String route, String audience) {
+    _titleCtrl.text = title;
+    _bodyCtrl.text = body;
+    _actionRoute = route;
+    _targetAudience = audience;
+    setState(() => _activeTab = 0);
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('Loaded template: "$title"'),
+        backgroundColor: AdminColors.accent,
+        duration: const Duration(seconds: 2),
+      ),
+    );
+  }
 
   @override
   void dispose() {
     _titleCtrl.dispose();
     _bodyCtrl.dispose();
     _urlCtrl.dispose();
+    _channelNameCtrl.dispose();
+    _defaultTopicCtrl.dispose();
     super.dispose();
   }
 
@@ -67,6 +193,8 @@ class _PushNotificationsScreenState extends State<PushNotificationsScreen> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
+        backgroundColor: AdminColors.bgCard,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16), side: const BorderSide(color: AdminColors.borderDark)),
         title: Row(
           children: [
             const Icon(Icons.send_rounded, color: AdminColors.accent, size: 22),
@@ -80,34 +208,34 @@ class _PushNotificationsScreenState extends State<PushNotificationsScreen> {
           children: [
             Text(
               'Target Audience: ${_getAudienceLabel(_targetAudience)}',
-              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: AdminColors.textWhite),
             ),
             const SizedBox(height: 8),
             Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: AdminColors.surfaceSunken,
+                color: AdminColors.bgSidebar,
                 borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: AdminColors.border),
+                border: Border.all(color: AdminColors.borderDark),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                  Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: AdminColors.textWhite)),
                   const SizedBox(height: 4),
-                  Text(body, style: const TextStyle(color: AdminColors.inkMuted, fontSize: 13)),
+                  Text(body, style: const TextStyle(color: AdminColors.textMuted, fontSize: 13)),
                 ],
               ),
             ),
             const SizedBox(height: 12),
             const Text(
-              'This will immediately dispatch a high-priority push alert to all targeted merchants.',
+              'This will immediately trigger the Cloud Function and drop an FCM status bar alert on all targeted merchant phones.',
               style: TextStyle(color: AdminColors.inkMuted, fontSize: 12),
             ),
           ],
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel', style: TextStyle(color: AdminColors.textMuted))),
           ElevatedButton(
             onPressed: () => Navigator.pop(ctx, true),
             style: ElevatedButton.styleFrom(
@@ -143,7 +271,7 @@ class _PushNotificationsScreenState extends State<PushNotificationsScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('🎉 Push notification dispatched successfully!'),
+            content: Text('🎉 Push notification dispatched successfully to FCM!'),
             backgroundColor: AdminColors.accent,
           ),
         );
@@ -184,56 +312,99 @@ class _PushNotificationsScreenState extends State<PushNotificationsScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Header
+              // Header & Quick Action Row
               Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Container(
-                    padding: const EdgeInsets.all(10),
-                    decoration: BoxDecoration(
-                      color: AdminColors.accentSoft,
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: const Icon(Icons.notifications_active_rounded, color: AdminColors.accent, size: 24),
-                  ),
-                  const SizedBox(width: 12),
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+                  Row(
                     children: [
-                      Text('Push Notifications Dispatcher', style: AdminTheme.heading(22)),
-                      const SizedBox(height: 2),
-                      const Text(
-                        'Broadcast high-priority announcements and targeted alerts directly to merchants.',
-                        style: TextStyle(color: AdminColors.inkMuted, fontSize: 13),
+                      Container(
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          color: AdminColors.accentSoft,
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: const Icon(Icons.notifications_active_rounded, color: AdminColors.accent, size: 24),
+                      ),
+                      const SizedBox(width: 12),
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('Push Notifications & FCM Manager', style: AdminTheme.heading(22)),
+                          const SizedBox(height: 2),
+                          const Text(
+                            'Broadcast alerts, manage FCM settings, and automate retention triggers.',
+                            style: TextStyle(color: AdminColors.inkMuted, fontSize: 13),
+                          ),
+                        ],
                       ),
                     ],
                   ),
+                  if (isWide)
+                    OutlinedButton.icon(
+                      onPressed: _sendingTestPing ? null : _sendTestPing,
+                      icon: _sendingTestPing
+                          ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: AdminColors.accent))
+                          : const Icon(Icons.bolt_rounded, size: 18, color: AdminColors.accent),
+                      label: const Text('Send Instant FCM Ping Test', style: TextStyle(color: AdminColors.accent, fontWeight: FontWeight.bold)),
+                      style: OutlinedButton.styleFrom(
+                        side: const BorderSide(color: AdminColors.accent),
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                      ),
+                    ),
                 ],
+              ),
+              const SizedBox(height: 20),
+
+              // Segmented Tabs Switcher
+              Container(
+                padding: const EdgeInsets.all(4),
+                decoration: BoxDecoration(
+                  color: AdminColors.bgCard,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: AdminColors.borderDark),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    _buildTabPill(0, '🚀 Campaign Dispatch', Icons.send_rounded),
+                    const SizedBox(width: 4),
+                    _buildTabPill(1, '⚙️ FCM & Engine Settings', Icons.settings_suggest_rounded),
+                    const SizedBox(width: 4),
+                    _buildTabPill(2, '📋 Dispatch History', Icons.history_rounded),
+                  ],
+                ),
               ),
               const SizedBox(height: 24),
 
-              // Responsive Two-Column Layout (Composer on Left, Preview on Right)
-              if (isWide)
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Expanded(flex: 3, child: _buildComposerCard()),
-                    const SizedBox(width: 24),
-                    Expanded(flex: 2, child: _buildLivePreviewCard()),
-                  ],
-                )
-              else
-                Column(
-                  children: [
-                    _buildComposerCard(),
-                    const SizedBox(height: 20),
-                    _buildLivePreviewCard(),
-                  ],
-                ),
-
-              const SizedBox(height: 32),
-
-              // Past Dispatch History
-              _buildHistorySection(),
+              // Main Tab Content
+              if (_activeTab == 0) ...[
+                // Responsive Two-Column Layout (Composer on Left, Preview on Right)
+                if (isWide)
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(flex: 3, child: _buildComposerCard()),
+                      const SizedBox(width: 24),
+                      Expanded(flex: 2, child: _buildLivePreviewCard()),
+                    ],
+                  )
+                else
+                  Column(
+                    children: [
+                      _buildComposerCard(),
+                      const SizedBox(height: 20),
+                      _buildLivePreviewCard(),
+                    ],
+                  ),
+                const SizedBox(height: 32),
+                _buildHistorySection(),
+              ] else if (_activeTab == 1) ...[
+                _buildSettingsSection(),
+              ] else ...[
+                _buildHistorySection(),
+              ],
             ],
           ),
         ),
@@ -241,6 +412,428 @@ class _PushNotificationsScreenState extends State<PushNotificationsScreen> {
     );
   }
 
+  Widget _buildTabPill(int index, String label, IconData icon) {
+    final active = _activeTab == index;
+    return InkWell(
+      onTap: () => setState(() => _activeTab = index),
+      borderRadius: BorderRadius.circular(8),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        decoration: BoxDecoration(
+          color: active ? AdminColors.accent : Colors.transparent,
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Row(
+          children: [
+            Icon(icon, size: 16, color: active ? Colors.white : AdminColors.textMuted),
+            const SizedBox(width: 8),
+            Text(
+              label,
+              style: TextStyle(
+                color: active ? Colors.white : AdminColors.textMuted,
+                fontWeight: active ? FontWeight.bold : FontWeight.w500,
+                fontSize: 13,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // =========================================================================
+  // FCM & Engine Settings Tab
+  // =========================================================================
+  Widget _buildSettingsSection() {
+    if (_loadingSettings) {
+      return const Center(
+        child: Padding(
+          padding: EdgeInsets.all(40),
+          child: CircularProgressIndicator(),
+        ),
+      );
+    }
+
+    final isWide = MediaQuery.of(context).size.width >= 960;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Top Health & Diagnostic Banner
+        Container(
+          padding: const EdgeInsets.all(20),
+          decoration: BoxDecoration(
+            color: AdminColors.bgCard,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: AdminColors.accent.withValues(alpha: 0.3), width: 1.2),
+            boxShadow: [
+              BoxShadow(color: AdminColors.accent.withValues(alpha: 0.08), blurRadius: 16, offset: const Offset(0, 4)),
+            ],
+          ),
+          child: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: AdminColors.accent.withValues(alpha: 0.15),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(Icons.cloud_done_rounded, color: AdminColors.accent, size: 28),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        const Text(
+                          'Cloud Function FCM Engine: ',
+                          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: AdminColors.textWhite),
+                        ),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: AdminColors.accent.withValues(alpha: 0.2),
+                            borderRadius: BorderRadius.circular(6),
+                            border: Border.all(color: AdminColors.accent),
+                          ),
+                          child: const Row(
+                            children: [
+                              Icon(Icons.circle, color: AdminColors.accent, size: 8),
+                              SizedBox(width: 6),
+                              Text('LIVE & OPERATIONAL', style: TextStyle(color: AdminColors.accent, fontWeight: FontWeight.bold, fontSize: 11)),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    const Text(
+                      'Trigger: onAdminPushCreated (us-central1, Cloud Functions v2) listening to Firestore admin_push_notifications',
+                      style: TextStyle(color: AdminColors.textMuted, fontSize: 12),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 12),
+              ElevatedButton.icon(
+                onPressed: _sendingTestPing ? null : _sendTestPing,
+                icon: _sendingTestPing
+                    ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                    : const Icon(Icons.bolt_rounded, size: 18),
+                label: const Text('1-Tap Test Ping'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AdminColors.accent,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 24),
+
+        if (isWide)
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(flex: 3, child: _buildDeliverySettingsCard()),
+              const SizedBox(width: 24),
+              Expanded(flex: 2, child: _buildTemplateQuickLibrary()),
+            ],
+          )
+        else
+          Column(
+            children: [
+              _buildDeliverySettingsCard(),
+              const SizedBox(height: 20),
+              _buildTemplateQuickLibrary(),
+            ],
+          ),
+      ],
+    );
+  }
+
+  Widget _buildDeliverySettingsCard() {
+    return Container(
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        color: AdminColors.bgCard,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: AdminColors.borderDark, width: 1.2),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.tune_rounded, color: AdminColors.accent, size: 20),
+              const SizedBox(width: 10),
+              Text('FCM Delivery & Channel Preferences', style: AdminTheme.heading(16)),
+            ],
+          ),
+          const SizedBox(height: 20),
+
+          // Channel Name
+          const Text('Android Notification Channel Name', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13, color: AdminColors.textWhite)),
+          const SizedBox(height: 6),
+          TextField(
+            controller: _channelNameCtrl,
+            style: const TextStyle(color: AdminColors.textWhite, fontSize: 14),
+            decoration: InputDecoration(
+              fillColor: AdminColors.bgSidebar,
+              border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: AdminColors.borderDark)),
+            ),
+          ),
+          const SizedBox(height: 16),
+
+          // Default Target Topic
+          const Text('Default Broadcast Topic (FCM)', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13, color: AdminColors.textWhite)),
+          const SizedBox(height: 6),
+          TextField(
+            controller: _defaultTopicCtrl,
+            style: const TextStyle(color: AdminColors.textWhite, fontSize: 14),
+            decoration: InputDecoration(
+              fillColor: AdminColors.bgSidebar,
+              border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: AdminColors.borderDark)),
+            ),
+          ),
+          const SizedBox(height: 20),
+
+          const Divider(color: AdminColors.borderDark),
+          const SizedBox(height: 12),
+          const Text('Delivery Behavior & Flags', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: AdminColors.accent)),
+          const SizedBox(height: 8),
+
+          _buildToggleRow(
+            title: 'High Priority (Drop-down / Heads-up Banner)',
+            subtitle: 'Forces device system tray to drop down alert over active screen with vibration and ringtone.',
+            value: _highPriority,
+            icon: Icons.priority_high_rounded,
+            onChanged: (v) => setState(() => _highPriority = v),
+          ),
+          _buildToggleRow(
+            title: 'Alert Sound on Arrival',
+            subtitle: 'Plays default Android POS chime when notification arrives on merchant phone.',
+            value: _soundEnabled,
+            icon: Icons.volume_up_rounded,
+            onChanged: (v) => setState(() => _soundEnabled = v),
+          ),
+          _buildToggleRow(
+            title: 'Haptic Vibration on Arrival',
+            subtitle: 'Vibrates device when alert drops down.',
+            value: _vibrateEnabled,
+            icon: Icons.vibration_rounded,
+            onChanged: (v) => setState(() => _vibrateEnabled = v),
+          ),
+          _buildToggleRow(
+            title: 'Dual-Sync to In-App Announcement Banner',
+            subtitle: 'Also displays announcement banner inside mobile POS billing screen in realtime.',
+            value: _mirrorInAppBanner,
+            icon: Icons.view_carousel_rounded,
+            onChanged: (v) => setState(() => _mirrorInAppBanner = v),
+          ),
+
+          const SizedBox(height: 20),
+          const Divider(color: AdminColors.borderDark),
+          const SizedBox(height: 12),
+          const Text('Automated Merchant Engagement Rules', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: AdminColors.accent)),
+          const SizedBox(height: 8),
+
+          _buildToggleRow(
+            title: 'Daily 9:00 PM Counter Closing Reminder',
+            subtitle: 'Automated nudge reminding merchants to tally cash register & print daily sales ledger.',
+            value: _autoClosingReminder,
+            icon: Icons.nights_stay_rounded,
+            onChanged: (v) => setState(() => _autoClosingReminder = v),
+          ),
+          _buildToggleRow(
+            title: '7-Day Inactive Store Retention Nudge',
+            subtitle: 'Automated friendly ping to stores with 0 sales for 7 consecutive days.',
+            value: _autoInactiveNudge,
+            icon: Icons.radar_rounded,
+            onChanged: (v) => setState(() => _autoInactiveNudge = v),
+          ),
+          _buildToggleRow(
+            title: 'Low Stock Radar Push Alert',
+            subtitle: 'Notifies store owner when fast-selling catalog products reach zero inventory.',
+            value: _autoLowStockAlert,
+            icon: Icons.inventory_2_rounded,
+            onChanged: (v) => setState(() => _autoLowStockAlert = v),
+          ),
+
+          const SizedBox(height: 24),
+          SizedBox(
+            width: double.infinity,
+            height: 46,
+            child: ElevatedButton.icon(
+              onPressed: _savingSettings ? null : _saveFcmSettings,
+              icon: _savingSettings
+                  ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                  : const Icon(Icons.save_rounded),
+              label: const Text('Save FCM Preferences & Automation Policies', style: TextStyle(fontWeight: FontWeight.bold)),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AdminColors.accent,
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTemplateQuickLibrary() {
+    final templates = [
+      {
+        'title': '⚡ Weekend Kirana Rush: Stock Tayyar Hai?',
+        'body': 'Weekend par grahako ki bheed ke liye inventory check karein aur barcode scan se 5 second me bill banayein!',
+        'route': 'billing',
+        'audience': 'all',
+        'icon': '🛒',
+      },
+      {
+        'title': '🚀 KamaiPlus Naya Update: Version 4.21 Live!',
+        'body': 'Play Store par naya version update karein. Fast barcode inwarding aur naye tax invoice features unlock karein.',
+        'route': 'home',
+        'audience': 'all',
+        'icon': '⚡',
+      },
+      {
+        'title': '💰 Aaj Ka Udhar & Khata Tally Karein',
+        'body': 'Counter band karne se pehle pending khata customers ko 1-tap WhatsApp reminder bhejein aur payment collect karein.',
+        'route': 'home',
+        'audience': 'all',
+        'icon': '📖',
+      },
+      {
+        'title': '🌙 Counter Closing Time: Daily Cash Tally',
+        'body': 'Aaj ki counter shift close karein aur apna daily profit-loss summary print karein.',
+        'route': 'billing',
+        'audience': 'all',
+        'icon': '🌙',
+      },
+    ];
+
+    return Container(
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        color: AdminColors.bgCard,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: AdminColors.borderDark, width: 1.2),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Row(
+            children: [
+              Icon(Icons.collections_bookmark_rounded, color: AdminColors.accent, size: 20),
+              SizedBox(width: 10),
+              Text('Fast Campaign Templates', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: AdminColors.textWhite)),
+            ],
+          ),
+          const SizedBox(height: 6),
+          const Text('1-tap pre-written high-conversion retail push alerts.', style: TextStyle(color: AdminColors.textMuted, fontSize: 12)),
+          const SizedBox(height: 16),
+
+          for (final t in templates)
+            Container(
+              margin: const EdgeInsets.only(bottom: 12),
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: AdminColors.bgSidebar,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: AdminColors.borderDark),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Text(t['icon']!, style: const TextStyle(fontSize: 16)),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          t['title']!,
+                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: AdminColors.textWhite),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  Text(t['body']!, style: const TextStyle(color: AdminColors.textMuted, fontSize: 12)),
+                  const SizedBox(height: 10),
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: TextButton.icon(
+                      onPressed: () => _applyTemplate(t['title']!, t['body']!, t['route']!, t['audience']!),
+                      icon: const Icon(Icons.bolt_rounded, size: 15, color: AdminColors.accent),
+                      label: const Text('Use Template', style: TextStyle(fontSize: 12, color: AdminColors.accent, fontWeight: FontWeight.bold)),
+                      style: TextButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildToggleRow({
+    required String title,
+    required String subtitle,
+    required bool value,
+    required ValueChanged<bool> onChanged,
+    IconData? icon,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          if (icon != null) ...[
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: AdminColors.bgElevated,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: AdminColors.borderDark),
+              ),
+              child: Icon(icon, size: 18, color: AdminColors.accent),
+            ),
+            const SizedBox(width: 12),
+          ],
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(title, style: const TextStyle(color: AdminColors.textWhite, fontWeight: FontWeight.w600, fontSize: 13.5)),
+                const SizedBox(height: 2),
+                Text(subtitle, style: const TextStyle(color: AdminColors.textMuted, fontSize: 12)),
+              ],
+            ),
+          ),
+          Switch(
+            value: value,
+            activeThumbColor: AdminColors.accent,
+            activeTrackColor: AdminColors.accent.withValues(alpha: 0.4),
+            onChanged: onChanged,
+          ),
+        ],
+      ),
+    );
+  }
+
+  // =========================================================================
+  // Campaign Composer & Preview
+  // =========================================================================
   Widget _buildComposerCard() {
     return Container(
       padding: const EdgeInsets.all(24),
@@ -279,7 +872,7 @@ class _PushNotificationsScreenState extends State<PushNotificationsScreen> {
             style: const TextStyle(color: AdminColors.textWhite, fontSize: 14),
             onChanged: (_) => setState(() {}),
             decoration: InputDecoration(
-              hintText: 'e.g. ⚡ Special Update: Variant Matrix is Live!',
+              hintText: 'e.g. ⚡ Special Update: Fast Barcode Inwarding is Live!',
               fillColor: AdminColors.bgSidebar,
               border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: AdminColors.borderDark)),
             ),
@@ -350,25 +943,26 @@ class _PushNotificationsScreenState extends State<PushNotificationsScreen> {
               DropdownMenuItem(value: 'pro_upgrade', child: Text('Open Pro Membership Upgrade')),
               DropdownMenuItem(value: 'external', child: Text('Open External Web Link')),
             ],
-            onChanged: (v) => setState(() => _actionRoute = v ?? 'home'),
+            onChanged: (v) {
+              if (v != null) setState(() => _actionRoute = v);
+            },
           ),
           if (_actionRoute == 'external') ...[
-            const SizedBox(height: 12),
+            const SizedBox(height: 14),
             TextField(
               controller: _urlCtrl,
               style: const TextStyle(color: AdminColors.textWhite, fontSize: 14),
               decoration: InputDecoration(
-                labelText: 'External URL (https://…)',
-                hintText: 'https://kamaiplus.com/offer',
+                hintText: 'https://example.com/festive-offer',
+                prefixIcon: const Icon(Icons.link_rounded, color: AdminColors.accent),
                 fillColor: AdminColors.bgSidebar,
                 border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: AdminColors.borderDark)),
               ),
-              keyboardType: TextInputType.url,
             ),
           ],
           const SizedBox(height: 24),
 
-          // Dispatch CTA
+          // Send Button
           SizedBox(
             width: double.infinity,
             height: 48,
@@ -377,12 +971,12 @@ class _PushNotificationsScreenState extends State<PushNotificationsScreen> {
               icon: _sending
                   ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
                   : const Icon(Icons.send_rounded, size: 18),
-              label: Text(_sending ? 'Dispatching…' : 'Send Push Notification Now'),
+              label: Text(_sending ? 'Broadcasting...' : 'Dispatch Push Campaign', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
               style: ElevatedButton.styleFrom(
                 backgroundColor: AdminColors.accent,
                 foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                elevation: 0,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                elevation: 3,
               ),
             ),
           ),
@@ -391,309 +985,241 @@ class _PushNotificationsScreenState extends State<PushNotificationsScreen> {
     );
   }
 
-  Widget _buildAudienceChip(String key, String label, IconData icon) {
-    final isSelected = _targetAudience == key;
+  Widget _buildAudienceChip(String id, String label, IconData icon) {
+    final isSelected = _targetAudience == id;
     return ChoiceChip(
-      backgroundColor: AdminColors.bgElevated,
-      selectedColor: AdminColors.accent,
-      side: BorderSide(color: isSelected ? AdminColors.accentBorder : AdminColors.borderDark),
+      selected: isSelected,
       label: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
           Icon(icon, size: 15, color: isSelected ? Colors.white : AdminColors.textMuted),
           const SizedBox(width: 6),
-          Text(label),
+          Text(label, style: TextStyle(color: isSelected ? Colors.white : AdminColors.textWhite, fontSize: 13)),
         ],
       ),
-      selected: isSelected,
-      labelStyle: TextStyle(
-        color: isSelected ? Colors.white : AdminColors.textMuted,
-        fontWeight: isSelected ? FontWeight.w700 : FontWeight.normal,
-        fontSize: 12,
-      ),
-      onSelected: (_) => setState(() => _targetAudience = key),
+      selectedColor: AdminColors.accent,
+      backgroundColor: AdminColors.bgElevated,
+      side: BorderSide(color: isSelected ? AdminColors.accent : AdminColors.borderDark),
+      onSelected: (_) => setState(() => _targetAudience = id),
     );
   }
 
+  // =========================================================================
+  // Realistic Android Phone Mockup (Top Shade Notification Dropdown)
+  // =========================================================================
   Widget _buildLivePreviewCard() {
-    final title = _titleCtrl.text.trim().isNotEmpty ? _titleCtrl.text.trim() : 'KamaiPlus POS Update';
-    final body = _bodyCtrl.text.trim().isNotEmpty
-        ? _bodyCtrl.text.trim()
-        : 'Your live alert message will render inside the Android status-bar notification drawer in real time.';
+    final title = _titleCtrl.text.trim().isEmpty ? 'KamaiPlus POS Alert' : _titleCtrl.text.trim();
+    final body = _bodyCtrl.text.trim().isEmpty ? 'Your alert message will appear here on merchant phones in realtime.' : _bodyCtrl.text.trim();
 
-    return Container(
-      padding: const EdgeInsets.all(24),
-      decoration: BoxDecoration(
-        color: AdminColors.bgCard,
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: AdminColors.borderDark, width: 1.2),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.3),
-            blurRadius: 20,
-            offset: const Offset(0, 8),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
+    return Center(
+      child: Container(
+        width: 320,
+        height: 560,
+        decoration: BoxDecoration(
+          color: const Color(0xFF0F172A),
+          borderRadius: BorderRadius.circular(36),
+          border: Border.all(color: const Color(0xFF334155), width: 3.5),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.6),
+              blurRadius: 30,
+              offset: const Offset(0, 15),
+            ),
+            BoxShadow(
+              color: AdminColors.accent.withValues(alpha: 0.1),
+              blurRadius: 20,
+              spreadRadius: 2,
+            ),
+          ],
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(32),
+          child: Stack(
             children: [
+              // Phone Screen Wallpaper Background
               Container(
-                padding: const EdgeInsets.all(6),
-                decoration: BoxDecoration(
-                  color: AdminColors.accent.withValues(alpha: 0.15),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: const Icon(Icons.phone_android_rounded, size: 18, color: AdminColors.accent),
-              ),
-              const SizedBox(width: 10),
-              Text('Live Android Device Preview', style: AdminTheme.heading(15)),
-            ],
-          ),
-          const SizedBox(height: 4),
-          const Text(
-            'Exact interactive simulator of the heads-up notification drawer.',
-            style: TextStyle(color: AdminColors.textFaint, fontSize: 12),
-          ),
-          const SizedBox(height: 20),
-
-          // High-Fidelity Realistic Android Phone Frame
-          Center(
-            child: Container(
-              width: 310,
-              decoration: BoxDecoration(
-                color: const Color(0xFF0F172A),
-                borderRadius: BorderRadius.circular(38),
-                border: Border.all(color: const Color(0xFF334155), width: 7),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.6),
-                    blurRadius: 30,
-                    offset: const Offset(0, 14),
+                decoration: const BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [Color(0xFF020617), Color(0xFF0F172A), Color(0xFF1E293B)],
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
                   ),
-                ],
+                ),
               ),
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(30),
-                child: Container(
-                  padding: const EdgeInsets.fromLTRB(14, 10, 14, 16),
-                  decoration: const BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topCenter,
-                      end: Alignment.bottomCenter,
-                      colors: [
-                        Color(0xFF0B1120),
-                        Color(0xFF020617),
+
+              // Camera Punch Hole / Speaker Notch
+              Align(
+                alignment: Alignment.topCenter,
+                child: Padding(
+                  padding: const EdgeInsets.only(top: 8),
+                  child: Container(
+                    width: 70,
+                    height: 16,
+                    decoration: BoxDecoration(
+                      color: Colors.black,
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                  ),
+                ),
+              ),
+
+              // Phone UI Content
+              Column(
+                children: [
+                  // Android Status Bar
+                  Padding(
+                    padding: const EdgeInsets.only(left: 24, right: 24, top: 12, bottom: 8),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          DateFormat('hh:mm').format(DateTime.now()),
+                          style: GoogleFonts.inter(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w600),
+                        ),
+                        const Row(
+                          children: [
+                            Icon(Icons.wifi, size: 12, color: Colors.white),
+                            SizedBox(width: 4),
+                            Icon(Icons.signal_cellular_4_bar, size: 12, color: Colors.white),
+                            SizedBox(width: 4),
+                            Icon(Icons.battery_full, size: 12, color: Colors.white),
+                          ],
+                        ),
                       ],
                     ),
                   ),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      // Punch Hole Camera & Speaker
-                      Center(
-                        child: Container(
-                          width: 60,
-                          height: 12,
-                          decoration: BoxDecoration(
-                            color: Colors.black,
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                          child: Center(
-                            child: Container(
-                              width: 6,
-                              height: 6,
-                              decoration: const BoxDecoration(
-                                color: Color(0xFF1E293B),
-                                shape: BoxShape.circle,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 8),
 
-                      // Android Status Bar
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  const SizedBox(height: 10),
+
+                  // Pulled Down System Notification Card
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 14),
+                    child: Container(
+                      padding: const EdgeInsets.all(14),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF1E293B).withValues(alpha: 0.95),
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.4),
+                            blurRadius: 12,
+                            offset: const Offset(0, 4),
+                          ),
+                        ],
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
+                          // App Branding Header in Notification
+                          Row(
+                            children: [
+                              Container(
+                                width: 18,
+                                height: 18,
+                                decoration: BoxDecoration(
+                                  color: AdminColors.accent,
+                                  borderRadius: BorderRadius.circular(4),
+                                ),
+                                child: const Center(
+                                  child: Icon(Icons.point_of_sale_rounded, size: 12, color: Colors.white),
+                                ),
+                              ),
+                              const SizedBox(width: 6),
+                              Text(
+                                'KAMAI+ POS',
+                                style: GoogleFonts.inter(
+                                  color: AdminColors.accent,
+                                  fontWeight: FontWeight.w800,
+                                  fontSize: 11,
+                                  letterSpacing: 0.5,
+                                ),
+                              ),
+                              const Spacer(),
+                              Text(
+                                'now',
+                                style: GoogleFonts.inter(color: Colors.white54, fontSize: 10),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 8),
+
+                          // Notification Title
                           Text(
-                            DateFormat('hh:mm').format(DateTime.now()),
+                            title,
                             style: GoogleFonts.inter(
                               color: Colors.white,
-                              fontSize: 11,
                               fontWeight: FontWeight.w700,
+                              fontSize: 13.5,
+                              height: 1.2,
                             ),
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
                           ),
+                          const SizedBox(height: 4),
+
+                          // Notification Body
+                          Text(
+                            body,
+                            style: GoogleFonts.inter(
+                              color: Colors.white.withValues(alpha: 0.85),
+                              fontSize: 12,
+                              height: 1.3,
+                            ),
+                            maxLines: 4,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+
+                          const SizedBox(height: 10),
+
+                          // Action pill indicator
                           Row(
-                            children: const [
-                              Icon(Icons.wifi_rounded, size: 13, color: Colors.white70),
-                              SizedBox(width: 4),
-                              Icon(Icons.signal_cellular_4_bar_rounded, size: 13, color: Colors.white70),
-                              SizedBox(width: 4),
-                              Icon(Icons.battery_5_bar_rounded, size: 14, color: AdminColors.accent),
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                decoration: BoxDecoration(
+                                  color: Colors.white.withValues(alpha: 0.08),
+                                  borderRadius: BorderRadius.circular(6),
+                                ),
+                                child: Row(
+                                  children: [
+                                    const Icon(Icons.touch_app_rounded, size: 11, color: AdminColors.accent),
+                                    const SizedBox(width: 4),
+                                    Text(
+                                      'Opens ${_actionRoute.replaceAll('_', ' ').toUpperCase()}',
+                                      style: const TextStyle(color: Colors.white70, fontSize: 10, fontWeight: FontWeight.bold),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              const Icon(Icons.notifications_active_rounded, size: 14, color: AdminColors.accent),
                             ],
                           ),
                         ],
                       ),
-                      const SizedBox(height: 16),
-
-                      // Heads-Up Drop Notification Drawer Card
-                      Container(
-                        padding: const EdgeInsets.all(14),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF1E293B).withValues(alpha: 0.95),
-                          borderRadius: BorderRadius.circular(18),
-                          border: Border.all(
-                            color: AdminColors.accent.withValues(alpha: 0.35),
-                            width: 1.2,
-                          ),
-                          boxShadow: [
-                            BoxShadow(
-                              color: AdminColors.accent.withValues(alpha: 0.12),
-                              blurRadius: 16,
-                              offset: const Offset(0, 4),
-                            ),
-                          ],
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            // App Brand Header
-                            Row(
-                              children: [
-                                Container(
-                                  padding: const EdgeInsets.all(5),
-                                  decoration: BoxDecoration(
-                                    gradient: const LinearGradient(
-                                      colors: [AdminColors.accent, AdminColors.accentGlow],
-                                    ),
-                                    borderRadius: BorderRadius.circular(8),
-                                  ),
-                                  child: const Icon(
-                                    Icons.point_of_sale_rounded,
-                                    color: Colors.white,
-                                    size: 13,
-                                  ),
-                                ),
-                                const SizedBox(width: 8),
-                                Text(
-                                  'KamaiPlus POS',
-                                  style: GoogleFonts.inter(
-                                    color: const Color(0xFFE2E8F0),
-                                    fontSize: 11.5,
-                                    fontWeight: FontWeight.w700,
-                                  ),
-                                ),
-                                const Text(
-                                  ' • now',
-                                  style: TextStyle(color: Color(0xFF64748B), fontSize: 10.5),
-                                ),
-                                const Spacer(),
-                                const Icon(Icons.notifications_active_rounded, size: 12, color: AdminColors.accent),
-                              ],
-                            ),
-                            const SizedBox(height: 10),
-
-                            // Notification Title & Body
-                            Text(
-                              title,
-                              style: GoogleFonts.plusJakartaSans(
-                                color: Colors.white,
-                                fontWeight: FontWeight.w700,
-                                fontSize: 13.5,
-                                height: 1.25,
-                              ),
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              body,
-                              style: GoogleFonts.inter(
-                                color: const Color(0xFF94A3B8),
-                                fontSize: 11.5,
-                                height: 1.4,
-                              ),
-                            ),
-                            const SizedBox(height: 14),
-
-                            // Quick Action Button
-                            Row(
-                              children: [
-                                Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                                  decoration: BoxDecoration(
-                                    color: AdminColors.accentSoft,
-                                    borderRadius: BorderRadius.circular(8),
-                                    border: Border.all(color: AdminColors.accent.withValues(alpha: 0.4)),
-                                  ),
-                                  child: Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      Text(
-                                        _actionRoute == 'pro_upgrade'
-                                            ? 'UPGRADE TO PRO 👑'
-                                            : _actionRoute == 'billing'
-                                                ? 'OPEN POS BILLING 🧾'
-                                                : _actionRoute == 'products'
-                                                    ? 'VIEW PRODUCTS 🛒'
-                                                    : 'OPEN KAMAI+ ➔',
-                                        style: GoogleFonts.inter(
-                                          color: AdminColors.accent,
-                                          fontSize: 10.5,
-                                          fontWeight: FontWeight.w800,
-                                          letterSpacing: 0.4,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 28),
-
-                      // Android Home Navigation Bar
-                      Container(
-                        width: 90,
-                        height: 4,
-                        decoration: BoxDecoration(
-                          color: Colors.white38,
-                          borderRadius: BorderRadius.circular(3),
-                        ),
-                      ),
-                    ],
+                    ),
                   ),
-                ),
+
+                  const Spacer(),
+
+                  // Bottom Android Navigation Bar Pill
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 12),
+                    child: Container(
+                      width: 100,
+                      height: 4,
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.4),
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                    ),
+                  ),
+                ],
               ),
-            ),
+            ],
           ),
-          const SizedBox(height: 18),
-
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: AdminColors.bgElevated,
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: AdminColors.borderDark),
-            ),
-            child: Row(
-              children: [
-                const Icon(Icons.flash_on_rounded, color: AdminColors.accent, size: 16),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    'Target Audience: ${_getAudienceLabel(_targetAudience)} • High-Priority Delivery',
-                    style: GoogleFonts.inter(color: AdminColors.textWhite, fontSize: 11.5, fontWeight: FontWeight.w600),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
+        ),
       ),
     );
   }
@@ -816,4 +1342,3 @@ class _PushNotificationsScreenState extends State<PushNotificationsScreen> {
     );
   }
 }
-

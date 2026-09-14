@@ -299,6 +299,48 @@ class AdminFirestoreService {
     );
   }
 
+  /// Settings and automated push trigger preferences
+  Future<Map<String, dynamic>> getFcmConfig() async {
+    try {
+      final doc = await _db.collection('platform_settings').doc('fcm_config').get();
+      if (!doc.exists || doc.data() == null) {
+        return {
+          'default_topic': 'all_merchants',
+          'channel_id': 'kamai_pos_channel',
+          'channel_name': 'KamaiPlus POS Alerts & Invoices',
+          'high_priority': true,
+          'sound_enabled': true,
+          'vibration_enabled': true,
+          'auto_closing_reminder': true,
+          'auto_inactive_nudge': true,
+          'auto_low_stock_alert': true,
+          'mirror_in_app_banner': true,
+        };
+      }
+      return doc.data()!;
+    } catch (_) {
+      return {
+        'default_topic': 'all_merchants',
+        'channel_id': 'kamai_pos_channel',
+        'channel_name': 'KamaiPlus POS Alerts & Invoices',
+        'high_priority': true,
+        'sound_enabled': true,
+        'vibration_enabled': true,
+        'auto_closing_reminder': true,
+        'auto_inactive_nudge': true,
+        'auto_low_stock_alert': true,
+        'mirror_in_app_banner': true,
+      };
+    }
+  }
+
+  Future<void> saveFcmConfig(Map<String, dynamic> config) async {
+    await _db.collection('platform_settings').doc('fcm_config').set({
+      ...config,
+      'updated_at': FieldValue.serverTimestamp(),
+    }, SetOptions(merge: true));
+  }
+
   // ---------------------------------------------------------------------
   // App Version Control & Force Update
   // ---------------------------------------------------------------------

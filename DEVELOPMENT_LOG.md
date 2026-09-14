@@ -45,6 +45,41 @@ hits (the screen's data-loading call), not just the data shape. See
 drives `LocalDatabase` through a real (in-memory FFI) SQLite database and asserts on what
 `getAllProducts`/`getAllCategories` actually return.
 
+## 2026-09-14 — Admin Console FCM & Push Notification Engine Settings Overhaul
+
+**User Request:**
+"FCM uske sath hi Push notification ke liye bhi admin panel me setting kardo..."
+
+**Summary of Deliverables:**
+1. **Firestore Service Enhancements (`admin_console/lib/services/admin_firestore_service.dart`):**
+   - Added `getFcmConfig()`: Reads delivery toggles, channel ID, and retention trigger preferences from `platform_settings/fcm_config`.
+   - Added `saveFcmConfig()`: Saves updated FCM engine configuration atomically with server timestamps.
+
+2. **Admin Console Push Screen Overhaul (`admin_console/lib/screens/push_notifications_screen.dart`):**
+   - **Segmented 3-Tab Interface:**
+     - `🚀 Campaign Dispatch`: Rich notification composition with dynamic merchant reach counter, audience filtering, and simulated push alert preview.
+     - `⚙️ FCM & Engine Settings`: Complete management suite for FCM delivery channels, high-priority heads-up alert toggles, sound, vibration, retention triggers, and pre-built templates.
+     - `📋 Dispatch History`: Audit log of sent notifications with status chips and recipient stats.
+   - **Live Engine Status & 1-Tap Ping:**
+     - Status card showing `🟢 LIVE & OPERATIONAL (Cloud Function Gen2 Active)`.
+     - `[ ⚡ Send Instant FCM Ping Test ]` button allowing administrators to trigger a live test push to all devices in 1 tap without filling forms.
+   - **Delivery & Channel Preferences:**
+     - Android Notification Channel ID (`kamai_pos_channel`, importance: Max).
+     - Toggles for Heads-up Alert, Alert Sound (`default`), Vibration Pattern, and In-App Banner Sync.
+   - **Automated Retention Triggers:**
+     - Daily 9:00 PM Counter Closing Reminder.
+     - 7-Day Inactive Store Radar Nudge.
+     - Low Stock Re-order Alert.
+   - **Fast Campaign Templates:**
+     - 4 pre-built templates (Counter Closing, Re-engagement, POS Update, Festive Promo) with 1-click loading into composer.
+
+3. **Build & Live Deployment:**
+   - Ran `dart analyze`: 0 errors, 0 warnings.
+   - Built optimized Flutter web release: `flutter build web --release`.
+   - Deployed live to Firebase Hosting: `https://kamaiplus-admin.web.app`.
+
+---
+
 ## 2026-09-14 — Firebase Cloud Function (Admin Panel FCM Bridge) Deployment & IAM Resolution
 
 **User Request:**

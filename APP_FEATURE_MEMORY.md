@@ -1432,4 +1432,24 @@ Comprehensive enterprise-grade retail UX upgrade suite aligned with PhonePe Busi
       - Android 13+ Runtime Permission: `NotificationService.init()` MUST call `_localNotifications.resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()?.requestNotificationsPermission()`.
       - Background Data Payloads: `firebaseMessagingBackgroundHandler` MUST instantiate `FlutterLocalNotificationsPlugin` and show notifications for any message lacking a system notification block.
 
-
+86. **Admin Console FCM & Push Notification Engine Settings (LOCKED):**
+    - **URL:** `https://kamaiplus-admin.web.app` (`admin_console/lib/screens/push_notifications_screen.dart`).
+    - **3-Tab Segmented Interface:**
+      1. `🚀 Campaign Dispatch`: Compose and send broadcast or target notifications to retail merchants with live reach counter and payload preview.
+      2. `⚙️ FCM & Engine Settings`: Complete notification engine configuration, live status, retention automation, and ready-to-use template library.
+      3. `📋 Dispatch History`: Audit log of all past dispatched push notifications with status, recipient count, and timestamp.
+    - **Live FCM Engine Status & Instant Ping:**
+      - Shows `🟢 LIVE & OPERATIONAL` when Cloud Function Gen 2 bridge (`onAdminPushCreated`) is active.
+      - Includes a 1-tap `[ ⚡ Send Instant FCM Ping Test ]` button that writes directly to `admin_push_notifications` in Firestore with high-priority heads-up payload, instantly triggering notification on all merchant devices.
+    - **Delivery & Channel Preferences:**
+      - Configurable Android Notification Channel ID (`kamai_pos_channel`).
+      - Toggles for High-Priority Heads-Up Dropdown Alert, Notification Alert Sound (`default`), Vibration Pattern, and Dual In-App Notification Center Sync.
+    - **Automated Retention Triggers:**
+      - Daily 9:00 PM Counter Closing Reminder (prompts merchants to tally cash register & print daily Z-report).
+      - 7-Day Inactive Store Radar Nudge (re-engages merchants who haven't billed in 7 days).
+      - Low Stock Re-order Alert (alerts merchants when inventory falls below minimum threshold).
+    - **Fast Campaign Templates:**
+      - Pre-built templates for Counter Closing, Inactive Merchant Re-engagement, POS App Update, and Special Festive Discount.
+      - 1-click "Use Template" loads title and body directly into the Campaign Composer and switches to tab 1.
+    - **Config Persistence:**
+      - Engine settings persist to Cloud Firestore under `platform_settings/fcm_config` via `AdminFirestoreService.saveFcmConfig()`.
