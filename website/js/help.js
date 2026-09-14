@@ -9,6 +9,7 @@ document.addEventListener('DOMContentLoaded', () => {
   initHelpCategoryFilter();
   initAnchorHighlight();
   initCopyPermalink();
+  initMobileMenu();
 });
 
 /* ==========================================================================
@@ -167,4 +168,24 @@ function initCopyPermalink() {
       });
     });
   });
+}
+
+/* ==========================================================================
+   6. Mobile Navigation Drawer
+   ========================================================================== */
+function initMobileMenu() {
+  const menuBtn = document.getElementById('mobile-menu-btn');
+  const drawer = document.getElementById('mobile-nav-drawer');
+
+  if (menuBtn && drawer) {
+    menuBtn.addEventListener('click', () => {
+      drawer.classList.toggle('active');
+    });
+
+    drawer.querySelectorAll('a').forEach(link => {
+      link.addEventListener('click', () => {
+        drawer.classList.remove('active');
+      });
+    });
+  }
 }
