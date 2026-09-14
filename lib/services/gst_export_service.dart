@@ -392,6 +392,7 @@ class GstExportService {
         '⚡ Generated via Kamai+ Android POS';
 
     // Share via SharePlus with attached real file
+    // ignore: deprecated_member_use
     await Share.shareXFiles(
       [XFile(file.path)],
       text: text,
