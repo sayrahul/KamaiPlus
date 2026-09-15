@@ -102,6 +102,25 @@ class LocalDatabase {
     // Retain _activeDbName so store data is never lost or switched to demo db
   }
 
+  /// Returns the absolute filesystem path to the currently active SQLite database file
+  Future<String> getActiveDatabasePath() async {
+    await database;
+    final dbPath = await getDatabasesPath();
+    return p.join(dbPath, _activeDbName);
+  }
+
+  /// Safely reopens database after file restore and notifies all listeners
+  Future<void> reloadDatabase() async {
+    if (_database != null) {
+      try {
+        await _database!.close();
+      } catch (_) {}
+      _database = null;
+    }
+    await database;
+    AppDataBus.instance.bumpAll();
+  }
+
   Future<Database> _initDB(String filePath) async {
     final dbPath = await getDatabasesPath();
     final path = p.join(dbPath, filePath);
@@ -1053,41 +1072,9 @@ class LocalDatabase {
       if (result.isNotEmpty) {
         return result.map((json) => ProductModel.fromMap(json)).toList();
       }
-      // Only seed a starter catalog if this business has genuinely NO products
-      // at all yet (a real brand-new store). If it already has products under
-      // some other tag, seeding here would silently plant a second, empty-of-
-      // history catalog for `businessType` while the real inventory — still
-      // sitting in the table — just becomes invisible behind this filter. That
-      // exact symptom ("saved my price edit and the whole product list plus
-      // its sales history vanished, replaced by defaults") is what happens if
-      // `businessType` ever drifts from the value products were actually
-      // tagged with (e.g. a stale/empty profile field). Business type is now
-      // locked at signup (store_profile_screen.dart no longer offers changing
-      // it) specifically so this drift can't happen — this check is the
-      // second, defense-in-depth layer: even if it somehow does, we fall
-      // through to the unclassified lookup below instead of masking real data
-      // with a fresh seed.
-      final totalCount = Sqflite.firstIntValue(
-            await db.rawQuery('SELECT COUNT(*) FROM products'),
-          ) ??
-          0;
-      if (totalCount == 0) {
-        await seedVerticalStarterData(businessType);
-        final seeded = await db.query(
-          'products',
-          where: "business_type = ? OR business_type = 'both'",
-          whereArgs: [businessType],
-          orderBy: 'is_favorite DESC, name ASC',
-        );
-        if (seeded.isNotEmpty) {
-          return seeded.map((json) => ProductModel.fromMap(json)).toList();
-        }
-      }
       // Nothing tagged for this vertical. Fall back ONLY to genuinely
       // unclassified rows (pre-dating the vertical feature) — never to
-      // another vertical's tagged products. This is the fix for products
-      // from one store type (e.g. Apparel) leaking into a different one (e.g.
-      // Electronics) whenever the active vertical had few or zero matches.
+      // another vertical's tagged products.
       final unclassified = await db.query(
         'products',
         where: "business_type IS NULL OR business_type = ''",
@@ -1096,13 +1083,6 @@ class LocalDatabase {
       return unclassified.map((json) => ProductModel.fromMap(json)).toList();
     }
     final allResult = await db.query('products', orderBy: 'is_favorite DESC, name ASC');
-    if (allResult.isEmpty) {
-      final profile = await getStoreProfile();
-      final type = profile.businessType.isNotEmpty ? profile.businessType : 'grocery';
-      await seedVerticalStarterData(type);
-      final seeded = await db.query('products', orderBy: 'is_favorite DESC, name ASC');
-      return seeded.map((json) => ProductModel.fromMap(json)).toList();
-    }
     return allResult.map((json) => ProductModel.fromMap(json)).toList();
   }
 
@@ -1452,7 +1432,18 @@ class LocalDatabase {
           : (paymentMethod == 'split' ? splitCreditPaise : 0);
 
       if (creditDue > 0 && customer != null) {
-        final newBalancePaise = customer.currentBalancePaise + creditDue;
+        // Query fresh balance directly from DB inside transaction to guarantee zero stale overwrite
+        final custRows = await txn.query(
+          'customers',
+          columns: ['current_balance_paise'],
+          where: 'id = ?',
+          whereArgs: [customer.id],
+        );
+        final int currentDbBalance = custRows.isNotEmpty
+            ? (custRows.first['current_balance_paise'] as int? ?? 0)
+            : customer.currentBalancePaise;
+
+        final newBalancePaise = currentDbBalance + creditDue;
 
         await txn.rawUpdate('''
           UPDATE customers
@@ -1824,7 +1815,8 @@ class LocalDatabase {
   /// Atomically saves a parent product and creates its child variants.
   Future<List<ProductModel>> createProductWithVariants({
     required ProductModel parentProduct,
-    required List<String> variantLabels,
+    List<String>? variantLabels,
+    List<VariantCustomData>? customVariants,
   }) async {
     final db = await instance.database;
     final List<ProductModel> createdVariants = [];
@@ -1837,35 +1829,69 @@ class LocalDatabase {
         conflictAlgorithm: ConflictAlgorithm.replace,
       );
 
-      for (final label in variantLabels) {
-        final variantId = _uuid.v4();
-        final childVariant = ProductModel(
-          id: variantId,
-          businessId: parentToSave.businessId,
-          name: '${parentToSave.name} ($label)',
-          categoryId: parentToSave.categoryId,
-          sellingPricePaise: parentToSave.sellingPricePaise,
-          mrpPaise: parentToSave.mrpPaise,
-          purchasePricePaise: parentToSave.purchasePricePaise,
-          stockQuantity: parentToSave.stockQuantity,
-          taxRate: parentToSave.taxRate,
-          isTaxInclusive: parentToSave.isTaxInclusive,
-          unit: parentToSave.unit,
-          size: label,
-          color: parentToSave.color,
-          fitNotes: parentToSave.fitNotes,
-          parentId: parentToSave.id,
-          hasVariants: false,
-          variantLabel: label,
-          syncStatus: 'pending',
-          businessType: parentToSave.businessType,
-        );
-        await txn.insert(
-          'products',
-          childVariant.toMap(),
-          conflictAlgorithm: ConflictAlgorithm.replace,
-        );
-        createdVariants.add(childVariant);
+      if (customVariants != null && customVariants.isNotEmpty) {
+        for (final cv in customVariants) {
+          final variantId = _uuid.v4();
+          final childVariant = ProductModel(
+            id: variantId,
+            businessId: parentToSave.businessId,
+            name: '${parentToSave.name} (${cv.label})',
+            barcode: cv.barcode != null && cv.barcode!.isNotEmpty ? cv.barcode : null,
+            categoryId: parentToSave.categoryId,
+            sellingPricePaise: cv.sellingPricePaise,
+            mrpPaise: cv.mrpPaise > 0 ? cv.mrpPaise : cv.sellingPricePaise,
+            purchasePricePaise: cv.purchasePricePaise,
+            stockQuantity: cv.stockQuantity,
+            taxRate: parentToSave.taxRate,
+            isTaxInclusive: parentToSave.isTaxInclusive,
+            unit: parentToSave.unit,
+            size: cv.label,
+            color: parentToSave.color,
+            fitNotes: parentToSave.fitNotes,
+            parentId: parentToSave.id,
+            hasVariants: false,
+            variantLabel: cv.label,
+            syncStatus: 'pending',
+            businessType: parentToSave.businessType,
+          );
+          await txn.insert(
+            'products',
+            childVariant.toMap(),
+            conflictAlgorithm: ConflictAlgorithm.replace,
+          );
+          createdVariants.add(childVariant);
+        }
+      } else if (variantLabels != null) {
+        for (final label in variantLabels) {
+          final variantId = _uuid.v4();
+          final childVariant = ProductModel(
+            id: variantId,
+            businessId: parentToSave.businessId,
+            name: '${parentToSave.name} ($label)',
+            categoryId: parentToSave.categoryId,
+            sellingPricePaise: parentToSave.sellingPricePaise,
+            mrpPaise: parentToSave.mrpPaise,
+            purchasePricePaise: parentToSave.purchasePricePaise,
+            stockQuantity: parentToSave.stockQuantity,
+            taxRate: parentToSave.taxRate,
+            isTaxInclusive: parentToSave.isTaxInclusive,
+            unit: parentToSave.unit,
+            size: label,
+            color: parentToSave.color,
+            fitNotes: parentToSave.fitNotes,
+            parentId: parentToSave.id,
+            hasVariants: false,
+            variantLabel: label,
+            syncStatus: 'pending',
+            businessType: parentToSave.businessType,
+          );
+          await txn.insert(
+            'products',
+            childVariant.toMap(),
+            conflictAlgorithm: ConflictAlgorithm.replace,
+          );
+          createdVariants.add(childVariant);
+        }
       }
     });
     AppDataBus.instance.bumpProducts();
@@ -2132,6 +2158,22 @@ class LocalDatabase {
     return newId;
   }
 
+  Future<CustomerModel?> findCustomerByPhone(String phone) async {
+    final cleanPhone = phone.replaceAll(RegExp(r'\D'), '').trim();
+    if (cleanPhone.isEmpty) return null;
+    final db = await instance.database;
+    final result = await db.query(
+      'customers',
+      where: 'phone = ?',
+      whereArgs: [cleanPhone],
+      limit: 1,
+    );
+    if (result.isNotEmpty) {
+      return CustomerModel.fromMap(result.first);
+    }
+    return null;
+  }
+
   Future<void> upsertCustomer(CustomerModel customer) async {
     final db = await instance.database;
     await db.insert(
@@ -2237,16 +2279,57 @@ class LocalDatabase {
   }) async {
     final db = await instance.database;
     final isUdhar = type == 'credit';
-    final int newBalancePaise = isUdhar
-        ? customer.currentBalancePaise + amountPaise
-        : (customer.currentBalancePaise - amountPaise).clamp(0, 999999999999);
 
     await db.transaction((txn) async {
+      // Query fresh balance directly from DB inside transaction to prevent race condition or stale UI reference
+      final custRows = await txn.query(
+        'customers',
+        columns: ['current_balance_paise'],
+        where: 'id = ?',
+        whereArgs: [customer.id],
+      );
+      final int currentDbBalance = custRows.isNotEmpty
+          ? (custRows.first['current_balance_paise'] as int? ?? 0)
+          : customer.currentBalancePaise;
+
+      // Sacred financial rule: No clamping! Negative balance represents Jama (Advance)
+      final int newBalancePaise = isUdhar
+          ? currentDbBalance + amountPaise
+          : currentDbBalance - amountPaise;
+
       await txn.rawUpdate('''
         UPDATE customers
         SET current_balance_paise = ?
         WHERE id = ?
       ''', [newBalancePaise, customer.id]);
+
+      // When Jama (payment received) is recorded, FIFO auto-settle the customer's unpaid credit bills
+      if (!isUdhar && amountPaise > 0) {
+        final pendingSales = await txn.query(
+          'sales',
+          where: "(customer_id = ? OR (customer_phone IS NOT NULL AND customer_phone != '' AND customer_phone = ?)) AND payment_method = 'credit' AND status != 'settled'",
+          whereArgs: [customer.id, customer.phone],
+          orderBy: 'created_at ASC',
+        );
+
+        int remainingJamaPaise = amountPaise;
+        for (final row in pendingSales) {
+          final saleId = row['id'] as String;
+          final totalPaise = (row['total_amount_paise'] as int?) ?? 0;
+          if (remainingJamaPaise >= totalPaise) {
+            await txn.update(
+              'sales',
+              {'status': 'settled', 'sync_status': 'pending'},
+              where: 'id = ?',
+              whereArgs: [saleId],
+            );
+            remainingJamaPaise -= totalPaise;
+          } else {
+            // Partial payment: bill remains pending until fully covered or selectively settled
+            break;
+          }
+        }
+      }
 
       final ledgerEntry = LedgerTransactionModel(
         id: _uuid.v4(),
@@ -2264,7 +2347,7 @@ class LocalDatabase {
     });
 
     AppDataBus.instance.bumpCustomers();
-    // A Jama/Udhar entry taken in cash physically changes the drawer.
+    AppDataBus.instance.bumpSales();
     AppDataBus.instance.bumpCash();
   }
 
@@ -2275,9 +2358,20 @@ class LocalDatabase {
     required String paymentMode,
   }) async {
     final db = await instance.database;
-    final int newBalancePaise = (customer.currentBalancePaise - amountPaise).clamp(0, 999999999999);
 
     await db.transaction((txn) async {
+      final custRows = await txn.query(
+        'customers',
+        columns: ['current_balance_paise'],
+        where: 'id = ?',
+        whereArgs: [customer.id],
+      );
+      final int currentDbBalance = custRows.isNotEmpty
+          ? (custRows.first['current_balance_paise'] as int? ?? 0)
+          : customer.currentBalancePaise;
+
+      final int newBalancePaise = currentDbBalance - amountPaise;
+
       await txn.update(
         'sales',
         {'status': 'settled', 'sync_status': 'pending'},
@@ -2319,9 +2413,20 @@ class LocalDatabase {
     required String paymentMode,
   }) async {
     final db = await instance.database;
-    final int newBalancePaise = (customer.currentBalancePaise - totalAmountPaise).clamp(0, 999999999999);
 
     await db.transaction((txn) async {
+      final custRows = await txn.query(
+        'customers',
+        columns: ['current_balance_paise'],
+        where: 'id = ?',
+        whereArgs: [customer.id],
+      );
+      final int currentDbBalance = custRows.isNotEmpty
+          ? (custRows.first['current_balance_paise'] as int? ?? 0)
+          : customer.currentBalancePaise;
+
+      final int newBalancePaise = currentDbBalance - totalAmountPaise;
+
       for (final saleId in saleIds) {
         await txn.update(
           'sales',
@@ -2432,9 +2537,13 @@ class LocalDatabase {
         is_pro INTEGER DEFAULT 0,
         pro_plan TEXT DEFAULT 'free',
         pro_expiry TEXT,
-        razorpay_payment_id TEXT
+        razorpay_payment_id TEXT,
+        trial_started_at TEXT
       )
     ''');
+    try {
+      await db.execute('ALTER TABLE store_profile ADD COLUMN trial_started_at TEXT');
+    } catch (_) {}
   }
 
   Future<StoreProfileModel> getStoreProfile() async {
@@ -2460,22 +2569,24 @@ class LocalDatabase {
     await _ensureStoreProfileTable(db);
     final map = profile.toMap();
     map['id'] = 'default_store';
-    // Never let an empty incoming businessType blank out an already-set one —
-    // business type is locked at signup and every product/category query is a
-    // hard partition keyed on it, so silently clearing it would make the
-    // entire existing catalog invisible on the very next read. A genuinely
-    // new store's profile always ships with a real businessType from
-    // signup_store_screen.dart, so an empty value here only ever means "this
-    // caller wasn't trying to change it" — preserve whatever is already saved.
-    if ((map['business_type'] as String?)?.trim().isEmpty ?? true) {
-      final existing = await db.query('store_profile', where: 'id = ?', whereArgs: ['default_store'], limit: 1);
-      if (existing.isNotEmpty) {
+
+    // Preserve existing business_type and trial_started_at if incoming is blank
+    final existing = await db.query('store_profile', where: 'id = ?', whereArgs: ['default_store'], limit: 1);
+    if (existing.isNotEmpty) {
+      if ((map['business_type'] as String?)?.trim().isEmpty ?? true) {
         final existingType = existing.first['business_type'] as String?;
         if (existingType != null && existingType.trim().isNotEmpty) {
           map['business_type'] = existingType;
         }
       }
+      if ((map['trial_started_at'] as String?)?.trim().isEmpty ?? true) {
+        final existingTrial = existing.first['trial_started_at'] as String?;
+        if (existingTrial != null && existingTrial.trim().isNotEmpty) {
+          map['trial_started_at'] = existingTrial;
+        }
+      }
     }
+
     await db.insert('store_profile', map, conflictAlgorithm: ConflictAlgorithm.replace);
   }
 
@@ -2504,20 +2615,86 @@ class LocalDatabase {
       proPlan: plan,
       proExpiry: expiryDate.toIso8601String(),
       razorpayPaymentId: paymentId,
+      trialStartedAt: current.trialStartedAt,
     );
     await saveStoreProfile(updated);
   }
 
-  /// Grants a 7-day free Pro trial if the store has never had any Pro plan or trial before
+  /// Grants a 7-day free Pro trial if the store has never had any Pro plan or trial before.
+  /// Strictly non-repeatable: Once initiated, trial_started_at is permanently locked and cannot restart.
   Future<StoreProfileModel> ensureFreeTrialGranted() async {
     final current = await getStoreProfile();
-    // If they already have an active pro or an existing pro plan/expiry, do not override
-    if (current.isProEffective || (current.proPlan.isNotEmpty && current.proPlan != 'free') || current.proExpiry.isNotEmpty) {
+    final prefs = await SharedPreferences.getInstance();
+
+    // 1. Check if trial was already initiated previously
+    String? existingTrialStart = current.trialStartedAt.trim().isNotEmpty ? current.trialStartedAt.trim() : null;
+    existingTrialStart ??= prefs.getString('pro_trial_started_at')?.trim();
+
+    if (existingTrialStart != null && existingTrialStart.isNotEmpty) {
+      final startDate = DateTime.tryParse(existingTrialStart);
+      if (startDate != null) {
+        final expiry = startDate.add(const Duration(days: 7));
+        final isStillValid = DateTime.now().isBefore(expiry);
+
+        if (isStillValid) {
+          if (!current.isPro || current.proPlan != 'trial') {
+            final updated = StoreProfileModel(
+              storeName: current.storeName,
+              tagline: current.tagline,
+              ownerName: current.ownerName,
+              phone: current.phone,
+              email: current.email,
+              upiVpa: current.upiVpa,
+              category: current.category,
+              businessType: current.businessType,
+              address: current.address,
+              pincode: current.pincode,
+              gstin: current.gstin,
+              fssai: current.fssai,
+              logoUrl: current.logoUrl,
+              upiAccountsJson: current.upiAccountsJson,
+              isPro: true,
+              proPlan: 'trial',
+              proExpiry: expiry.toIso8601String(),
+              razorpayPaymentId: 'free_trial_7d',
+              trialStartedAt: existingTrialStart,
+            );
+            await saveStoreProfile(updated);
+            await prefs.setBool('is_pro', true);
+            return updated;
+          }
+          return current;
+        } else {
+          // Trial has strictly expired! Do not renew!
+          if (current.isPro && (current.proPlan == 'trial' || current.razorpayPaymentId == 'free_trial_7d')) {
+            await deactivateProMembership();
+            await prefs.setBool('is_pro', false);
+          }
+          return current;
+        }
+      }
+    }
+
+    // 2. If user already purchased a paid plan (monthly / annual), do not override
+    if (current.isProEffective && current.proPlan != 'trial' && current.proPlan != 'free') {
       return current;
     }
-    // Grant 7 days free trial
+
+    // 3. Check if device or account already used trial
+    final alreadyUsed = prefs.getBool('pro_trial_already_consumed') ?? false;
+    if (alreadyUsed) {
+      return current;
+    }
+
+    // 4. First-time initiation: Lock trial_started_at permanently!
     final now = DateTime.now();
     final expiry = now.add(const Duration(days: 7));
+    final startStr = now.toIso8601String();
+
+    await prefs.setString('pro_trial_started_at', startStr);
+    await prefs.setBool('pro_trial_already_consumed', true);
+    await prefs.setBool('is_pro', true);
+
     final updated = StoreProfileModel(
       storeName: current.storeName,
       tagline: current.tagline,
@@ -2537,12 +2714,9 @@ class LocalDatabase {
       proPlan: 'trial',
       proExpiry: expiry.toIso8601String(),
       razorpayPaymentId: 'free_trial_7d',
+      trialStartedAt: startStr,
     );
     await saveStoreProfile(updated);
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setBool('is_pro', true);
-    } catch (_) {}
     return updated;
   }
 
@@ -2704,10 +2878,42 @@ class LocalDatabase {
       await txn.delete('expenses');
       await txn.delete('cash_register_shifts');
       await txn.delete('suppliers');
+      try {
+        await txn.delete('product_batches');
+        await txn.delete('audit_logs');
+      } catch (_) {}
       if (resetStoreProfile) {
         await txn.delete('store_profile');
       }
     });
+
+    // Reset Cash Drawer float to ₹0.00
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setInt('cash_register_opening_float_paise', 0);
+    } catch (_) {}
+
+    // Instantly notify all active tabs (Products, POS, Khata, Cash Register) to refresh
+    AppDataBus.instance.bumpAll();
+  }
+
+  /// Automatically re-links orphan variants to their master parent product
+  Future<void> repairVariantRelationships() async {
+    final db = await database;
+    try {
+      final parents = await db.query('products', where: 'has_variants = 1');
+      for (final p in parents) {
+        final pId = p['id'] as String;
+        final pName = p['name'] as String;
+        await db.rawUpdate('''
+          UPDATE products
+          SET parent_id = ?
+          WHERE (parent_id IS NULL OR parent_id = '')
+            AND name LIKE ?
+            AND id != ?
+        ''', [pId, '$pName (%', pId]);
+      }
+    } catch (_) {}
   }
 
   // --- DOCTOR MANAGEMENT (Pharmacy Vertical) ---
@@ -2764,4 +2970,23 @@ class LocalDatabase {
     }
   }
 }
+
+class VariantCustomData {
+  final String label;
+  final int sellingPricePaise;
+  final int mrpPaise;
+  final int purchasePricePaise;
+  final double stockQuantity;
+  final String? barcode;
+
+  const VariantCustomData({
+    required this.label,
+    required this.sellingPricePaise,
+    required this.mrpPaise,
+    required this.purchasePricePaise,
+    required this.stockQuantity,
+    this.barcode,
+  });
+}
+
 

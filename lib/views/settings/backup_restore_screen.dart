@@ -1,9 +1,9 @@
-import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../core/database/local_database.dart';
 import '../../services/firestore_sync_service.dart';
+import '../../services/backup_restore_service.dart';
 import '../common/in_app_notification.dart';
 import '../common/kamai_bottom_nav.dart';
 import '../common/pro_upgrade_modal.dart';
@@ -23,6 +23,9 @@ class _BackupRestoreScreenState extends State<BackupRestoreScreen> {
   bool _isLoading = true;
   bool _isSyncing = false;
   bool _isPro = false;
+  bool _isTrialActive = false;
+
+  bool get _canAccessCloud => _isPro || _isTrialActive;
 
   @override
   void initState() {
@@ -41,7 +44,8 @@ class _BackupRestoreScreenState extends State<BackupRestoreScreen> {
           _itemCount = products.length;
           _saleCount = sales.length;
           _customerCount = customers.length;
-          _isPro = profile.isPro;
+          _isPro = profile.isProEffective;
+          _isTrialActive = profile.isTrialActive;
           _isLoading = false;
         });
       }
@@ -50,61 +54,122 @@ class _BackupRestoreScreenState extends State<BackupRestoreScreen> {
     }
   }
 
-  Future<void> _exportBackupJson() async {
-    final messenger = ScaffoldMessenger.of(context);
-    messenger.showSnackBar(const SnackBar(content: Text('Generating encrypted JSON database snapshot...')));
+  bool _isBackingUpDrive = false;
+  bool _isRestoring = false;
+
+  Future<void> _backupToGoogleDrive() async {
+    HapticFeedback.lightImpact();
+    if (!_canAccessCloud) {
+      if (mounted) {
+        ProUpgradeModal.show(context, triggerFeature: 'Google Drive Cloud Backup');
+      }
+      return;
+    }
+    setState(() => _isBackingUpDrive = true);
     try {
-      final products = await LocalDatabase.instance.getAllProducts();
-      final customers = await LocalDatabase.instance.getAllCustomers();
-      final sales = await LocalDatabase.instance.getAllSales(limit: 500);
-
-      final snapshot = {
-        'version': '4.17.0',
-        'exported_at': DateTime.now().toIso8601String(),
-        'products': products.map((p) => p.toMap()).toList(),
-        'customers': customers.map((c) => c.toMap()).toList(),
-        'sales': sales.map((s) => s.toMap()).toList(),
-      };
-      final jsonStr = jsonEncode(snapshot);
-
+      final res = await BackupRestoreService.instance.saveToGoogleDrive();
       if (!mounted) return;
-      showDialog(
-        context: context,
-        builder: (ctx) => AlertDialog(
-          backgroundColor: Colors.white,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-          title: Row(
-            children: [
-              const Icon(Icons.check_circle_rounded, color: Color(0xFF10B981)),
-              const SizedBox(width: 8),
-              Text('Backup Ready', style: GoogleFonts.outfit(fontSize: 17, fontWeight: FontWeight.w700)),
-            ],
-          ),
-          content: Text(
-            'Snapshot generated with $_itemCount products, $_customerCount customers and $_saleCount sales bills (${(jsonStr.length / 1024).toStringAsFixed(1)} KB).\n\nSaved to Internal Storage / Documents / KamaiPlus_Backup.json',
-            style: GoogleFonts.inter(fontSize: 13, color: const Color(0xFF475569)),
-          ),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('OK')),
-            ElevatedButton(
-              onPressed: () {
-                Navigator.pop(ctx);
-                messenger.showSnackBar(const SnackBar(content: Text('Backup file ready for Google Drive / WhatsApp export!')));
-              },
-              style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF10B981), foregroundColor: Colors.white),
-              child: const Text('Export File'),
-            ),
+      if (res.success) {
+        InAppNotification.show(
+          context: context,
+          message: res.message,
+          customIcon: Icons.cloud_done_rounded,
+          customColor: const Color(0xFF0284C7),
+        );
+      } else {
+        InAppNotification.error(res.message, context: context);
+      }
+    } catch (e) {
+      if (mounted) InAppNotification.error('Drive backup failed: $e', context: context);
+    } finally {
+      if (mounted) setState(() => _isBackingUpDrive = false);
+    }
+  }
+
+  Future<void> _shareEncryptedBackup() async {
+    HapticFeedback.lightImpact();
+    try {
+      await BackupRestoreService.instance.shareBackupFile();
+    } catch (e) {
+      if (mounted) InAppNotification.error('Share failed: $e', context: context);
+    }
+  }
+
+  Future<void> _restoreFromBackupFile() async {
+    HapticFeedback.mediumImpact();
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: Colors.white,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Row(
+          children: [
+            const Icon(Icons.warning_amber_rounded, color: Color(0xFFD97706)),
+            const SizedBox(width: 8),
+            Text('Restore Database?', style: GoogleFonts.outfit(fontSize: 17, fontWeight: FontWeight.w700)),
           ],
         ),
-      );
-    } catch (e) {
+        content: Text(
+          'Restoring a backup will replace your current local database with the contents of the backup file. Current data will be overwritten.\n\nDo you want to proceed?',
+          style: GoogleFonts.inter(fontSize: 13, color: const Color(0xFF475569)),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF0F172A), foregroundColor: Colors.white),
+            child: const Text('Select File & Restore'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm != true) return;
+
+    setState(() => _isRestoring = true);
+    try {
+      final res = await BackupRestoreService.instance.pickAndRestore();
       if (!mounted) return;
-      messenger.showSnackBar(SnackBar(content: Text('Export failed: ${e.toString()}')));
+      if (res.success) {
+        await _loadStats();
+        if (!mounted) return;
+        showDialog(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            backgroundColor: Colors.white,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+            title: Row(
+              children: [
+                const Icon(Icons.check_circle_rounded, color: Color(0xFF10B981)),
+                const SizedBox(width: 8),
+                Text('Restore Successful', style: GoogleFonts.outfit(fontSize: 17, fontWeight: FontWeight.w700)),
+              ],
+            ),
+            content: Text(
+              res.message,
+              style: GoogleFonts.inter(fontSize: 13, color: const Color(0xFF475569)),
+            ),
+            actions: [
+              ElevatedButton(
+                onPressed: () => Navigator.pop(ctx),
+                style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF10B981), foregroundColor: Colors.white),
+                child: const Text('OK'),
+              ),
+            ],
+          ),
+        );
+      } else {
+        InAppNotification.error(res.message, context: context);
+      }
+    } catch (e) {
+      if (mounted) InAppNotification.error('Restore failed: $e', context: context);
+    } finally {
+      if (mounted) setState(() => _isRestoring = false);
     }
   }
 
   Future<void> _triggerCloudSync() async {
-    if (!_isPro) {
+    if (!_canAccessCloud) {
       HapticFeedback.mediumImpact();
       ProUpgradeModal.show(context).then((_) => _loadStats());
       return;
@@ -200,7 +265,7 @@ class _BackupRestoreScreenState extends State<BackupRestoreScreen> {
           ],
         ),
         content: Text(
-          'Aapka poora product catalog ($_itemCount items) aur category list delete ho jayegi taaki aap fresh real stock add kar sakein.\n\nSales bills aur customers safe rahenge.',
+          'Your entire product catalog ($_itemCount items) and categories will be removed so you can add fresh store stock.\n\nSales bills and customers remain safe.',
           style: GoogleFonts.inter(fontSize: 13, color: const Color(0xFF475569)),
         ),
         actions: [
@@ -303,7 +368,7 @@ class _BackupRestoreScreenState extends State<BackupRestoreScreen> {
           ],
         ),
         content: Text(
-          'Kya aap sach me apna sabhi test data (products, sales bills, customers, khata ledger, expenses) delete karna chahte hain?\n\nDukan ki profile aur UPI details surakshit rahengi taaki aap turant fresh start kar sakein.',
+          'Are you sure you want to delete all transaction data (products, sales bills, customers, ledger, expenses)?\n\nStore profile and UPI settings will be preserved for a fresh start.',
           style: GoogleFonts.inter(fontSize: 13, color: const Color(0xFF475569)),
         ),
         actions: [
@@ -320,7 +385,7 @@ class _BackupRestoreScreenState extends State<BackupRestoreScreen> {
               if (!mounted) return;
               messenger.showSnackBar(
                 const SnackBar(
-                  content: Text('✓ Sabhi data safalta-purvak delete ho gaya. Fresh start ready!'),
+                  content: Text('✓ All data successfully cleared. Ready for a fresh start!'),
                   backgroundColor: Color(0xFF059669),
                   behavior: SnackBarBehavior.floating,
                 ),
@@ -421,38 +486,53 @@ class _BackupRestoreScreenState extends State<BackupRestoreScreen> {
                 _buildSectionTitle('STORE DATA BACKUP & RESTORE'),
                 const SizedBox(height: 10),
                 _buildActionCard(
-                  icon: Icons.download_for_offline_rounded,
-                  iconColor: const Color(0xFFD97706),
-                  iconBg: const Color(0xFFFFFBEB),
-                  title: 'Export Full Backup',
-                  subtitle: 'Save .json snapshot file on phone',
-                  buttonLabel: 'Download',
-                  onTap: _exportBackupJson,
-                ),
-                const SizedBox(height: 10),
-                _buildActionCard(
-                  icon: Icons.upload_file_rounded,
+                  icon: Icons.add_to_drive_rounded,
                   iconColor: const Color(0xFF0284C7),
-                  iconBg: const Color(0xFFF0F9FF),
-                  title: 'Restore Store Data',
-                  subtitle: 'Upload .json backup file to recover items',
-                  buttonLabel: 'Select File',
+                  iconBg: const Color(0xFFE0F2FE),
+                  title: 'Google Drive 1-Tap Cloud Backup',
+                  subtitle: 'Direct encrypted SQLite backup to your Google account',
+                  badge: _canAccessCloud ? (_isPro && !_isTrialActive ? 'DRIVE' : '7D TRIAL') : 'PRO',
+                  buttonLabel: _isBackingUpDrive ? 'Saving...' : (_canAccessCloud ? 'Drive Backup' : '🔒 Upgrade'),
                   onTap: () {
-                    InAppNotification.info('Select KamaiPlus_Backup.json from your device storage', context: context);
+                    if (!_canAccessCloud) {
+                      ProUpgradeModal.show(context, triggerFeature: 'Google Drive Cloud Backup');
+                      return;
+                    }
+                    _backupToGoogleDrive();
                   },
                 ),
                 const SizedBox(height: 10),
                 _buildActionCard(
-                  icon: Icons.cloud_sync_rounded,
+                  icon: Icons.share_rounded,
+                  iconColor: const Color(0xFFD97706),
+                  iconBg: const Color(0xFFFFFBEB),
+                  title: 'Export Encrypted Backup (.kmb)',
+                  subtitle: 'Share via WhatsApp, Email, or File Manager',
+                  buttonLabel: 'Export File',
+                  onTap: _shareEncryptedBackup,
+                ),
+                const SizedBox(height: 10),
+                _buildActionCard(
+                  icon: Icons.settings_backup_restore_rounded,
                   iconColor: const Color(0xFF10B981),
                   iconBg: const Color(0xFFECFDF5),
-                  title: 'Cloud Backup & Multi-Counter',
-                  subtitle: 'Real-time cloud sync across counters & mobile',
-                  badge: 'PRO',
-                  buttonLabel: _isSyncing ? 'Syncing...' : (_isPro ? 'Backup to Cloud' : '🔒 Upgrade'),
+                  title: 'Restore Store Database',
+                  subtitle: 'Pick .kmb backup file to recover all data',
+                  buttonLabel: _isRestoring ? 'Restoring...' : 'Restore File',
+                  onTap: _restoreFromBackupFile,
+                ),
+                const SizedBox(height: 10),
+                _buildActionCard(
+                  icon: Icons.cloud_sync_rounded,
+                  iconColor: const Color(0xFF6366F1),
+                  iconBg: const Color(0xFFEEF2FF),
+                  title: 'Real-time Multi-Counter Sync',
+                  subtitle: 'Continuous background sync with Firestore',
+                  badge: _canAccessCloud ? (_isPro && !_isTrialActive ? 'LIVE' : '7D TRIAL') : 'PRO',
+                  buttonLabel: _isSyncing ? 'Syncing...' : (_canAccessCloud ? 'Sync Now' : '🔒 Upgrade'),
                   onTap: _triggerCloudSync,
                 ),
-                if (!_isPro) ...[
+                if (!_canAccessCloud) ...[
                   const SizedBox(height: 10),
                   const ProLockedCard(
                     title: 'Cloud Backup & Multi-Counter Sync',
@@ -475,10 +555,10 @@ class _BackupRestoreScreenState extends State<BackupRestoreScreen> {
                   iconBg: const Color(0xFFFFFBEB),
                   title: 'Tally Prime XML',
                   subtitle: 'Vouchers, Sales & Sundry Debtors import',
-                  badge: _isPro ? 'TALLY ERP 9' : 'PRO',
-                  buttonLabel: _isPro ? 'Export XML' : '🔒 Upgrade',
+                  badge: _canAccessCloud ? (_isPro && !_isTrialActive ? 'TALLY ERP 9' : '7D TRIAL') : 'PRO',
+                  buttonLabel: _canAccessCloud ? 'Export XML' : '🔒 Upgrade',
                   onTap: () {
-                    if (!_isPro) {
+                    if (!_canAccessCloud) {
                       ProUpgradeModal.show(context).then((_) => _loadStats());
                       return;
                     }
@@ -492,17 +572,17 @@ class _BackupRestoreScreenState extends State<BackupRestoreScreen> {
                   iconBg: const Color(0xFFEEF2FF),
                   title: 'CA Master Sales Register',
                   subtitle: 'GSTR-1 Excel / CSV Table for CA Audit',
-                  badge: _isPro ? 'CA FORMAT' : 'PRO',
-                  buttonLabel: _isPro ? 'Export CSV' : '🔒 Upgrade',
+                  badge: _canAccessCloud ? (_isPro && !_isTrialActive ? 'CA FORMAT' : '7D TRIAL') : 'PRO',
+                  buttonLabel: _canAccessCloud ? 'Export CSV' : '🔒 Upgrade',
                   onTap: () {
-                    if (!_isPro) {
+                    if (!_canAccessCloud) {
                       ProUpgradeModal.show(context).then((_) => _loadStats());
                       return;
                     }
                     InAppNotification.success('CA Master CSV exported to Downloads/kamai_ca_register.csv', context: context);
                   },
                 ),
-                if (!_isPro) ...[
+                if (!_canAccessCloud) ...[
                   const SizedBox(height: 10),
                   const ProLockedCard(
                     title: 'Accounting Software & Tax Exports',
@@ -535,7 +615,7 @@ class _BackupRestoreScreenState extends State<BackupRestoreScreen> {
                 ),
                 const SizedBox(height: 6),
                 Text(
-                  'Naye store setup ke liye test data delete karein. Data safe rakhne ke liye pehle backup download kar lein.',
+                  'Clear test data for a new store setup. Export a backup first to keep your data safe.',
                   style: GoogleFonts.inter(fontSize: 11, color: const Color(0xFF64748B)),
                 ),
                 const SizedBox(height: 12),
@@ -603,7 +683,7 @@ class _BackupRestoreScreenState extends State<BackupRestoreScreen> {
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Text('Data Reset and Start Fresh', style: GoogleFonts.outfit(fontSize: 15, fontWeight: FontWeight.w800, color: const Color(0xFF991B1B))),
-                                Text('Purana sabhi test data 1-click me delete karein taaki aap dukan me fresh real start kar sakein.', style: GoogleFonts.inter(fontSize: 11, color: const Color(0xFFB91C1C))),
+                                Text('Delete all sample test data in 1 click to start fresh with real store data.', style: GoogleFonts.inter(fontSize: 11, color: const Color(0xFFB91C1C))),
                               ],
                             ),
                           ),
@@ -611,7 +691,7 @@ class _BackupRestoreScreenState extends State<BackupRestoreScreen> {
                       ),
                       const SizedBox(height: 12),
                       Text(
-                        'Bills, Products, Customers, Expenses aur Shifts saaf ho jayenge. Dukan ki profile aur UPI details surakshit rahengi.',
+                        'Bills, Products, Customers, Expenses, and Shifts will be wiped. Store profile and UPI settings remain safe.',
                         style: GoogleFonts.inter(fontSize: 11, color: const Color(0xFF7F1D1D)),
                       ),
                       const SizedBox(height: 12),
@@ -635,7 +715,7 @@ class _BackupRestoreScreenState extends State<BackupRestoreScreen> {
                 ),
               ],
             ),
-      bottomNavigationBar: const KamaiBottomNav(),
+      bottomNavigationBar: const KamaiBottomNav(activeScreen: 'backup_restore'),
     );
   }
 

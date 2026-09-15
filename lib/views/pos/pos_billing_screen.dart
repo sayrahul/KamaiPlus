@@ -75,6 +75,13 @@ class _PosBillingScreenState extends State<PosBillingScreen>
   int _activeTabIndex = 0;
   bool _isPro = false;
 
+  // POS Catalog Filter Mode: 'all', 'in_stock', 'favorites'
+  String _posFilterMode = 'all';
+
+  int get _inStockCount => _allProducts.where((p) => !p.isVariant && (p.isUnlimitedStock || p.stockQuantity > 0)).length;
+  int get _favoritesCount => _allProducts.where((p) => !p.isVariant && p.isFavorite).length;
+  int get _totalCatalogCount => _allProducts.where((p) => !p.isVariant).length;
+
   @override
   void initState() {
     super.initState();
@@ -93,6 +100,92 @@ class _PosBillingScreenState extends State<PosBillingScreen>
     BusinessVerticals.activeBusinessTypeNotifier.addListener(_onBusinessTypeChanged);
     FirestoreSyncService.instance.liveSyncCounter.addListener(_handleCloudSyncUpdate);
     FirestoreSyncService.isProNotifier.addListener(_handleProStatusUpdate);
+    HardwareKeyboard.instance.addHandler(_handleHardwareBarcodeScan);
+  }
+
+  // Hardware USB/OTG Barcode Scanner Gun Buffer
+  final StringBuffer _hardwareBarcodeBuffer = StringBuffer();
+  DateTime _lastHardwareKeyTime = DateTime.now();
+
+  bool _handleHardwareBarcodeScan(KeyEvent event) {
+    if (event is! KeyDownEvent) return false;
+
+    // Enter indicates end of barcode transmission from scanner gun
+    if (event.logicalKey == LogicalKeyboardKey.enter ||
+        event.logicalKey == LogicalKeyboardKey.numpadEnter) {
+      if (_hardwareBarcodeBuffer.isNotEmpty && _hardwareBarcodeBuffer.length >= 3) {
+        final scanned = _hardwareBarcodeBuffer.toString().trim();
+        _hardwareBarcodeBuffer.clear();
+        _processHardwareScannedBarcode(scanned);
+        return true;
+      }
+      _hardwareBarcodeBuffer.clear();
+      return false;
+    }
+
+    final char = event.character;
+    if (char != null && char.isNotEmpty && char.codeUnitAt(0) >= 32) {
+      final now = DateTime.now();
+      // Scanners type at blazing speeds (<70ms per char). If user took >800ms between keys, reset buffer
+      if (now.difference(_lastHardwareKeyTime).inMilliseconds > 800) {
+        _hardwareBarcodeBuffer.clear();
+      }
+      _lastHardwareKeyTime = now;
+      _hardwareBarcodeBuffer.write(char);
+      return false;
+    }
+    return false;
+  }
+
+  Future<void> _processHardwareScannedBarcode(String barcode) async {
+    HapticFeedback.mediumImpact();
+    // 1. Search in loaded active store products
+    ProductModel? match;
+    for (final p in _allProducts) {
+      if (p.barcode != null && p.barcode!.trim() == barcode) {
+        match = p;
+        break;
+      }
+    }
+
+    // 2. If not in memory, query SQLite
+    if (match == null) {
+      final activeType = BusinessVerticals.activeBusinessTypeNotifier.value;
+      match = await LocalDatabase.instance.findProductByBarcode(barcode, businessType: activeType);
+    }
+
+    if (match != null) {
+      _addToCart(match);
+      if (mounted) {
+        InAppNotification.show(
+          context: context,
+          message: '🔫 Scanned: ${match.name}',
+          customIcon: Icons.qr_code_scanner_rounded,
+          customColor: const Color(0xFF10B981),
+          duration: const Duration(milliseconds: 1400),
+        );
+      }
+      return;
+    }
+
+    // 3. Check master catalog or cloud resolver
+    try {
+      final activeType = BusinessVerticals.activeBusinessTypeNotifier.value;
+      final master = await LocalDatabase.instance.findMasterProductByBarcode(barcode, businessType: activeType);
+      if (master != null) {
+        await _importAndAddToCart(master);
+        return;
+      }
+      final cloudItem = await CloudBarcodeResolverService.instance.resolveBarcode(barcode, businessType: activeType);
+      if (cloudItem != null) {
+        await _importAndAddToCart(cloudItem);
+        return;
+      }
+    } catch (_) {}
+
+    if (mounted) {
+      InAppNotification.error('Barcode "$barcode" not found in store catalog', context: context);
+    }
   }
 
   Future<void> _loadBusinessType() async {
@@ -123,6 +216,7 @@ class _PosBillingScreenState extends State<PosBillingScreen>
 
   @override
   void dispose() {
+    HardwareKeyboard.instance.removeHandler(_handleHardwareBarcodeScan);
     BusinessVerticals.activeBusinessTypeNotifier.removeListener(_onBusinessTypeChanged);
     FirestoreSyncService.instance.liveSyncCounter.removeListener(_handleCloudSyncUpdate);
     FirestoreSyncService.isProNotifier.removeListener(_handleProStatusUpdate);
@@ -167,10 +261,30 @@ class _PosBillingScreenState extends State<PosBillingScreen>
 
   List<ProductModel> get filteredProducts {
     final list = _allProducts.where((p) {
-      final matchesSearch = p.name.toLowerCase().contains(_searchQuery.toLowerCase()) ||
-          (p.barcode != null && p.barcode!.contains(_searchQuery));
+      // 1. Hide child variants from main POS grid so catalog is clean
+      if (p.isVariant) return false;
+
+      // 2. POS Filter Mode (Issue 10)
+      if (_posFilterMode == 'in_stock') {
+        final isInStock = p.isUnlimitedStock || p.stockQuantity > 0;
+        if (!isInStock) return false;
+      } else if (_posFilterMode == 'favorites') {
+        if (!p.isFavorite) return false;
+      }
+
+      // 3. Search filter: matches parent or any child variant
+      if (_searchQuery.trim().isNotEmpty) {
+        final q = _searchQuery.toLowerCase().trim();
+        final matchesSelf = p.name.toLowerCase().contains(q) ||
+            (p.barcode != null && p.barcode!.contains(q));
+        final matchesVariant = p.hasVariants &&
+            _allProducts.any((v) => v.parentId == p.id && (v.name.toLowerCase().contains(q) || (v.barcode != null && v.barcode!.contains(q))));
+        if (!matchesSelf && !matchesVariant) return false;
+      }
+
+      // 4. Category filter
       final matchesCat = _selectedCategoryId == null || p.categoryId == _selectedCategoryId;
-      return matchesSearch && matchesCat;
+      return matchesCat;
     }).toList();
     list.sort((a, b) {
       if (a.isFavorite && !b.isFavorite) return -1;
@@ -271,7 +385,47 @@ class _PosBillingScreenState extends State<PosBillingScreen>
       _showVariantPicker(product);
       return;
     }
+    final exp = parseProductExpiry(product);
+    if (exp != null && exp.isExpired) {
+      _showExpiredWarningModal(product);
+      return;
+    }
     _addProductDirectlyToCart(product);
+  }
+
+  void _showExpiredWarningModal(ProductModel product) {
+    HapticFeedback.heavyImpact();
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Row(
+          children: [
+            const Icon(Icons.warning_amber_rounded, color: Color(0xFFDC2626), size: 22),
+            const SizedBox(width: 8),
+            Text('Expired Product!', style: GoogleFonts.plusJakartaSans(fontSize: 15, fontWeight: FontWeight.w800, color: const Color(0xFFDC2626))),
+          ],
+        ),
+        content: Text(
+          '"${product.name}" has expired (${product.expiryDate ?? ''}). Do you still want to add this item to the bill?',
+          style: GoogleFonts.inter(fontSize: 13, color: const Color(0xFF334155)),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel', style: TextStyle(color: Color(0xFF64748B))),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(ctx);
+              _addProductDirectlyToCart(product);
+            },
+            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFDC2626), foregroundColor: Colors.white),
+            child: const Text('Add Anyway'),
+          ),
+        ],
+      ),
+    );
   }
 
   void _showVariantPicker(ProductModel parent) async {
@@ -507,7 +661,7 @@ class _PosBillingScreenState extends State<PosBillingScreen>
       _activeTabIndex = _tabs.length - 1;
     });
     InAppNotification.info(
-      'Naya Bill #${_tabs.last.number} open ho gaya. Products add karein.',
+      'New Bill #${_tabs.last.number} created. Add items to cart.',
       context: context,
     );
   }
@@ -668,6 +822,9 @@ class _PosBillingScreenState extends State<PosBillingScreen>
                 // 3. Category Filter Pills (hidden when searching for maximum vertical space)
                 if (_searchQuery.trim().isEmpty) _buildCategoryPills(),
 
+                // 3.5 Active POS Filter Banner
+                if (_posFilterMode != 'all') _buildActiveFilterBanner(),
+
                 // 4. Content: Real-Time Dual Search Results or Standard Product Grid
                 Expanded(
                   child: _isLoading
@@ -803,41 +960,283 @@ class _PosBillingScreenState extends State<PosBillingScreen>
             ),
           const SizedBox(width: 8),
 
-          // Filter / Settings Button with Yellow Lock Badge
+          // Functional POS Filter Button
           Stack(
             clipBehavior: Clip.none,
             children: [
               InkWell(
-                onTap: () {
-                  HapticFeedback.lightImpact();
-                  InAppNotification.info('POS Filter: Showing all available items', context: context);
-                },
+                onTap: _showPosFilterModal,
                 borderRadius: BorderRadius.circular(12),
                 child: Container(
                   width: 48,
                   height: 48,
                   decoration: BoxDecoration(
-                    color: const Color(0xFF0F172A),
+                    color: _posFilterMode != 'all' ? const Color(0xFF2563EB) : const Color(0xFF0F172A),
                     borderRadius: BorderRadius.circular(12),
+                    border: _posFilterMode != 'all'
+                        ? Border.all(color: const Color(0xFF60A5FA), width: 1.5)
+                        : null,
                   ),
                   child: const Icon(Icons.tune_rounded, size: 20, color: Colors.white),
                 ),
               ),
-              Positioned(
-                top: -2,
-                right: -2,
-                child: Container(
-                  padding: const EdgeInsets.all(3),
-                  decoration: const BoxDecoration(
-                    color: Color(0xFFFBBF24),
-                    shape: BoxShape.circle,
+              if (_posFilterMode != 'all')
+                Positioned(
+                  top: -2,
+                  right: -2,
+                  child: Container(
+                    width: 10,
+                    height: 10,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFFBBF24),
+                      shape: BoxShape.circle,
+                      border: Border.all(color: Colors.white, width: 1.5),
+                    ),
                   ),
-                  child: const Icon(Icons.lock, size: 9, color: Color(0xFF0F172A)),
                 ),
-              ),
             ],
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildActiveFilterBanner() {
+    final filterLabel = _posFilterMode == 'in_stock'
+        ? 'In Stock Only ($_inStockCount items)'
+        : 'Favorites Only ($_favoritesCount items)';
+
+    return Container(
+      margin: const EdgeInsets.fromLTRB(16, 0, 16, 6),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      decoration: BoxDecoration(
+        color: _posFilterMode == 'in_stock' ? const Color(0xFFECFDF5) : const Color(0xFFFEF3C7),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(
+          color: _posFilterMode == 'in_stock' ? const Color(0xFFA7F3D0) : const Color(0xFFFDE68A),
+        ),
+      ),
+      child: Row(
+        children: [
+          Icon(
+            _posFilterMode == 'in_stock' ? Icons.inventory_2_outlined : Icons.star_rounded,
+            size: 14,
+            color: _posFilterMode == 'in_stock' ? const Color(0xFF059669) : const Color(0xFFD97706),
+          ),
+          const SizedBox(width: 6),
+          Expanded(
+            child: Text(
+              'Filtered: $filterLabel',
+              style: GoogleFonts.inter(
+                fontSize: 11,
+                fontWeight: FontWeight.w700,
+                color: _posFilterMode == 'in_stock' ? const Color(0xFF065F46) : const Color(0xFF92400E),
+              ),
+            ),
+          ),
+          InkWell(
+            onTap: () {
+              HapticFeedback.lightImpact();
+              setState(() => _posFilterMode = 'all');
+            },
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  'Clear',
+                  style: GoogleFonts.inter(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w800,
+                    color: _posFilterMode == 'in_stock' ? const Color(0xFF059669) : const Color(0xFFD97706),
+                    decoration: TextDecoration.underline,
+                  ),
+                ),
+                const SizedBox(width: 2),
+                Icon(
+                  Icons.close_rounded,
+                  size: 13,
+                  color: _posFilterMode == 'in_stock' ? const Color(0xFF059669) : const Color(0xFFD97706),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showPosFilterModal() {
+    HapticFeedback.mediumImpact();
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
+      ),
+      builder: (ctx) {
+        return SafeArea(
+          top: false,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFEFF6FF),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: const Icon(Icons.tune_rounded, color: Color(0xFF2563EB), size: 20),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'POS Catalog Filter',
+                            style: GoogleFonts.plusJakartaSans(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w800,
+                              color: const Color(0xFF0F172A),
+                            ),
+                          ),
+                          Text(
+                            'Filter items displayed on the billing counter',
+                            style: GoogleFonts.inter(fontSize: 11.5, color: const Color(0xFF64748B)),
+                          ),
+                        ],
+                      ),
+                    ),
+                    IconButton(
+                      onPressed: () => Navigator.pop(ctx),
+                      icon: const Icon(Icons.close_rounded, color: Color(0xFF94A3B8)),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                _buildFilterOption(
+                  id: 'all',
+                  title: 'All Products',
+                  subtitle: 'Show entire catalog without restrictions',
+                  count: _totalCatalogCount,
+                  icon: Icons.grid_view_rounded,
+                  iconColor: const Color(0xFF0F172A),
+                  iconBg: const Color(0xFFF1F5F9),
+                  ctx: ctx,
+                ),
+                const SizedBox(height: 8),
+                _buildFilterOption(
+                  id: 'in_stock',
+                  title: 'In Stock Only',
+                  subtitle: 'Hide zero or negative stock items',
+                  count: _inStockCount,
+                  icon: Icons.inventory_2_outlined,
+                  iconColor: const Color(0xFF059669),
+                  iconBg: const Color(0xFFECFDF5),
+                  ctx: ctx,
+                ),
+                const SizedBox(height: 8),
+                _buildFilterOption(
+                  id: 'favorites',
+                  title: 'Favorites / Fast Billing',
+                  subtitle: 'Starred items for rapid counter checkout',
+                  count: _favoritesCount,
+                  icon: Icons.star_rounded,
+                  iconColor: const Color(0xFFD97706),
+                  iconBg: const Color(0xFFFEF3C7),
+                  ctx: ctx,
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildFilterOption({
+    required String id,
+    required String title,
+    required String subtitle,
+    required int count,
+    required IconData icon,
+    required Color iconColor,
+    required Color iconBg,
+    required BuildContext ctx,
+  }) {
+    final isSelected = _posFilterMode == id;
+    return InkWell(
+      onTap: () {
+        HapticFeedback.selectionClick();
+        Navigator.pop(ctx);
+        setState(() => _posFilterMode = id);
+      },
+      borderRadius: BorderRadius.circular(14),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        decoration: BoxDecoration(
+          color: isSelected ? const Color(0xFFF8FAFC) : Colors.white,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(
+            color: isSelected ? const Color(0xFF0F172A) : const Color(0xFFE2E8F0),
+            width: isSelected ? 1.8 : 1.0,
+          ),
+        ),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(color: iconBg, borderRadius: BorderRadius.circular(10)),
+              child: Icon(icon, size: 18, color: iconColor),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: GoogleFonts.plusJakartaSans(
+                      fontSize: 13.5,
+                      fontWeight: isSelected ? FontWeight.w800 : FontWeight.w700,
+                      color: const Color(0xFF0F172A),
+                    ),
+                  ),
+                  Text(
+                    subtitle,
+                    style: GoogleFonts.inter(fontSize: 11, color: const Color(0xFF64748B)),
+                  ),
+                ],
+              ),
+            ),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+              decoration: BoxDecoration(
+                color: isSelected ? const Color(0xFF0F172A) : const Color(0xFFF1F5F9),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Text(
+                '$count items',
+                style: GoogleFonts.jetBrainsMono(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  color: isSelected ? Colors.white : const Color(0xFF475569),
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Icon(
+              isSelected ? Icons.check_circle_rounded : Icons.radio_button_unchecked_rounded,
+              size: 20,
+              color: isSelected ? const Color(0xFF0F172A) : const Color(0xFFCBD5E1),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -1377,7 +1776,7 @@ class _PosBillingScreenState extends State<PosBillingScreen>
     final isUnlimited = product.isUnlimitedStock;
 
     final vertToggles = BusinessVerticals.resolve(BusinessVerticals.activeBusinessTypeNotifier.value).toggles;
-    final expiryStatus = vertToggles.showBatchExpiry ? parseProductExpiry(product) : null;
+    final expiryStatus = parseProductExpiry(product);
     final isExpired = expiryStatus?.isExpired ?? false;
     final isExpiringSoon = expiryStatus?.isExpiringSoon ?? false;
     final showFitNote = vertToggles.showSizeVariants && (product.fitNotes?.trim().isNotEmpty ?? false);
@@ -1950,8 +2349,7 @@ class _PosProductGridItemState extends State<_PosProductGridItem> {
     // Pharmacy FEFO nudge (Phase 4, KamaiPlus Playbook): flag a near/past
     // expiry item right on the billing tile so the cashier naturally reaches
     // for it before newer stock of the same medicine.
-    final showExpiryBadges = BusinessVerticals.resolve(BusinessVerticals.activeBusinessTypeNotifier.value).toggles.showBatchExpiry;
-    final expiryStatus = showExpiryBadges ? parseProductExpiry(widget.product) : null;
+    final expiryStatus = parseProductExpiry(widget.product);
     final isExpired = expiryStatus?.isExpired ?? false;
     final isExpiringSoon = expiryStatus?.isExpiringSoon ?? false;
 
@@ -2076,6 +2474,30 @@ class _PosProductGridItemState extends State<_PosProductGridItem> {
                           ),
                         ),
                       )
+                    else if (widget.product.hasVariants)
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFF3E8FF),
+                          borderRadius: BorderRadius.circular(5),
+                          border: Border.all(color: const Color(0xFFD8B4FE), width: 0.8),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(Icons.style_rounded, size: 9, color: Color(0xFF7E22CE)),
+                            const SizedBox(width: 2.5),
+                            Text(
+                              'Variants ▾',
+                              style: GoogleFonts.outfit(
+                                fontSize: 8,
+                                fontWeight: FontWeight.w800,
+                                color: const Color(0xFF7E22CE),
+                              ),
+                            ),
+                          ],
+                        ),
+                      )
                     else if (isInCart)
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
@@ -2126,7 +2548,7 @@ class _PosProductGridItemState extends State<_PosProductGridItem> {
                               ),
                             ),
                             TextSpan(
-                              text: '/$unitDisplay',
+                              text: widget.product.hasVariants ? 'starts' : '/$unitDisplay',
                               style: GoogleFonts.plusJakartaSans(
                                 fontSize: 9.5,
                                 fontWeight: FontWeight.w500,
@@ -2141,11 +2563,15 @@ class _PosProductGridItemState extends State<_PosProductGridItem> {
                     ),
                     const SizedBox(width: 4),
                     Text(
-                      isStockDepleted ? 'Out of Stock' : stockLeftStr,
+                      widget.product.hasVariants
+                          ? 'Choose ▾'
+                          : (isStockDepleted ? 'Out of Stock' : stockLeftStr),
                       style: GoogleFonts.plusJakartaSans(
                         fontSize: 9,
                         fontWeight: FontWeight.w700,
-                        color: isStockDepleted ? const Color(0xFFDC2626) : const Color(0xFF64748B),
+                        color: widget.product.hasVariants
+                            ? const Color(0xFF7E22CE)
+                            : (isStockDepleted ? const Color(0xFFDC2626) : const Color(0xFF64748B)),
                       ),
                     ),
                   ],

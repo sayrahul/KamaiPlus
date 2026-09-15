@@ -741,53 +741,67 @@ public class MainActivity extends FlutterFragmentActivity implements TextToSpeec
                                         // =========================================================================
                                         // 2. BILLED TO (BUYER / CUSTOMER B2B CARD)
                                         // =========================================================================
-                                        RectF custBanner = new RectF(36, 110, 559, 138);
+                                        boolean isB2B = customerGstin != null && !customerGstin.trim().isEmpty();
+                                        boolean hasTaxBreakup = taxBreakup != null && !taxBreakup.isEmpty();
+                                        boolean hasGst = false;
+                                        if (taxAmount != null && !taxAmount.trim().isEmpty() && !taxAmount.equals("₹0.00") && !taxAmount.equals("₹0")) {
+                                            hasGst = true;
+                                        }
+                                        boolean showStatutoryGstColumns = isB2B || hasTaxBreakup || hasGst;
+
+                                        RectF custBanner = new RectF(36, 110, 559, isB2B ? 138 : 130);
                                         canvas.drawRoundRect(custBanner, 6, 6, badgeBg);
                                         canvas.drawRoundRect(custBanner, 6, 6, linePaint);
 
-                                        String custStr = "BILLED TO: " + customerName;
-                                        if (customerPhone != null && !customerPhone.trim().isEmpty()) custStr += "  •  Mob: " + customerPhone;
-                                        if (doctorName != null && !doctorName.trim().isEmpty()) custStr += "  •  Dr: " + doctorName;
+                                        String custStr = "BILLED TO: " + (customerName != null && !customerName.trim().isEmpty() ? customerName : "Cash Customer");
                                         if (tableNumber != null && !tableNumber.trim().isEmpty()) custStr += "  •  Tbl: " + tableNumber;
-                                        canvas.drawText(custStr, 44, 122, boldTextPaint);
+                                        if (customerPhone != null && !customerPhone.trim().isEmpty()) custStr += "  •  Ph: " + customerPhone;
+                                        if (doctorName != null && !doctorName.trim().isEmpty()) custStr += "  •  Dr: " + doctorName;
+                                        canvas.drawText(custStr, 44, isB2B ? 122 : 123, boldTextPaint);
 
-                                        String b2bSub = "";
-                                        if (customerGstin != null && !customerGstin.trim().isEmpty()) {
-                                            b2bSub = "Buyer GSTIN: " + customerGstin;
+                                        if (isB2B) {
+                                            String b2bSub = "Buyer GSTIN: " + customerGstin;
                                             if (placeOfSupply != null && !placeOfSupply.trim().isEmpty()) b2bSub += "  •  State: " + placeOfSupply;
-                                        } else {
-                                            b2bSub = "Consumer Sale (B2C)  •  Reverse Charge: No";
+                                            canvas.drawText(b2bSub, 44, 133, subPaint);
                                         }
-                                        canvas.drawText(b2bSub, 44, 133, subPaint);
 
                                         // Payment Badge on right
                                         String paidText = "PAID (" + paymentMode.toUpperCase() + ")";
-                                        RectF paidBadge = new RectF(465, 115, 550, 132);
+                                        RectF paidBadge = new RectF(465, isB2B ? 115 : 114, 550, isB2B ? 132 : 126);
                                         Paint paidBgPaint = new Paint();
                                         paidBgPaint.setColor(Color.rgb(236, 253, 245));
                                         canvas.drawRoundRect(paidBadge, 4, 4, paidBgPaint);
                                         Paint paidTextPaint = new Paint();
                                         paidTextPaint.setColor(Color.rgb(5, 150, 105));
-                                        paidTextPaint.setTextSize(8f);
+                                        paidTextPaint.setTextSize(7.5f);
                                         paidTextPaint.setFakeBoldText(true);
                                         paidTextPaint.setAntiAlias(true);
-                                        canvas.drawText(paidText, 474, 126.5f, paidTextPaint);
+                                        canvas.drawText(paidText, 474, isB2B ? 126.5f : 122.5f, paidTextPaint);
 
                                         // =========================================================================
-                                        // 3. TABLE HEADER BAR (STATUTORY GST COLUMNS)
+                                        // 3. TABLE HEADER BAR (CLEAN 5-COL FOR RETAIL, 8-COL FOR GST)
                                         // =========================================================================
-                                        RectF thRect = new RectF(36, 144, 559, 164);
+                                        float thTop = isB2B ? 144 : 136;
+                                        RectF thRect = new RectF(36, thTop, 559, thTop + 20);
                                         canvas.drawRoundRect(thRect, 5, 5, thBgPaint);
-                                        canvas.drawText("#", 42, 157, thTextPaint);
-                                        canvas.drawText("ITEM DESCRIPTION", 60, 157, thTextPaint);
-                                        canvas.drawText("HSN", 242, 157, thTextPaint);
-                                        canvas.drawText("QTY", 290, 157, thTextPaint);
-                                        canvas.drawText("RATE", 336, 157, thTextPaint);
-                                        canvas.drawText("TAXABLE", 392, 157, thTextPaint);
-                                        canvas.drawText("GST (C+S)", 448, 157, thTextPaint);
-                                        canvas.drawText("TOTAL (₹)", 510, 157, thTextPaint);
+                                        if (showStatutoryGstColumns) {
+                                            canvas.drawText("#", 42, thTop + 13, thTextPaint);
+                                            canvas.drawText("ITEM DESCRIPTION", 60, thTop + 13, thTextPaint);
+                                            canvas.drawText("HSN", 242, thTop + 13, thTextPaint);
+                                            canvas.drawText("QTY", 290, thTop + 13, thTextPaint);
+                                            canvas.drawText("RATE", 336, thTop + 13, thTextPaint);
+                                            canvas.drawText("TAXABLE", 392, thTop + 13, thTextPaint);
+                                            canvas.drawText("GST (C+S)", 448, thTop + 13, thTextPaint);
+                                            canvas.drawText("TOTAL (₹)", 510, thTop + 13, thTextPaint);
+                                        } else {
+                                            canvas.drawText("#", 44, thTop + 13, thTextPaint);
+                                            canvas.drawText("ITEM DESCRIPTION", 65, thTop + 13, thTextPaint);
+                                            canvas.drawText("QTY", 335, thTop + 13, thTextPaint);
+                                            canvas.drawText("RATE", 415, thTop + 13, thTextPaint);
+                                            canvas.drawText("TOTAL (₹)", 495, thTop + 13, thTextPaint);
+                                        }
 
-                                        currentY = 178;
+                                        currentY = thTop + 33;
                                     } else {
                                         // --- CONTINUATION PAGES (PAGE 2+) ---
                                         canvas.drawText(storeName.toUpperCase(), 36, 46, darkPaint);
@@ -795,19 +809,37 @@ public class MainActivity extends FlutterFragmentActivity implements TextToSpeec
                                         canvas.drawText("#" + invoiceNumber, 480, 46, boldTextPaint);
                                         canvas.drawLine(36, 54, 559, 54, linePaint);
 
+                                        boolean isB2B = customerGstin != null && !customerGstin.trim().isEmpty();
+                                        boolean hasTaxBreakup = taxBreakup != null && !taxBreakup.isEmpty();
+                                        boolean hasGst = taxAmount != null && !taxAmount.trim().isEmpty() && !taxAmount.equals("₹0.00") && !taxAmount.equals("₹0");
+                                        boolean showStatutoryGstColumns = isB2B || hasTaxBreakup || hasGst;
+
                                         RectF thRect = new RectF(36, 60, 559, 80);
                                         canvas.drawRoundRect(thRect, 5, 5, thBgPaint);
-                                        canvas.drawText("#", 42, 73, thTextPaint);
-                                        canvas.drawText("ITEM DESCRIPTION", 60, 73, thTextPaint);
-                                        canvas.drawText("HSN", 242, 73, thTextPaint);
-                                        canvas.drawText("QTY", 290, 73, thTextPaint);
-                                        canvas.drawText("RATE", 336, 73, thTextPaint);
-                                        canvas.drawText("TAXABLE", 392, 73, thTextPaint);
-                                        canvas.drawText("GST (C+S)", 448, 73, thTextPaint);
-                                        canvas.drawText("TOTAL (₹)", 510, 73, thTextPaint);
+                                        if (showStatutoryGstColumns) {
+                                            canvas.drawText("#", 42, 73, thTextPaint);
+                                            canvas.drawText("ITEM DESCRIPTION", 60, 73, thTextPaint);
+                                            canvas.drawText("HSN", 242, 73, thTextPaint);
+                                            canvas.drawText("QTY", 290, 73, thTextPaint);
+                                            canvas.drawText("RATE", 336, 73, thTextPaint);
+                                            canvas.drawText("TAXABLE", 392, 73, thTextPaint);
+                                            canvas.drawText("GST (C+S)", 448, 73, thTextPaint);
+                                            canvas.drawText("TOTAL (₹)", 510, 73, thTextPaint);
+                                        } else {
+                                            canvas.drawText("#", 44, 73, thTextPaint);
+                                            canvas.drawText("ITEM DESCRIPTION", 65, 73, thTextPaint);
+                                            canvas.drawText("QTY", 335, 73, thTextPaint);
+                                            canvas.drawText("RATE", 415, 73, thTextPaint);
+                                            canvas.drawText("TOTAL (₹)", 495, 73, thTextPaint);
+                                        }
 
                                         currentY = 94;
                                     }
+
+                                    boolean isB2B = customerGstin != null && !customerGstin.trim().isEmpty();
+                                    boolean hasTaxBreakup = taxBreakup != null && !taxBreakup.isEmpty();
+                                    boolean hasGst = taxAmount != null && !taxAmount.trim().isEmpty() && !taxAmount.equals("₹0.00") && !taxAmount.equals("₹0");
+                                    boolean showStatutoryGstColumns = isB2B || hasTaxBreakup || hasGst;
 
                                     // Render Items for this page
                                     List<Map<String, Object>> pageItems = pagesItems.get(pageIdx - 1);
@@ -820,15 +852,24 @@ public class MainActivity extends FlutterFragmentActivity implements TextToSpeec
                                         String taxAmt = item.containsKey("taxAmt") && item.get("taxAmt") != null ? String.valueOf(item.get("taxAmt")) : "₹0.00";
                                         String amt = String.valueOf(item.get("amount"));
 
-                                        canvas.drawText(String.valueOf(globalSNo++), 42, currentY, subPaint);
-                                        if (name.length() > 26) name = name.substring(0, 24) + "...";
-                                        canvas.drawText(name, 60, currentY, itemNamePaint);
-                                        canvas.drawText(hsn, 242, currentY, bodyPaint);
-                                        canvas.drawText(qty, 292, currentY, bodyPaint);
-                                        canvas.drawText(rate, 336, currentY, bodyPaint);
-                                        canvas.drawText(taxable, 392, currentY, bodyPaint);
-                                        canvas.drawText(taxAmt, 448, currentY, subPaint);
-                                        canvas.drawText(amt, 510, currentY, boldTextPaint);
+                                        if (showStatutoryGstColumns) {
+                                            canvas.drawText(String.valueOf(globalSNo++), 42, currentY, subPaint);
+                                            if (name.length() > 26) name = name.substring(0, 24) + "...";
+                                            canvas.drawText(name, 60, currentY, itemNamePaint);
+                                            canvas.drawText(hsn, 242, currentY, bodyPaint);
+                                            canvas.drawText(qty, 292, currentY, bodyPaint);
+                                            canvas.drawText(rate, 336, currentY, bodyPaint);
+                                            canvas.drawText(taxable, 392, currentY, bodyPaint);
+                                            canvas.drawText(taxAmt, 448, currentY, subPaint);
+                                            canvas.drawText(amt, 510, currentY, boldTextPaint);
+                                        } else {
+                                            canvas.drawText(String.valueOf(globalSNo++), 44, currentY, subPaint);
+                                            if (name.length() > 42) name = name.substring(0, 40) + "...";
+                                            canvas.drawText(name, 65, currentY, itemNamePaint);
+                                            canvas.drawText(qty, 335, currentY, bodyPaint);
+                                            canvas.drawText(rate, 415, currentY, bodyPaint);
+                                            canvas.drawText(amt, 495, currentY, boldTextPaint);
+                                        }
 
                                         canvas.drawLine(36, currentY + 5, 559, currentY + 5, rowLinePaint);
                                         currentY += 19;
@@ -955,8 +996,9 @@ public class MainActivity extends FlutterFragmentActivity implements TextToSpeec
                                         float totalsX = 330;
                                         float totalsY = sectionTopY;
 
-                                        // Taxable Subtotal
-                                        canvas.drawText("Taxable Value:", totalsX, totalsY + 9, subPaint);
+                                        // Subtotal
+                                        String subtotalLabel = showStatutoryGstColumns ? "Taxable Value:" : "Subtotal:";
+                                        canvas.drawText(subtotalLabel, totalsX, totalsY + 9, subPaint);
                                         float subW = bodyPaint.measureText(taxableSubtotal);
                                         canvas.drawText(taxableSubtotal, 555 - subW, totalsY + 9, bodyPaint);
                                         totalsY += 13;
@@ -1045,12 +1087,6 @@ public class MainActivity extends FlutterFragmentActivity implements TextToSpeec
                                     brandDesc.setAntiAlias(true);
                                     canvas.drawText("India's #1 Retail POS & GST Billing App", brandContentX + 70, brandY + 15, brandDesc);
 
-                                    Paint brandLink = new Paint();
-                                    brandLink.setColor(themeColor);
-                                    brandLink.setTextSize(7.5f);
-                                    brandLink.setFakeBoldText(true);
-                                    brandLink.setAntiAlias(true);
-                                    canvas.drawText("www.kamaiplus.com", 472, brandY + 15, brandLink);
 
                                     // Page Number Footer
                                     Paint pageNumPaint = new Paint(subPaint);
@@ -1458,7 +1494,7 @@ public class MainActivity extends FlutterFragmentActivity implements TextToSpeec
                                         if (message != null && !message.trim().isEmpty()) {
                                             shareIntent.putExtra(Intent.EXTRA_TEXT, message);
                                         } else {
-                                            shareIntent.putExtra(Intent.EXTRA_TEXT, "Namaste! Here is your document #" + invNum + " from " + sName + ".");
+                                            shareIntent.putExtra(Intent.EXTRA_TEXT, "Hello! Here is your document #" + invNum + " from " + sName + ".");
                                         }
                                         shareIntent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_ACTIVITY_NEW_TASK);
 

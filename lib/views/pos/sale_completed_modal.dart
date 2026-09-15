@@ -115,7 +115,7 @@ class _SaleCompletedModalState extends State<SaleCompletedModal> {
 
     final vert = BusinessVerticals.resolve(BusinessVerticals.activeBusinessTypeNotifier.value);
     final message = '''
-Namaste ${widget.sale.customerName ?? 'Valued Customer'}! 🙏
+Dear ${widget.sale.customerName ?? 'Valued Customer'},
 Here is your digital tax invoice from *$_storeName*:
 
 🧾 *Invoice No:* #${widget.sale.invoiceNumber}
@@ -402,7 +402,7 @@ ${vert.placeholders.invoiceFooterNote}
                                 const Icon(Icons.payments_outlined, size: 18, color: Color(0xFF0F172A)),
                                 const SizedBox(width: 6),
                                 Text(
-                                  '+ New Bill',
+                                  'New Bill',
                                   style: GoogleFonts.plusJakartaSans(
                                     fontSize: 13.5,
                                     fontWeight: FontWeight.w800,

@@ -27,6 +27,10 @@ class _PushNotificationsScreenState extends State<PushNotificationsScreen> {
   // FCM Settings State
   final _channelNameCtrl = TextEditingController(text: 'KamaiPlus POS Alerts & Invoices');
   final _defaultTopicCtrl = TextEditingController(text: 'all_merchants');
+  final _geminiKeyCtrl = TextEditingController();
+  bool _fcmEnabled = true;
+  bool _pushNotificationsEnabled = true;
+  bool _inAppBannerEnabled = true;
   bool _highPriority = true;
   bool _soundEnabled = true;
   bool _vibrateEnabled = true;
@@ -50,8 +54,13 @@ class _PushNotificationsScreenState extends State<PushNotificationsScreen> {
   Future<void> _loadFcmSettings() async {
     try {
       final config = await AdminFirestoreService.instance.getFcmConfig();
+      final globalConfig = await AdminFirestoreService.instance.getGlobalConfig();
       if (mounted) {
         setState(() {
+          _fcmEnabled = config['fcm_enabled'] ?? true;
+          _pushNotificationsEnabled = config['push_notifications_enabled'] ?? true;
+          _inAppBannerEnabled = config['in_app_banner_enabled'] ?? true;
+          _geminiKeyCtrl.text = globalConfig?['gemini_api_key']?.toString() ?? '';
           _channelNameCtrl.text = config['channel_name'] ?? 'KamaiPlus POS Alerts & Invoices';
           _defaultTopicCtrl.text = config['default_topic'] ?? 'all_merchants';
           _highPriority = config['high_priority'] ?? true;
@@ -73,6 +82,9 @@ class _PushNotificationsScreenState extends State<PushNotificationsScreen> {
     setState(() => _savingSettings = true);
     try {
       await AdminFirestoreService.instance.saveFcmConfig({
+        'fcm_enabled': _fcmEnabled,
+        'push_notifications_enabled': _pushNotificationsEnabled,
+        'in_app_banner_enabled': _inAppBannerEnabled,
         'channel_name': _channelNameCtrl.text.trim(),
         'default_topic': _defaultTopicCtrl.text.trim(),
         'high_priority': _highPriority,
@@ -83,10 +95,16 @@ class _PushNotificationsScreenState extends State<PushNotificationsScreen> {
         'auto_inactive_nudge': _autoInactiveNudge,
         'auto_low_stock_alert': _autoLowStockAlert,
       });
+
+      // Save Gemini key to global_config
+      final currentGlobal = await AdminFirestoreService.instance.getGlobalConfig() ?? {};
+      currentGlobal['gemini_api_key'] = _geminiKeyCtrl.text.trim();
+      await AdminFirestoreService.instance.setGlobalConfig(currentGlobal);
+
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('✅ FCM Settings & Automation Policies saved successfully!'),
+            content: Text('✅ FCM Settings, Master Switches & AI Key saved successfully!'),
             backgroundColor: AdminColors.accent,
           ),
         );
@@ -155,6 +173,7 @@ class _PushNotificationsScreenState extends State<PushNotificationsScreen> {
     _urlCtrl.dispose();
     _channelNameCtrl.dispose();
     _defaultTopicCtrl.dispose();
+    _geminiKeyCtrl.dispose();
     super.dispose();
   }
 
@@ -573,6 +592,70 @@ class _PushNotificationsScreenState extends State<PushNotificationsScreen> {
               const SizedBox(width: 10),
               Text('FCM Delivery & Channel Preferences', style: AdminTheme.heading(16)),
             ],
+          ),
+          const SizedBox(height: 20),
+
+          // Master Switches Block
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: AdminColors.bgSidebar,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: AdminColors.accent.withValues(alpha: 0.3)),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Row(
+                  children: [
+                    Icon(Icons.power_settings_new_rounded, color: AdminColors.accent, size: 18),
+                    SizedBox(width: 8),
+                    Text('System Master On / Off Controls', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: AdminColors.textWhite)),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                _buildToggleRow(
+                  title: 'Master FCM Notification Engine',
+                  subtitle: 'Globally enable or disable all background FCM push broadcasts to devices.',
+                  value: _fcmEnabled,
+                  icon: Icons.cell_tower_rounded,
+                  onChanged: (v) => setState(() => _fcmEnabled = v),
+                ),
+                _buildToggleRow(
+                  title: 'Mobile Status Bar Push Alerts',
+                  subtitle: 'Show heads-up status bar and notification tray alerts on cashier phones.',
+                  value: _pushNotificationsEnabled,
+                  icon: Icons.notifications_active_rounded,
+                  onChanged: (v) => setState(() => _pushNotificationsEnabled = v),
+                ),
+                _buildToggleRow(
+                  title: 'In-App Announcement Banners',
+                  subtitle: 'Show real-time floating broadcast banners inside the POS dashboard.',
+                  value: _inAppBannerEnabled,
+                  icon: Icons.campaign_rounded,
+                  onChanged: (v) => setState(() => _inAppBannerEnabled = v),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 20),
+
+          // Google AI Studio / Gemini Vision OCR Key
+          const Text('Google AI Studio / Gemini Vision OCR API Key', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13, color: AdminColors.textWhite)),
+          const SizedBox(height: 4),
+          const Text('Used automatically by all retail merchants for Mandi Parcha & Restaurant Menu photo OCR. Users are never asked for their own key.', style: TextStyle(color: AdminColors.textMuted, fontSize: 11.5)),
+          const SizedBox(height: 8),
+          TextField(
+            controller: _geminiKeyCtrl,
+            obscureText: true,
+            style: const TextStyle(color: AdminColors.textWhite, fontSize: 13, fontFamily: 'monospace'),
+            decoration: InputDecoration(
+              hintText: 'Enter AIzaSy... Google AI Studio key',
+              hintStyle: const TextStyle(color: AdminColors.inkMuted, fontSize: 12),
+              fillColor: AdminColors.bgSidebar,
+              border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: AdminColors.borderDark)),
+              prefixIcon: const Icon(Icons.key_rounded, color: AdminColors.accent, size: 18),
+            ),
           ),
           const SizedBox(height: 20),
 

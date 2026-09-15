@@ -295,7 +295,7 @@ class _InvoiceThemesScreenState extends State<InvoiceThemesScreen> {
           _buildSection4LiveA4Preview(activeColor),
         ],
       ),
-      bottomNavigationBar: const KamaiBottomNav(),
+      bottomNavigationBar: const KamaiBottomNav(activeScreen: 'invoice_themes'),
     );
   }
 
@@ -997,7 +997,7 @@ class _InvoiceThemesScreenState extends State<InvoiceThemesScreen> {
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
                       decoration: BoxDecoration(color: activeColor, borderRadius: BorderRadius.circular(4)),
-                      child: Text('⚡ KAMAI+ POS', style: GoogleFonts.outfit(fontSize: 8, fontWeight: FontWeight.w900, color: Colors.white)),
+                      child: Text('KAMAI+ POS', style: GoogleFonts.outfit(fontSize: 8, fontWeight: FontWeight.w900, color: Colors.white)),
                     ),
                     const SizedBox(width: 6),
                     Expanded(
@@ -1005,10 +1005,6 @@ class _InvoiceThemesScreenState extends State<InvoiceThemesScreen> {
                         "India's #1 Retail POS & GST Billing App",
                         style: GoogleFonts.inter(fontSize: 8, fontWeight: FontWeight.w600, color: const Color(0xFF475569)),
                       ),
-                    ),
-                    Text(
-                      'www.kamaiplus.com',
-                      style: GoogleFonts.inter(fontSize: 8, fontWeight: FontWeight.w800, color: activeColor),
                     ),
                   ],
                 ),

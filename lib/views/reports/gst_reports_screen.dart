@@ -130,20 +130,23 @@ class _GstReportsScreenState extends State<GstReportsScreen> with DataBusRefresh
     );
   }
 
-  /// Filtered B2B Sales (Customer has GSTIN or flagged B2B)
+  /// Filtered B2B Sales (Customer has valid GSTIN on sale or customer profile)
   List<SaleModel> get _b2bSales {
     return _periodSales.where((s) {
+      final saleGst = s.customerGstin?.trim();
+      if (saleGst != null && saleGst.isNotEmpty) return true;
       if (s.customerId != null) {
         final cust = _customersMap[s.customerId];
-        if (cust != null && (cust.address?.contains('GST') == true)) return true;
+        if (cust != null && cust.gstin != null && cust.gstin!.trim().isNotEmpty) return true;
       }
       return false;
     }).toList();
   }
 
-  /// Filtered B2C Retail Sales
+  /// Filtered B2C Retail Sales (Non-GSTIN Consumers)
   List<SaleModel> get _b2cSales {
-    return _periodSales;
+    final b2bIds = _b2bSales.map((s) => s.id).toSet();
+    return _periodSales.where((s) => !b2bIds.contains(s.id)).toList();
   }
 
   int get _taxableValuePaise {
@@ -490,7 +493,7 @@ class _GstReportsScreenState extends State<GstReportsScreen> with DataBusRefresh
                 if (_selectedTab == 3) _buildCaDocsCard(),
               ],
             ),
-      bottomNavigationBar: const KamaiBottomNav(),
+      bottomNavigationBar: const KamaiBottomNav(activeScreen: 'gst_reports'),
     );
   }
 

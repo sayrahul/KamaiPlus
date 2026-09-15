@@ -3,8 +3,10 @@ import 'dart:io';
 import 'dart:typed_data';
 import 'package:intl/intl.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import '../core/database/local_database.dart';
 import '../core/utils/money_formatter.dart';
+import 'remote_config_service.dart';
 
 class ExtractedBillItem {
   String productName;
@@ -171,16 +173,40 @@ class GeminiAiService {
   static const int freeMonthlyPictureScanLimit = 10;
 
   static const List<String> _modelsToTry = [
-    'gemini-2.0-flash',
     'gemini-2.5-flash',
-    'gemini-1.5-flash',
+    'gemini-3.5-flash-lite',
+    'gemini-3.6-flash',
+    'gemini-3.7-flash',
+    'gemini-2.5-flash-latest',
   ];
 
-  /// Get effective API key from SharedPreferences, or from environment
+  /// Get effective API key from Firestore global_config, Remote Config, cached key, or environment
   static Future<String> getEffectiveApiKey() async {
     final prefs = await SharedPreferences.getInstance();
+
+    // 1. Cached key from Firestore platform_settings/global_config
+    final cached = prefs.getString('cached_gemini_api_key')?.trim() ?? '';
+    if (cached.isNotEmpty) return cached;
+
+    // 2. Custom override / Admin provided
     final custom = prefs.getString(_prefKeyCustomApiKey)?.trim() ?? '';
     if (custom.isNotEmpty) return custom;
+
+    // 3. Remote Config Service
+    final remoteKey = RemoteConfigService.instance.geminiApiKey.trim();
+    if (remoteKey.isNotEmpty) return remoteKey;
+
+    // 4. Live fetch from Firestore platform_settings/global_config
+    try {
+      final doc = await FirebaseFirestore.instance.collection('platform_settings').doc('global_config').get();
+      if (doc.exists) {
+        final k = doc.data()?['gemini_api_key']?.toString().trim() ?? '';
+        if (k.isNotEmpty) {
+          await prefs.setString('cached_gemini_api_key', k);
+          return k;
+        }
+      }
+    } catch (_) {}
 
     const fromEnv = String.fromEnvironment('GEMINI_API_KEY');
     if (fromEnv.isNotEmpty) return fromEnv;
@@ -200,12 +226,21 @@ class GeminiAiService {
 
   /// Tests if an API key is valid by making a lightweight request to Google AI Studio
   static Future<bool> testApiKey(String key) async {
-    if (key.trim().isEmpty) return false;
+    final trimmed = key.trim();
+    if (trimmed.isEmpty) return false;
     try {
       final client = HttpClient();
       client.connectionTimeout = const Duration(seconds: 8);
-      final uri = Uri.parse('https://generativelanguage.googleapis.com/v1beta/models?key=${key.trim()}');
+      final isBearer = trimmed.startsWith('AQ.') || trimmed.startsWith('ya29.');
+      final uri = isBearer
+          ? Uri.parse('https://generativelanguage.googleapis.com/v1beta/models')
+          : Uri.parse('https://generativelanguage.googleapis.com/v1beta/models?key=$trimmed');
       final req = await client.getUrl(uri);
+      if (isBearer) {
+        req.headers.set(HttpHeaders.authorizationHeader, 'Bearer $trimmed');
+      } else {
+        req.headers.set('x-goog-api-key', trimmed);
+      }
       final res = await req.close();
       return res.statusCode == 200;
     } catch (_) {
@@ -269,7 +304,7 @@ class GeminiAiService {
         return AiInwardResult(
           success: false,
           errorMessage:
-              'Gemini AI API Key is required for live bill vision OCR. Tap "Settings" below to enter your free API Key from Google AI Studio (aistudio.google.com), or use Excel / CSV inward.',
+              'Cloud AI scan is not enabled in Admin Console. Please use Offline ML Kit Scan, Excel / CSV inward, or configure Gemini API key in admin panel.',
         );
       }
 
@@ -297,12 +332,18 @@ class GeminiAiService {
 
       String? lastErrorMessage;
 
+      final isBearer = apiKey.startsWith('AQ.') || apiKey.startsWith('ya29.');
+
       // Try multiple models in sequence for high availability
       for (final model in _modelsToTry) {
         try {
-          final uri = Uri.parse(
-            'https://generativelanguage.googleapis.com/v1beta/models/$model:generateContent?key=$apiKey',
-          );
+          final uri = isBearer
+              ? Uri.parse(
+                  'https://generativelanguage.googleapis.com/v1beta/models/$model:generateContent',
+                )
+              : Uri.parse(
+                  'https://generativelanguage.googleapis.com/v1beta/models/$model:generateContent?key=$apiKey',
+                );
 
           final requestPayload = {
             'contents': [
@@ -329,6 +370,11 @@ class GeminiAiService {
 
           final req = await client.postUrl(uri);
           req.headers.set(HttpHeaders.contentTypeHeader, 'application/json');
+          if (isBearer) {
+            req.headers.set(HttpHeaders.authorizationHeader, 'Bearer $apiKey');
+          } else {
+            req.headers.set('x-goog-api-key', apiKey);
+          }
           req.write(jsonEncode(requestPayload));
 
           final res = await req.close();
@@ -448,7 +494,7 @@ class GeminiAiService {
         return MenuScanResult(
           success: false,
           errorMessage:
-              'Gemini AI API Key is required for menu photo scanning. Tap "Settings" below to enter your free API Key from Google AI Studio (aistudio.google.com), or add dishes manually.',
+              'Cloud AI scan is not enabled in Admin Console. Please use Offline Menu Scan, add dishes manually, or configure Gemini API key in admin panel.',
         );
       }
 
@@ -477,13 +523,19 @@ class GeminiAiService {
           '}\n'
           'Do not output any markdown ticks, preamble, or comments. Output ONLY valid JSON.';
 
+      final isBearer = apiKey.startsWith('AQ.') || apiKey.startsWith('ya29.');
+
       String? lastErrorMessage;
 
       for (final model in _modelsToTry) {
         try {
-          final uri = Uri.parse(
-            'https://generativelanguage.googleapis.com/v1beta/models/$model:generateContent?key=$apiKey',
-          );
+          final uri = isBearer
+              ? Uri.parse(
+                  'https://generativelanguage.googleapis.com/v1beta/models/$model:generateContent',
+                )
+              : Uri.parse(
+                  'https://generativelanguage.googleapis.com/v1beta/models/$model:generateContent?key=$apiKey',
+                );
 
           final requestPayload = {
             'contents': [
@@ -510,6 +562,11 @@ class GeminiAiService {
 
           final req = await client.postUrl(uri);
           req.headers.set(HttpHeaders.contentTypeHeader, 'application/json');
+          if (isBearer) {
+            req.headers.set(HttpHeaders.authorizationHeader, 'Bearer $apiKey');
+          } else {
+            req.headers.set('x-goog-api-key', apiKey);
+          }
           req.write(jsonEncode(requestPayload));
 
           final res = await req.close();

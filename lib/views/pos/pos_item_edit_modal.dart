@@ -298,8 +298,9 @@ class _PosItemEditModalState extends State<PosItemEditModal> {
               scrollDirection: Axis.horizontal,
               child: Row(
                 children: chips.map((chip) {
+                  final curQty = double.tryParse(_qtyController.text) ?? -1.0;
+                  final isSelected = (curQty - chip.value).abs() < 0.005;
                   final chipValStr = chip.value % 1 == 0 ? chip.value.toInt().toString() : chip.value.toString();
-                  final isSelected = _qtyController.text == chipValStr;
                   return Padding(
                     padding: const EdgeInsets.only(right: 6),
                     child: InkWell(

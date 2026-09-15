@@ -74,16 +74,11 @@ void main() {
     );
   });
 
-  test('a genuinely brand-new business (zero products of any kind) still gets its starter catalog seeded', () async {
-    // The defense-in-depth fix above only blocks seeding for a business that
-    // ALREADY has products under some tag — a real fresh signup (nothing in
-    // the products table yet) must still get its vertical's starter catalog,
-    // exactly as before.
+  test('a genuinely brand-new business (zero products of any kind) returns clean empty catalog without phantom leaks', () async {
+    // A genuinely empty store (or post-reset) must return an empty list rather
+    // than leaking other verticals or resurrecting phantom products.
     final hardwareProducts = await LocalDatabase.instance.getAllProducts(businessType: 'hardware');
-    expect(hardwareProducts, isNotEmpty, reason: 'a genuinely empty store should still auto-seed its starter catalog');
-    for (final p in hardwareProducts) {
-      expect(p.businessType == 'hardware' || p.businessType == 'both', isTrue);
-    }
+    expect(hardwareProducts, isEmpty, reason: 'a genuinely empty store should return empty list without cross-vertical leaks');
   });
 
   test('a vertical with no starter catalog shows an empty catalog, not every other vertical\'s products', () async {

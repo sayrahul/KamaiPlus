@@ -84,8 +84,8 @@ class _InventoryScreenState extends State<InventoryScreen> with DataBusRefresh<I
   }
 
 
-  int get _totalValuationPaise => _products.fold(
-      0, (sum, p) => sum + (p.purchasePricePaise * p.stockQuantity).round());
+  int get _totalValuationPaise => _products.fold<int>(
+      0, (sum, p) => sum + p.assetCostValuationPaise);
 
   List<ProductModel> get _lowStockProducts =>
       _products.where((p) => p.stockQuantity <= 5).toList();
@@ -336,7 +336,7 @@ class _InventoryScreenState extends State<InventoryScreen> with DataBusRefresh<I
                 ],
               ),
             ),
-      bottomNavigationBar: const KamaiBottomNav(),
+      bottomNavigationBar: const KamaiBottomNav(activeScreen: 'inventory'),
     );
   }
 

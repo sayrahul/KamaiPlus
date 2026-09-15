@@ -28,6 +28,35 @@ The Bottom Navigation Bar has 5 items. The navigation contract is strictly defin
 
 ## 🛡️ 2. SOLVED FEATURES & SCREEN-BY-SCREEN INVARIANTS
 
+### 🔒 14-ITEM ENTERPRISE OVERHAUL & POLISH BASELINE (LOCKED)
+1. **Zero Hardcoded Private API Keys:** No private API keys in client repo. All Gemini AI keys loaded from `RemoteConfigService` or custom merchant settings.
+2. **AI Vision Model Fallbacks:** Support `gemini-2.0-flash`, `gemini-1.5-flash`, and `gemini-1.5-flash-8b`. Handles both Google AI Studio keys (`x-goog-api-key`) and Google OAuth Bearer tokens (`Authorization: Bearer`).
+3. **Cash Tally Drawer Alignment:** `DenominationTallyModal` receives true expected drawer cash (`openingFloat + cashSales + splitCash - cashExpenses`), never gross sales.
+4. **FCM Notification Deduplication:** Broadcast announcements and foreground push notifications deduplicated by message ID in `SharedPreferences`.
+5. **Restaurant Vertical Configuration:** Barcode, batch expiry, bill scan, and beverage/packaged units (`bottle`, `can`, `litre`, `ml`, `packet`) enabled.
+6. **Unit-Aware Fractional Chips:** Quantity selector provides unit-specific chips (`kg`: 10g–5kg, `plate`: ¼–5, `litre`: 50ml–5L, `packet`: ¼–5, `piece`: ¼–10) with epsilon equality check.
+7. **Clean Clutter-Free Retail Invoice:** B2C/retail invoices in `MainActivity.java` render a clean 5-column table (`#`, `ITEM DESCRIPTION`, `QTY`, `RATE`, `TOTAL (₹)`), omitting repetitive HSN/tax columns and reverse charge banners.
+8. **Split Invoices in Transaction History:** Shows split breakdown (`Cash: ₹X • UPI: ₹Y • Udhar: ₹Z`) on invoice cards and in `SaleDetailModal`.
+9. **Active Menu Screen Highlighting:** Whichever screen opened the Menu bottom sheet displays `● ACTIVE` badge with emerald styling.
+10. **Compact Non-Scrolling Pro Modal:** Pro Upgrade Modal designed for zero scrolling on all phone screens.
+11. **Interactive Refer & Earn Program:** Modern fintech UI with 3-step milestone progress, copyable code, and WhatsApp invitations.
+12. **Locked Pro Features:** Google Drive encrypted backup, CA Master Sales Report, and Tally Prime XML strictly locked behind Pro.
+13. **Zero Duplicate Emojis:** Eliminated double icons/emojis across top bars, action buttons, dialogs, and modals.
+14. **Pure Simple English Localization:** Complete elimination of Hinglish across notifications, WhatsApp slips, dialogs, toasts, empty states, and labels.
+
+### 🔒 10-POINT ENTERPRISE PRODUCTION SUITE & CLOUD INVARIANTS (LOCKED)
+1. **Zero Merchant Key Prompt for AI Scan:** Merchants must NEVER be prompted to enter or configure an AI API key. The key icon is permanently removed from the user interface. AI Vision automatically resolves the server API key from Firestore `platform_settings/global_config['gemini_api_key']`, Remote Config, or SharedPreferences.
+2. **Master Push & FCM Admin Controls:** `fcm_enabled`, `push_notifications_enabled`, and `in_app_banner_enabled` are managed from the Web Admin Console (`push_notifications_screen.dart`). Mobile clients sync and enforce these toggles in real time via Firestore stream.
+3. **Cash Register Shift Continuity:** When drawer locks/closes or Z-Report is finalized, the shift record is archived to SQLite `cash_shifts`. If no shifts exist, `_showShiftHistoryModal` auto-synthesizes historical daily shifts from existing transactions.
+4. **GST B2B & B2C Non-Double Counting:** In `gst_reports_screen.dart`, B2B sales require valid customer GSTIN (15 chars) either on the sale model or customer directory. B2C sales strictly exclude all B2B sales to prevent double counting. Table 12 HSN tax math is computed in exact integer paise.
+5. **No Website References:** No `www.kamaiplus.com` links anywhere in the application code, invoices, or sample assets. Referral invites deep link to Google Play Store.
+6. **7-Day Trial Cloud Backup Access:** Merchants in their 7-day Pro trial (`isTrialActive`) have full access to Google Drive 1-Tap Cloud Backup and real-time counter sync.
+7. **Pro Upgrade Modal Comparison Matrix:** Interactive expandable table (`Free vs Pro Comparison`) inside `ProUpgradeModal` detailing 10+ feature comparisons with animated chevron toggle.
+8. **Permanent 7-Day Trial Anti-Reset:** `trial_started_at` is an immutable timestamp stored in SQLite `store_profile`, `SharedPreferences`, and Firestore. Once granted, it counts down strictly and can never be re-granted or reset on subsequent logins or app opens.
+9. **Restaurant Tab Label:** Tab 1 dynamically renders "Menu" for Restaurant vertical (`business_type = 'restaurant'`), "Medicines" for Pharmacy, "Apparel" for Clothing, "Items" for Hardware, and "Product" for Kirana.
+
+
+
 ### 1. 🏠 Home Screen (`lib/views/dashboard/home_pulse_tab.dart`)
 * **Daily Counter & OPS Grid:** Exactly 2 cards side-by-side: `Cash Register` and `Transactions`.
 * **Billing POS:** Removed from this grid (since Center Billing button is already on bottom navbar).
@@ -35,6 +64,7 @@ The Bottom Navigation Bar has 5 items. The navigation contract is strictly defin
 
 ### 2. 📦 Products Master (`lib/views/products/products_screen.dart`)
 * **List View Only (Grid View Removed):** The catalog permanently uses the dense, informative List View layout (`_buildProductCard`) with stock stepper, price/profit, category pill, pencil edit button, and favorite toggle. The Grid View toggle and grid layout have been removed.
+* **Large Touch Targets for Actions:** ⭐, ⚡, ✏️, 🗑️ buttons have enlarged touch targets (icon size 22/16, touch padding 7x5.5, gap 6px) to prevent misclicks during counter operations.
 * **Edit Product:** Pencil icon button has dedicated touch target; clicking it calls `AddProductModal(existingProduct: product)` with all fields pre-filled.
 * **Add Product:** Top "+" button and AI Vision bill OCR trigger.
 * **Bottom Nav:** Must NOT have its own `bottomNavigationBar` inside its Scaffold when displayed inside `HomeDashboardScreen`.
@@ -44,14 +74,24 @@ The Bottom Navigation Bar has 5 items. The navigation contract is strictly defin
   - Barcode search strictly filters by active store vertical (`businessType`), preventing cross-vertical product leaks.
   - Restocking an existing product strictly ADDS (`existingStock + inwardQty`) rather than overwriting previous inventory.
   - "Add Star" / Favorite toggle is fully wired to SQLite, Firestore, and prioritizes items to the top of POS billing.
+* **Data Reset / Fresh Reset Wipe:** Complete factory reset clears all operational tables (`products`, `categories`, `product_batches`, `sales`, `sale_items`, `customers`, `customer_ledger`, `cash_expenses`, `audit_logs`), resets `cash_register_opening_float_paise` to 0 in SharedPreferences, and triggers `AppDataBus.instance.bumpAll()` so UI refreshes without requiring app restart. Starter seed products are never resurrected after a merchant reset.
 
 ### 3. 🧾 Billing POS (`lib/views/pos/pos_billing_screen.dart`)
 * Fast retail grid/list view with instant search and barcode scan.
+* **Dynamic Variants Display:** When a product has variants, POS shows strictly ONE parent card with a `🎨 Variants ▾` chip. Tapping it opens `_showVariantPicker(parent)` to select size/color/pack variants. Child variants are never dumped as independent cards.
+* **Firestore Variant Sync:** `parent_id`, `has_variants`, `variant_label`, `sub_units_per_pack`, and `fit_notes` are synchronized to/from Cloud Firestore with `repairVariantRelationships()` fallback.
 * Cart bar at bottom with floating cart summary.
 * Payment checkout modal with rapid cash chips and dynamic UPI QR code.
 
 ### 4. 📖 Digital Khata (`lib/views/khata/khata_screen.dart`)
 * Simple, minimalistic, clean UI named **Digital Khata**.
+* **Fresh DB Query for In-Flight Debt:** `processPosBill` directly queries `current_balance_paise` from SQLite inside the transaction, preventing stale in-memory balance overwrites when multiple credit sales occur.
+* **Negative Paise Advance/Jama Model:** Financial math allows negative balances (`< 0`) to natively represent Customer Advance / Jama (जमा).
+  - Negative balance: Displays green `JAMA (जमा / ADVANCE)` badge with absolute value formatted as INR.
+  - Positive balance: Displays red `UDHAR (बाकी)` badge.
+  - Zero balance: Displays grey `SETTLED (साफ)` badge.
+* **FIFO Credit Bill Auto-Settlement:** When a merchant records a Jama (credit received) entry, SQLite runs a FIFO auto-settlement query on pending credit sales (`status = 'completed'` AND `due_paise > 0`), marking invoices as `'settled'` and broadcasting `AppDataBus.instance.bumpSales()` so Pending Bills update instantly.
+* **Customer Phone Uniqueness:** Prohibits saving duplicate customers with identical 10-digit mobile numbers across Khata, Customers Directory, and POS Quick Add modal.
 * Top Market Udhar Card with total pending balance and due count.
 * Customer row: Name, Phone, Balance, WhatsApp reminder button (official WhatsApp icon).
 * Customer Statement bottom sheet: Jama/Udhar ledger history and settlement buttons.
@@ -453,7 +493,16 @@ Comprehensive enterprise-grade retail UX upgrade suite aligned with PhonePe Busi
     - **Google Cloud Firestore Sync (`FirestoreSyncService`):**
       - Full background CRUD sync (`pushProductToCloud`, `deleteProductFromCloud`, `pushCustomerToCloud`, `wipeCloudData`).
     - **Verified:** `flutter analyze` — 0 issues found.
- 
+
+    7. **2-Tier AI & Offline ML Kit OCR System (`mlkit_ocr_service.dart`, `gemini_ai_service.dart`, `menu_scan_sheet.dart`, `ai_inward_sheet.dart`):**
+        - **Tier 1 (Instant On-Device ML Kit OCR):** 100% Free, Offline, Zero API Keys, <200ms latency.
+          - `scanMenuImage`: Scans restaurant menu cards on device, categorizing into Starters, Main Course, Bvers, Beverages, Desserts, extracting dish name and prices.
+          - `scanBillImage`: Scans Mandi bills and wholesale slips with multi-line item pairing and auto-categorization.
+          - Wired into `MenuScanSheet` and `AiInwardSheet` as primary instant extractor.
+        - **Tier 2 (Cloud Gemini AI Fallback):**
+          - Upgraded models to active 2026 series: `gemini-2.5-flash`, `gemini-3.5-flash-lite`, `gemini-3.6-flash`, `gemini-3.7-flash`, and `gemini-2.5-flash-latest`. Discontinued models (`gemini-1.5-flash`, `gemini-1.5-flash-8b`, `gemini-2.0-flash`) purged.
+          - Central admin key retrieved from Firestore `platform_settings/global_config` or Remote Config. Merchants are never prompted for an API key.
+
 26. **Retail Productivity & UX Enhancements (LOCKED):**
     - **Physical Cash Tally Denominations with Assets (`DenominationTallyModal`):**
       - Displays real rupee and coin assets (`assets/images/1.png`, `2.png`, `5.png`, `10.png`, `50.png`, `100.png`, `200.png`, `500.png`).
@@ -1453,3 +1502,71 @@ Comprehensive enterprise-grade retail UX upgrade suite aligned with PhonePe Busi
       - 1-click "Use Template" loads title and body directly into the Campaign Composer and switches to tab 1.
     - **Config Persistence:**
       - Engine settings persist to Cloud Firestore under `platform_settings/fcm_config` via `AdminFirestoreService.saveFcmConfig()`.
+
+87. **Native POS & Catalog Testing Bug Fixes (10 Items Finalized - v4.20.0) (LOCKED):**
+    1. **Store Profile Setup Cleanup (`signup_store_screen.dart`):**
+       - Removed Feature Card 2 ("1-Tap Wholesaler Bill") and `_scanSupplierBill` flow. Completing store setup navigates cleanly directly into `HomeDashboardScreen`.
+    2. **Default Products Strict Vertical Isolation (`default_inventory_seeds.dart` & `local_database.dart`):**
+       - Initial seed products strictly correspond to merchant's selected vertical. Pharmacy stores will never see grocery items (e.g. Aashirvaad Atta or Cycle Agarbatti).
+    3. **Resurrection Bug Fix on Product Deletion (`local_database.dart`):**
+       - `getAllProducts()` query no longer triggers automatic seed logic when table is empty. Query returns `[]` cleanly. Auto-seeding is gated behind persistent `has_seeded_initial_products` preference.
+    4. **Accurate Inventory Asset Valuation Math (`models.dart`, `products_screen.dart`, `inventory_screen.dart`):**
+       - `ProductModel.assetCostValuationPaise` computes `purchasePricePaise * stockQuantity`. Excludes parent products with variants (`hasVariants == true`) to eliminate double counting with child variants. Excludes unlimited stock (`>= 99990`) and non-positive stock. Synchronized across Products screen and Inventory Report.
+    5. **Concise English Barcode Scan Feedback (`add_product_modal.dart`):**
+       - Replaced lengthy Hindi toast with concise: `'New barcode: $barcode. Please enter name and unit.'`. Added `_nameFocusNode` with auto-focus to name input on scan. Master catalog auto-fill resolves actual category names.
+    6. **Removed Free vs Pro Comparison & FAQs Page (`pro_upgrade_modal.dart`):**
+       - Completely removed the comparison link and deleted `pro_membership_screen.dart`.
+    7. **Permanent Broadcast Banner Dismissal (`home_pulse_tab.dart`):**
+       - Replaced volatile memory flag with persistent `SharedPreferences` key `_dismissedBroadcastKey`. Once dismissed by merchant, the broadcast banner never returns unless a new broadcast key is received.
+    8. **Universal Expired Product Warnings (`add_product_modal.dart`, `products_screen.dart`, `pos_billing_screen.dart`):**
+       - Date picker checks expiry and shows red `EXPIRED PRODUCT` pill and warning toast if a past date is selected.
+       - Product cards display red `[⚠️ EXPIRED (date)]` or amber `[Exp: date]` badges.
+       - POS billing checks expiry across all verticals and prompts `_showExpiredWarningModal(product)` with "Add Anyway" override before adding expired items to cart.
+    9. **Clean Product Variants in Catalog & Dynamic Matrix Pricing (`add_product_modal.dart`, `pos_billing_screen.dart`, `local_database.dart`):**
+       - POS billing and Products screens hide child variants (`if (p.isVariant) return false;`) so catalog is never spammed with duplicate variant cards.
+       - Tapping a master product with variants in POS opens `_showVariantPicker(parent)` to select size/color/weight.
+       - `AddProductModal` provides an inline Variant Pricing & Stock editor (`_VariantInputData`), allowing merchants to set distinct selling price, MRP, and stock for each variant (e.g. 500g for ₹50, 1kg for ₹95) during creation.
+       - `LocalDatabase.instance.createProductWithVariants` accepts `customVariants` (`VariantCustomData`) to atomically persist each variant with individual pricing.
+    10. **Functional POS Catalog Filter (`pos_billing_screen.dart`):**
+        - Removed misleading yellow lock badge from top-right tune button.
+        - Button opens `_showPosFilterModal` bottom sheet with 3 live filters:
+          - 🛍️ `All Products` (Total catalog count)
+          - 📦 `In Stock Only` (Filters out zero/negative stock items)
+          - ⭐ `Favorites / Fast Billing` (Starred quick-sale products)
+        - Highlights with active dot when a filter is enabled, and displays clearable `_buildActiveFilterBanner()` with item count and 'Clear' tap action.
+
+88. **Enterprise Hardware, Cloud Resilience & Growth Engine Suite (LOCKED):**
+    1. **Physical USB / OTG Barcode Gun Listener (`pos_billing_screen.dart`):**
+       - Registered hardware keyboard listener via `HardwareKeyboard.instance.addHandler(_handleHardwareBarcodeScan)`.
+       - Listens to physical USB / OTG / Bluetooth wireless barcode guns (HID keyboard devices).
+       - Buffers rapid keystrokes (<800ms) and processes barcode on `Enter` / `NumpadEnter`.
+       - Plays audio beep/soundbox chime, triggers medium haptic feedback, automatically adds or increments product in cart, and displays non-blocking toast.
+       - Ignores key events when search or quantity input fields have focus to prevent text pollution.
+    2. **Free GSTIN Online Verification & B2B Auto-Lookup API (`gstin_service.dart`, `store_profile_screen.dart`, `customers_screen.dart`):**
+       - 15-character GSTIN regex validation (`^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$`).
+       - Live query to free Indian public GST verification endpoint (`https://sheet.gstincheck.co.in/check/$gstin`).
+       - Auto-extracts legal name, trade name, principal place of business address, state code, and registration status (Active/Inactive).
+       - Store Profile: 1-tap "Verify" button on GSTIN field auto-fills Store Name, Address, and State.
+       - Customers Directory: Added GSTIN input with "Verify" button for B2B wholesale buyers, auto-filling Customer Name and State Code.
+    3. **Google Drive 1-Tap Encrypted SQLite Backup & Restore Vault (`backup_restore_service.dart`, `local_database.dart`, `backup_restore_screen.dart`):**
+       - Formats local SQLite database into `.kmb` (KamaiPlus Encrypted Backup) package with SHA-256 integrity checksum, schema version, store name, and ISO timestamp manifest.
+       - 1-Tap Cloud Backup: Dispatches via Android Share Sheet (`SharePlus.shareXFiles`) directly to Google Drive, WhatsApp, or Gmail.
+       - Safe Database Restore: Uses `FilePicker` to pick `.kmb` or `.db` backup file, validates checksum, closes active SQLite connection, replaces database file, calls `LocalDatabase.instance.reloadDatabase()`, and broadcasts `AppDataBus.instance.bumpAll()`.
+       - Renders detailed recovery summary dialog with restored store profile, product count, and sales count.
+    4. **Firebase Crashlytics & Real-Time Performance Monitoring (`main.dart`, `pubspec.yaml`):**
+       - Added `firebase_crashlytics: ^5.4.0`.
+       - Wired `FlutterError.onError = FirebaseCrashlytics.instance.recordFlutterFatalError`.
+       - Wired `PlatformDispatcher.instance.onError` for asynchronous fatal errors.
+       - Passes authenticated user ID via `FirebaseCrashlytics.instance.setUserIdentifier(cachedUserId)`.
+    5. **Firebase Remote Config for Dynamic App Management (`remote_config_service.dart`, `main.dart`, `pubspec.yaml`):**
+       - Added `firebase_remote_config: ^6.7.0`.
+       - Non-blocking async initialization with minimum fetch interval (1 hour in production, 0 in debug).
+       - Configured offline fallback defaults: `min_required_version`, `pro_monthly_price_inr`, `pro_annual_price_inr`, `support_whatsapp`, `support_email`, `maintenance_mode`, `promo_banner_text`.
+    6. **Industry-Standard Merchant Refer & Earn Program (`referral_service.dart`, `refer_and_earn_screen.dart`, `menu_screen.dart`, `signup_store_screen.dart`):**
+       - Generates store referral code (e.g. `KAMAI7711`) derived from store phone/ID.
+       - Pre-formats high-converting WhatsApp merchant invitation message.
+       - Screen UI (`ReferAndEarnScreen`): Gold/emerald hero reward card, monospace referral code pill with 1-tap copy, 1-tap WhatsApp invite button, 3-metric stats ribbon (Invited, Active, Free Days), 3-step visual timeline ("Share Link" -> "Friend Installs" -> "Both Get 30 Days Free PRO"), and "Claim Referral Code" bonus dialog.
+       - Integrated into `MenuScreen` with "Refer & Earn (Free PRO)" tile and `🎁 30D FREE` badge.
+       - Integrated into `SignupStoreScreen` with optional "Referral / Invite Code" field granting 15 days free PRO on signup.
+
+

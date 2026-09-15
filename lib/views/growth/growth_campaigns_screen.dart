@@ -39,7 +39,7 @@ class _GrowthCampaignsScreenState extends State<GrowthCampaignsScreen> {
   void initState() {
     super.initState();
     _customMessageController = TextEditingController(
-      text: 'Namaste {name} ji! 🙏\n🏪 *{store}*\n\nAapke liye special shopping discount offer ready hai! Aaj hi store par visit karein ya WhatsApp par order karein.',
+      text: 'Dear {name},\n🏪 *{store}*\n\nWe have an exclusive shopping discount ready for you! Visit our store today or place your order via WhatsApp.',
     );
     _loadData();
   }
@@ -72,7 +72,7 @@ class _GrowthCampaignsScreenState extends State<GrowthCampaignsScreen> {
   List<Map<String, dynamic>> get _campaignTemplates => [
     // Set 1 (1 to 4): Core Retail
     {
-      'title': 'Weekend Dhamaka',
+      'title': 'Weekend Savings',
       'icon': Icons.shopping_bag_outlined,
       'color': const Color(0xFF10B981),
       'bg': const Color(0xFFECFDF5),
@@ -80,7 +80,7 @@ class _GrowthCampaignsScreenState extends State<GrowthCampaignsScreen> {
       'headline': 'Weekend Special Savings 🛒',
       'defaultDiscount': '10%',
       'defaultCode': 'WEEKEND10',
-      'body': 'Aapke parivar ke liye grocery, dry fruits aur daily essentials par best rate! Visit counter today or order on WhatsApp.',
+      'body': 'Special savings on groceries, staples, and daily essentials for your family! Visit our counter today or order on WhatsApp.',
     },
     {
       'title': 'Festival Special',
@@ -88,21 +88,21 @@ class _GrowthCampaignsScreenState extends State<GrowthCampaignsScreen> {
       'color': const Color(0xFFD97706),
       'bg': const Color(0xFFFEF3C7),
       'tag': 'FESTIVE',
-      'headline': 'Shubh Tyohar Mubarak 🪔',
+      'headline': 'Warm Festive Greetings 🪔',
       'defaultDiscount': 'Flat ₹100',
       'defaultCode': 'FESTIVE100',
-      'body': 'Tyoharon ke shubh avsar par humari taraf se special festive packs & sweets at wholesale rates!',
+      'body': 'Celebrate this festive season with exclusive gift packs & festive treats at the best prices!',
     },
     {
-      'title': 'Khata Settle Reminder',
+      'title': 'Credit Settlement Reminder',
       'icon': Icons.menu_book_rounded,
       'color': const Color(0xFFDC2626),
       'bg': const Color(0xFFFEF2F2),
       'tag': 'KHATA DUE',
-      'headline': 'Namaste Ji! Khata Statement 📝',
+      'headline': 'Payment Reminder 📝',
       'defaultDiscount': 'Clear Balance',
       'defaultCode': 'SETTLE',
-      'body': 'Aapka pichhla hisaab bakaya hai. Samay par UPI dwara bhugtan karein aur credit limit active rakhein.',
+      'body': 'You have an outstanding balance on your account. Kindly clear your dues via instant UPI or counter to keep your credit active.',
     },
     {
       'title': 'We Miss You!',
@@ -110,10 +110,10 @@ class _GrowthCampaignsScreenState extends State<GrowthCampaignsScreen> {
       'color': const Color(0xFF8B5CF6),
       'bg': const Color(0xFFF5F3FF),
       'tag': 'WIN-BACK',
-      'headline': 'Aapki Yaad Aayi! 🎁',
+      'headline': 'We Miss You! 🎁',
       'defaultDiscount': '15% OFF',
       'defaultCode': 'WELCOMEBACK',
-      'body': 'Kafi dino se aap store par nahi aaye! Aapke liye humne special VIP discount ready rakha hai.',
+      'body': 'We have not seen you in a while! Here is a special VIP discount on your next visit.',
     },
 
     // Set 2 (5 to 8): Daily & Fresh Essentials
@@ -123,10 +123,10 @@ class _GrowthCampaignsScreenState extends State<GrowthCampaignsScreen> {
       'color': const Color(0xFF0284C7),
       'bg': const Color(0xFFE0F2FE),
       'tag': 'NEW ARRIVALS',
-      'headline': 'Naya Taaza Stock Aagaya! 📦',
+      'headline': 'Fresh Stock Just Arrived! 📦',
       'defaultDiscount': 'Flat ₹50',
       'defaultCode': 'FRESH50',
-      'body': 'Brand new branded stock store par deliver ho chuka hai. Best quality aur guaranteed freshness.',
+      'body': 'Brand new branded stock has just arrived at our store. Premium quality and guaranteed freshness.',
     },
     {
       'title': 'Daily Dairy & Bakery',
@@ -134,10 +134,10 @@ class _GrowthCampaignsScreenState extends State<GrowthCampaignsScreen> {
       'color': const Color(0xFF059669),
       'bg': const Color(0xFFD1FAE5),
       'tag': 'DAILY FRESH',
-      'headline': 'Rozana Milk & Bakery 🥛',
+      'headline': 'Daily Milk & Bakery 🥛',
       'defaultDiscount': '5% OFF',
       'defaultCode': 'DAILY5',
-      'body': 'Subah taaza doodh, dahi, paneer aur bread har din fresh available. Daily booking open hai.',
+      'body': 'Fresh milk, yogurt, paneer, and bread available daily. Pre-orders welcome.',
     },
     {
       'title': 'Rainy Day / Monsoon',
@@ -145,10 +145,10 @@ class _GrowthCampaignsScreenState extends State<GrowthCampaignsScreen> {
       'color': const Color(0xFF0891B2),
       'bg': const Color(0xFFCFFAFE),
       'tag': 'MONSOON',
-      'headline': 'Chai-Pakoda Weather ☔',
+      'headline': 'Monsoon Special ☔',
       'defaultDiscount': '10% OFF',
       'defaultCode': 'RAIN10',
-      'body': 'Barsaat ke mausam me garma-garam chai patti, snacks aur dry snacks par special monsoon discount!',
+      'body': 'Enjoy delicious tea and hot snacks with special seasonal monsoon discounts!',
     },
     {
       'title': 'Summer Coolers',
@@ -156,10 +156,10 @@ class _GrowthCampaignsScreenState extends State<GrowthCampaignsScreen> {
       'color': const Color(0xFFEA580C),
       'bg': const Color(0xFFFFEDD5),
       'tag': 'SUMMER BEATS',
-      'headline': 'Thanda-Thanda Cool Offer 🥤',
+      'headline': 'Cool Summer Treats 🥤',
       'defaultDiscount': 'Buy 2 Get 10%',
       'defaultCode': 'COOL10',
-      'body': 'Cold drinks, juices, ice creams aur lassi par beat-the-heat cooling discount!',
+      'body': 'Beat the heat with refreshing beverages, juices, ice creams, and cold drinks at discount prices!',
     },
 
     // Set 3 (9 to 12): Savings & Loyalty
@@ -172,7 +172,7 @@ class _GrowthCampaignsScreenState extends State<GrowthCampaignsScreen> {
       'headline': 'Instant Cash Savings 💰',
       'defaultDiscount': '₹50 Cashback',
       'defaultCode': 'CASH50',
-      'body': '₹500 ya usse jyada ki purchase par turant counter discount payein.',
+      'body': 'Get an instant counter discount on purchases of ₹500 or more.',
     },
     {
       'title': 'Bulk Ration Saver',
@@ -180,10 +180,10 @@ class _GrowthCampaignsScreenState extends State<GrowthCampaignsScreen> {
       'color': const Color(0xFFB45309),
       'bg': const Color(0xFFFEF3C7),
       'tag': 'BULK BUY',
-      'headline': 'Mahine Ka Ration Sasta! 🧺',
+      'headline': 'Monthly Ration Super Saver 🧺',
       'defaultDiscount': 'Extra 5% Bulk',
       'defaultCode': 'RATION5',
-      'body': 'Aata, Chawal, Daal aur Tel ke 5kg/10kg/15L packs par wholesale rate se bhi sasta!',
+      'body': 'Wholesale rates on 5kg/10kg/15L bulk packs of flour, rice, pulses, and edible oil!',
     },
     {
       'title': 'VIP Customer Club',
@@ -194,7 +194,7 @@ class _GrowthCampaignsScreenState extends State<GrowthCampaignsScreen> {
       'headline': 'Exclusive VIP Member Deal 👑',
       'defaultDiscount': 'VIP 12%',
       'defaultCode': 'VIPCLUB',
-      'body': 'Aap humare premium regular customer hain. Sirf aapke liye exclusive flat rate discount.',
+      'body': 'As one of our most valued customers, enjoy an exclusive VIP discount on your purchase.',
     },
     {
       'title': 'Birthday Celebration',
@@ -202,10 +202,10 @@ class _GrowthCampaignsScreenState extends State<GrowthCampaignsScreen> {
       'color': const Color(0xFFE11D48),
       'bg': const Color(0xFFFFF1F2),
       'tag': 'BIRTHDAY',
-      'headline': 'Janamdin Ki Shubhkamnayein! 🎂',
+      'headline': 'Happy Birthday! 🎂',
       'defaultDiscount': 'Gift ₹150',
       'defaultCode': 'BDAYGIFT',
-      'body': 'Aapke special day par hamari dukan ki taraf se free birthday gift voucher!',
+      'body': 'Celebrate your special day with a birthday shopping voucher from our store!',
     },
 
     // Set 4 (13 to 16): Speed & Digital Offers
@@ -218,7 +218,7 @@ class _GrowthCampaignsScreenState extends State<GrowthCampaignsScreen> {
       'headline': 'Happy Anniversary! 💐',
       'defaultDiscount': 'Special 10%',
       'defaultCode': 'LOVE10',
-      'body': 'Aapke rishte ki khushi me poore parivar ke liye special gift voucher.',
+      'body': 'Celebrate your special milestone with a family gift voucher from our store.',
     },
     {
       'title': 'Flash Sale (3 Hours)',
@@ -226,10 +226,10 @@ class _GrowthCampaignsScreenState extends State<GrowthCampaignsScreen> {
       'color': const Color(0xFFD97706),
       'bg': const Color(0xFFFEF3C7),
       'tag': 'FLASH OFFER',
-      'headline': 'Dhamaka Flash Sale (Limited Time) ⚡',
+      'headline': 'Flash Sale (Limited Time) ⚡',
       'defaultDiscount': 'Flat 20%',
       'defaultCode': 'FLASH20',
-      'body': 'Sirf agle 3 ghante tak valid! Stock khatam hone se pehle turant order karein.',
+      'body': 'Valid for the next 3 hours only! Order now before stocks run out.',
     },
     {
       'title': 'UPI Digital Cashback',
@@ -240,7 +240,7 @@ class _GrowthCampaignsScreenState extends State<GrowthCampaignsScreen> {
       'headline': 'Pay via UPI & Save Extra 📱',
       'defaultDiscount': 'Extra ₹25',
       'defaultCode': 'UPI25',
-      'body': 'Galla par cash ki jagah QR code scan karke pay karein aur payein instant ₹25 bachat.',
+      'body': 'Pay digitally by scanning our counter QR code and get an instant discount.',
     },
     {
       'title': 'Sunday Morning Special',
@@ -251,7 +251,7 @@ class _GrowthCampaignsScreenState extends State<GrowthCampaignsScreen> {
       'headline': 'Sunday Super Morning ☀️',
       'defaultDiscount': 'Morning 8%',
       'defaultCode': 'SUNDAY8',
-      'body': 'Ravivar subah 8 AM se 12 PM tak counter billing par flat 8% ki vishesh chhoot.',
+      'body': 'Enjoy a flat 8% discount on counter billing every Sunday from 8 AM to 12 PM.',
     },
 
     // Set 5 (17 to 20): Stock Clearance & Delivery
@@ -261,10 +261,10 @@ class _GrowthCampaignsScreenState extends State<GrowthCampaignsScreen> {
       'color': const Color(0xFFDC2626),
       'bg': const Color(0xFFFEF2F2),
       'tag': 'CLEARANCE',
-      'headline': 'Maha Stock Clearance Sale 📉',
+      'headline': 'Super Stock Clearance Sale 📉',
       'defaultDiscount': 'Up to 30%',
       'defaultCode': 'CLEAR30',
-      'body': 'Godown clear karne ke liye selected brands par cost-to-cost rate discount!',
+      'body': 'Special cost-to-cost clearance prices on selected brands while stocks last!',
     },
     {
       'title': 'Free Home Delivery',
@@ -272,10 +272,10 @@ class _GrowthCampaignsScreenState extends State<GrowthCampaignsScreen> {
       'color': const Color(0xFF059669),
       'bg': const Color(0xFFD1FAE5),
       'tag': 'FREE DELIVERY',
-      'headline': 'Ghar Baithe Free Delivery 🛵',
+      'headline': 'Free Home Delivery 🛵',
       'defaultDiscount': 'Free Delivery',
       'defaultCode': 'FREEDEL',
-      'body': 'Dukan aane ki zaroorat nahi! WhatsApp par list bhejo, 30 minute me samaan ghar par.',
+      'body': 'No need to step out! Send your order list on WhatsApp and get free doorstep delivery.',
     },
     {
       'title': 'Loyalty Stamp Reward',
@@ -283,10 +283,10 @@ class _GrowthCampaignsScreenState extends State<GrowthCampaignsScreen> {
       'color': const Color(0xFF4F46E5),
       'bg': const Color(0xFFEEF2FF),
       'tag': 'LOYALTY REWARD',
-      'headline': 'Aapka Wafadari Reward 🎟️',
+      'headline': 'Customer Loyalty Reward 🎟️',
       'defaultDiscount': 'Free Gift Box',
       'defaultCode': 'STAMP5',
-      'body': 'Pichhle 5 bills poore hone par aapka bonus gift pack store par claim karne ke liye ready hai.',
+      'body': 'Congratulations on completing 5 orders! Your bonus gift is ready to collect at the counter.',
     },
     {
       'title': 'Personal Care & Hygiene',
@@ -297,7 +297,7 @@ class _GrowthCampaignsScreenState extends State<GrowthCampaignsScreen> {
       'headline': 'Health & Hygiene Pack 🧼',
       'defaultDiscount': 'Combo 10%',
       'defaultCode': 'HYGIENE10',
-      'body': 'Soaps, detergents, shampoos aur cleaners ke combos par extra bachhat pack.',
+      'body': 'Special combo discounts on soaps, detergents, shampoos, and cleaning essentials.',
     },
 
     // Set 6 (21 to 24): Community & Combos
@@ -307,10 +307,10 @@ class _GrowthCampaignsScreenState extends State<GrowthCampaignsScreen> {
       'color': const Color(0xFF92400E),
       'bg': const Color(0xFFFEF3C7),
       'tag': 'EVENING COMBO',
-      'headline': 'Shaam Ki Chai & Namkeen ☕',
+      'headline': 'Evening Tea & Snacks ☕',
       'defaultDiscount': 'Buy 2 Get ₹20',
       'defaultCode': 'SNACKS20',
-      'body': 'Biscuits, namkeens, chips aur toast ke sath premium tea leaf combo discount.',
+      'body': 'Pair your favorite cookies, snacks, and biscuits with premium tea leaves at bundle rates.',
     },
     {
       'title': 'Seasonal Harvest',
@@ -318,10 +318,10 @@ class _GrowthCampaignsScreenState extends State<GrowthCampaignsScreen> {
       'color': const Color(0xFF15803D),
       'bg': const Color(0xFFDCFCE7),
       'tag': 'SEASON SPECIAL',
-      'headline': 'Mandi Se Seedha Khet Taaza 🌾',
+      'headline': 'Farm Fresh Direct 🌾',
       'defaultDiscount': 'Direct Price',
       'defaultCode': 'FARM50',
-      'body': 'Sidhe kisan aur mandi se aayi shuddh, anadulterated daal, masale aur anaj.',
+      'body': 'Pure, unadulterated pulses, spices, and whole grains sourced directly from farmers.',
     },
     {
       'title': 'Refer a Neighbor',
@@ -329,10 +329,10 @@ class _GrowthCampaignsScreenState extends State<GrowthCampaignsScreen> {
       'color': const Color(0xFF6366F1),
       'bg': const Color(0xFFEEF2FF),
       'tag': 'REFERRAL',
-      'headline': 'Padosi Ko Bhejo, Dono Bachao 🤝',
-      'defaultDiscount': 'Dono ko ₹50',
+      'headline': 'Refer a Neighbor & Save 🤝',
+      'defaultDiscount': '₹50 Each',
       'defaultCode': 'FRIEND50',
-      'body': 'Apne kisi padosi ya rishtedaar ko dukan recommend karein aur dono payein agle bill par ₹50 off.',
+      'body': 'Recommend our store to a friend or neighbor, and you both get ₹50 off your next bill.',
     },
     {
       'title': 'Emergency Store Open',
@@ -340,10 +340,10 @@ class _GrowthCampaignsScreenState extends State<GrowthCampaignsScreen> {
       'color': const Color(0xFFBE123C),
       'bg': const Color(0xFFFFF1F2),
       'tag': 'STORE OPEN',
-      'headline': 'Hum Aapke Liye Khule Hain! 🏪',
+      'headline': 'We Are Open For You! 🏪',
       'defaultDiscount': 'Counter Ready',
       'defaultCode': 'OPENNOW',
-      'body': 'Late night ya early morning emergency ration / medicine ke liye dukan open hai. WhatsApp karein.',
+      'body': 'Need emergency groceries or household essentials? We are open and ready to assist via WhatsApp.',
     },
   ];
 
@@ -365,7 +365,7 @@ class _GrowthCampaignsScreenState extends State<GrowthCampaignsScreen> {
     if (_isCustomMessageMode) {
       final customRaw = _customMessageController.text.trim();
       if (customRaw.isEmpty) {
-        return 'Namaste $custName ji! 🙏\n🏪 *$_storeName*\n\nApna custom broadcast message yahan type karein...';
+        return 'Dear $custName,\n🏪 *$_storeName*\n\nType your custom broadcast message here...';
       }
       return customRaw
           .replaceAll('{name}', custName)
@@ -382,18 +382,18 @@ class _GrowthCampaignsScreenState extends State<GrowthCampaignsScreen> {
       final amt = customer.currentBalancePaise ~/ 100;
       final upiPart = _storeUpiVpa.isNotEmpty ? '\n📌 *Pay via UPI:* $_storeUpiVpa\n' : '\n';
       return '''
-Namaste $custName ji! 🙏
+Dear $custName,
 🏪 *$_storeName*
 
-Aapka kul baki hisaab *₹$amt* hai.
-Kripya samay par chukta karein ya counter par aakar settle karein.
+Your total outstanding balance is *₹$amt*.
+Kindly settle your balance at your earliest convenience via UPI or counter.
 $upiPart
-Dhanyawad! Have a great day!
+Thank you! Have a great day!
 '''.trim();
     }
 
     return '''
-Namaste $custName ji! 🙏
+Dear $custName,
 🏪 *$_storeName*
 
 🎉 *${camp['headline']}*
@@ -403,7 +403,7 @@ ${camp['body']}
 🔑 *Coupon Code:* *$code*
 ⏳ *Valid For:* Next $_validityDays Days Only
 
-Aapka Swagat Hai! Visit store today.
+Welcome to our store! Visit today.
 '''.trim();
   }
 
@@ -984,7 +984,7 @@ Aapka Swagat Hai! Visit store today.
                     onChanged: (_) => setState(() {}),
                     style: GoogleFonts.inter(fontSize: 13, color: const Color(0xFF0F172A), height: 1.4),
                     decoration: InputDecoration(
-                      hintText: 'Apna custom WhatsApp broadcast message yahan type karein...',
+                      hintText: 'Type your custom WhatsApp broadcast message here...',
                       isDense: true,
                       filled: true,
                       fillColor: const Color(0xFFF8FAFC),
@@ -1082,7 +1082,7 @@ Aapka Swagat Hai! Visit store today.
             child: Row(
               children: [
                 {'key': 'All', 'label': 'All (${_customers.length})'},
-                {'key': 'Udhar Due', 'label': 'Udhar Due (${_customers.where((c) => c.currentBalancePaise > 0).length})'},
+                {'key': 'Udhar Due', 'label': 'Due Balance (${_customers.where((c) => c.currentBalancePaise > 0).length})'},
                 {'key': 'VIP', 'label': 'VIP (${_customers.where((c) => c.creditLimitPaise >= 1000000).length})'},
                 {'key': 'Birthdays', 'label': '🎂 Birthdays ($birthdayCount)'},
               ].map((item) {

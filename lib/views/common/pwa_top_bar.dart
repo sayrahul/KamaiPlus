@@ -116,7 +116,7 @@ class _PwaTopBarState extends State<PwaTopBar> {
                             ),
                             const SizedBox(width: 3.5),
                             Text(
-                              isPro ? '★ Pro' : 'Pro',
+                              'Pro',
                               style: GoogleFonts.outfit(
                                 fontSize: 11,
                                 fontWeight: FontWeight.w800,

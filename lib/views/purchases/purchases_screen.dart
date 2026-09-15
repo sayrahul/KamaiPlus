@@ -89,9 +89,9 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
 
     String msg;
     if (due > 0) {
-      msg = 'Namaste $sup ji, regarding PO $id (Total: ${MoneyFormatter.formatINR(total)}). Outstanding payment of ${MoneyFormatter.formatINR(due)} is acknowledged and will be processed. - Sent via KamaiPlus';
+      msg = 'Dear $sup, regarding PO $id (Total: ${MoneyFormatter.formatINR(total)}). Outstanding payment of ${MoneyFormatter.formatINR(due)} is acknowledged and will be processed. - Sent via KamaiPlus';
     } else {
-      msg = 'Namaste $sup ji, regarding PO $id (Total: ${MoneyFormatter.formatINR(total)}). Stock inward received and settled. Thank you! - Sent via KamaiPlus';
+      msg = 'Dear $sup, regarding PO $id (Total: ${MoneyFormatter.formatINR(total)}). Stock inward received and settled. Thank you! - Sent via KamaiPlus';
     }
 
     final encoded = Uri.encodeComponent(msg);
@@ -120,7 +120,7 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
       builder: (dialogCtx) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: Text('Delete Purchase Order?', style: GoogleFonts.outfit(fontSize: 16, fontWeight: FontWeight.w700)),
-        content: Text('Kya aap purchase order ${purchase['id']} (${purchase['supplier']}) ko delete karna chahte hain?'),
+        content: Text('Are you sure you want to delete purchase order ${purchase['id']} (${purchase['supplier']})?'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(dialogCtx),
@@ -1356,7 +1356,7 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
             ...filtered.map((p) => _buildPurchaseCard(p)),
         ],
       ),
-      bottomNavigationBar: const KamaiBottomNav(),
+      bottomNavigationBar: const KamaiBottomNav(activeScreen: 'purchases'),
     );
   }
 

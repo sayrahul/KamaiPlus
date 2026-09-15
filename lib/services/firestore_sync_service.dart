@@ -30,6 +30,7 @@ class FirestoreSyncService {
   StreamSubscription? _businessSub;
   StreamSubscription? _broadcastSub;
   StreamSubscription? _globalConfigSub;
+  StreamSubscription? _fcmConfigSub;
 
   final ValueNotifier<Map<String, dynamic>?> broadcastNotifier = ValueNotifier<Map<String, dynamic>?>(null);
   final ValueNotifier<Map<String, dynamic>?> globalConfigNotifier = ValueNotifier<Map<String, dynamic>?>(null);
@@ -303,6 +304,17 @@ class FirestoreSyncService {
                 isFavorite: data['is_favorite'] == true,
                 businessType: businessType,
                 syncStatus: 'synced',
+                parentId: data['parent_id']?.toString(),
+                hasVariants: (data['has_variants'] == 1 || data['has_variants'] == true),
+                variantLabel: data['variant_label']?.toString(),
+                subUnitsPerPack: (data['sub_units_per_pack'] as num?)?.toInt(),
+                fitNotes: data['fit_notes']?.toString(),
+                batchNumber: data['batch_number']?.toString(),
+                expiryDate: data['expiry_date']?.toString(),
+                size: data['size']?.toString(),
+                color: data['color']?.toString(),
+                imeiSerial: data['imei_serial']?.toString(),
+                hsnCode: data['hsn_code']?.toString(),
               );
               await LocalDatabase.instance.upsertProduct(product);
             } catch (e) {
@@ -435,17 +447,22 @@ class FirestoreSyncService {
         final isExpired = expiresAt != null && DateTime.now().isAfter(expiresAt);
 
         if (enabled && !isExpired && (data['message']?.toString().isNotEmpty ?? false)) {
-          final previousMsg = broadcastNotifier.value?['message']?.toString();
-          final newMsg = data['message']?.toString();
+          final newMsg = data['message']?.toString() ?? '';
           broadcastNotifier.value = data;
-          if (newMsg != null && newMsg != previousMsg) {
-            final title = data['title']?.toString() ?? '📢 KamaiPlus Announcement';
-            NotificationService.instance.showLocalNotification(
-              id: DateTime.now().millisecondsSinceEpoch ~/ 1000,
-              title: title,
-              body: newMsg,
-            );
-          }
+
+          final broadcastId = data['id']?.toString() ?? '${data['title']}_${data['message']}_${data['updated_at']}';
+          SharedPreferences.getInstance().then((prefs) {
+            final lastNotifiedId = prefs.getString('last_notified_broadcast_id');
+            if (lastNotifiedId != broadcastId && newMsg.isNotEmpty) {
+              prefs.setString('last_notified_broadcast_id', broadcastId);
+              final title = data['title']?.toString() ?? 'KamaiPlus Announcement';
+              NotificationService.instance.showLocalNotification(
+                id: 9901,
+                title: title,
+                body: newMsg,
+              );
+            }
+          });
         } else {
           broadcastNotifier.value = null;
         }
@@ -462,7 +479,32 @@ class FirestoreSyncService {
         .snapshots()
         .listen((docSnap) {
       if (docSnap.exists && docSnap.data() != null) {
-        globalConfigNotifier.value = docSnap.data();
+        final data = docSnap.data()!;
+        globalConfigNotifier.value = data;
+        final geminiKey = data['gemini_api_key']?.toString().trim();
+        if (geminiKey != null && geminiKey.isNotEmpty) {
+          SharedPreferences.getInstance().then((prefs) {
+            prefs.setString('cached_gemini_api_key', geminiKey);
+          });
+        }
+      }
+    }, onError: (_) {});
+
+    // 6. Live FCM & Push Notification Master Switches from Admin Console
+    _fcmConfigSub?.cancel();
+    _fcmConfigSub = firestore
+        .collection('platform_settings')
+        .doc('fcm_config')
+        .snapshots()
+        .listen((docSnap) {
+      if (docSnap.exists && docSnap.data() != null) {
+        final data = docSnap.data()!;
+        final pushEnabled = data['push_notifications_enabled'] == true || data['push_notifications_enabled'] == null;
+        final fcmEnabled = data['fcm_enabled'] == true || data['fcm_enabled'] == null;
+        SharedPreferences.getInstance().then((prefs) {
+          prefs.setBool('push_notifications_enabled', pushEnabled);
+          prefs.setBool('fcm_enabled', fcmEnabled);
+        });
       }
     }, onError: (_) {});
   }
@@ -559,6 +601,17 @@ class FirestoreSyncService {
             isFavorite: d['is_favorite'] == true,
             businessType: businessType,
             syncStatus: 'synced',
+            parentId: d['parent_id']?.toString(),
+            hasVariants: (d['has_variants'] == 1 || d['has_variants'] == true),
+            variantLabel: d['variant_label']?.toString(),
+            subUnitsPerPack: (d['sub_units_per_pack'] as num?)?.toInt(),
+            fitNotes: d['fit_notes']?.toString(),
+            batchNumber: d['batch_number']?.toString(),
+            expiryDate: d['expiry_date']?.toString(),
+            size: d['size']?.toString(),
+            color: d['color']?.toString(),
+            imeiSerial: d['imei_serial']?.toString(),
+            hsnCode: d['hsn_code']?.toString(),
           ),
         );
       }
@@ -570,6 +623,7 @@ class FirestoreSyncService {
       // pulled products all defaulted to 'grocery'. Run the same repair
       // immediately so this device is never left carrying that damage.
       await LocalDatabase.instance.repairMistaggedProducts();
+      await LocalDatabase.instance.repairVariantRelationships();
 
       // Fetch Sales
       try {
@@ -814,6 +868,11 @@ class FirestoreSyncService {
         'color': product.color,
         'imei_serial': product.imeiSerial,
         'hsn_code': product.hsnCode,
+        'parent_id': product.parentId,
+        'has_variants': product.hasVariants ? 1 : 0,
+        'variant_label': product.variantLabel,
+        'sub_units_per_pack': product.subUnitsPerPack,
+        'fit_notes': product.fitNotes,
         'sync_status': 'synced',
         'lastSyncedAt': DateTime.now().toIso8601String(),
         'updated_at': FieldValue.serverTimestamp(),

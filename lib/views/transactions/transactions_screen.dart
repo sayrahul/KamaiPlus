@@ -280,7 +280,7 @@ class _TransactionsScreenState extends State<TransactionsScreen> with DataBusRef
     if (upiId.isNotEmpty) {
       buffer.writeln('📌 *UPI ID:* $upiId');
     }
-    buffer.writeln('\nDhanyawad! Phir aaiyega! 🙏');
+    buffer.writeln('\nThank you for your business! Visit again! 🙏');
 
     final cleanPhone = phone.replaceAll(RegExp(r'\D'), '');
     final fullPhone = cleanPhone.length == 10 ? '91$cleanPhone' : cleanPhone;
@@ -316,7 +316,7 @@ class _TransactionsScreenState extends State<TransactionsScreen> with DataBusRef
           await launchUrl(url, mode: LaunchMode.externalApplication);
         } else {
           if (mounted) {
-            InAppNotification.error('WhatsApp application open nahi ho paya.', context: context);
+            InAppNotification.error('Could not open WhatsApp.', context: context);
           }
         }
       } catch (_) {}
@@ -662,7 +662,7 @@ class _TransactionsScreenState extends State<TransactionsScreen> with DataBusRef
                 ],
               ),
             ),
-      bottomNavigationBar: const KamaiBottomNav(),
+      bottomNavigationBar: const KamaiBottomNav(activeScreen: 'transactions'),
     );
   }
 
@@ -1072,23 +1072,28 @@ class _TransactionsScreenState extends State<TransactionsScreen> with DataBusRef
     final isRefunded = sale.isRefunded;
     final isUdhar = sale.paymentMethod == 'credit';
     final isUpi = sale.paymentMethod == 'upi';
+    final isSplit = sale.paymentMethod == 'split';
     final dateStr = DateFormat('d MMM, hh:mm a').format(sale.createdAt);
 
     final modeColor = isRefunded
         ? const Color(0xFFDC2626)
-        : (isUdhar
-            ? const Color(0xFFDC2626)
-            : isUpi
-                ? const Color(0xFF0284C7)
-                : const Color(0xFF059669));
+        : (isSplit
+            ? const Color(0xFF6366F1)
+            : (isUdhar
+                ? const Color(0xFFDC2626)
+                : isUpi
+                    ? const Color(0xFF0284C7)
+                    : const Color(0xFF059669)));
 
     final modeBg = isRefunded
         ? const Color(0xFFFEE2E2)
-        : (isUdhar
-            ? const Color(0xFFFEF2F2)
-            : isUpi
-                ? const Color(0xFFF0F9FF)
-                : const Color(0xFFECFDF5));
+        : (isSplit
+            ? const Color(0xFFEEF2FF)
+            : (isUdhar
+                ? const Color(0xFFFEF2F2)
+                : isUpi
+                    ? const Color(0xFFF0F9FF)
+                    : const Color(0xFFECFDF5)));
 
     // Items preview
     String itemsSummary = '';
@@ -1144,11 +1149,13 @@ class _TransactionsScreenState extends State<TransactionsScreen> with DataBusRef
                       child: Icon(
                         isRefunded
                             ? Icons.replay_rounded
-                            : (isUdhar
-                                ? Icons.book_rounded
-                                : isUpi
-                                    ? Icons.qr_code_2_rounded
-                                    : Icons.payments_rounded),
+                            : (isSplit
+                                ? Icons.call_split_rounded
+                                : (isUdhar
+                                    ? Icons.book_rounded
+                                    : isUpi
+                                        ? Icons.qr_code_2_rounded
+                                        : Icons.payments_rounded)),
                         color: modeColor,
                         size: 18,
                       ),
@@ -1165,9 +1172,9 @@ class _TransactionsScreenState extends State<TransactionsScreen> with DataBusRef
                               Text(
                                 '#${sale.invoiceNumber}',
                                 style: GoogleFonts.outfit(
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w800,
-                                  color: const Color(0xFF0F172A),
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w800,
+                                    color: const Color(0xFF0F172A),
                                 ),
                               ),
                               const SizedBox(width: 6),
@@ -1221,17 +1228,23 @@ class _TransactionsScreenState extends State<TransactionsScreen> with DataBusRef
                           decoration: BoxDecoration(
                             color: isRefunded
                                 ? const Color(0xFFFEE2E2)
-                                : (isUdhar ? const Color(0xFFFEF2F2) : const Color(0xFFECFDF5)),
+                                : (isSplit
+                                    ? const Color(0xFFEEF2FF)
+                                    : (isUdhar ? const Color(0xFFFEF2F2) : const Color(0xFFECFDF5))),
                             borderRadius: BorderRadius.circular(4),
                           ),
                           child: Text(
-                            isRefunded ? 'REFUNDED' : (isUdhar ? 'UDHAR' : 'PAID'),
+                            isRefunded
+                                ? 'REFUNDED'
+                                : (isSplit ? 'SPLIT' : (isUdhar ? 'UDHAR' : 'PAID')),
                             style: GoogleFonts.inter(
                               fontSize: 9,
                               fontWeight: FontWeight.w800,
                               color: isRefunded
                                   ? const Color(0xFFDC2626)
-                                  : (isUdhar ? const Color(0xFFDC2626) : const Color(0xFF059669)),
+                                  : (isSplit
+                                      ? const Color(0xFF6366F1)
+                                      : (isUdhar ? const Color(0xFFDC2626) : const Color(0xFF059669))),
                             ),
                           ),
                         ),
@@ -1264,6 +1277,42 @@ class _TransactionsScreenState extends State<TransactionsScreen> with DataBusRef
                     ],
                   ),
                 ),
+
+                // Split breakdown preview if payment is split
+                if (isSplit) ...[
+                  const SizedBox(height: 6),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4.5),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF5F3FF),
+                      borderRadius: BorderRadius.circular(6),
+                      border: Border.all(color: const Color(0xFFDDD6FE), width: 0.8),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.call_split_rounded, size: 12, color: Color(0xFF6366F1)),
+                        const SizedBox(width: 5),
+                        Text(
+                          'Split: ',
+                          style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.w700, color: const Color(0xFF4C1D95)),
+                        ),
+                        Expanded(
+                          child: Text(
+                            [
+                              if (sale.splitCashPaise > 0) 'Cash: ${MoneyFormatter.formatINR(sale.splitCashPaise)}',
+                              if (sale.splitUpiPaise > 0) 'UPI: ${MoneyFormatter.formatINR(sale.splitUpiPaise)}',
+                              if (sale.splitCreditPaise > 0) 'Udhar: ${MoneyFormatter.formatINR(sale.splitCreditPaise)}',
+                            ].join(' • '),
+                            style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.w800, color: const Color(0xFF4338CA)),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
                 const SizedBox(height: 8),
 
                 // Interactive Quick Actions Toolbar (Space-Saving)
@@ -1379,12 +1428,12 @@ class _TransactionsScreenState extends State<TransactionsScreen> with DataBusRef
           const Icon(Icons.search_off_rounded, size: 48, color: Color(0xFF94A3B8)),
           const SizedBox(height: 12),
           Text(
-            'Koi Transaction Nahi Mila',
+            'No Transactions Found',
             style: GoogleFonts.outfit(fontSize: 16, fontWeight: FontWeight.w700, color: const Color(0xFF334155)),
           ),
           const SizedBox(height: 4),
           Text(
-            'Filter badal kar dekhein ya Billing counter se naya bill banayein.',
+            'Change filter criteria or create a new bill from Billing counter.',
             style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF64748B)),
             textAlign: TextAlign.center,
           ),
@@ -1524,7 +1573,7 @@ class _TransactionsScreenState extends State<TransactionsScreen> with DataBusRef
           ],
         ),
         content: Text(
-          'Kisi bhi transaction ko return ya refund karne ke liye invoice row par tap karein aur "Return Item" select karein. Inventory stock automatic restock ho jayega aur khata hisaab reverse ho jayega.',
+          'To return or refund any transaction, tap the invoice row and select "Return Item". Items will be automatically restocked in inventory and ledger balance will be reversed.',
           style: GoogleFonts.inter(fontSize: 12.5, color: const Color(0xFF475569)),
         ),
         actions: [

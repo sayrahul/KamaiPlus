@@ -70,6 +70,16 @@ class AppDataBus {
     if (affectsCash) bumpCash();
   }
 
+  /// Broadcasts refresh signal to all screens (e.g. after a factory reset).
+  void bumpAll() {
+    bumpSales();
+    bumpProducts();
+    bumpCustomers();
+    bumpCash();
+  }
+
+
+
   /// Test-only: cancel pending timers and return every counter to zero so cases
   /// don't leak into each other.
   @visibleForTesting

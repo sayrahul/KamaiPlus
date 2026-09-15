@@ -224,7 +224,7 @@ class BusinessVerticalProfile {
   String get emptyCatalogDescription {
     switch (id) {
       case 'restaurant':
-        return 'Scan a photo of your menu card, or add your first dish manually.';
+        return 'Scan a menu photo, scan a packaged drink barcode, or add a dish manually.';
       case 'pharmacy':
         return 'Scan a barcode or add your first medicine to get started.';
       case 'clothing':
@@ -405,28 +405,29 @@ class BusinessVerticals {
     shortName: 'Cafe / Dine',
     emoji: '🍽️',
     toggles: VerticalFeatureToggles(
-      showBarcode: false,
+      showBarcode: true,
       showWeightUnits: false,
-      showBatchExpiry: false,
+      showBatchExpiry: true,
       showTableOrderType: true,
       showSizeVariants: false,
       showImeiWarranty: false,
       showDoctorPrescription: false,
-      hasBillScan: false,
+      hasBillScan: true,
       showQuotationEstimate: false,
     ),
     placeholders: VerticalPlaceholders(
-      searchProduct: 'Touch category or type Chai, Paneer, Dosa, Pizza...',
-      newProductName: 'e.g., Paneer Butter Masala (Full) / Cold Coffee',
+      searchProduct: 'Scan barcode or type Chai, Biryani, Cold Drink, Water...',
+      newProductName: 'e.g., Paneer Butter Masala (Full) / Mineral Water 1L',
       customerSearch: 'Guest name or phone (optional for dine-in)...',
-      supplierNameExample: 'e.g. Local Vegetable Vendor, Dairy Supplier...',
+      supplierNameExample: 'e.g. Dairy Supplier, Beverage Distributor...',
       invoiceFooterNote:
           'Thank you for dining with us! Hope you enjoyed the food. Please visit again.',
     ),
     defaultUnit: 'plate',
-    recommendedUnits: ['plate', 'portion', 'piece', 'packet', 'box'],
+    recommendedUnits: ['plate', 'portion', 'piece', 'bottle', 'can', 'packet', 'box', 'litre', 'ml'],
     quickCategories: [
       'Hot & Cold Beverages',
+      'Packaged Drinks & Water',
       'Starters & Snacks',
       'Main Course (Curries)',
       'Roti, Naan & Rice',
@@ -434,7 +435,7 @@ class BusinessVerticals {
       'Desserts & Sweets',
     ],
     productsMenuTitle: 'Menu Items',
-    productsMenuSubtitle: 'Dishes & Prices',
+    productsMenuSubtitle: 'Dishes, Drinks & Barcodes',
     purchasesMenuTitle: 'Kitchen Inward',
     purchasesMenuSubtitle: 'Vendor & Raw Material Bills',
   );

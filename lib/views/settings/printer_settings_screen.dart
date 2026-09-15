@@ -576,7 +576,7 @@ class _PrinterSettingsScreenState extends State<PrinterSettingsScreen> {
                   const Icon(Icons.flash_on_rounded, size: 18),
                   const SizedBox(width: 8),
                   Text(
-                    _isTestingPrint ? 'Sending Test Print...' : '⚡ Print Test Receipt',
+                    _isTestingPrint ? 'Sending Test Print...' : 'Print Test Receipt',
                     style: GoogleFonts.outfit(fontSize: 14, fontWeight: FontWeight.w800),
                   ),
                 ],
@@ -627,7 +627,7 @@ class _PrinterSettingsScreenState extends State<PrinterSettingsScreen> {
                   const Icon(Icons.print_rounded, size: 18),
                   const SizedBox(width: 8),
                   Text(
-                    _isTestingPrint ? 'Opening Spooler...' : '⚡ Print Test A4 Bill',
+                    _isTestingPrint ? 'Opening Spooler...' : 'Print Test A4 Bill',
                     style: GoogleFonts.outfit(fontSize: 14, fontWeight: FontWeight.w800),
                   ),
                 ],

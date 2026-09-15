@@ -7,7 +7,9 @@ import '../../services/csv_inward_service.dart';
 import '../../services/gemini_ai_service.dart';
 import '../../services/mlkit_ocr_service.dart';
 import '../common/in_app_notification.dart';
-import '../common/gemini_api_key_dialog.dart';
+import '../../core/database/local_database.dart';
+import '../../services/firestore_sync_service.dart';
+import '../common/pro_upgrade_modal.dart';
 import 'bill_scan_review_sheet.dart';
 
 class AiInwardSheet extends StatelessWidget {
@@ -23,6 +25,37 @@ class AiInwardSheet extends StatelessWidget {
       builder: (ctx) => AiInwardSheet(onInwardComplete: onInwardComplete),
     );
   }
+
+  static Future<void> showPhotoSourcePickerDirect(BuildContext context, {VoidCallback? onInwardComplete}) async {
+    final profile = await LocalDatabase.instance.getStoreProfile();
+    final isPro = profile.isProEffective || FirestoreSyncService.isProNotifier.value;
+    if (!isPro) {
+      if (context.mounted) {
+        ProUpgradeModal.show(context, triggerFeature: 'AI Bill Vision OCR');
+      }
+      return;
+    }
+    final sheet = AiInwardSheet(onInwardComplete: onInwardComplete);
+    if (context.mounted) {
+      sheet._showImageSourcePicker(context);
+    }
+  }
+
+  static Future<void> pickPdfDirect(BuildContext context, {VoidCallback? onInwardComplete}) async {
+    final profile = await LocalDatabase.instance.getStoreProfile();
+    final isPro = profile.isProEffective || FirestoreSyncService.isProNotifier.value;
+    if (!isPro) {
+      if (context.mounted) {
+        ProUpgradeModal.show(context, triggerFeature: 'AI Bill Vision OCR');
+      }
+      return;
+    }
+    final sheet = AiInwardSheet(onInwardComplete: onInwardComplete);
+    if (context.mounted) {
+      sheet._processPdfScan(context);
+    }
+  }
+
 
   void _showImageSourcePicker(BuildContext context) {
     showModalBottomSheet(
@@ -280,20 +313,13 @@ class AiInwardSheet extends StatelessWidget {
                 ],
               ),
               content: Text(
-                res?.errorMessage ?? 'Could not parse bill slip. Please check photo clarity or configure API key.',
+                res?.errorMessage ?? 'Could not parse bill slip. Please ensure the bill is clearly visible and well-lit, then try again.',
                 style: GoogleFonts.plusJakartaSans(fontSize: 13, color: const Color(0xFF475569)),
               ),
               actions: [
                 TextButton(
                   onPressed: () => Navigator.pop(dialogCtx),
                   child: Text('Close', style: GoogleFonts.plusJakartaSans(color: const Color(0xFF64748B))),
-                ),
-                TextButton(
-                  onPressed: () {
-                    Navigator.pop(dialogCtx);
-                    GeminiApiKeyDialog.show(context);
-                  },
-                  child: Text('AI Key Settings', style: GoogleFonts.plusJakartaSans(color: const Color(0xFF0284C7), fontWeight: FontWeight.w700)),
                 ),
                 if (isQuota)
                   ElevatedButton(
@@ -381,11 +407,6 @@ class AiInwardSheet extends StatelessWidget {
                 ),
               ),
               const Spacer(),
-              IconButton(
-                icon: const Icon(Icons.key_rounded, size: 20, color: Color(0xFF64748B)),
-                tooltip: 'Configure Gemini API Key',
-                onPressed: () => GeminiApiKeyDialog.show(context),
-              ),
               IconButton(
                 icon: const Icon(Icons.close_rounded, size: 20, color: Color(0xFF94A3B8)),
                 onPressed: () => Navigator.pop(context),

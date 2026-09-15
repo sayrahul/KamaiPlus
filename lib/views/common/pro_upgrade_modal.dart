@@ -9,7 +9,6 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../core/database/local_database.dart';
 import '../../core/utils/money_formatter.dart';
 import '../../models/models.dart';
-import '../settings/pro_membership_screen.dart';
 import '../../services/razorpay_service.dart';
 import 'in_app_notification.dart';
 
@@ -40,6 +39,7 @@ class _ProUpgradeModalState extends State<ProUpgradeModal> {
   String? _couponError;
   String? _appliedCouponCode;
   int? _appliedDiscountPaise;
+  bool _isComparisonExpanded = false;
 
   Timer? _countdownTimer;
 
@@ -525,48 +525,11 @@ class _ProUpgradeModalState extends State<ProUpgradeModal> {
                             ),
                           ),
                         ),
-                        const SizedBox(height: 14),
+                        const SizedBox(height: 12),
 
-                        // Pro Unlocked Features Glass Card
-                        Container(
-                          padding: const EdgeInsets.all(14),
-                          decoration: BoxDecoration(
-                            color: Colors.white.withValues(alpha: 0.05),
-                            borderRadius: BorderRadius.circular(18),
-                            border: Border.all(color: Colors.white.withValues(alpha: 0.09)),
-                          ),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Row(
-                                children: [
-                                  const Icon(Icons.bolt_rounded, size: 15, color: Color(0xFFFBBF24)),
-                                  const SizedBox(width: 5),
-                                  Text(
-                                    'ALL PRO CAPABILITIES INCLUDED:',
-                                    style: GoogleFonts.outfit(
-                                      fontSize: 10,
-                                      fontWeight: FontWeight.w900,
-                                      letterSpacing: 0.6,
-                                      color: const Color(0xFFFDE68A),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              const SizedBox(height: 10),
-                              _buildGlassFeature('Cloud Backup & Multi-Device Realtime Sync'),
-                              const SizedBox(height: 7),
-                              _buildGlassFeature('Govt GSTR-1 Tax Filing & HSN CA Reports'),
-                              const SizedBox(height: 7),
-                              _buildGlassFeature('Batch & Expiry Radar with Shelf-Life Alerts'),
-                              const SizedBox(height: 7),
-                              _buildGlassFeature('Custom Barcode Label Sticker Print Studio'),
-                              const SizedBox(height: 7),
-                              _buildGlassFeature('Custom Logo on Invoices (Zero Watermark)'),
-                            ],
-                          ),
-                        ),
-                        const SizedBox(height: 16),
+                        // Interactive Free vs Pro Feature Comparison Dropdown
+                        _buildFreeVsProComparison(),
+                        const SizedBox(height: 14),
 
                         // Coupon Code — validated against Firestore
                         // `coupons/{CODE}` (admin-managed today via Firebase
@@ -741,28 +704,6 @@ class _ProUpgradeModalState extends State<ProUpgradeModal> {
                             ),
                           ],
                         ),
-                        const SizedBox(height: 6),
-
-                        // Compare Plans Link
-                        Center(
-                          child: TextButton(
-                            onPressed: () {
-                              Navigator.of(context).pop();
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(builder: (_) => const ProMembershipScreen()),
-                              );
-                            },
-                            child: Text(
-                              'Compare Free vs Pro Plans & FAQs →',
-                              style: GoogleFonts.outfit(
-                                fontSize: 11.5,
-                                fontWeight: FontWeight.w700,
-                                color: const Color(0xFF38BDF8),
-                              ),
-                            ),
-                          ),
-                        ),
                       ],
                     ),
                   ),
@@ -771,6 +712,303 @@ class _ProUpgradeModalState extends State<ProUpgradeModal> {
             ),
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildFreeVsProComparison() {
+    final List<Map<String, String>> comparisonRows = [
+      {
+        'feature': 'Google Drive Cloud Backup',
+        'free': 'Manual export only',
+        'pro': '1-Tap Auto Drive Sync',
+      },
+      {
+        'feature': 'Multi-Counter Live Sync',
+        'free': 'Single device only',
+        'pro': 'Real-time Live Sync',
+      },
+      {
+        'feature': 'GST & CA Tax Filing',
+        'free': 'Basic summary',
+        'pro': 'GSTR-1, HSN & Tally XML',
+      },
+      {
+        'feature': 'AI Scan (Inward & Food Menu)',
+        'free': 'Not included',
+        'pro': 'Unlimited AI Vision OCR',
+      },
+      {
+        'feature': 'Instant Voice Soundbox',
+        'free': 'Screen alerts only',
+        'pro': 'UPI Payment Voice Speaker',
+      },
+      {
+        'feature': 'Customer Khata Reminders',
+        'free': 'Manual SMS',
+        'pro': '1-Tap WhatsApp Link',
+      },
+      {
+        'feature': 'Cash Register Shifts',
+        'free': 'Current shift only',
+        'pro': 'Shift History & Z-Reports',
+      },
+      {
+        'feature': 'Custom Invoice Branding',
+        'free': 'App watermark',
+        'pro': 'Store Logo, Thermal & A4',
+      },
+      {
+        'feature': 'Product Catalog Capacity',
+        'free': 'Up to 50 items',
+        'pro': 'Unlimited Products',
+      },
+      {
+        'feature': 'Priority VIP Support',
+        'free': 'Standard email',
+        'pro': '24/7 WhatsApp & Call',
+      },
+    ];
+
+    return Container(
+      decoration: BoxDecoration(
+        color: _isComparisonExpanded
+            ? const Color(0xFF0F172A).withValues(alpha: 0.85)
+            : Colors.white.withValues(alpha: 0.04),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: _isComparisonExpanded
+              ? const Color(0xFFFBBF24).withValues(alpha: 0.45)
+              : Colors.white.withValues(alpha: 0.08),
+          width: _isComparisonExpanded ? 1.4 : 1.0,
+        ),
+      ),
+      child: Column(
+        children: [
+          // Dropdown Header / Trigger
+          Material(
+            color: Colors.transparent,
+            child: InkWell(
+              onTap: () {
+                HapticFeedback.selectionClick();
+                setState(() => _isComparisonExpanded = !_isComparisonExpanded);
+              },
+              borderRadius: BorderRadius.circular(16),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                child: Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(6),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFF59E0B).withValues(alpha: 0.2),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: const Icon(Icons.compare_arrows_rounded, size: 16, color: Color(0xFFFBBF24)),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Text(
+                                'Free vs Pro Comparison',
+                                style: GoogleFonts.outfit(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w800,
+                                  color: Colors.white,
+                                ),
+                              ),
+                              const SizedBox(width: 6),
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFFFBBF24).withValues(alpha: 0.2),
+                                  borderRadius: BorderRadius.circular(6),
+                                ),
+                                child: Text(
+                                  '10+ Perks',
+                                  style: GoogleFonts.inter(
+                                    fontSize: 9,
+                                    fontWeight: FontWeight.w800,
+                                    color: const Color(0xFFFDE68A),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 1.5),
+                          Text(
+                            _isComparisonExpanded ? 'Showing full feature matrix' : 'Tap to compare Free vs Pro plans',
+                            style: GoogleFonts.inter(
+                              fontSize: 10.5,
+                              color: const Color(0xFF94A3B8),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    AnimatedRotation(
+                      turns: _isComparisonExpanded ? 0.5 : 0.0,
+                      duration: const Duration(milliseconds: 200),
+                      child: const Icon(
+                        Icons.keyboard_arrow_down_rounded,
+                        color: Color(0xFFFBBF24),
+                        size: 22,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+
+          // Collapsible Comparison Matrix
+          if (_isComparisonExpanded) ...[
+            Container(
+              padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+              child: Column(
+                children: [
+                  const Divider(color: Colors.white12, height: 1),
+                  const SizedBox(height: 10),
+                  // Table Column Titles
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.05),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          flex: 4,
+                          child: Text(
+                            'BENEFIT',
+                            style: GoogleFonts.outfit(
+                              fontSize: 10,
+                              fontWeight: FontWeight.w800,
+                              color: const Color(0xFF94A3B8),
+                              letterSpacing: 0.5,
+                            ),
+                          ),
+                        ),
+                        Expanded(
+                          flex: 3,
+                          child: Text(
+                            'FREE',
+                            textAlign: TextAlign.center,
+                            style: GoogleFonts.outfit(
+                              fontSize: 10,
+                              fontWeight: FontWeight.w800,
+                              color: const Color(0xFF94A3B8),
+                              letterSpacing: 0.5,
+                            ),
+                          ),
+                        ),
+                        Expanded(
+                          flex: 4,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(vertical: 2),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFF59E0B).withValues(alpha: 0.2),
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: Text(
+                              'PRO ★',
+                              textAlign: TextAlign.center,
+                              style: GoogleFonts.outfit(
+                                fontSize: 10,
+                                fontWeight: FontWeight.w900,
+                                color: const Color(0xFFFDE68A),
+                                letterSpacing: 0.5,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+
+                  // Feature Rows
+                  ...comparisonRows.asMap().entries.map((entry) {
+                    final idx = entry.key;
+                    final row = entry.value;
+                    final isEven = idx % 2 == 0;
+                    return Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 7),
+                      decoration: BoxDecoration(
+                        color: isEven ? Colors.white.withValues(alpha: 0.02) : Colors.transparent,
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.center,
+                        children: [
+                          Expanded(
+                            flex: 4,
+                            child: Text(
+                              row['feature']!,
+                              style: GoogleFonts.inter(
+                                fontSize: 10.5,
+                                fontWeight: FontWeight.w600,
+                                color: Colors.white,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 4),
+                          Expanded(
+                            flex: 3,
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                const Icon(Icons.close_rounded, size: 12, color: Color(0xFFEF4444)),
+                                const SizedBox(width: 3),
+                                Flexible(
+                                  child: Text(
+                                    row['free']!,
+                                    textAlign: TextAlign.center,
+                                    style: GoogleFonts.inter(
+                                      fontSize: 9,
+                                      color: const Color(0xFF94A3B8),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(width: 4),
+                          Expanded(
+                            flex: 4,
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                const Icon(Icons.check_circle_rounded, size: 12, color: Color(0xFF10B981)),
+                                const SizedBox(width: 3),
+                                Flexible(
+                                  child: Text(
+                                    row['pro']!,
+                                    textAlign: TextAlign.center,
+                                    style: GoogleFonts.inter(
+                                      fontSize: 9.5,
+                                      fontWeight: FontWeight.w700,
+                                      color: const Color(0xFF34D399),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  }),
+                ],
+              ),
+            ),
+          ],
+        ],
       ),
     );
   }
@@ -971,7 +1209,7 @@ class _ProUpgradeModalState extends State<ProUpgradeModal> {
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        'Aapka store $businessTitle full power par chal raha hai. Sabhi premium retail features 100% unlocked hain.',
+                        'Your store $businessTitle is running at full power. All premium retail features are 100% unlocked.',
                         style: GoogleFonts.inter(
                           fontSize: 12,
                           color: const Color(0xFFCBD5E1),
@@ -1242,23 +1480,14 @@ class _ProUpgradeModalState extends State<ProUpgradeModal> {
               color: Colors.white,
             ),
           ),
-          const SizedBox(height: 4),
-          Text(
-            'Aapki dukaan ke sabhi premium retail features 7 dino ke liye bilkul FREE unlock ho chuke hain.',
-            style: GoogleFonts.inter(
-              fontSize: 11,
-              color: const Color(0xFFD1FAE5),
-              height: 1.35,
-            ),
-          ),
-          const SizedBox(height: 14),
+          const SizedBox(height: 8),
 
           // Digital Countdown Ticker Boxes
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
             decoration: BoxDecoration(
               color: Colors.black.withValues(alpha: 0.35),
-              borderRadius: BorderRadius.circular(14),
+              borderRadius: BorderRadius.circular(12),
               border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
             ),
             child: Column(
@@ -1266,12 +1495,12 @@ class _ProUpgradeModalState extends State<ProUpgradeModal> {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    const Icon(Icons.timer_outlined, size: 13, color: Color(0xFF34D399)),
+                    const Icon(Icons.timer_outlined, size: 12, color: Color(0xFF34D399)),
                     const SizedBox(width: 5),
                     Text(
                       'TRIAL VALIDITY REMAINING',
                       style: GoogleFonts.outfit(
-                        fontSize: 10,
+                        fontSize: 9.5,
                         fontWeight: FontWeight.w800,
                         letterSpacing: 0.8,
                         color: const Color(0xFF6EE7B7),
@@ -1279,7 +1508,7 @@ class _ProUpgradeModalState extends State<ProUpgradeModal> {
                     ),
                   ],
                 ),
-                const SizedBox(height: 8),
+                const SizedBox(height: 6),
                 Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
@@ -1291,47 +1520,6 @@ class _ProUpgradeModalState extends State<ProUpgradeModal> {
                     _buildCountdownColon(),
                     _buildCountdownUnit(seconds.toString().padLeft(2, '0'), 'SECS', isSeconds: true),
                   ],
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 12),
-
-          // Active Features Checklist
-          Wrap(
-            spacing: 8,
-            runSpacing: 6,
-            children: [
-              _buildFeaturePill('⚡ Unlimited Billing'),
-              _buildFeaturePill('🏷️ Barcode Studio'),
-              _buildFeaturePill('☁️ Cloud Backup'),
-              _buildFeaturePill('💬 WhatsApp CRM'),
-              _buildFeaturePill('🖨️ Thermal Receipts'),
-            ],
-          ),
-          const SizedBox(height: 12),
-
-          // Upsell hint
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
-            decoration: BoxDecoration(
-              color: const Color(0xFFF59E0B).withValues(alpha: 0.12),
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: const Color(0xFFF59E0B).withValues(alpha: 0.3)),
-            ),
-            child: Row(
-              children: [
-                const Icon(Icons.stars_rounded, size: 14, color: Color(0xFFFBBF24)),
-                const SizedBox(width: 6),
-                Expanded(
-                  child: Text(
-                    'Want uninterrupted service? Lock in 50% discount on Annual Plan early:',
-                    style: GoogleFonts.inter(
-                      fontSize: 10.5,
-                      fontWeight: FontWeight.w600,
-                      color: const Color(0xFFFDE68A),
-                    ),
-                  ),
                 ),
               ],
             ),
@@ -1387,25 +1575,6 @@ class _ProUpgradeModalState extends State<ProUpgradeModal> {
           fontSize: 16,
           fontWeight: FontWeight.w900,
           color: const Color(0xFF64748B),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildFeaturePill(String text) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.08),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
-      ),
-      child: Text(
-        text,
-        style: GoogleFonts.inter(
-          fontSize: 10,
-          fontWeight: FontWeight.w600,
-          color: const Color(0xFFE2E8F0),
         ),
       ),
     );

@@ -305,6 +305,9 @@ class AdminFirestoreService {
       final doc = await _db.collection('platform_settings').doc('fcm_config').get();
       if (!doc.exists || doc.data() == null) {
         return {
+          'fcm_enabled': true,
+          'push_notifications_enabled': true,
+          'in_app_banner_enabled': true,
           'default_topic': 'all_merchants',
           'channel_id': 'kamai_pos_channel',
           'channel_name': 'KamaiPlus POS Alerts & Invoices',
@@ -320,6 +323,9 @@ class AdminFirestoreService {
       return doc.data()!;
     } catch (_) {
       return {
+        'fcm_enabled': true,
+        'push_notifications_enabled': true,
+        'in_app_banner_enabled': true,
         'default_topic': 'all_merchants',
         'channel_id': 'kamai_pos_channel',
         'channel_name': 'KamaiPlus POS Alerts & Invoices',

@@ -214,8 +214,8 @@ class HomeDashboardScreenState extends State<HomeDashboardScreen> {
                 const SizedBox(height: 14),
                 Text(
                   forceUpdate
-                      ? 'KamaiPlus me naye features aur zaroori security improvements shamil kiye gaye hain. Aage billing karne ke liye Google Play se update karna anivarya hai.'
-                      : 'KamaiPlus ka behtar aur fast version Google Play par live hai. Best experience ke liye abhi update karein.',
+                      ? 'Important security improvements and new features are available. Please update KamaiPlus from Google Play to continue billing.'
+                      : 'A faster and improved version of KamaiPlus is available on Google Play. Update now for the best retail experience.',
                   textAlign: TextAlign.center,
                   style: GoogleFonts.inter(
                     fontSize: 13.5,
@@ -242,7 +242,7 @@ class HomeDashboardScreenState extends State<HomeDashboardScreen> {
                     ),
                     icon: const Icon(Icons.shop_two_rounded, size: 20),
                     label: Text(
-                      'Google Play Se Update Karein',
+                      'Update on Google Play',
                       style: GoogleFonts.outfit(
                         fontSize: 14.5,
                         fontWeight: FontWeight.w700,
@@ -258,7 +258,7 @@ class HomeDashboardScreenState extends State<HomeDashboardScreen> {
                       Navigator.pop(ctx);
                     },
                     child: Text(
-                      'Baad Me Karein',
+                      'Later',
                       style: GoogleFonts.inter(
                         fontSize: 13,
                         fontWeight: FontWeight.w600,

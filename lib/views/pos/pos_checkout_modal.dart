@@ -530,6 +530,20 @@ class _PosCheckoutModalState extends State<PosCheckoutModal> {
                   return;
                 }
                 cleanPhone = AppValidators.cleanPhone(rawPhone);
+                final existingCust = await LocalDatabase.instance.findCustomerByPhone(cleanPhone);
+                if (existingCust != null) {
+                  if (ctx.mounted) Navigator.of(ctx).pop();
+                  if (mounted) {
+                    _selectCustomer(existingCust);
+                    InAppNotification.show(
+                      context: context,
+                      message: 'Selected existing customer: ${existingCust.name}',
+                      customIcon: Icons.check_circle_rounded,
+                      customColor: Colors.green,
+                    );
+                  }
+                  return;
+                }
               }
 
               final newCust = CustomerModel(
@@ -1675,7 +1689,7 @@ class _PosCheckoutModalState extends State<PosCheckoutModal> {
                           const Icon(Icons.shopping_basket_outlined, size: 32, color: Color(0xFF94A3B8)),
                           const SizedBox(height: 8),
                           Text(
-                            '$currentBillTitle me abhi koi product nahi hai',
+                            'No items in $currentBillTitle',
                             style: GoogleFonts.plusJakartaSans(
                               fontSize: 13,
                               fontWeight: FontWeight.w700,
@@ -1684,7 +1698,7 @@ class _PosCheckoutModalState extends State<PosCheckoutModal> {
                           ),
                           const SizedBox(height: 4),
                           Text(
-                            'Products add karne ke liye modal close karein',
+                            'Close modal to add products to cart',
                             style: GoogleFonts.plusJakartaSans(
                               fontSize: 11.5,
                               color: const Color(0xFF94A3B8),
@@ -2330,7 +2344,7 @@ class _PosCheckoutModalState extends State<PosCheckoutModal> {
                                   ),
                                   const SizedBox(height: 4),
                                   Text(
-                                    'Customer payment QR generate karne ke liye Store Profile me apna UPI ID (Google Pay, PhonePe, Paytm) dalein.',
+                                    'Configure your UPI ID (Google Pay, PhonePe, Paytm) in Store Profile to generate customer payment QR.',
                                     textAlign: TextAlign.center,
                                     style: GoogleFonts.inter(
                                       fontSize: 11,
@@ -3445,10 +3459,10 @@ class _PosCheckoutModalState extends State<PosCheckoutModal> {
                           final amountRupees = (grandTotalPaise / 100.0).toStringAsFixed(2);
                           final upiInfo = _activeUpiVpa.isNotEmpty ? '📌 UPI ID: $_activeUpiVpa\n' : '';
                           final text = Uri.encodeComponent(
-                            '🙏 Namaste ${_currentCustomer!.name} Ji!\n\n'
-                            'Aapka $_activeStoreName Bill amount: ₹$amountRupees\n'
+                            'Dear ${_currentCustomer!.name},\n\n'
+                            'Your $_activeStoreName invoice total: ₹$amountRupees\n'
                             '$upiInfo\n'
-                            'Counter par bill ready hai. Dhanyawad! ✨'
+                            'Counter bill is ready. Thank you!'
                           );
                           final url = Uri.parse('https://wa.me/$cleanPhone?text=$text');
                           if (await canLaunchUrl(url)) {

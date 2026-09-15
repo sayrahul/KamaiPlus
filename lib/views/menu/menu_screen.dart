@@ -16,6 +16,7 @@ import '../settings/store_profile_screen.dart';
 import '../settings/printer_settings_screen.dart';
 import '../tools/barcode_studio_screen.dart';
 import '../growth/growth_campaigns_screen.dart';
+import '../growth/refer_and_earn_screen.dart';
 import '../common/pro_upgrade_modal.dart';
 import '../auth/login_screen.dart';
 import '../../core/database/local_database.dart';
@@ -29,18 +30,21 @@ import '../common/language_selection_modal.dart';
 class MenuScreen extends StatefulWidget {
   final bool isModal;
   final int? currentTabIndex;
+  final String? activeScreen;
   final Function(int)? onNavigateTab;
 
   const MenuScreen({
     super.key,
     this.isModal = false,
     this.currentTabIndex,
+    this.activeScreen,
     this.onNavigateTab,
   });
 
   static Future<void> show(
     BuildContext context, {
     int? currentTabIndex,
+    String? activeScreen,
     Function(int)? onNavigateTab,
   }) {
     return showModalBottomSheet(
@@ -51,6 +55,7 @@ class MenuScreen extends StatefulWidget {
       builder: (ctx) => MenuScreen(
         isModal: true,
         currentTabIndex: currentTabIndex,
+        activeScreen: activeScreen,
         onNavigateTab: onNavigateTab,
       ),
     );
@@ -146,7 +151,7 @@ class _MenuScreenState extends State<MenuScreen> {
           ],
         ),
         content: Text(
-          'Aapka current session sign out ho jayega. Offline billing database device par surakshit rahega.',
+          'Your current session will be signed out. The offline billing database remains secure on this device.',
           style: GoogleFonts.inter(fontSize: 13, color: const Color(0xFF475569)),
         ),
         actions: [
@@ -218,7 +223,7 @@ class _MenuScreenState extends State<MenuScreen> {
 
   Future<void> _openWhatsAppSupport() async {
     HapticFeedback.lightImpact();
-    final url = Uri.parse('https://wa.me/918669997711?text=${Uri.encodeComponent("Namaste KamaiPlus Team, mujhe support chahiye.")}');
+    final url = Uri.parse('https://wa.me/918669997711?text=${Uri.encodeComponent("Hello KamaiPlus Team, I need assistance.")}');
     try {
       if (await canLaunchUrl(url)) {
         await launchUrl(url, mode: LaunchMode.externalApplication);
@@ -239,6 +244,27 @@ class _MenuScreenState extends State<MenuScreen> {
   @override
   Widget build(BuildContext context) {
     final vert = BusinessVerticals.resolve(BusinessVerticals.activeBusinessTypeNotifier.value);
+    final act = widget.activeScreen?.toLowerCase().trim();
+    final tab = widget.currentTabIndex;
+
+    final isHomeActive = act == 'home' || (act == null && tab == 0);
+    final isProductsActive = act == 'products' || (act == null && tab == 1);
+    final isPosActive = act == 'pos' || act == 'billing' || (act == null && tab == 2);
+    final isKhataActive = act == 'khata' || (act == null && tab == 3);
+    final isTransactionsActive = act == 'transactions';
+    final isCashRegisterActive = act == 'cash_register';
+    final isPurchasesActive = act == 'purchases';
+    final isInventoryActive = act == 'inventory';
+    final isBarcodeActive = act == 'barcode_studio';
+    final isCustomersActive = act == 'customers';
+    final isGrowthActive = act == 'growth_campaigns' || act == 'growth';
+    final isReferActive = act == 'refer_and_earn';
+    final isGstActive = act == 'gst_reports';
+    final isInvoiceThemesActive = act == 'invoice_themes';
+    final isBackupRestoreActive = act == 'backup_restore';
+    final isStoreProfileActive = act == 'store_profile';
+    final isPrinterActive = act == 'printer_settings';
+
     final bodyContent = Container(
       height: widget.isModal ? MediaQuery.of(context).size.height * 0.88 : null,
       decoration: BoxDecoration(
@@ -275,10 +301,10 @@ class _MenuScreenState extends State<MenuScreen> {
                     iconColor: const Color(0xFF10B981),
                     iconBg: const Color(0xFFECFDF5),
                     borderColor: const Color(0xFFA7F3D0),
-                    badgeText: widget.currentTabIndex == 2 ? '● ACTIVE' : 'CENTER POS',
-                    badgeBg: widget.currentTabIndex == 2 ? const Color(0xFF064E3B) : const Color(0xFFECFDF5),
-                    badgeColor: widget.currentTabIndex == 2 ? const Color(0xFF34D399) : const Color(0xFF059669),
-                    isDark: widget.currentTabIndex == 2,
+                    badgeText: isPosActive ? '● ACTIVE' : 'CENTER POS',
+                    badgeBg: isPosActive ? const Color(0xFF064E3B) : const Color(0xFFECFDF5),
+                    badgeColor: isPosActive ? const Color(0xFF34D399) : const Color(0xFF059669),
+                    isDark: isPosActive,
                     onTap: () => _handleTabTap(2),
                   ),
                   const SizedBox(height: 10),
@@ -293,10 +319,10 @@ class _MenuScreenState extends State<MenuScreen> {
                           iconColor: const Color(0xFF2563EB),
                           iconBg: const Color(0xFFEFF6FF),
                           borderColor: const Color(0xFFDBEAFE),
-                          badgeText: widget.currentTabIndex == 0 ? '● ACTIVE' : 'PULSE',
-                          badgeBg: widget.currentTabIndex == 0 ? const Color(0xFF064E3B) : null,
-                          badgeColor: widget.currentTabIndex == 0 ? const Color(0xFF34D399) : null,
-                          isDark: widget.currentTabIndex == 0,
+                          badgeText: isHomeActive ? '● ACTIVE' : 'PULSE',
+                          badgeBg: isHomeActive ? const Color(0xFF064E3B) : null,
+                          badgeColor: isHomeActive ? const Color(0xFF34D399) : null,
+                          isDark: isHomeActive,
                           onTap: () => _handleTabTap(0),
                         ),
                       ),
@@ -309,7 +335,10 @@ class _MenuScreenState extends State<MenuScreen> {
                           iconColor: const Color(0xFF0D9488),
                           iconBg: const Color(0xFFCCFBF1),
                           borderColor: const Color(0xFF99F6E4),
-                          badgeText: 'HISTORY',
+                          badgeText: isTransactionsActive ? '● ACTIVE' : 'HISTORY',
+                          badgeBg: isTransactionsActive ? const Color(0xFF064E3B) : null,
+                          badgeColor: isTransactionsActive ? const Color(0xFF34D399) : null,
+                          isDark: isTransactionsActive,
                           onTap: () => _handleScreenPush(const TransactionsScreen()),
                         ),
                       ),
@@ -323,9 +352,10 @@ class _MenuScreenState extends State<MenuScreen> {
                     iconColor: const Color(0xFFD97706),
                     iconBg: const Color(0xFFFEF3C7),
                     borderColor: const Color(0xFFFDE68A),
-                    badgeText: 'Z-REPORT',
-                    badgeBg: const Color(0xFFFFFBEB),
-                    badgeColor: const Color(0xFFB45309),
+                    badgeText: isCashRegisterActive ? '● ACTIVE' : 'Z-REPORT',
+                    badgeBg: isCashRegisterActive ? const Color(0xFF064E3B) : const Color(0xFFFFFBEB),
+                    badgeColor: isCashRegisterActive ? const Color(0xFF34D399) : const Color(0xFFB45309),
+                    isDark: isCashRegisterActive,
                     onTap: () => _handleScreenPush(const CashRegisterScreen()),
                   ),
                   const SizedBox(height: 22),
@@ -343,10 +373,10 @@ class _MenuScreenState extends State<MenuScreen> {
                           iconColor: const Color(0xFF3B82F6),
                           iconBg: const Color(0xFFEFF6FF),
                           borderColor: const Color(0xFFDBEAFE),
-                          badgeText: widget.currentTabIndex == 1 ? '● ACTIVE' : 'CATALOG',
-                          badgeBg: widget.currentTabIndex == 1 ? const Color(0xFF064E3B) : null,
-                          badgeColor: widget.currentTabIndex == 1 ? const Color(0xFF34D399) : null,
-                          isDark: widget.currentTabIndex == 1,
+                          badgeText: isProductsActive ? '● ACTIVE' : 'CATALOG',
+                          badgeBg: isProductsActive ? const Color(0xFF064E3B) : null,
+                          badgeColor: isProductsActive ? const Color(0xFF34D399) : null,
+                          isDark: isProductsActive,
                           onTap: () => _handleTabTap(1),
                         ),
                       ),
@@ -359,9 +389,10 @@ class _MenuScreenState extends State<MenuScreen> {
                           iconColor: const Color(0xFF059669),
                           iconBg: const Color(0xFFECFDF5),
                           borderColor: const Color(0xFFA7F3D0),
-                          badgeText: 'AI OCR',
-                          badgeBg: const Color(0xFFECFDF5),
-                          badgeColor: const Color(0xFF059669),
+                          badgeText: isPurchasesActive ? '● ACTIVE' : 'AI OCR',
+                          badgeBg: isPurchasesActive ? const Color(0xFF064E3B) : const Color(0xFFECFDF5),
+                          badgeColor: isPurchasesActive ? const Color(0xFF34D399) : const Color(0xFF059669),
+                          isDark: isPurchasesActive,
                           onTap: () => _handleScreenPush(const PurchasesScreen()),
                         ),
                       ),
@@ -378,7 +409,10 @@ class _MenuScreenState extends State<MenuScreen> {
                           iconColor: const Color(0xFF0891B2),
                           iconBg: const Color(0xFFECFEFF),
                           borderColor: const Color(0xFFA5F3FC),
-                          badgeText: 'ALERTS',
+                          badgeText: isInventoryActive ? '● ACTIVE' : 'ALERTS',
+                          badgeBg: isInventoryActive ? const Color(0xFF064E3B) : null,
+                          badgeColor: isInventoryActive ? const Color(0xFF34D399) : null,
+                          isDark: isInventoryActive,
                           onTap: () => _handleScreenPush(const InventoryScreen()),
                         ),
                       ),
@@ -392,7 +426,10 @@ class _MenuScreenState extends State<MenuScreen> {
                             iconColor: const Color(0xFF7C3AED),
                             iconBg: const Color(0xFFF5F3FF),
                             borderColor: const Color(0xFFDDD6FE),
-                            badgeText: 'PRINT',
+                            badgeText: isBarcodeActive ? '● ACTIVE' : 'PRINT',
+                            badgeBg: isBarcodeActive ? const Color(0xFF064E3B) : null,
+                            badgeColor: isBarcodeActive ? const Color(0xFF34D399) : null,
+                            isDark: isBarcodeActive,
                             isLocked: true,
                             onTap: () => _handleScreenPush(const BarcodeStudioScreen()),
                           ),
@@ -415,10 +452,10 @@ class _MenuScreenState extends State<MenuScreen> {
                           iconColor: const Color(0xFFEA580C),
                           iconBg: const Color(0xFFFFF7ED),
                           borderColor: const Color(0xFFFFEDD5),
-                          badgeText: widget.currentTabIndex == 3 ? '● ACTIVE' : 'UDHAR',
-                          badgeBg: widget.currentTabIndex == 3 ? const Color(0xFF064E3B) : const Color(0xFFFEF2F2),
-                          badgeColor: widget.currentTabIndex == 3 ? const Color(0xFF34D399) : const Color(0xFFDC2626),
-                          isDark: widget.currentTabIndex == 3,
+                          badgeText: isKhataActive ? '● ACTIVE' : 'UDHAR',
+                          badgeBg: isKhataActive ? const Color(0xFF064E3B) : const Color(0xFFFEF2F2),
+                          badgeColor: isKhataActive ? const Color(0xFF34D399) : const Color(0xFFDC2626),
+                          isDark: isKhataActive,
                           onTap: () => _handleTabTap(3),
                         ),
                       ),
@@ -431,7 +468,10 @@ class _MenuScreenState extends State<MenuScreen> {
                           iconColor: const Color(0xFF0284C7),
                           iconBg: const Color(0xFFF0F9FF),
                           borderColor: const Color(0xFFBAE6FD),
-                          badgeText: 'CRM',
+                          badgeText: isCustomersActive ? '● ACTIVE' : 'CRM',
+                          badgeBg: isCustomersActive ? const Color(0xFF064E3B) : null,
+                          badgeColor: isCustomersActive ? const Color(0xFF34D399) : null,
+                          isDark: isCustomersActive,
                           onTap: () => _handleScreenPush(const CustomersScreen()),
                         ),
                       ),
@@ -448,7 +488,10 @@ class _MenuScreenState extends State<MenuScreen> {
                           iconColor: const Color(0xFF16A34A),
                           iconBg: const Color(0xFFF0FDF4),
                           borderColor: const Color(0xFFBBF7D0),
-                          badgeText: 'AUTO',
+                          badgeText: isGrowthActive ? '● ACTIVE' : 'AUTO',
+                          badgeBg: isGrowthActive ? const Color(0xFF064E3B) : null,
+                          badgeColor: isGrowthActive ? const Color(0xFF34D399) : null,
+                          isDark: isGrowthActive,
                           isLocked: true,
                           onTap: () => _handleScreenPush(const GrowthCampaignsScreen()),
                         ),
@@ -462,13 +505,27 @@ class _MenuScreenState extends State<MenuScreen> {
                           iconColor: _isPro ? const Color(0xFF059669) : const Color(0xFF9333EA),
                           iconBg: _isPro ? const Color(0xFFECFDF5) : const Color(0xFFFAF5FF),
                           borderColor: _isPro ? const Color(0xFFA7F3D0) : const Color(0xFFE9D5FF),
-                          badgeText: _isPro ? '★ ACTIVE' : 'PRO',
+                          badgeText: _isPro ? 'PRO ACTIVE' : 'PRO',
                           badgeBg: _isPro ? const Color(0xFFD1FAE5) : const Color(0xFFFAF5FF),
                           badgeColor: _isPro ? const Color(0xFF059669) : const Color(0xFF7E22CE),
                           onTap: _handleProUpgrade,
                         ),
                       ),
                     ],
+                  ),
+                  const SizedBox(height: 10),
+                  _buildNavCard(
+                    title: 'Refer & Earn (Free PRO)',
+                    subtitle: 'Invite merchant friends & earn 30 Days Free PRO per store',
+                    icon: Icons.card_giftcard_rounded,
+                    iconColor: const Color(0xFFD97706),
+                    iconBg: const Color(0xFFFFFBEB),
+                    borderColor: const Color(0xFFFDE68A),
+                    badgeText: isReferActive ? '● ACTIVE' : '30D FREE',
+                    badgeBg: isReferActive ? const Color(0xFF064E3B) : const Color(0xFFFEF3C7),
+                    badgeColor: isReferActive ? const Color(0xFF34D399) : const Color(0xFFB45309),
+                    isDark: isReferActive,
+                    onTap: () => _handleScreenPush(const ReferAndEarnScreen()),
                   ),
                   const SizedBox(height: 22),
 
@@ -485,9 +542,10 @@ class _MenuScreenState extends State<MenuScreen> {
                           iconColor: const Color(0xFF4F46E5),
                           iconBg: const Color(0xFFEEF2FF),
                           borderColor: const Color(0xFFC7D2FE),
-                          badgeText: 'CA READY',
-                          badgeBg: const Color(0xFFEEF2FF),
-                          badgeColor: const Color(0xFF4338CA),
+                          badgeText: isGstActive ? '● ACTIVE' : 'CA READY',
+                          badgeBg: isGstActive ? const Color(0xFF064E3B) : const Color(0xFFEEF2FF),
+                          badgeColor: isGstActive ? const Color(0xFF34D399) : const Color(0xFF4338CA),
+                          isDark: isGstActive,
                           isLocked: true,
                           onTap: () => _handleScreenPush(const GstReportsScreen()),
                         ),
@@ -501,7 +559,10 @@ class _MenuScreenState extends State<MenuScreen> {
                           iconColor: const Color(0xFFD97706),
                           iconBg: const Color(0xFFFFFBEB),
                           borderColor: const Color(0xFFFDE68A),
-                          badgeText: 'DESIGN',
+                          badgeText: isInvoiceThemesActive ? '● ACTIVE' : 'DESIGN',
+                          badgeBg: isInvoiceThemesActive ? const Color(0xFF064E3B) : null,
+                          badgeColor: isInvoiceThemesActive ? const Color(0xFF34D399) : null,
+                          isDark: isInvoiceThemesActive,
                           onTap: () => _handleScreenPush(const InvoiceThemesScreen()),
                         ),
                       ),
@@ -518,7 +579,10 @@ class _MenuScreenState extends State<MenuScreen> {
                           iconColor: const Color(0xFF0284C7),
                           iconBg: const Color(0xFFF0F9FF),
                           borderColor: const Color(0xFFBAE6FD),
-                          badgeText: 'RESET',
+                          badgeText: isBackupRestoreActive ? '● ACTIVE' : 'RESET',
+                          badgeBg: isBackupRestoreActive ? const Color(0xFF064E3B) : null,
+                          badgeColor: isBackupRestoreActive ? const Color(0xFF34D399) : null,
+                          isDark: isBackupRestoreActive,
                           onTap: () => _handleScreenPush(const BackupRestoreScreen()),
                         ),
                       ),
@@ -531,7 +595,10 @@ class _MenuScreenState extends State<MenuScreen> {
                           iconColor: const Color(0xFF475569),
                           iconBg: const Color(0xFFF1F5F9),
                           borderColor: const Color(0xFFE2E8F0),
-                          badgeText: 'CONFIG',
+                          badgeText: isStoreProfileActive ? '● ACTIVE' : 'CONFIG',
+                          badgeBg: isStoreProfileActive ? const Color(0xFF064E3B) : null,
+                          badgeColor: isStoreProfileActive ? const Color(0xFF34D399) : null,
+                          isDark: isStoreProfileActive,
                           onTap: () => _handleScreenPush(const StoreProfileScreen()),
                         ),
                       ),
@@ -545,9 +612,10 @@ class _MenuScreenState extends State<MenuScreen> {
                     iconColor: const Color(0xFF7C3AED),
                     iconBg: const Color(0xFFF5F3FF),
                     borderColor: const Color(0xFFDDD6FE),
-                    badgeText: 'HARDWARE',
-                    badgeBg: const Color(0xFFF5F3FF),
-                    badgeColor: const Color(0xFF7C3AED),
+                    badgeText: isPrinterActive ? '● ACTIVE' : 'HARDWARE',
+                    badgeBg: isPrinterActive ? const Color(0xFF064E3B) : const Color(0xFFF5F3FF),
+                    badgeColor: isPrinterActive ? const Color(0xFF34D399) : const Color(0xFF7C3AED),
+                    isDark: isPrinterActive,
                     onTap: () => _handleScreenPush(const PrinterSettingsScreen()),
                   ),
                   const SizedBox(height: 16),

@@ -12,6 +12,7 @@ import '../../core/utils/money_formatter.dart';
 import '../../models/models.dart';
 import '../../services/firestore_sync_service.dart';
 import '../../services/contacts_service.dart';
+import '../../services/gstin_service.dart';
 import '../common/kamai_bottom_nav.dart';
 import '../common/empty_state_card.dart';
 import '../common/in_app_notification.dart';
@@ -131,8 +132,10 @@ class _CustomersScreenState extends State<CustomersScreen> with DataBusRefresh<C
     final nameCtrl = TextEditingController();
     final phoneCtrl = TextEditingController();
     final limitCtrl = TextEditingController(text: '5000');
+    final gstinCtrl = TextEditingController();
 
     bool isVip = false;
+    bool isVerifyingGstin = false;
 
     showModalBottomSheet(
       context: context,
@@ -240,9 +243,74 @@ class _CustomersScreenState extends State<CustomersScreen> with DataBusRefresh<C
                 controller: limitCtrl,
                 keyboardType: TextInputType.number,
                 decoration: InputDecoration(
-                  labelText: 'Udhar Credit Limit (₹)',
+                  labelText: 'Credit Limit (₹)',
                   hintText: '5000',
                   border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: gstinCtrl,
+                textCapitalization: TextCapitalization.characters,
+                decoration: InputDecoration(
+                  labelText: 'GSTIN Number (Optional - B2B)',
+                  hintText: 'e.g. 27AAAAA0000A1Z5',
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                  suffixIcon: Padding(
+                    padding: const EdgeInsets.only(right: 6),
+                    child: isVerifyingGstin
+                        ? const SizedBox(
+                            width: 24,
+                            height: 24,
+                            child: Center(
+                              child: SizedBox(
+                                width: 14,
+                                height: 14,
+                                child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFF0284C7)),
+                              ),
+                            ),
+                          )
+                        : TextButton.icon(
+                            onPressed: () async {
+                              final raw = gstinCtrl.text.trim();
+                              if (raw.isEmpty) {
+                                InAppNotification.error('Please enter 15-character GSTIN first', context: modalCtx);
+                                return;
+                              }
+                              setModalState(() => isVerifyingGstin = true);
+                              final data = await GstinService.instance.verifyGstin(raw);
+                              if (!modalCtx.mounted) return;
+                              setModalState(() {
+                                isVerifyingGstin = false;
+                                if (data.isValid) {
+                                  if (data.tradeName.isNotEmpty && nameCtrl.text.trim().isEmpty) {
+                                    nameCtrl.text = data.tradeName;
+                                  }
+                                }
+                              });
+                              if (data.isValid) {
+                                InAppNotification.show(
+                                  context: modalCtx,
+                                  message: '✓ Verified: ${data.tradeName.isNotEmpty ? data.tradeName : data.legalName}',
+                                  customIcon: Icons.verified_rounded,
+                                  customColor: const Color(0xFF059669),
+                                );
+                              } else {
+                                InAppNotification.error(data.errorMessage ?? 'Invalid GSTIN', context: modalCtx);
+                              }
+                            },
+                            style: TextButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                              minimumSize: Size.zero,
+                              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                            ),
+                            icon: const Icon(Icons.verified_user_outlined, size: 14, color: Color(0xFF0284C7)),
+                            label: Text(
+                              'Verify',
+                              style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w700, color: const Color(0xFF0284C7)),
+                            ),
+                          ),
+                  ),
                 ),
               ),
               const SizedBox(height: 12),
@@ -304,12 +372,22 @@ class _CustomersScreenState extends State<CustomersScreen> with DataBusRefresh<C
                       return;
                     }
                     final cleanPhone = AppValidators.cleanPhone(phoneCtrl.text.trim());
+                    final existingCust = await LocalDatabase.instance.findCustomerByPhone(cleanPhone);
+                    if (existingCust != null) {
+                      if (modalCtx.mounted) {
+                        InAppNotification.error('Customer with mobile $cleanPhone already exists (${existingCust.name})!', context: modalCtx);
+                      }
+                      return;
+                    }
                     final limit = int.tryParse(limitCtrl.text.trim()) ?? 5000;
+                    final rawGstin = gstinCtrl.text.trim().toUpperCase();
                     final newCust = CustomerModel(
                       id: const Uuid().v4(),
                       businessId: FirestoreSyncService.instance.activeBusinessId,
                       name: name,
                       phone: cleanPhone,
+                      gstin: rawGstin.isNotEmpty ? rawGstin : null,
+                      stateCode: rawGstin.length >= 2 ? rawGstin.substring(0, 2) : null,
                       creditLimitPaise: limit * 100,
                       isVip: isVip,
                     );
@@ -448,7 +526,7 @@ class _CustomersScreenState extends State<CustomersScreen> with DataBusRefresh<C
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text('CURRENT UDHAR DUE', style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.w700, color: hasDue ? const Color(0xFFDC2626) : const Color(0xFF16A34A))),
+                          Text('CURRENT BALANCE DUE', style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.w700, color: hasDue ? const Color(0xFFDC2626) : const Color(0xFF16A34A))),
                           const SizedBox(height: 4),
                           Text(MoneyFormatter.formatPaise(customer.currentBalancePaise), style: GoogleFonts.outfit(fontSize: 16, fontWeight: FontWeight.w800, color: hasDue ? const Color(0xFFDC2626) : const Color(0xFF16A34A))),
                           Text('Limit: ${MoneyFormatter.formatPaise(customer.creditLimitPaise)}', style: GoogleFonts.inter(fontSize: 11, color: const Color(0xFF94A3B8))),
@@ -517,8 +595,8 @@ class _CustomersScreenState extends State<CustomersScreen> with DataBusRefresh<C
                     child: ElevatedButton.icon(
                       onPressed: () async {
                         final text = hasDue
-                            ? 'Namaste%20${customer.name}%20Ji,%20Aapke%20KamaiPlus%20store%20ka%20Udhar%20balance%20${MoneyFormatter.formatPaise(customer.currentBalancePaise)}%20pending%20hai.%20Kripya%20UPI%20ya%20counter%20par%20clear%20karein.'
-                            : 'Namaste%20${customer.name}%20Ji,%20Greetings%20from%20KamaiPlus%20Store!%20Aapka%20khata%20bilkul%20clear%20hai.';
+                            ? Uri.encodeComponent('Dear ${customer.name},\n\nYour outstanding balance at KamaiPlus store is ${MoneyFormatter.formatPaise(customer.currentBalancePaise)}. Please clear your balance via UPI or counter.\n\nThank you!')
+                            : Uri.encodeComponent('Dear ${customer.name},\n\nGreetings from KamaiPlus Store! Your account is fully settled.\n\nThank you!');
                         final waPhone = AppValidators.formatWhatsAppPhone(customer.phone);
                         final uri = Uri.parse('https://wa.me/$waPhone?text=$text');
                         if (await canLaunchUrl(uri)) launchUrl(uri, mode: LaunchMode.externalApplication);
@@ -542,7 +620,7 @@ class _CustomersScreenState extends State<CustomersScreen> with DataBusRefresh<C
                         _showAddKhataEntryDialog(customer);
                       },
                       icon: const Icon(Icons.add_circle_outline_rounded, size: 18),
-                      label: Text('+ Jama / Udhar', style: GoogleFonts.outfit(fontSize: 13, fontWeight: FontWeight.w700)),
+                      label: Text('+ Transaction', style: GoogleFonts.outfit(fontSize: 13, fontWeight: FontWeight.w700)),
                       style: OutlinedButton.styleFrom(
                         foregroundColor: const Color(0xFF0F172A),
                         side: const BorderSide(color: Color(0xFF0F172A)),
@@ -566,7 +644,7 @@ class _CustomersScreenState extends State<CustomersScreen> with DataBusRefresh<C
       builder: (dialogCtx) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: Text('Delete Customer?', style: GoogleFonts.outfit(fontSize: 16, fontWeight: FontWeight.w700)),
-        content: Text('Kya aap ${customer.name} ko delete karna chahte hain? Inka khata ledger bhi permanently delete ho jayega.'),
+        content: Text('Are you sure you want to delete ${customer.name}? Their transaction ledger will also be permanently deleted.'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(dialogCtx),
@@ -599,7 +677,7 @@ class _CustomersScreenState extends State<CustomersScreen> with DataBusRefresh<C
   void _showAddKhataEntryDialog(CustomerModel customer) {
     final amountCtrl = TextEditingController();
     final noteCtrl = TextEditingController();
-    String type = 'debit'; // 'debit' = Jama mila (balance decreases), 'credit' = Udhar diya (balance increases)
+    String type = 'debit'; // 'debit' = Payment received (balance decreases), 'credit' = Credit given (balance increases)
 
     showDialog(
       context: context,
@@ -615,7 +693,7 @@ class _CustomersScreenState extends State<CustomersScreen> with DataBusRefresh<C
                 children: [
                   Expanded(
                     child: ChoiceChip(
-                      label: const Text('Jama Mila (Paid)'),
+                      label: const Text('Payment Received'),
                       selected: type == 'debit',
                       onSelected: (_) => setDialogState(() => type = 'debit'),
                       selectedColor: const Color(0xFF10B981),
@@ -625,7 +703,7 @@ class _CustomersScreenState extends State<CustomersScreen> with DataBusRefresh<C
                   const SizedBox(width: 8),
                   Expanded(
                     child: ChoiceChip(
-                      label: const Text('Udhar Diya (Due)'),
+                      label: const Text('Credit Given'),
                       selected: type == 'credit',
                       onSelected: (_) => setDialogState(() => type = 'credit'),
                       selectedColor: const Color(0xFFDC2626),
@@ -670,7 +748,7 @@ class _CustomersScreenState extends State<CustomersScreen> with DataBusRefresh<C
                   customer: customer,
                   type: type,
                   amountPaise: amountPaise,
-                  description: noteCtrl.text.trim().isNotEmpty ? noteCtrl.text.trim() : (type == 'debit' ? 'Jama Mila' : 'Udhar Diya'),
+                  description: noteCtrl.text.trim().isNotEmpty ? noteCtrl.text.trim() : (type == 'debit' ? 'Payment Received' : 'Credit Given'),
                 );
                 if (!ctx.mounted) return;
                 Navigator.pop(ctx);
@@ -830,7 +908,7 @@ class _CustomersScreenState extends State<CustomersScreen> with DataBusRefresh<C
                 ],
               ),
             ),
-      bottomNavigationBar: const KamaiBottomNav(),
+      bottomNavigationBar: const KamaiBottomNav(activeScreen: 'customers'),
     );
   }
 
@@ -882,7 +960,7 @@ class _CustomersScreenState extends State<CustomersScreen> with DataBusRefresh<C
                 child: _buildMetricTile(
                   icon: Icons.account_balance_wallet_rounded,
                   iconColor: const Color(0xFFEF4444),
-                  title: 'Total Udhar',
+                  title: 'Total Credit Due',
                   tag: 'Pending',
                   value: MoneyFormatter.formatPaise(_totalUdharPaise),
                   valueColor: _totalUdharPaise > 0 ? const Color(0xFFEF4444) : const Color(0xFF059669),
@@ -1056,7 +1134,7 @@ class _CustomersScreenState extends State<CustomersScreen> with DataBusRefresh<C
                       ),
                     ),
                     Text(
-                      hasDue ? 'Udhar Due' : 'All Clear',
+                      hasDue ? 'Due Balance' : 'All Clear',
                       style: GoogleFonts.inter(
                         fontSize: 10,
                         fontWeight: FontWeight.w700,
@@ -1070,7 +1148,8 @@ class _CustomersScreenState extends State<CustomersScreen> with DataBusRefresh<C
                   icon: Image.asset('assets/images/whatsapp_logo.png', width: 22, height: 22),
                   onPressed: () async {
                     final waPhone = AppValidators.formatWhatsAppPhone(customer.phone);
-                    final uri = Uri.parse('https://wa.me/$waPhone?text=Namaste%20${customer.name},%20Greetings%20from%20KamaiPlus%20Store!');
+                    final text = Uri.encodeComponent('Dear ${customer.name}, Greetings from KamaiPlus Store!');
+                    final uri = Uri.parse('https://wa.me/$waPhone?text=$text');
                     if (await canLaunchUrl(uri)) launchUrl(uri, mode: LaunchMode.externalApplication);
                   },
                 ),

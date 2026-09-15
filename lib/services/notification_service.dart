@@ -157,12 +157,21 @@ class NotificationService {
       });
 
       // 7. Handle Foreground Messages (Display as Heads-Up Banner)
-      FirebaseMessaging.onMessage.listen((RemoteMessage message) {
+      FirebaseMessaging.onMessage.listen((RemoteMessage message) async {
         debugPrint('Foreground FCM Message received: ${message.notification?.title}');
         final notification = message.notification;
         if (notification != null) {
+          final msgId = message.messageId ?? '${notification.title}_${notification.body}';
+          final prefs = await SharedPreferences.getInstance();
+          final handledKey = 'fcm_handled_$msgId';
+          if (prefs.getBool(handledKey) == true) {
+            debugPrint('Deduplicated repetitive FCM message: $msgId');
+            return;
+          }
+          await prefs.setBool(handledKey, true);
+
           showLocalNotification(
-            id: message.hashCode,
+            id: msgId.hashCode,
             title: notification.title ?? 'KamaiPlus POS',
             body: notification.body ?? '',
             payload: jsonEncode(message.data),
@@ -213,6 +222,15 @@ class NotificationService {
     required String body,
     String? payload,
   }) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final pushEnabled = prefs.getBool('push_notifications_enabled') ?? true;
+      if (!pushEnabled) {
+        debugPrint('Push notifications globally disabled by Admin Console.');
+        return;
+      }
+    } catch (_) {}
+
     const AndroidNotificationDetails androidDetails = AndroidNotificationDetails(
       channelId,
       channelName,

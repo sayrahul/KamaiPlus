@@ -195,7 +195,7 @@ class _PaymentModalState extends State<PaymentModal> {
                           SizedBox(width: 12),
                           Expanded(
                             child: Text(
-                              'Store UPI ID set nahi hai. Kripya Settings > Store Profile me jaakar UPI ID configure karein.',
+                              'Store UPI ID is not configured. Please set your UPI ID in Settings > Store Profile.',
                               style: TextStyle(fontSize: 12, color: Color(0xFF991B1B), fontWeight: FontWeight.w600),
                             ),
                           ),

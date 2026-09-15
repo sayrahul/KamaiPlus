@@ -186,7 +186,7 @@ class _KhataScreenState extends State<KhataScreen> with DataBusRefresh<KhataScre
                 ),
                 const SizedBox(height: 10),
 
-                // 1. Friendly Mode (Apnapan)
+                // 1. Friendly Mode
                 InkWell(
                   onTap: () {
                     Navigator.pop(ctx);
@@ -219,7 +219,7 @@ class _KhataScreenState extends State<KhataScreen> with DataBusRefresh<KhataScre
                               Row(
                                 children: [
                                   Text(
-                                    'Friendly (Apnapan)',
+                                    'Friendly Reminder',
                                     style: GoogleFonts.outfit(fontSize: 15, fontWeight: FontWeight.w800, color: const Color(0xFF065F46)),
                                   ),
                                   const SizedBox(width: 8),
@@ -238,7 +238,7 @@ class _KhataScreenState extends State<KhataScreen> with DataBusRefresh<KhataScre
                               ),
                               const SizedBox(height: 4),
                               Text(
-                                '"Namaste ${customer.name} ji! 🙏 $storeName par ₹$rupees ka hisaab hai. Jab bhi aana ho, aaram se clear kar dena."',
+                                '"Dear ${customer.name}, your outstanding balance at $storeName is ₹$rupees. Please clear your dues at your convenience.\n\nThank you!"',
                                 style: GoogleFonts.inter(fontSize: 11.5, color: const Color(0xFF047857), fontStyle: FontStyle.italic),
                               ),
                               const SizedBox(height: 6),
@@ -322,9 +322,9 @@ class _KhataScreenState extends State<KhataScreen> with DataBusRefresh<KhataScre
 
     final buffer = StringBuffer();
     if (isFriendly) {
-      buffer.writeln('Namaste ${customer.name} ji! 🙏\n');
-      buffer.writeln('$storeName par aapka baki hisaab ₹$rupees hai.');
-      buffer.writeln('Jab bhi counter ki taraf aana ho, aaram se clear kar dena.\n');
+      buffer.writeln('Dear ${customer.name},\n');
+      buffer.writeln('Your outstanding balance at $storeName is ₹$rupees.');
+      buffer.writeln('Please clear your dues at your earliest convenience.\n');
     } else {
       buffer.writeln('Dear ${customer.name},\n');
       buffer.writeln('This is a gentle payment reminder regarding your outstanding balance of ₹$rupees at $storeName.');
@@ -334,7 +334,7 @@ class _KhataScreenState extends State<KhataScreen> with DataBusRefresh<KhataScre
     if (upiId.isNotEmpty) {
       buffer.writeln('📌 *UPI ID:* $upiId\n');
     }
-    buffer.writeln('Dhanyawad!');
+    buffer.writeln('Thank you!');
     final text = buffer.toString();
 
     // Generate Statement PDF and share
@@ -387,19 +387,19 @@ class _KhataScreenState extends State<KhataScreen> with DataBusRefresh<KhataScre
     final dateStr = DateFormat('d MMM yyyy, hh:mm a').format(tx.createdAt);
 
     final buffer = StringBuffer();
-    buffer.writeln('🧾 *HISAB PARCHA / HISAAB SLIP*');
+    buffer.writeln('🧾 *ACCOUNT STATEMENT / LEDGER SLIP*');
     buffer.writeln('🏪 *$storeName*');
     buffer.writeln('👤 Customer: ${customer.name}');
     buffer.writeln('📅 Date: $dateStr');
     buffer.writeln('--------------------------');
-    buffer.writeln('${isUdhar ? "🔴 Udhar Diya (Given)" : "🟢 Jama Mila (Received)"}: ₹$amtRupees');
+    buffer.writeln('${isUdhar ? "🔴 Credit Given" : "🟢 Payment Received"}: ₹$amtRupees');
     buffer.writeln('📝 Note: ${tx.description.isNotEmpty ? tx.description : "Khata Transaction"}');
     buffer.writeln('--------------------------');
-    buffer.writeln('💰 *Kul Baki (Balance): ₹$balRupees*');
+    buffer.writeln('💰 *Total Balance: ₹$balRupees*');
     if (upiId.isNotEmpty) {
       buffer.writeln('📌 *UPI ID:* $upiId');
     }
-    buffer.writeln('\nDhanyawad!');
+    buffer.writeln('\nThank you!');
     final text = buffer.toString();
 
     final waPhone = AppValidators.formatWhatsAppPhone(customer.phone);
@@ -437,7 +437,7 @@ class _KhataScreenState extends State<KhataScreen> with DataBusRefresh<KhataScre
     if (upiId.isNotEmpty) {
       buffer.writeln('📌 *UPI ID:* $upiId');
     }
-    buffer.writeln('\nDhanyawad!');
+    buffer.writeln('\nThank you!');
 
     final fullPhone = AppValidators.formatWhatsAppPhone(customer.phone);
 
@@ -926,7 +926,7 @@ class _KhataScreenState extends State<KhataScreen> with DataBusRefresh<KhataScre
   Widget _buildFilterChips() {
     final filters = [
       {'key': 'All', 'label': 'All (${_customers.length})'},
-      {'key': 'Due', 'label': 'Udhar Due ($_dueCustomersCount)'},
+      {'key': 'Due', 'label': 'Due Balance ($_dueCustomersCount)'},
       {'key': 'Clear', 'label': 'Settled (${_customers.length - _dueCustomersCount})'},
       {'key': 'VIP', 'label': 'VIP'},
     ];
@@ -1109,9 +1109,7 @@ class _KhataScreenState extends State<KhataScreen> with DataBusRefresh<KhataScre
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Text(
-                      hasAdvance
-                          ? '-${MoneyFormatter.formatINR(absPaise)}'
-                          : MoneyFormatter.formatINR(absPaise),
+                      MoneyFormatter.formatINR(absPaise),
                       style: GoogleFonts.outfit(
                         fontSize: 15,
                         fontWeight: FontWeight.w800,
@@ -1135,7 +1133,7 @@ class _KhataScreenState extends State<KhataScreen> with DataBusRefresh<KhataScre
                       ),
                       child: Text(
                         hasUdhar
-                            ? 'UDHAR DUE'
+                            ? 'DUE'
                             : hasAdvance
                                 ? 'ADVANCE'
                                 : 'SETTLED',
@@ -1183,9 +1181,9 @@ class _KhataScreenState extends State<KhataScreen> with DataBusRefresh<KhataScre
       icon: Icons.person_search_rounded,
       iconColor: const Color(0xFFD97706),
       iconBgColor: const Color(0xFFFEF3C7),
-      title: 'Koi Grahak Nahi Mila',
-      description: 'Search badal kar dekhein ya "+ Add" par click karke naya khata kholein.',
-      actionText: '+ Naya Khata Kholein',
+      title: 'No Customers Found',
+      description: 'Try changing your search or tap "+ Add" to create a new customer account.',
+      actionText: '+ Add Customer',
       onAction: _showAddCustomerModal,
     );
   }
@@ -1408,30 +1406,40 @@ class _KhataScreenState extends State<KhataScreen> with DataBusRefresh<KhataScre
                     crossAxisAlignment: CrossAxisAlignment.end,
                     children: [
                       Text(
-                        MoneyFormatter.formatINR(customer.currentBalancePaise),
+                        MoneyFormatter.formatINR(customer.currentBalancePaise.abs()),
                         style: GoogleFonts.outfit(
                           fontSize: 17,
                           fontWeight: FontWeight.w900,
-                          color: hasUdhar ? const Color(0xFFDC2626) : const Color(0xFF059669),
+                          color: hasUdhar
+                              ? const Color(0xFFDC2626)
+                              : (customer.currentBalancePaise < 0 ? const Color(0xFF059669) : const Color(0xFF64748B)),
                         ),
                       ),
                       const SizedBox(height: 2),
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
                         decoration: BoxDecoration(
-                          color: hasUdhar ? const Color(0xFFFEF2F2) : const Color(0xFFECFDF5),
+                          color: hasUdhar
+                              ? const Color(0xFFFEF2F2)
+                              : (customer.currentBalancePaise < 0 ? const Color(0xFFECFDF5) : const Color(0xFFF1F5F9)),
                           borderRadius: BorderRadius.circular(4),
                           border: Border.all(
-                            color: hasUdhar ? const Color(0xFFFECACA) : const Color(0xFFA7F3D0),
+                            color: hasUdhar
+                                ? const Color(0xFFFECACA)
+                                : (customer.currentBalancePaise < 0 ? const Color(0xFFA7F3D0) : const Color(0xFFCBD5E1)),
                             width: 0.8,
                           ),
                         ),
                         child: Text(
-                          hasUdhar ? 'UDHAR (बाकी)' : 'CLEAR (साफ)',
+                          hasUdhar
+                              ? 'DUE'
+                              : (customer.currentBalancePaise < 0 ? 'ADVANCE' : 'SETTLED'),
                           style: GoogleFonts.inter(
                             fontSize: 9.5,
                             fontWeight: FontWeight.w800,
-                            color: hasUdhar ? const Color(0xFFDC2626) : const Color(0xFF059669),
+                            color: hasUdhar
+                                ? const Color(0xFFDC2626)
+                                : (customer.currentBalancePaise < 0 ? const Color(0xFF059669) : const Color(0xFF64748B)),
                           ),
                         ),
                       ),
@@ -1451,7 +1459,7 @@ class _KhataScreenState extends State<KhataScreen> with DataBusRefresh<KhataScre
                       onPressed: () => _showGiveUdharModal(customer),
                       icon: const Icon(Icons.arrow_upward_rounded, size: 15, color: Colors.white),
                       label: Text(
-                        '+ Udhar Diya',
+                        '+ Give Credit',
                         style: GoogleFonts.outfit(fontSize: 12.5, fontWeight: FontWeight.w800, color: Colors.white),
                       ),
                       style: ElevatedButton.styleFrom(
@@ -1469,7 +1477,7 @@ class _KhataScreenState extends State<KhataScreen> with DataBusRefresh<KhataScre
                       onPressed: () => _showReceiveJamaModal(customer),
                       icon: const Icon(Icons.arrow_downward_rounded, size: 15, color: Colors.white),
                       label: Text(
-                        '- Jama Mila',
+                        '- Receive Payment',
                         style: GoogleFonts.outfit(fontSize: 12.5, fontWeight: FontWeight.w800, color: Colors.white),
                       ),
                       style: ElevatedButton.styleFrom(
@@ -1599,8 +1607,8 @@ class _KhataScreenState extends State<KhataScreen> with DataBusRefresh<KhataScre
         iconColor: const Color(0xFF0284C7),
         iconBgColor: const Color(0xFFE0F2FE),
         title: 'No Transaction History',
-        description: 'Aapne abhi tak is grahak ka koi hisaab nahi joda hai. "+ Udhar Diya" ya "- Jama Mila" se start karein.',
-        actionText: '+ Udhar Diya',
+        description: 'No transaction history for this customer yet. Start with "+ Give Credit" or "- Receive Payment".',
+        actionText: '+ Give Credit',
         onAction: () => _showGiveUdharModal(customer),
       );
     }
@@ -1677,7 +1685,7 @@ class _KhataScreenState extends State<KhataScreen> with DataBusRefresh<KhataScre
                     ),
                     const SizedBox(width: 4),
                     Text(
-                      isUdhar ? 'YOU GAVE (उधार)' : 'YOU RECEIVED (जमा)',
+                      isUdhar ? 'YOU GAVE (CREDIT)' : 'YOU RECEIVED (PAYMENT)',
                       style: GoogleFonts.inter(
                         fontSize: 11,
                         fontWeight: FontWeight.w800,
@@ -1909,7 +1917,7 @@ class _KhataScreenState extends State<KhataScreen> with DataBusRefresh<KhataScre
           const EmptyStateCard(
             icon: Icons.receipt_outlined,
             title: 'No Bills in this Filter',
-            description: 'Jab aap POS Billing se credit bill banayenge, wo yahan automatic reflect hoga.',
+            description: 'Credit invoices created from POS Billing will automatically reflect here.',
           )
         else
           ...creditBills.map((bill) => _buildCreditBillCard(bill, customer)),
@@ -2031,7 +2039,7 @@ class _KhataScreenState extends State<KhataScreen> with DataBusRefresh<KhataScre
                       borderRadius: BorderRadius.circular(6),
                     ),
                     child: Text(
-                      isSettled ? 'PAID (SETTLED)' : 'UNPAID (UDHAR)',
+                      isSettled ? 'PAID (SETTLED)' : 'UNPAID (CREDIT)',
                       style: GoogleFonts.inter(
                         fontSize: 9.5,
                         fontWeight: FontWeight.w800,
@@ -2255,7 +2263,7 @@ class _KhataScreenState extends State<KhataScreen> with DataBusRefresh<KhataScre
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Create a new customer account to track Udhar and payment transactions.',
+                  'Create a new customer account to track credit and payment transactions.',
                   style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF64748B)),
                 ),
                 const SizedBox(height: 14),
@@ -2286,7 +2294,7 @@ class _KhataScreenState extends State<KhataScreen> with DataBusRefresh<KhataScre
                         const Icon(Icons.contacts_rounded, size: 16, color: Color(0xFF2563EB)),
                         const SizedBox(width: 8),
                         Text(
-                          '📱 Phone Contacts se Chunein',
+                          'Import from Contacts',
                           style: GoogleFonts.plusJakartaSans(
                             fontSize: 12,
                             fontWeight: FontWeight.w700,
@@ -2326,7 +2334,7 @@ class _KhataScreenState extends State<KhataScreen> with DataBusRefresh<KhataScre
 
                 // Opening Balance
                 _buildModalTextField(
-                  label: 'Opening Balance (Purana Udhar / Advance) (₹)',
+                  label: 'Opening Balance (Due Credit / Advance) (₹)',
                   hint: '0.00',
                   controller: balanceCtrl,
                   keyboardType: const TextInputType.numberWithOptions(decimal: true),
@@ -2358,6 +2366,14 @@ class _KhataScreenState extends State<KhataScreen> with DataBusRefresh<KhataScre
                   return;
                 }
                 final cleanPhone = AppValidators.cleanPhone(phone);
+
+                final existingCust = await LocalDatabase.instance.findCustomerByPhone(cleanPhone);
+                if (existingCust != null) {
+                  if (ctx.mounted) {
+                    InAppNotification.error('Customer with mobile $cleanPhone already exists (${existingCust.name})!', context: ctx);
+                  }
+                  return;
+                }
 
                 final newCustomer = CustomerModel(
                   id: 'cust_${const Uuid().v4().substring(0, 8)}',
@@ -2600,7 +2616,7 @@ class _KhataScreenState extends State<KhataScreen> with DataBusRefresh<KhataScre
                           ),
                           const SizedBox(width: 8),
                           Text(
-                            'Receive Payment (Jama Settle)',
+                            'Receive Payment',
                             style: GoogleFonts.outfit(fontSize: 17, fontWeight: FontWeight.w800, color: const Color(0xFF0F172A)),
                           ),
                         ],
@@ -2742,7 +2758,7 @@ class _KhataScreenState extends State<KhataScreen> with DataBusRefresh<KhataScre
                         backgroundColor: const Color(0xFF059669),
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
                       ),
-                      child: Text('Confirm Jama (Receive Payment)', style: GoogleFonts.outfit(fontSize: 15, fontWeight: FontWeight.w800, color: Colors.white)),
+                      child: Text('Confirm Receive Payment', style: GoogleFonts.outfit(fontSize: 15, fontWeight: FontWeight.w800, color: Colors.white)),
                     ),
                   ),
                 ],
@@ -2795,7 +2811,7 @@ class _KhataScreenState extends State<KhataScreen> with DataBusRefresh<KhataScre
                           ),
                           const SizedBox(width: 8),
                           Text(
-                            'Give Credit (Udhar Diya)',
+                            'Give Credit',
                             style: GoogleFonts.outfit(fontSize: 17, fontWeight: FontWeight.w800, color: const Color(0xFF0F172A)),
                           ),
                         ],
@@ -2881,7 +2897,7 @@ class _KhataScreenState extends State<KhataScreen> with DataBusRefresh<KhataScre
 
                     InAppNotification.show(
                       context: context,
-                      message: 'Recorded ${MoneyFormatter.formatINR(amtPaise)} Udhar for ${customer.name}!',
+                      message: 'Recorded ${MoneyFormatter.formatINR(amtPaise)} credit for ${customer.name}!',
                       customColor: const Color(0xFFDC2626),
                     );
                   },
@@ -2889,7 +2905,7 @@ class _KhataScreenState extends State<KhataScreen> with DataBusRefresh<KhataScre
                       backgroundColor: const Color(0xFFDC2626),
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
                     ),
-                    child: Text('Confirm Udhar Diya', style: GoogleFonts.outfit(fontSize: 15, fontWeight: FontWeight.w800, color: Colors.white)),
+                    child: Text('Confirm Give Credit', style: GoogleFonts.outfit(fontSize: 15, fontWeight: FontWeight.w800, color: Colors.white)),
                   ),
                 ),
               ],

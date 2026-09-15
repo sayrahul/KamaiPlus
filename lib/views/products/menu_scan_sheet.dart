@@ -4,7 +4,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
 import '../../core/constants/business_vertical_config.dart';
 import '../../services/gemini_ai_service.dart';
-import '../common/gemini_api_key_dialog.dart';
+import '../../services/mlkit_ocr_service.dart';
 import 'menu_item_review_sheet.dart';
 import '../common/in_app_notification.dart';
 
@@ -95,6 +95,20 @@ class MenuScanSheet extends StatelessWidget {
 
       if (file == null) return;
 
+      // 1. Instant On-Device ML Kit OCR (Free, Offline, Zero-API Key, <200ms)
+      final mlItems = await MlKitOcrService.instance.scanMenuImage(file.path);
+      if (mlItems.isNotEmpty) {
+        if (!context.mounted) return;
+        Navigator.pop(context); // close sheet
+        MenuItemReviewSheet.show(
+          context,
+          initialItems: mlItems,
+          onMenuAddComplete: onMenuAddSuccess,
+        );
+        return;
+      }
+
+      // 2. Cloud AI Fallback for complex layouts
       final bytes = await file.readAsBytes();
       if (!context.mounted) return;
 
@@ -197,14 +211,11 @@ class MenuScanSheet extends StatelessWidget {
             if (!context.mounted) return;
 
             if (result == null || !result.success) {
-              final needsApiKey = (result?.errorMessage ?? '').contains('API Key');
               InAppNotification.show(
                 context: context,
-                message: result?.errorMessage ?? 'Could not read the menu photo.',
+                message: result?.errorMessage ?? 'Could not read the menu photo. Please ensure text is sharp and clearly visible.',
                 type: NotificationType.error,
-                duration: const Duration(seconds: 6),
-                actionLabel: needsApiKey ? 'Settings' : null,
-                onAction: needsApiKey ? () => GeminiApiKeyDialog.show(context) : null,
+                duration: const Duration(seconds: 5),
               );
               return;
             }
@@ -275,11 +286,6 @@ class MenuScanSheet extends StatelessWidget {
                 ),
                 Row(
                   children: [
-                    IconButton(
-                      icon: const Icon(Icons.key_rounded, size: 20, color: Color(0xFF64748B)),
-                      tooltip: 'Configure Gemini API Key',
-                      onPressed: () => GeminiApiKeyDialog.show(context),
-                    ),
                     Material(
                       color: Colors.transparent,
                       child: InkWell(

@@ -37,7 +37,7 @@ class _CashRegisterScreenState extends State<CashRegisterScreen> with DataBusRef
 
   bool _isDrawerOpen = true;
   bool _maskAmounts = false;
-  int _openingFloatPaise = 200000; // ₹2,000 default morning float
+  int _openingFloatPaise = 0; // ₹0 default start
   int _cashInSalesPaise = 0;
   List<ExpenseModel> _expenses = [];
   bool _isLoading = true;
@@ -69,7 +69,7 @@ class _CashRegisterScreenState extends State<CashRegisterScreen> with DataBusRef
       final drawerOpen = prefs.getBool('cash_register_is_drawer_open');
       final mask = prefs.getBool('cash_register_mask_amounts');
 
-      if (savedFloat != null) _openingFloatPaise = savedFloat;
+      _openingFloatPaise = savedFloat ?? 0;
       if (drawerOpen != null) _isDrawerOpen = drawerOpen;
       if (mask != null) _maskAmounts = mask;
 
@@ -152,12 +152,14 @@ class _CashRegisterScreenState extends State<CashRegisterScreen> with DataBusRef
     await prefs.setBool('cash_register_is_drawer_open', _isDrawerOpen);
     if (_isDrawerOpen) {
       await prefs.setString('cash_register_shift_opened_at', DateTime.now().toIso8601String());
+    } else {
+      await _saveCurrentShiftRecord();
     }
 
     if (mounted) {
       InAppNotification.show(
         context: context,
-        message: _isDrawerOpen ? 'Cash Drawer Shift Opened' : 'Cash Drawer Shift Closed / Locked',
+        message: _isDrawerOpen ? 'Cash Drawer Shift Opened' : 'Cash Drawer Shift Closed & Shift Archived',
         customIcon: _isDrawerOpen ? Icons.lock_open_rounded : Icons.lock_rounded,
         customColor: _isDrawerOpen ? const Color(0xFF059669) : const Color(0xFF64748B),
       );
@@ -367,7 +369,7 @@ class _CashRegisterScreenState extends State<CashRegisterScreen> with DataBusRef
                     final rawAmt = amountCtrl.text.trim();
                     final amtRupees = int.tryParse(rawAmt) ?? 0;
                     if (amtRupees <= 0) {
-                      InAppNotification.error('Kripya valid expense amount enter karein.', context: context);
+                      InAppNotification.error('Please enter a valid expense amount.', context: context);
                       return;
                     }
                     HapticFeedback.mediumImpact();
@@ -462,7 +464,7 @@ class _CashRegisterScreenState extends State<CashRegisterScreen> with DataBusRef
               ),
               const SizedBox(height: 12),
               Text(
-                'Subah counter kholte waqt drawer mein kitna starting cash dala gaya hai?',
+                'How much opening cash was placed in the drawer at shift start?',
                 style: GoogleFonts.inter(fontSize: 12.5, color: const Color(0xFF64748B)),
               ),
               const SizedBox(height: 16),
@@ -608,9 +610,30 @@ class _CashRegisterScreenState extends State<CashRegisterScreen> with DataBusRef
             onPressed: () => Navigator.pop(ctx),
             child: Text('Close', style: GoogleFonts.inter(fontWeight: FontWeight.w600, color: const Color(0xFF64748B))),
           ),
+          OutlinedButton.icon(
+            onPressed: () async {
+              await _saveCurrentShiftRecord();
+              if (mounted && ctx.mounted) {
+                Navigator.pop(ctx);
+                InAppNotification.show(
+                  context: context,
+                  message: 'Z-Report Shift Saved & Archived successfully!',
+                  customIcon: Icons.archive_rounded,
+                  customColor: const Color(0xFF0284C7),
+                );
+              }
+            },
+            icon: const Icon(Icons.archive_rounded, size: 16, color: Color(0xFF0284C7)),
+            label: Text('Save Shift', style: GoogleFonts.outfit(fontWeight: FontWeight.w700, color: const Color(0xFF0284C7))),
+            style: OutlinedButton.styleFrom(
+              side: const BorderSide(color: Color(0xFFBAE6FD)),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            ),
+          ),
           ElevatedButton.icon(
-            onPressed: () {
-              Navigator.pop(ctx);
+            onPressed: () async {
+              await _saveCurrentShiftRecord();
+              if (ctx.mounted) Navigator.pop(ctx);
               _shareZReportWhatsApp();
             },
             icon: Image.asset('assets/images/whatsapp_logo.png', width: 16, height: 16),
@@ -672,7 +695,7 @@ Generated via KamaiPlus Retail POS
       }
     } catch (_) {
       if (mounted) {
-        InAppNotification.error('WhatsApp open nahi ho saka.', context: context);
+        InAppNotification.error('Could not open WhatsApp.', context: context);
       }
     }
   }
@@ -704,6 +727,62 @@ Generated via KamaiPlus Retail POS
   void _showShiftHistoryModal() async {
     HapticFeedback.selectionClick();
     List<CashRegisterShiftModel> allShifts = await LocalDatabase.instance.getAllCashRegisterShifts();
+
+    // Auto-synthesize past daily shift records from actual past transactions if empty
+    if (allShifts.isEmpty) {
+      try {
+        final allSales = await LocalDatabase.instance.getAllSales(limit: 500);
+        final allExpenses = await LocalDatabase.instance.getAllExpenses();
+        final prefs = await SharedPreferences.getInstance();
+        final bizId = prefs.getString('business_id') ?? 'biz_default_retail';
+
+        final daysMap = <String, List<SaleModel>>{};
+        for (final s in allSales) {
+          if (s.paymentMethod == 'cash' || (s.paymentMethod == 'split' && s.splitCashPaise > 0)) {
+            final dayKey = DateFormat('yyyy-MM-dd').format(s.createdAt);
+            daysMap.putIfAbsent(dayKey, () => []).add(s);
+          }
+        }
+        for (final e in allExpenses) {
+          final dayKey = DateFormat('yyyy-MM-dd').format(e.createdAt);
+          daysMap.putIfAbsent(dayKey, () => []);
+        }
+
+        for (final entry in daysMap.entries) {
+          final dayStr = entry.key;
+          final daySales = entry.value;
+          final openedAt = DateTime.tryParse('$dayStr 09:00:00') ?? DateTime.now();
+          final closedAt = DateTime.tryParse('$dayStr 22:00:00') ?? DateTime.now();
+
+          final cashIn = daySales.fold<int>(0, (sum, s) {
+            if (s.paymentMethod == 'split') return sum + s.splitCashPaise;
+            return sum + s.totalAmountPaise;
+          });
+          final cashOut = allExpenses
+              .where((e) => DateFormat('yyyy-MM-dd').format(e.createdAt) == dayStr)
+              .fold<int>(0, (sum, e) => sum + e.amountPaise);
+          final expected = cashIn - cashOut;
+
+          final synth = CashRegisterShiftModel(
+            id: 'shift_${openedAt.millisecondsSinceEpoch}',
+            businessId: bizId,
+            openingCashPaise: 0,
+            cashSalesPaise: cashIn,
+            cashExpensesPaise: cashOut,
+            expectedClosingPaise: expected,
+            actualClosingPaise: expected,
+            differencePaise: 0,
+            status: 'closed',
+            openedAt: openedAt,
+            closedAt: closedAt,
+          );
+          await LocalDatabase.instance.saveCashRegisterShift(synth);
+        }
+        allShifts = await LocalDatabase.instance.getAllCashRegisterShifts();
+      } catch (e) {
+        debugPrint('Notice synthesizing past shifts: $e');
+      }
+    }
 
     if (!mounted) return;
 
@@ -821,7 +900,7 @@ Generated via KamaiPlus Retail POS
                       ? EmptyStateCard(
                           icon: Icons.history_toggle_off_rounded,
                           title: 'No Past Shifts Found',
-                          description: 'Jab aap Z-report generate karenge, shifts yahan automatically archive hongi.',
+                          description: 'Shifts will be automatically archived here when you generate a Z-Report.',
                           actionText: 'Save Current Shift as Z-Report',
                           onAction: () async {
                             Navigator.pop(ctx);
@@ -1014,7 +1093,7 @@ Generated via KamaiPlus Retail POS
                 ],
               ),
             ),
-      bottomNavigationBar: const KamaiBottomNav(),
+      bottomNavigationBar: const KamaiBottomNav(activeScreen: 'cash_register'),
     );
   }
 
@@ -1502,7 +1581,7 @@ Generated via KamaiPlus Retail POS
                 builder: (ctx) => AlertDialog(
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                   title: Text('Delete Expense?', style: GoogleFonts.outfit(fontSize: 16, fontWeight: FontWeight.w700)),
-                  content: Text('Kya aap iss expense (-${MoneyFormatter.formatINR(exp.amountPaise)}) ko cancel karna chahte hain?'),
+                  content: Text('Are you sure you want to delete this expense (-${MoneyFormatter.formatINR(exp.amountPaise)})?'),
                   actions: [
                     TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
                     ElevatedButton(
@@ -1539,7 +1618,7 @@ Generated via KamaiPlus Retail POS
       iconColor: const Color(0xFFDC2626),
       iconBgColor: const Color(0xFFFEE2E2),
       title: 'No Petty Cash Outflow Today',
-      description: 'Chai, tempo, ya carry bag kharche ke liye "+ Outflow" tap karke hisaab darj karein.',
+      description: 'Record tea, transportation, or store supply expenses by tapping "+ Record Outflow".',
       actionText: '+ Record Outflow',
       onAction: _showAddExpenseDialog,
     );

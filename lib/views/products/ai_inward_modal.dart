@@ -184,7 +184,7 @@ class AiInwardModal extends StatelessWidget {
               subtitle: 'Camera photo of invoice, slip or wholesale parcha',
               onTap: () {
                 Navigator.pop(context);
-                AiInwardSheet.show(context, onInwardComplete: onInwardSuccess);
+                AiInwardSheet.showPhotoSourcePickerDirect(context, onInwardComplete: onInwardSuccess);
               },
             ),
             const SizedBox(height: 10),
@@ -203,7 +203,7 @@ class AiInwardModal extends StatelessWidget {
               subtitle: 'Single or multi-page digital invoice document',
               onTap: () {
                 Navigator.pop(context);
-                AiInwardSheet.show(context, onInwardComplete: onInwardSuccess);
+                AiInwardSheet.pickPdfDirect(context, onInwardComplete: onInwardSuccess);
               },
             ),
             const SizedBox(height: 10),

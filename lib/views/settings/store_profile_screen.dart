@@ -18,6 +18,7 @@ import '../growth/growth_campaigns_screen.dart';
 import '../auth/login_screen.dart';
 import '../../services/auth_service.dart';
 import '../../services/firestore_sync_service.dart';
+import '../../services/gstin_service.dart';
 import 'printer_settings_screen.dart';
 import '../../core/localization/app_language_service.dart';
 import '../../core/localization/app_strings.dart';
@@ -46,6 +47,40 @@ class _StoreProfileScreenState extends State<StoreProfileScreen> {
   final _pincodeCtrl = TextEditingController();
   final _gstinCtrl = TextEditingController();
   final _fssaiCtrl = TextEditingController();
+
+  bool _isVerifyingGstin = false;
+
+  Future<void> _verifyGstinOnline() async {
+    final raw = _gstinCtrl.text.trim();
+    if (raw.isEmpty) {
+      InAppNotification.error('Please enter a 15-digit GSTIN first', context: context);
+      return;
+    }
+    setState(() => _isVerifyingGstin = true);
+    final data = await GstinService.instance.verifyGstin(raw);
+    if (!mounted) return;
+    setState(() {
+      _isVerifyingGstin = false;
+      if (data.isValid) {
+        if (data.tradeName.isNotEmpty && _storeNameCtrl.text.trim().isEmpty) {
+          _storeNameCtrl.text = data.tradeName;
+        }
+        if (data.address.isNotEmpty && _addressCtrl.text.trim().isEmpty) {
+          _addressCtrl.text = data.address;
+        }
+      }
+    });
+    if (data.isValid) {
+      InAppNotification.show(
+        context: context,
+        message: '✓ GSTIN Verified: ${data.tradeName.isNotEmpty ? data.tradeName : data.legalName} (${data.status})',
+        customIcon: Icons.verified_rounded,
+        customColor: const Color(0xFF059669),
+      );
+    } else {
+      InAppNotification.error(data.errorMessage ?? 'Invalid GSTIN Number', context: context);
+    }
+  }
 
   String _selectedCategory = 'Grocery / Kirana';
   String _selectedBusinessType = 'grocery';
@@ -486,7 +521,7 @@ class _StoreProfileScreenState extends State<StoreProfileScreen> {
           ],
         ),
         content: Text(
-          'Aapka current device session sign out ho jayega. Data offline database me surakshit rahega.',
+          'Your current device session will be signed out. Your data remains safe in the offline database.',
           style: GoogleFonts.inter(fontSize: 13, color: const Color(0xFF475569)),
         ),
         actions: [
@@ -552,7 +587,7 @@ class _StoreProfileScreenState extends State<StoreProfileScreen> {
                 ],
               ),
             ),
-      bottomNavigationBar: const KamaiBottomNav(),
+      bottomNavigationBar: const KamaiBottomNav(activeScreen: 'store_profile'),
     );
   }
 
@@ -614,7 +649,7 @@ class _StoreProfileScreenState extends State<StoreProfileScreen> {
                             ),
                             const SizedBox(width: 4),
                             Text(
-                              isPro ? '★ Pro Active' : 'Pro',
+                              isPro ? 'Pro Active' : 'Pro',
                               style: GoogleFonts.outfit(
                                 fontSize: 12,
                                 fontWeight: FontWeight.w800,
@@ -1188,7 +1223,37 @@ class _StoreProfileScreenState extends State<StoreProfileScreen> {
                 textCapitalization: TextCapitalization.characters,
                 validator: (v) => AppValidators.validateGstin(v),
                 style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.w600),
-                decoration: _fieldInputDecoration(hint: 'e.g. 27AAAAA0000A1Z5'),
+                decoration: _fieldInputDecoration(
+                  hint: 'e.g. 27AAAAA0000A1Z5',
+                  suffix: Padding(
+                    padding: const EdgeInsets.only(right: 6),
+                    child: _isVerifyingGstin
+                        ? const SizedBox(
+                            width: 24,
+                            height: 24,
+                            child: Center(
+                              child: SizedBox(
+                                width: 14,
+                                height: 14,
+                                child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFF0284C7)),
+                              ),
+                            ),
+                          )
+                        : TextButton.icon(
+                            onPressed: _verifyGstinOnline,
+                            style: TextButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                              minimumSize: Size.zero,
+                              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                            ),
+                            icon: const Icon(Icons.verified_user_outlined, size: 14, color: Color(0xFF0284C7)),
+                            label: Text(
+                              'Verify',
+                              style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w700, color: const Color(0xFF0284C7)),
+                            ),
+                          ),
+                  ),
+                ),
               ),
               const SizedBox(height: 16),
 
@@ -1277,7 +1342,7 @@ class _StoreProfileScreenState extends State<StoreProfileScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                'Bluetooth Thermal (58mm/80mm) POS printer pair karein ya A4 Standard System Spooler select karein. Har sale par 1-tap direct print enable karein.',
+                'Pair a Bluetooth Thermal (58mm/80mm) POS printer or select A4 Standard System Spooler. Enable 1-tap direct printing on every sale.',
                 style: GoogleFonts.inter(fontSize: 11.5, color: const Color(0xFF64748B)),
               ),
               const SizedBox(height: 14),
@@ -1327,7 +1392,7 @@ class _StoreProfileScreenState extends State<StoreProfileScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                'Purana sabhi test data (products, sales bills, customers, khata ledger, expenses) 1-click me delete karein taaki aap dukan me fresh real start kar sakein.',
+                'Delete all sample test data (products, sales bills, customers, ledger, expenses) in 1 click so you can start fresh with real store data.',
                 style: GoogleFonts.inter(fontSize: 11.5, color: const Color(0xFF64748B)),
               ),
               const SizedBox(height: 14),
@@ -1380,7 +1445,7 @@ class _StoreProfileScreenState extends State<StoreProfileScreen> {
           ],
         ),
         content: Text(
-          'Kya aap sach me apna sabhi test data (products, sales bills, customers, khata ledger, expenses) delete karna chahte hain?\n\nDukan ki profile aur UPI details surakshit rahengi taaki aap turant fresh start kar sakein.',
+          'Are you sure you want to delete all transaction data (products, sales bills, customers, ledger, expenses)?\n\nStore profile and UPI settings will be preserved for a fresh start.',
           style: GoogleFonts.inter(fontSize: 13, color: const Color(0xFF475569)),
         ),
         actions: [
@@ -1394,7 +1459,7 @@ class _StoreProfileScreenState extends State<StoreProfileScreen> {
               await LocalDatabase.instance.completeFactoryReset(resetStoreProfile: false);
               FirestoreSyncService.instance.wipeCloudData().catchError((_) {});
               if (!mounted) return;
-              InAppNotification.success('Sabhi data safalta-purvak delete ho gaya. Fresh start ready!', context: context);
+              InAppNotification.success('All data successfully cleared. Ready for a fresh start!', context: context);
             },
             style: ElevatedButton.styleFrom(
               backgroundColor: const Color(0xFFDC2626),
@@ -1824,12 +1889,13 @@ class _StoreProfileScreenState extends State<StoreProfileScreen> {
     );
   }
 
-  InputDecoration _fieldInputDecoration({required String hint}) {
+  InputDecoration _fieldInputDecoration({required String hint, Widget? suffix}) {
     return InputDecoration(
       hintText: hint,
       hintStyle: GoogleFonts.inter(fontSize: 13, color: const Color(0xFF94A3B8)),
       filled: true,
       fillColor: Colors.white,
+      suffixIcon: suffix,
       contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(10),

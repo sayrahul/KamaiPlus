@@ -9,11 +9,13 @@ import '../../core/localization/app_language_service.dart';
 class KamaiBottomNav extends StatelessWidget {
   final int currentIndex;
   final ValueChanged<int>? onTabTap;
+  final String? activeScreen;
 
   const KamaiBottomNav({
     super.key,
     this.currentIndex = -1,
     this.onTabTap,
+    this.activeScreen,
   });
 
   void _handleTap(BuildContext context, int index) {
@@ -27,6 +29,7 @@ class KamaiBottomNav extends StatelessWidget {
       MenuScreen.show(
         context,
         currentTabIndex: currentIndex,
+        activeScreen: activeScreen,
         onNavigateTab: (targetIndex) {
           HomeDashboardScreen.switchTab(context, targetIndex);
         },
@@ -77,7 +80,7 @@ class KamaiBottomNav extends StatelessWidget {
                         1,
                         vert.navActiveIcon,
                         vert.navInactiveIcon,
-                        'nav_products'.tr,
+                        vert.bottomNavLabel,
                       ),
 
                       // 2: Center Billing

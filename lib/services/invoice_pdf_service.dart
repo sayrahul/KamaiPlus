@@ -340,7 +340,7 @@ class InvoicePdfService {
           ? '\n\n📌 *UPI ID:* $effectiveUpiId'
           : '';
       final defaultMsg = customMessage ??
-          'Namaste ${customer.name} ji! 🙏\n\n$storeName par aapka baki hisaab $totalBalance hai. Kripya samay par chukta karein.$upiSuffix\n\nDhanyawad!';
+          'Dear ${customer.name}, 🙏\n\nYour outstanding balance at $storeName is $totalBalance. Please clear your dues at your convenience.$upiSuffix\n\nThank you!';
 
       return await sharePdf(
         filePath: path,

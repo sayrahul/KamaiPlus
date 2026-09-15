@@ -76,10 +76,17 @@ class SaleDetailModal extends StatelessWidget {
     buffer.writeln('--------------------------');
     buffer.writeln('💰 *Total Amount: ₹$amtRupees*');
     buffer.writeln('💳 Paid via: ${sale.paymentMethod.toUpperCase()}');
+    if (sale.paymentMethod == 'split') {
+      final parts = <String>[];
+      if (sale.splitCashPaise > 0) parts.add('Cash: ₹${sale.splitCashPaise ~/ 100}');
+      if (sale.splitUpiPaise > 0) parts.add('UPI: ₹${sale.splitUpiPaise ~/ 100}');
+      if (sale.splitCreditPaise > 0) parts.add('Udhar: ₹${sale.splitCreditPaise ~/ 100}');
+      buffer.writeln('   Breakdown: ${parts.join(" • ")}');
+    }
     if (upiId.isNotEmpty) {
       buffer.writeln('📌 *UPI ID:* $upiId');
     }
-    buffer.writeln('\nDhanyawad! Phir Padhaarein 🙏');
+    buffer.writeln('\nThank you for your business! Visit again 🙏');
 
     final phone = sale.customerPhone ?? '';
     final cleanPhone = phone.replaceAll(RegExp(r'[^0-9]'), '');
@@ -234,7 +241,7 @@ class SaleDetailModal extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Invoice #${sale.invoiceNumber} ke sabhi items inventory me wapas add honge:',
+                  'All items of Invoice #${sale.invoiceNumber} will be restored to inventory:',
                   style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF475569)),
                 ),
                 const SizedBox(height: 8),
@@ -284,7 +291,7 @@ class SaleDetailModal extends StatelessWidget {
                         const SizedBox(width: 8),
                         Expanded(
                           child: Text(
-                            'Customer ${sale.customerName ?? ""} ka Udhar ${MoneyFormatter.formatINR(creditDue)} turant reverse ho jayega.',
+                            'Customer ${sale.customerName ?? ""} credit balance of ${MoneyFormatter.formatINR(creditDue)} will be reversed immediately.',
                             style: GoogleFonts.inter(fontSize: 11.5, fontWeight: FontWeight.w600, color: const Color(0xFF991B1B)),
                           ),
                         ),
@@ -305,7 +312,7 @@ class SaleDetailModal extends StatelessWidget {
                         const SizedBox(width: 8),
                         Expanded(
                           child: Text(
-                            'Customer ko ${MoneyFormatter.formatINR(sale.totalAmountPaise)} (${sale.paymentMethod.toUpperCase()}) refund karein.',
+                            'Refund ${MoneyFormatter.formatINR(sale.totalAmountPaise)} (${sale.paymentMethod.toUpperCase()}) to customer.',
                             style: GoogleFonts.inter(fontSize: 11.5, fontWeight: FontWeight.w600, color: const Color(0xFF92400E)),
                           ),
                         ),
@@ -831,21 +838,28 @@ class SaleDetailModal extends StatelessWidget {
     final isPartiallyRefunded = sale.status == 'partially_refunded';
     final isUdhar = sale.paymentMethod == 'credit';
     final isUpi = sale.paymentMethod == 'upi';
+    final isSplit = sale.paymentMethod == 'split';
     final modeBadgeText = isRefunded
         ? 'REFUNDED / RETURNED'
         : (isPartiallyRefunded
             ? 'PARTIALLY RETURNED'
-            : (isUdhar ? 'CREDIT / UDHAR' : (isUpi ? 'UPI DIGITAL' : 'CASH COUNTER')));
+            : (isSplit
+                ? 'SPLIT PAYMENT'
+                : (isUdhar ? 'CREDIT / UDHAR' : (isUpi ? 'UPI DIGITAL' : 'CASH COUNTER'))));
     final modeBadgeBg = isRefunded
         ? const Color(0xFFFEE2E2)
         : (isPartiallyRefunded
             ? const Color(0xFFFEF3C7)
-            : (isUdhar ? const Color(0xFFFEF2F2) : (isUpi ? const Color(0xFFF0F9FF) : const Color(0xFFECFDF5))));
+            : (isSplit
+                ? const Color(0xFFEEF2FF)
+                : (isUdhar ? const Color(0xFFFEF2F2) : (isUpi ? const Color(0xFFF0F9FF) : const Color(0xFFECFDF5)))));
     final modeBadgeColor = isRefunded
         ? const Color(0xFFDC2626)
         : (isPartiallyRefunded
             ? const Color(0xFFD97706)
-            : (isUdhar ? const Color(0xFFDC2626) : (isUpi ? const Color(0xFF0284C7) : const Color(0xFF059669))));
+            : (isSplit
+                ? const Color(0xFF6366F1)
+                : (isUdhar ? const Color(0xFFDC2626) : (isUpi ? const Color(0xFF0284C7) : const Color(0xFF059669)))));
 
     return Padding(
       padding: EdgeInsets.only(
@@ -1044,6 +1058,111 @@ class SaleDetailModal extends StatelessWidget {
               ],
             ),
           ),
+
+          // Split Payment Breakdown Card
+          if (sale.paymentMethod == 'split') ...[
+            const SizedBox(height: 10),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: const Color(0xFFF8FAFC),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: const Color(0xFFE2E8F0)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      const Icon(Icons.call_split_rounded, size: 15, color: Color(0xFF6366F1)),
+                      const SizedBox(width: 6),
+                      Text(
+                        'Split Payment Breakdown',
+                        style: GoogleFonts.plusJakartaSans(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w800,
+                          color: const Color(0xFF1E293B),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      if (sale.splitCashPaise > 0)
+                        Expanded(
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(color: const Color(0xFFE2E8F0)),
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text('Cash', style: GoogleFonts.inter(fontSize: 10, color: const Color(0xFF64748B))),
+                                const SizedBox(height: 2),
+                                Text(
+                                  MoneyFormatter.formatINR(sale.splitCashPaise),
+                                  style: GoogleFonts.plusJakartaSans(fontSize: 12, fontWeight: FontWeight.w800, color: const Color(0xFF059669)),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      if (sale.splitCashPaise > 0 && sale.splitUpiPaise > 0) const SizedBox(width: 6),
+                      if (sale.splitUpiPaise > 0)
+                        Expanded(
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(color: const Color(0xFFE2E8F0)),
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text('UPI', style: GoogleFonts.inter(fontSize: 10, color: const Color(0xFF64748B))),
+                                const SizedBox(height: 2),
+                                Text(
+                                  MoneyFormatter.formatINR(sale.splitUpiPaise),
+                                  style: GoogleFonts.plusJakartaSans(fontSize: 12, fontWeight: FontWeight.w800, color: const Color(0xFF0284C7)),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      if ((sale.splitCashPaise > 0 || sale.splitUpiPaise > 0) && sale.splitCreditPaise > 0) const SizedBox(width: 6),
+                      if (sale.splitCreditPaise > 0)
+                        Expanded(
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(color: const Color(0xFFE2E8F0)),
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text('Udhar (Credit)', style: GoogleFonts.inter(fontSize: 10, color: const Color(0xFF64748B))),
+                                const SizedBox(height: 2),
+                                Text(
+                                  MoneyFormatter.formatINR(sale.splitCreditPaise),
+                                  style: GoogleFonts.plusJakartaSans(fontSize: 12, fontWeight: FontWeight.w800, color: const Color(0xFFDC2626)),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ],
           const SizedBox(height: 16),
 
           // Actions: Print Thermal + Download PDF + Share PDF

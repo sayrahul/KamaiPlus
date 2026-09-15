@@ -1,7 +1,10 @@
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_crashlytics/firebase_crashlytics.dart';
+import 'services/remote_config_service.dart';
 import 'core/constants/business_vertical_config.dart';
 import 'core/theme/app_theme.dart';
 import 'core/database/local_database.dart';
@@ -36,6 +39,15 @@ void main() async {
   // 1. Initialize Firebase Core Engine First
   try {
     await Firebase.initializeApp();
+    FlutterError.onError = (errorDetails) {
+      FirebaseCrashlytics.instance.recordFlutterFatalError(errorDetails);
+    };
+    PlatformDispatcher.instance.onError = (error, stack) {
+      FirebaseCrashlytics.instance.recordError(error, stack, fatal: true);
+      return true;
+    };
+    // Non-blocking dynamic Remote Config fetch
+    RemoteConfigService.instance.init();
   } catch (e) {
     debugPrint('Firebase.initializeApp warning: $e');
   }
@@ -44,6 +56,9 @@ void main() async {
   final prefs = await SharedPreferences.getInstance();
   final cachedUserId = prefs.getString('auth_user_id');
   if (cachedUserId != null && cachedUserId.isNotEmpty) {
+    try {
+      FirebaseCrashlytics.instance.setUserIdentifier(cachedUserId);
+    } catch (_) {}
     await LocalDatabase.instance.switchUser(cachedUserId);
   } else {
     await LocalDatabase.instance.database;

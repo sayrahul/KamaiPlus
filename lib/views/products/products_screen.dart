@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../models/models.dart';
 import '../../core/utils/money_formatter.dart';
+import '../../core/utils/expiry_utils.dart';
 import '../../core/database/local_database.dart';
 import '../common/pwa_top_bar.dart';
 import '../common/owner_privacy_modal.dart';
@@ -89,10 +90,7 @@ class _ProductsScreenState extends State<ProductsScreen> with DataBusRefresh<Pro
   }
 
   int get _totalInventoryCostValuationPaise {
-    return _products.fold<int>(0, (sum, p) {
-      final cost = p.purchasePricePaise > 0 ? p.purchasePricePaise : (p.sellingPricePaise * 0.85).round();
-      return sum + (p.stockQuantity * cost).toInt();
-    });
+    return _products.fold<int>(0, (sum, p) => sum + p.assetCostValuationPaise);
   }
 
   int get _lowStockCount {
@@ -466,7 +464,7 @@ class _ProductsScreenState extends State<ProductsScreen> with DataBusRefresh<Pro
           ],
         ),
         content: Text(
-          'Kya aap sach me "${product.name}" ko product catalog se delete karna chahte hain?',
+          'Are you sure you want to delete "${product.name}" from the product catalog?',
           style: GoogleFonts.inter(fontSize: 13, color: const Color(0xFF475569)),
         ),
         actions: [
@@ -763,8 +761,6 @@ class _ProductsScreenState extends State<ProductsScreen> with DataBusRefresh<Pro
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
                           const Icon(Icons.auto_awesome_rounded, size: 14, color: Color(0xFFD97706)),
-                          const SizedBox(width: 4),
-                          const Icon(Icons.receipt_long_outlined, size: 14, color: Color(0xFFD97706)),
                           const SizedBox(width: 5),
                           Text(
                             vert.aiBulkAddButtonLabel,
@@ -1223,78 +1219,82 @@ class _ProductsScreenState extends State<ProductsScreen> with DataBusRefresh<Pro
                   ),
                 ),
               ),
-              const SizedBox(width: 4),
+              const SizedBox(width: 6),
               // Favorite Star
-              GestureDetector(
+              InkWell(
                 onTap: () => _toggleFavorite(product),
-                child: Icon(
-                  isFav ? Icons.star_rounded : Icons.star_outline_rounded,
-                  size: 18,
-                  color: const Color(0xFFF59E0B),
+                borderRadius: BorderRadius.circular(8),
+                child: Padding(
+                  padding: const EdgeInsets.all(4),
+                  child: Icon(
+                    isFav ? Icons.star_rounded : Icons.star_outline_rounded,
+                    size: 22,
+                    color: const Color(0xFFF59E0B),
+                  ),
                 ),
               ),
-              const SizedBox(width: 4),
+              const SizedBox(width: 6),
               // Quick In-Line Price & Stock Update Button
               InkWell(
                 onTap: () {
                   HapticFeedback.selectionClick();
                   _openQuickUpdateDialog(product);
                 },
-                borderRadius: BorderRadius.circular(7),
+                borderRadius: BorderRadius.circular(8),
                 child: Container(
-                  padding: const EdgeInsets.all(4),
+                  padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 5.5),
                   decoration: BoxDecoration(
                     color: const Color(0xFFEFF6FF),
-                    borderRadius: BorderRadius.circular(7),
+                    borderRadius: BorderRadius.circular(8),
                     border: Border.all(color: const Color(0xFFBFDBFE)),
                   ),
                   child: const Icon(
                     Icons.bolt_rounded,
-                    size: 14,
+                    size: 16,
                     color: Color(0xFF2563EB),
                   ),
                 ),
               ),
-              const SizedBox(width: 4),
+              const SizedBox(width: 6),
               // Dedicated Pencil Edit Button
               InkWell(
                 onTap: () {
                   HapticFeedback.selectionClick();
                   _openAddProductSheet(existingProduct: product);
                 },
-                borderRadius: BorderRadius.circular(7),
+                borderRadius: BorderRadius.circular(8),
                 child: Container(
-                  padding: const EdgeInsets.all(4),
+                  padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 5.5),
                   decoration: BoxDecoration(
                     color: const Color(0xFFF1F5F9),
-                    borderRadius: BorderRadius.circular(7),
-                    border: Border.all(color: const Color(0xFFE2E8F0)),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: const Color(0xFFCBD5E1)),
                   ),
                   child: const Icon(
                     Icons.edit_outlined,
-                    size: 14,
+                    size: 16,
                     color: Color(0xFF0F172A),
                   ),
                 ),
               ),
-              const SizedBox(width: 4),
+              const SizedBox(width: 6),
               // Dedicated Delete Button
               InkWell(
                 onTap: () {
                   HapticFeedback.selectionClick();
                   _confirmDeleteProduct(product);
                 },
-                borderRadius: BorderRadius.circular(7),
+                borderRadius: BorderRadius.circular(8),
                 child: Container(
-                  padding: const EdgeInsets.all(4),
+                  padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 5.5),
                   decoration: BoxDecoration(
                     color: const Color(0xFFFEF2F2),
-                    borderRadius: BorderRadius.circular(7),
+                    borderRadius: BorderRadius.circular(8),
                     border: Border.all(color: const Color(0xFFFECACA)),
                   ),
                   child: const Icon(
                     Icons.delete_outline_rounded,
-                    size: 14,
+                    size: 16,
                     color: Color(0xFFDC2626),
                   ),
                 ),
@@ -1323,6 +1323,63 @@ class _ProductsScreenState extends State<ProductsScreen> with DataBusRefresh<Pro
                     color: const Color(0xFF475569),
                   ),
                 ),
+              ),
+              Builder(
+                builder: (_) {
+                  final exp = parseProductExpiry(product);
+                  if (exp == null) return const SizedBox.shrink();
+                  if (exp.isExpired) {
+                    return Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFFEF2F2),
+                        borderRadius: BorderRadius.circular(6),
+                        border: Border.all(color: const Color(0xFFFCA5A5)),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(Icons.warning_amber_rounded, size: 10, color: Color(0xFFDC2626)),
+                          const SizedBox(width: 3),
+                          Text(
+                            'EXPIRED (${product.expiryDate})',
+                            style: GoogleFonts.inter(
+                              fontSize: 9.5,
+                              fontWeight: FontWeight.w800,
+                              color: const Color(0xFFDC2626),
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  }
+                  if (exp.isExpiringSoon) {
+                    return Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFFFFBEB),
+                        borderRadius: BorderRadius.circular(6),
+                        border: Border.all(color: const Color(0xFFFDE68A)),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(Icons.access_time_rounded, size: 10, color: Color(0xFFD97706)),
+                          const SizedBox(width: 3),
+                          Text(
+                            'Exp: ${product.expiryDate}',
+                            style: GoogleFonts.inter(
+                              fontSize: 9.5,
+                              fontWeight: FontWeight.w700,
+                              color: const Color(0xFFD97706),
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  }
+                  return const SizedBox.shrink();
+                },
               ),
               if (product.hasVariants)
                 GestureDetector(

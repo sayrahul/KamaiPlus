@@ -11,7 +11,6 @@ import '../../core/database/local_database.dart';
 import '../../core/utils/app_validators.dart';
 import '../../models/models.dart';
 import '../dashboard/home_dashboard_screen.dart';
-import '../purchases/purchases_screen.dart';
 import '../../services/firestore_sync_service.dart';
 
 class SignupStoreScreen extends StatefulWidget {
@@ -36,10 +35,10 @@ class _SignupStoreScreenState extends State<SignupStoreScreen> {
   late final TextEditingController _ownerNameCtrl;
   late final TextEditingController _phoneCtrl;
   late final TextEditingController _upiCtrl;
+  late final TextEditingController _referralCodeCtrl;
 
   String _selectedCategory = 'Grocery / Kirana';
   bool _preloadCatalog = true;
-  bool _scanSupplierBill = false;
   bool _isSubmitting = false;
 
   final List<Map<String, dynamic>> _categories = [
@@ -82,6 +81,7 @@ class _SignupStoreScreenState extends State<SignupStoreScreen> {
     _ownerNameCtrl = TextEditingController(text: widget.initialOwnerName ?? '');
     _phoneCtrl = TextEditingController(text: widget.initialPhone ?? '');
     _upiCtrl = TextEditingController();
+    _referralCodeCtrl = TextEditingController();
   }
 
   @override
@@ -90,6 +90,7 @@ class _SignupStoreScreenState extends State<SignupStoreScreen> {
     _ownerNameCtrl.dispose();
     _phoneCtrl.dispose();
     _upiCtrl.dispose();
+    _referralCodeCtrl.dispose();
     super.dispose();
   }
 
@@ -133,7 +134,9 @@ class _SignupStoreScreenState extends State<SignupStoreScreen> {
       }
 
       final now = DateTime.now();
-      final freeTrialExpiry = now.add(const Duration(days: 7));
+      final enteredRefCode = _referralCodeCtrl.text.trim().toUpperCase();
+      final trialDays = enteredRefCode.isNotEmpty ? 15 : 7;
+      final freeTrialExpiry = now.add(Duration(days: trialDays));
 
       final profile = StoreProfileModel(
         storeName: storeName.isNotEmpty ? storeName : 'My Store',
@@ -150,10 +153,17 @@ class _SignupStoreScreenState extends State<SignupStoreScreen> {
         fssai: '',
         upiAccountsJson: jsonEncode(upiAccounts),
         isPro: true,
-        proPlan: 'trial',
+        proPlan: enteredRefCode.isNotEmpty ? 'referral_trial' : 'trial',
         proExpiry: freeTrialExpiry.toIso8601String(),
-        razorpayPaymentId: 'free_trial_7d',
+        razorpayPaymentId: enteredRefCode.isNotEmpty ? 'ref_$enteredRefCode' : 'free_trial_7d',
+        trialStartedAt: now.toIso8601String(),
       );
+
+      // Lock trial started timestamp permanently
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('pro_trial_started_at', now.toIso8601String());
+      await prefs.setBool('pro_trial_already_consumed', true);
+      await prefs.setBool('is_pro', true);
 
       // Save to SQLite
       await LocalDatabase.instance.saveStoreProfile(profile);
@@ -165,16 +175,19 @@ class _SignupStoreScreenState extends State<SignupStoreScreen> {
       }
 
       // Save login & onboarding status
-      final prefs = await SharedPreferences.getInstance();
       final currentUserId = prefs.getString('auth_user_id') ?? 'starter';
       final businessId = 'biz_$currentUserId';
       await prefs.setBool('is_logged_in', true);
       await prefs.setBool('is_onboarded', true);
+      await prefs.setBool('has_seeded_initial_products', true);
       await prefs.setBool('is_pro', true);
       await prefs.setString('business_name', storeName);
       await prefs.setString('merchant_phone', phone);
       await prefs.setString('business_type', businessTypeId);
       await prefs.setString('business_id', businessId);
+      if (enteredRefCode.isNotEmpty) {
+        await prefs.setString('referral_applied_code', enteredRefCode);
+      }
       FirestoreSyncService.instance.initialize(businessId: businessId);
       FirestoreSyncService.syncAllPending();
 
@@ -182,23 +195,17 @@ class _SignupStoreScreenState extends State<SignupStoreScreen> {
 
       InAppNotification.show(
         context: context,
-        message: '🎉 Swagat hai $storeName! 7 Days FREE Pro Membership activated!',
+        message: enteredRefCode.isNotEmpty
+            ? '🎉 Swagat hai $storeName! Referral bonus: 15 Days FREE Pro activated!'
+            : '🎉 Swagat hai $storeName! 7 Days FREE Pro Membership activated!',
         customIcon: Icons.stars_rounded,
         customColor: const Color(0xFFFBBF24),
       );
 
-      if (_scanSupplierBill) {
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(builder: (_) => const PurchasesScreen()),
-        );
-      } else {
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(builder: (_) => HomeDashboardScreen(key: HomeDashboardScreen.dashboardKey)),
-        );
-
-      }
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (_) => HomeDashboardScreen(key: HomeDashboardScreen.dashboardKey)),
+      );
     } catch (e) {
       if (mounted) {
         setState(() => _isSubmitting = false);
@@ -608,93 +615,34 @@ class _SignupStoreScreenState extends State<SignupStoreScreen> {
                         ),
                       ),
                     ),
-                    const SizedBox(height: 12),
+                    const SizedBox(height: 16),
 
-                    // Feature Card 2: 1-Tap Wholesaler Bill / Parcha Setup (AI VISION)
-                    Container(
-                      padding: const EdgeInsets.all(14),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF071B19),
-                        borderRadius: BorderRadius.circular(16),
-                        border: Border.all(color: const Color(0xFF0D9488).withValues(alpha: 0.6), width: 1.2),
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            children: [
-                              Container(
-                                width: 38,
-                                height: 38,
-                                decoration: BoxDecoration(
-                                  color: const Color(0xFFF59E0B),
-                                  borderRadius: BorderRadius.circular(10),
-                                ),
-                                child: const Icon(Icons.camera_alt_rounded, color: Color(0xFF0F172A), size: 20),
-                              ),
-                              const SizedBox(width: 10),
-                              Expanded(
-                                child: Text(
-                                  '📦 1-Tap Wholesaler Bill / Parcha Setup',
-                                  style: GoogleFonts.outfit(
-                                    fontSize: 13,
-                                    fontWeight: FontWeight.w700,
-                                    color: Colors.white,
-                                  ),
-                                ),
-                              ),
-                              Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                decoration: BoxDecoration(
-                                  color: const Color(0xFF064E3B),
-                                  borderRadius: BorderRadius.circular(6),
-                                  border: Border.all(color: const Color(0xFF10B981)),
-                                ),
-                                child: Text(
-                                  '✨ AI VISION',
-                                  style: GoogleFonts.inter(
-                                    fontSize: 9,
-                                    fontWeight: FontWeight.w800,
-                                    color: const Color(0xFF6EE7B7),
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 8),
-                          Text(
-                            'Take a photo of your supplier invoice, parcha, or purchase bill. Our AI will auto-extract all products, quantities, and rates!',
-                            style: GoogleFonts.inter(
-                              fontSize: 11,
-                              color: const Color(0xFF94A3B8),
-                            ),
-                          ),
-                          const SizedBox(height: 10),
-                          Row(
-                            children: [
-                              Checkbox(
-                                value: _scanSupplierBill,
-                                onChanged: (v) => setState(() => _scanSupplierBill = v ?? false),
-                                activeColor: const Color(0xFFF59E0B),
-                                checkColor: const Color(0xFF0F172A),
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
-                                materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                                visualDensity: VisualDensity.compact,
-                              ),
-                              const SizedBox(width: 6),
-                              Expanded(
-                                child: Text(
-                                  'Open Camera to Scan Supplier Bill immediately after setup',
-                                  style: GoogleFonts.inter(
-                                    fontSize: 11.5,
-                                    fontWeight: FontWeight.w600,
-                                    color: const Color(0xFFE2E8F0),
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ],
+                    // Feature Field: Referral / Invite Code (Optional)
+                    _buildFieldLabel('Referral / Invite Code (Optional)'),
+                    const SizedBox(height: 6),
+                    TextFormField(
+                      controller: _referralCodeCtrl,
+                      textCapitalization: TextCapitalization.characters,
+                      style: GoogleFonts.inter(fontSize: 14, color: Colors.white, fontWeight: FontWeight.w600),
+                      decoration: InputDecoration(
+                        filled: true,
+                        fillColor: const Color(0xFF070C18),
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                        prefixIcon: const Icon(Icons.card_giftcard_rounded, color: Color(0xFFF59E0B), size: 20),
+                        hintText: 'e.g. KAMAI9595 (Get 15 Days Free PRO)',
+                        hintStyle: GoogleFonts.inter(fontSize: 13, color: const Color(0xFF64748B)),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: const BorderSide(color: Color(0xFF1E293B)),
+                        ),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: const BorderSide(color: Color(0xFF1E293B)),
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: const BorderSide(color: Color(0xFFF59E0B), width: 1.5),
+                        ),
                       ),
                     ),
                     const SizedBox(height: 22),

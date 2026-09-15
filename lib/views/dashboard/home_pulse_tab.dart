@@ -3,6 +3,7 @@ import '../common/in_app_notification.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../../core/database/local_database.dart';
 import '../../core/utils/money_formatter.dart';
 import '../../models/models.dart';
@@ -72,7 +73,18 @@ class _HomePulseTabState extends State<HomePulseTab> with DataBusRefresh<HomePul
 
   int _totalProductsCount = 0;
   List<SaleModel> _recentSales = [];
-  bool _isBroadcastDismissed = false;
+  String? _dismissedBroadcastKey;
+
+  void _dismissBroadcast(String messageKey) async {
+    HapticFeedback.lightImpact();
+    setState(() {
+      _dismissedBroadcastKey = messageKey;
+    });
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('dismissed_broadcast_key', messageKey);
+    } catch (_) {}
+  }
 
   @override
   void initState() {
@@ -116,8 +128,16 @@ class _HomePulseTabState extends State<HomePulseTab> with DataBusRefresh<HomePul
           e.createdAt.day == now.day).fold(0, (sum, e) => sum + e.amountPaise);
 
       final totalSales = todaySales.fold(0, (sum, s) => sum + s.totalAmountPaise);
-      final cashSales = todaySales.where((s) => s.paymentMethod == 'cash').fold(0, (sum, s) => sum + s.totalAmountPaise);
-      final calculatedCash = (cashSales - todayExp);
+      final cashSales = todaySales.fold(0, (sum, s) {
+        if (s.paymentMethod == 'cash') return sum + s.totalAmountPaise;
+        if (s.paymentMethod == 'split') return sum + s.splitCashPaise;
+        return sum;
+      });
+
+      final prefs = await SharedPreferences.getInstance();
+      final openingFloat = prefs.getInt('cash_register_opening_float_paise') ?? 0;
+      final calculatedCash = (openingFloat + cashSales - todayExp);
+      final dismissedBroadcastKey = prefs.getString('dismissed_broadcast_key');
 
       if (mounted) {
         setState(() {
@@ -129,6 +149,7 @@ class _HomePulseTabState extends State<HomePulseTab> with DataBusRefresh<HomePul
           _debtorsCount = debtors.length;
           _totalProductsCount = products.length;
           _recentSales = sales;
+          _dismissedBroadcastKey = dismissedBroadcastKey;
           _isLoading = false;
         });
       }
@@ -603,7 +624,7 @@ class _HomePulseTabState extends State<HomePulseTab> with DataBusRefresh<HomePul
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      '+ New Bill (POS)',
+                      'New Bill (POS)',
                       style: GoogleFonts.outfit(
                         fontSize: 14,
                         fontWeight: FontWeight.w800,
@@ -688,7 +709,7 @@ class _HomePulseTabState extends State<HomePulseTab> with DataBusRefresh<HomePul
             onTap: () {
               DenominationTallyModal.show(
                 context,
-                expectedCashPaise: _todaySalesPaise,
+                expectedCashPaise: _cashInHandPaise,
               );
             },
           ),
@@ -1724,12 +1745,17 @@ class _HomePulseTabState extends State<HomePulseTab> with DataBusRefresh<HomePul
     return ValueListenableBuilder<Map<String, dynamic>?>(
       valueListenable: FirestoreSyncService.instance.broadcastNotifier,
       builder: (context, broadcast, _) {
-        if (broadcast == null || _isBroadcastDismissed) {
+        if (broadcast == null) {
           return const SizedBox.shrink();
         }
 
         final message = broadcast['message']?.toString() ?? '';
         if (message.isEmpty) return const SizedBox.shrink();
+
+        final broadcastKey = '${broadcast['id'] ?? ''}_$message';
+        if (_dismissedBroadcastKey == broadcastKey) {
+          return const SizedBox.shrink();
+        }
 
         final type = broadcast['type']?.toString().toLowerCase() ?? 'info';
         List<Color> gradientColors;
@@ -1764,13 +1790,10 @@ class _HomePulseTabState extends State<HomePulseTab> with DataBusRefresh<HomePul
         }
 
         return Dismissible(
-          key: ValueKey('live_broadcast_${broadcast['message'] ?? 'banner'}'),
+          key: ValueKey('live_broadcast_$broadcastKey'),
           direction: DismissDirection.horizontal,
           onDismissed: (_) {
-            HapticFeedback.lightImpact();
-            setState(() {
-              _isBroadcastDismissed = true;
-            });
+            _dismissBroadcast(broadcastKey);
           },
           child: Container(
             margin: const EdgeInsets.only(bottom: 14),
@@ -1840,11 +1863,7 @@ class _HomePulseTabState extends State<HomePulseTab> with DataBusRefresh<HomePul
                     ),
                     const SizedBox(width: 8),
                     InkWell(
-                      onTap: () {
-                        setState(() {
-                          _isBroadcastDismissed = true;
-                        });
-                      },
+                      onTap: () => _dismissBroadcast(broadcastKey),
                       borderRadius: BorderRadius.circular(20),
                       child: Container(
                         padding: const EdgeInsets.all(4),

@@ -11,6 +11,26 @@ import '../../services/cloud_barcode_resolver_service.dart';
 import '../pos/barcode_scanner_view.dart';
 import '../common/in_app_notification.dart';
 
+class _VariantInputData {
+  final TextEditingController priceCtrl;
+  final TextEditingController mrpCtrl;
+  final TextEditingController stockCtrl;
+
+  _VariantInputData({
+    required String defaultPrice,
+    required String defaultMrp,
+    required String defaultStock,
+  })  : priceCtrl = TextEditingController(text: defaultPrice),
+        mrpCtrl = TextEditingController(text: defaultMrp),
+        stockCtrl = TextEditingController(text: defaultStock);
+
+  void dispose() {
+    priceCtrl.dispose();
+    mrpCtrl.dispose();
+    stockCtrl.dispose();
+  }
+}
+
 class AddProductModal extends StatefulWidget {
   final ProductModel? existingProduct;
   final String? parentIdForNewVariant;
@@ -71,6 +91,7 @@ class _AddProductModalState extends State<AddProductModal> {
   late final TextEditingController _fitNotesCtrl;
   late final TextEditingController _imeiCtrl;
   late final TextEditingController _warrantyCtrl;
+  final FocusNode _nameFocusNode = FocusNode();
 
   late String _selectedCategoryId;
   late String _selectedUnit;
@@ -83,6 +104,7 @@ class _AddProductModalState extends State<AddProductModal> {
   bool _isResolvingBarcode = false;
   bool _enableVariants = false;
   final Set<String> _selectedVariants = {};
+  final Map<String, _VariantInputData> _variantConfigs = {};
   late final TextEditingController _customVariantCtrl;
 
   late final List<Map<String, String>> _units;
@@ -216,7 +238,31 @@ class _AddProductModalState extends State<AddProductModal> {
     _imeiCtrl.dispose();
     _warrantyCtrl.dispose();
     _customVariantCtrl.dispose();
+    _nameFocusNode.dispose();
+    for (final cfg in _variantConfigs.values) {
+      cfg.dispose();
+    }
     super.dispose();
+  }
+
+  void _addVariant(String label) {
+    final clean = label.trim();
+    if (clean.isEmpty) return;
+    if (!_selectedVariants.contains(clean)) {
+      _selectedVariants.add(clean);
+      final defaultStock = _isUnlimitedStock ? '999999' : (_stockCtrl.text.isNotEmpty ? _stockCtrl.text : '10');
+      _variantConfigs[clean] = _VariantInputData(
+        defaultPrice: _sellPriceCtrl.text,
+        defaultMrp: _mrpCtrl.text,
+        defaultStock: defaultStock,
+      );
+    }
+  }
+
+  void _removeVariant(String label) {
+    _selectedVariants.remove(label);
+    _variantConfigs[label]?.dispose();
+    _variantConfigs.remove(label);
   }
 
   double get _profitMargin {
@@ -255,7 +301,45 @@ class _AddProductModalState extends State<AddProductModal> {
       setState(() {
         _expiryDateCtrl.text = '$dayStr/$monthStr/${picked.year}';
       });
+      final now = DateTime.now();
+      if (picked.isBefore(DateTime(now.year, now.month, now.day))) {
+        HapticFeedback.heavyImpact();
+        if (mounted) {
+          InAppNotification.show(
+            context: context,
+            message: '⚠️ Warning: Selected expiry date is in the past (Expired)!',
+            type: NotificationType.warning,
+          );
+        }
+      }
     }
+  }
+
+  bool get _isCurrentExpiryExpired {
+    final raw = _expiryDateCtrl.text.trim();
+    if (raw.isEmpty) return false;
+    DateTime? exp = DateTime.tryParse(raw);
+    if (exp == null && raw.contains('/')) {
+      final parts = raw.split('/');
+      if (parts.length == 2) {
+        final m = int.tryParse(parts[0]);
+        var y = int.tryParse(parts[1]);
+        if (m != null && y != null) {
+          if (y < 100) y += 2000;
+          exp = DateTime(y, m, 28);
+        }
+      } else if (parts.length == 3) {
+        final d = int.tryParse(parts[0]);
+        final m = int.tryParse(parts[1]);
+        final y = int.tryParse(parts[2]);
+        if (d != null && m != null && y != null) {
+          exp = DateTime(y, m, d);
+        }
+      }
+    }
+    if (exp == null) return false;
+    final now = DateTime.now();
+    return exp.isBefore(DateTime(now.year, now.month, now.day));
   }
 
   Future<void> _openBarcodeScanner() async {
@@ -333,9 +417,10 @@ class _AddProductModalState extends State<AddProductModal> {
 
       if (mounted) {
         InAppNotification.info(
-          'Barcode "$barcode" naya hai. Ek baar Naam & Unit set kar dein — aage se yeh hamesha auto-fill hoga!',
+          'New barcode: $barcode. Please enter name and unit.',
           context: context,
         );
+        _nameFocusNode.requestFocus();
       }
     } finally {
       if (mounted) setState(() => _isResolvingBarcode = false);
@@ -556,9 +641,30 @@ class _AddProductModalState extends State<AddProductModal> {
       );
 
       if (shouldCreateVariants) {
+        final customVariants = _selectedVariants.map((label) {
+          final cfg = _variantConfigs[label];
+          final pSellPaise = cfg != null && cfg.priceCtrl.text.trim().isNotEmpty
+              ? ((double.tryParse(cfg.priceCtrl.text.trim()) ?? 0.0) * 100).round()
+              : sellPaise;
+          final pMrpPaise = cfg != null && cfg.mrpCtrl.text.trim().isNotEmpty
+              ? ((double.tryParse(cfg.mrpCtrl.text.trim()) ?? 0.0) * 100).round()
+              : (mrpPaise > 0 ? mrpPaise : pSellPaise);
+          final pStock = cfg != null && cfg.stockCtrl.text.trim().isNotEmpty
+              ? (double.tryParse(cfg.stockCtrl.text.trim()) ?? stockQty)
+              : stockQty;
+
+          return VariantCustomData(
+            label: label,
+            sellingPricePaise: pSellPaise,
+            mrpPaise: pMrpPaise,
+            purchasePricePaise: costPaise,
+            stockQuantity: pStock,
+          );
+        }).toList();
+
         final variants = await LocalDatabase.instance.createProductWithVariants(
           parentProduct: p,
-          variantLabels: _selectedVariants.toList(),
+          customVariants: customVariants,
         );
         for (final v in variants) {
           FirestoreSyncService.instance.pushProductToCloud(v).catchError((_) {});
@@ -568,10 +674,14 @@ class _AddProductModalState extends State<AddProductModal> {
         await LocalDatabase.instance.upsertProduct(p);
         if (p.barcode != null && p.barcode!.isNotEmpty) {
           try {
+            final catName = _localCategories.firstWhere(
+              (c) => c.id == p.categoryId,
+              orElse: () => CategoryModel(id: '', businessId: '', name: 'General'),
+            ).name;
             await LocalDatabase.instance.insertMasterProduct(MasterProductModel(
               barcode: p.barcode!,
               name: p.name,
-              category: 'General',
+              category: catName,
               unit: p.unit,
               mrpPaise: p.mrpPaise,
               sellingPricePaise: p.sellingPricePaise,
@@ -738,6 +848,7 @@ class _AddProductModalState extends State<AddProductModal> {
                       const SizedBox(height: 5),
                       TextFormField(
                         controller: _nameCtrl,
+                        focusNode: _nameFocusNode,
                         style: GoogleFonts.inter(fontSize: 13.5, fontWeight: FontWeight.w600),
                         decoration: _buildInputDecoration(
                           BusinessVerticals.resolve(BusinessVerticals.activeBusinessTypeNotifier.value).placeholders.newProductName,
@@ -1068,6 +1179,28 @@ class _AddProductModalState extends State<AddProductModal> {
                                       ),
                                     ),
                                   ),
+                                  if (_isCurrentExpiryExpired) ...[
+                                    const SizedBox(height: 4),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                      decoration: BoxDecoration(
+                                        color: const Color(0xFFFEF2F2),
+                                        borderRadius: BorderRadius.circular(6),
+                                        border: Border.all(color: const Color(0xFFFCA5A5)),
+                                      ),
+                                      child: Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          const Icon(Icons.warning_amber_rounded, size: 12, color: Color(0xFFDC2626)),
+                                          const SizedBox(width: 4),
+                                          Text(
+                                            'EXPIRED PRODUCT',
+                                            style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.w800, color: const Color(0xFFDC2626)),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ],
                                 ],
                               ),
                             ),
@@ -1629,32 +1762,32 @@ class _AddProductModalState extends State<AddProductModal> {
 
     switch (vert.id) {
       case 'grocery':
-        matrixTitle = 'Variants Matrix (वजन / पैक मैट्रिक्स)';
+        matrixTitle = 'Variants Matrix (Weight / Pack)';
         matrixSubtitle = 'Create weight or pack variants (e.g. 500g, 1kg, 5kg)';
         hintText = 'Custom variant (e.g. 250g, 2kg, Combo)...';
         presets = ['100g', '250g', '500g', '1kg', '2kg', '5kg', '10kg', '500ml', '1 Litre', 'Pack of 2', 'Pack of 4', 'Combo'];
         break;
       case 'pharmacy':
-        matrixTitle = 'Variants Matrix (डोज़ / पैक मैट्रिक्स)';
+        matrixTitle = 'Variants Matrix (Dosage / Pack)';
         matrixSubtitle = 'Create dosage or pack variants (e.g. 500mg, Strip of 10)';
         hintText = 'Custom variant (e.g. Strip 15, 650mg, 100ml)...';
         presets = ['Strip (10 Tab)', 'Strip (15 Tab)', 'Bottle (60ml)', 'Bottle (100ml)', '100mg', '250mg', '500mg', '650mg', 'Sachet', 'Box of 10'];
         break;
       case 'hardware':
-        matrixTitle = 'Variants Matrix (साइज / माप मैट्रिक्स)';
+        matrixTitle = 'Variants Matrix (Size / Dimension)';
         matrixSubtitle = 'Create dimension or volume variants (e.g. 1/2 Inch, 1 Litre)';
         hintText = 'Custom variant (e.g. 1.5 Inch, 10 Litre)...';
         presets = ['1/2 Inch', '3/4 Inch', '1 Inch', '1.5 Inch', '2 Inch', '50mm', '100mm', '500ml', '1 Ltr', '4 Ltr', '10 Ltr', '20 Ltr'];
         break;
       case 'restaurant':
-        matrixTitle = 'Variants Matrix (पोर्शन / सर्विंग मैट्रिक्स)';
+        matrixTitle = 'Variants Matrix (Portion / Serving)';
         matrixSubtitle = 'Create portion or serving variants (e.g. Half, Full, Large)';
         hintText = 'Custom variant (e.g. Medium, Spicy, Jain)...';
         presets = ['Regular', 'Medium', 'Large', 'Half', 'Full', 'Single', 'Double', 'Jain', 'Spicy', 'Combo'];
         break;
       case 'clothing':
       default:
-        matrixTitle = 'Variants Matrix (साइज / कलर मैट्रिक्स)';
+        matrixTitle = 'Variants Matrix (Size / Color)';
         matrixSubtitle = 'Create multiple sizes or colors under this item';
         hintText = 'Custom variant (e.g. 36, Red-XL)...';
         presets = [
@@ -1764,7 +1897,7 @@ class _AddProductModalState extends State<AddProductModal> {
                           final text = _customVariantCtrl.text.trim();
                           if (text.isNotEmpty) {
                             setState(() {
-                              _selectedVariants.add(text);
+                              _addVariant(text);
                               _customVariantCtrl.clear();
                             });
                           }
@@ -1795,7 +1928,7 @@ class _AddProductModalState extends State<AddProductModal> {
                           backgroundColor: const Color(0xFFF3E8FF),
                           deleteIconColor: const Color(0xFF7E22CE),
                           onDeleted: () {
-                            setState(() => _selectedVariants.remove(label));
+                            setState(() => _removeVariant(label));
                           },
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(8),
@@ -1806,6 +1939,132 @@ class _AddProductModalState extends State<AddProductModal> {
                         );
                       }).toList(),
                     ),
+                    const SizedBox(height: 12),
+                    Text(
+                      'Variant Pricing & Stock:',
+                      style: GoogleFonts.outfit(fontSize: 12, fontWeight: FontWeight.w800, color: const Color(0xFF7E22CE)),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      'Set individual selling price and stock for each variant:',
+                      style: GoogleFonts.inter(fontSize: 10.5, color: const Color(0xFF64748B)),
+                    ),
+                    const SizedBox(height: 8),
+                    ..._selectedVariants.map((label) {
+                      final cfg = _variantConfigs.putIfAbsent(
+                        label,
+                        () => _VariantInputData(
+                          defaultPrice: _sellPriceCtrl.text,
+                          defaultMrp: _mrpCtrl.text,
+                          defaultStock: _isUnlimitedStock ? '999999' : (_stockCtrl.text.isNotEmpty ? _stockCtrl.text : '10'),
+                        ),
+                      );
+                      return Container(
+                        margin: const EdgeInsets.only(bottom: 8),
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: const Color(0xFFE9D5FF), width: 1.1),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFFF3E8FF),
+                                    borderRadius: BorderRadius.circular(6),
+                                  ),
+                                  child: Text(
+                                    label,
+                                    style: GoogleFonts.outfit(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w800,
+                                      color: const Color(0xFF7E22CE),
+                                    ),
+                                  ),
+                                ),
+                                const Spacer(),
+                                InkWell(
+                                  onTap: () {
+                                    HapticFeedback.lightImpact();
+                                    setState(() => _removeVariant(label));
+                                  },
+                                  child: const Icon(Icons.close_rounded, size: 16, color: Color(0xFF94A3B8)),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 8),
+                            Row(
+                              children: [
+                                Expanded(
+                                  flex: 3,
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text('Selling Price (₹)', style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.w700, color: const Color(0xFF334155))),
+                                      const SizedBox(height: 3),
+                                      SizedBox(
+                                        height: 36,
+                                        child: TextFormField(
+                                          controller: cfg.priceCtrl,
+                                          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                                          style: GoogleFonts.robotoMono(fontSize: 12.5, fontWeight: FontWeight.w700),
+                                          decoration: _buildInputDecoration('₹0.00').copyWith(contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6)),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  flex: 2,
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text('MRP (₹)', style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.w700, color: const Color(0xFF334155))),
+                                      const SizedBox(height: 3),
+                                      SizedBox(
+                                        height: 36,
+                                        child: TextFormField(
+                                          controller: cfg.mrpCtrl,
+                                          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                                          style: GoogleFonts.robotoMono(fontSize: 12.5, fontWeight: FontWeight.w700),
+                                          decoration: _buildInputDecoration('MRP').copyWith(contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6)),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  flex: 2,
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text('Stock Qty', style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.w700, color: const Color(0xFF334155))),
+                                      const SizedBox(height: 3),
+                                      SizedBox(
+                                        height: 36,
+                                        child: TextFormField(
+                                          controller: cfg.stockCtrl,
+                                          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                                          style: GoogleFonts.robotoMono(fontSize: 12.5, fontWeight: FontWeight.w700),
+                                          decoration: _buildInputDecoration('Qty').copyWith(contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6)),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      );
+                    }),
                   ],
                 ],
               ),
@@ -1823,9 +2082,9 @@ class _AddProductModalState extends State<AddProductModal> {
         HapticFeedback.selectionClick();
         setState(() {
           if (isSelected) {
-            _selectedVariants.remove(label);
+            _removeVariant(label);
           } else {
-            _selectedVariants.add(label);
+            _addVariant(label);
           }
         });
       },

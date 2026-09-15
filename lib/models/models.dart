@@ -325,6 +325,17 @@ class ProductModel {
   /// Returns true if item has uncounted / infinite stock (stock quantity >= 99990).
   /// This prevents counter billing from being blocked by zero stock.
   bool get isUnlimitedStock => stockQuantity >= 99990.0;
+
+  /// Strict inventory asset cost valuation in integer paise:
+  /// (stockQuantity * purchasePricePaise).
+  /// Excludes master parent items with variants (child variants hold the actual stock),
+  /// unlimited stock (>= 99990), and negative stock.
+  int get assetCostValuationPaise {
+    if (hasVariants) return 0;
+    if (isUnlimitedStock || stockQuantity <= 0) return 0;
+    if (purchasePricePaise <= 0) return 0;
+    return (stockQuantity * purchasePricePaise).round();
+  }
 }
 
 /// Offline Master SKU catalog item pre-indexed for ultra-fast barcode scan
@@ -838,6 +849,7 @@ class StoreProfileModel {
   final String proPlan; // 'free' | 'monthly' | 'annual'
   final String proExpiry; // ISO date string
   final String razorpayPaymentId;
+  final String trialStartedAt;
 
   StoreProfileModel({
     this.storeName = '',
@@ -858,6 +870,7 @@ class StoreProfileModel {
     this.proPlan = 'free',
     this.proExpiry = '',
     this.razorpayPaymentId = '',
+    this.trialStartedAt = '',
   });
 
   factory StoreProfileModel.empty() => StoreProfileModel();
@@ -875,6 +888,12 @@ class StoreProfileModel {
     final exp = DateTime.tryParse(proExpiry.trim());
     if (exp == null) return true;
     return DateTime.now().isBefore(exp);
+  }
+
+  /// Evaluates whether a 7-day Pro trial is currently active and valid
+  bool get isTrialActive {
+    if (!isProEffective) return false;
+    return proPlan == 'trial' || proPlan == 'referral_trial' || razorpayPaymentId == 'free_trial_7d';
   }
 
   Map<String, dynamic> toMap() => {
@@ -896,6 +915,7 @@ class StoreProfileModel {
     'pro_plan': proPlan,
     'pro_expiry': proExpiry,
     'razorpay_payment_id': razorpayPaymentId,
+    'trial_started_at': trialStartedAt,
   };
 
   factory StoreProfileModel.fromMap(Map<String, dynamic> map) {
@@ -923,6 +943,7 @@ class StoreProfileModel {
       proPlan: (map['pro_plan'] as String?)?.isNotEmpty == true ? map['pro_plan'] : 'free',
       proExpiry: expiryStr,
       razorpayPaymentId: map['razorpay_payment_id'] ?? '',
+      trialStartedAt: map['trial_started_at']?.toString() ?? '',
     );
   }
 }

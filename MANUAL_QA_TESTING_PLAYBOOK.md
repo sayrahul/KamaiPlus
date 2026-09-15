@@ -22,11 +22,11 @@
 
 | ID | Screen / Modal | Step / Action | Expected Result | Status | Observation / Bug Notes |
 |:---|:---|:---|:---|:---:|:---|
-| **TC-001** | App Launch | App install karke pehli baar open karein | Splash screen ke baad clean **Welcome / Login** screen appear ho | `[ ] PASS` | |
-| **TC-002** | Permissions | Android 13+ Notification permission prompt check | System notification permission dialog aaye; Allow karne par notification register ho | `[ ] PASS` | |
-| **TC-003** | Auth Screen | Phone number enter karein (WhatsApp OTP / SMS OTP) | 6-digit OTP receive ho; auto-fill ya manual enter karne par authenticate ho | `[ ] PASS` | |
-| **TC-004** | Auth Screen | Google Sign-in button tap karein | Google account chooser khule aur bina crash sign in ho | `[ ] PASS` | |
-| **TC-005** | Store Setup | Shop Profile Setup screen par: Store Name, Owner Name, Phone, UPI ID enter karein | UPI ID format validate ho (e.g. `merchant@upi`); Invalid UPI par red warning dikhe | `[ ] PASS` | |
+| **TC-001** | App Launch | App install karke pehli baar open karein | Splash screen ke baad clean **Welcome / Login** screen appear ho | `[PASS] PASS` | |
+| **TC-002** | Permissions | Android 13+ Notification permission prompt check | System notification permission dialog aaye; Allow karne par notification register ho | `[PASS] PASS` | |
+| **TC-003** | Auth Screen | Phone number enter karein (WhatsApp OTP / SMS OTP) | 6-digit OTP receive ho; auto-fill ya manual enter karne par authenticate ho | `[PASS] PASS` | |
+| **TC-004** | Auth Screen | Google Sign-in button tap karein | Google account chooser khule aur bina crash sign in ho | `[PASS] PASS` | |
+| **TC-005** | Store Setup | Shop Profile Setup screen par: Store Name, Owner Name, Phone, UPI ID enter karein | UPI ID format validate ho (e.g. `merchant@upi`); Invalid UPI par red warning dikhe | `[] PASS` | |
 | **TC-006** | Vertical Picker | Business Vertical choose karein (Kirana, Garments, Pharmacy, Hardware, Cafe) | Selected vertical highlight ho aur default catalog seeds usi vertical ke load hon | `[ ] PASS` | |
 | **TC-007** | Root Nav Init | Setup complete karke "Start Billing" tap karein | User directly **Home Tab (0)** par land ho; Bottom navigation bar me 5 items visible hon | `[ ] PASS` | |
 

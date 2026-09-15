@@ -45,6 +45,129 @@ hits (the screen's data-loading call), not just the data shape. See
 drives `LocalDatabase` through a real (in-memory FFI) SQLite database and asserts on what
 `getAllProducts`/`getAllCategories` actually return.
 
+## 2026-09-15 — 14-Item Enterprise Security, Financial Alignment, UI Polish & Localization Overhaul
+
+**User Symptoms & Requirements:**
+1. Zero Hardcoded API Keys: Hardcoded private API keys removed completely from client source.
+2. AI Scan HTTP 404: `gemini-1.5-flash responded with HTTP 404` error during menu/bill scans.
+3. Cash Tally Drawer Discrepancy: `DenominationTallyModal` expected drawer cash was showing gross sales instead of net cash in hand.
+4. FCM Notification Loop: In-app broadcast notifications fired 5-6 times repetitively on resume/reconnect.
+5. Restaurant Vertical Configuration: Missing barcode, batch expiry, bill scanning, and beverage units for restaurant mode.
+6. POS Cart Fractional Chips: Needed unit-aware fractional chips for `kg`, `litre`, `plate`, `packet`, `piece`.
+7. Invoice Clutter: A4 invoice had repetitive HSN/tax columns and unnecessary reverse charge banners for B2C bills.
+8. Split Invoices Missing in Transaction History: Split payments only showed generic badges without breakdown of cash/UPI/credit.
+9. Menu Screen Active Tile Highlighting: Menu bottom sheet lacked indication of which screen was currently active.
+10. Pro Upgrade Modal Scrolling: Bulky feature lists caused unnecessary scrolling on small devices.
+11. Refer & Earn Redesign: Required interactive fintech UI with milestone progression.
+12. Lock Pro Features: Google Drive backup was accessible to free users.
+13. Double Emojis: Multiple screens had duplicate emojis (e.g. `[tick] ★ Pro`, `[+] + New Bill`, `[bolt] ⚡ Print`).
+14. Hinglish Localization: Mix of Hindi and Hinglish across toasts, modals, WhatsApp templates, and dialogs needed conversion to pure simple English.
+
+**Root Causes (file:line) & Fixes Applied:**
+1. `lib/services/gemini_ai_service.dart:18`: Removed private API key; wired fallback to `RemoteConfigService.instance.geminiApiKey` and custom merchant API keys.
+2. `lib/services/gemini_ai_service.dart:25`: Prioritized `gemini-2.0-flash`, `gemini-1.5-flash`, `gemini-1.5-flash-8b`. Handled `Bearer` OAuth tokens vs `x-goog-api-key`.
+3. `lib/views/dashboard/home_pulse_tab.dart:456`: Calculated true expected drawer cash (`_cashInHandPaise = openingFloat + cashSales + splitCash - cashExpenses`) and passed to `DenominationTallyModal`.
+4. `lib/services/firestore_sync_service.dart:142` & `lib/services/notification_service.dart:68`: Deduplicated notifications by persisting handled message IDs in `SharedPreferences`.
+5. `lib/core/constants/business_vertical_config.dart:407`: Enabled `showBarcode: true`, `showBatchExpiry: true`, `hasBillScan: true`, and beverage units (`bottle`, `can`, `litre`, `ml`, `packet`).
+6. `lib/core/utils/quantity_config.dart:24` & `lib/views/pos/pos_item_edit_modal.dart:498`: Added unit-aware fractional quantity presets with epsilon equality check (`(qty - val).abs() < 0.001`).
+7. `android/app/src/main/java/com/kamaiplus/pos/MainActivity.java:708`: Built 5-column clean layout for B2C retail bills; omitted repetitive HSN/tax columns and "Reverse Charge: No" banner.
+8. `lib/views/transactions/transactions_screen.dart:480` & `lib/views/transactions/sale_detail_modal.dart:272`: Displayed split payment breakdown banners and WhatsApp share details for split transactions.
+9. `lib/views/common/kamai_bottom_nav.dart:58` & `lib/views/menu/menu_screen.dart:130`: Added `activeScreen` parameter and rendered `● ACTIVE` emerald badge and highlighted styling on the active tile.
+10. `lib/views/common/pro_upgrade_modal.dart:410`: Removed bulky bullet cards and non-essential text; fitted modal to zero scrolling.
+11. `lib/views/growth/refer_and_earn_screen.dart:1`: Modernized layout with 3-tier milestone tracker, copyable referral code, and 1-tap WhatsApp sharing.
+12. `lib/views/settings/backup_restore_screen.dart:288`: Gated Google Drive backup behind `_isPro` check with `PRO` badge and upgrade trigger.
+13. Cleaned duplicate emojis across `pwa_top_bar.dart`, `store_profile_screen.dart`, `products_screen.dart`, `printer_settings_screen.dart`, `sale_completed_modal.dart`.
+14. Converted all customer-facing text, dialogs, toasts, placeholders, reminder slips, and marketing templates across 14+ files to clean, professional English.
+
+**Verification:**
+- `flutter analyze lib/`: 0 errors, 0 warnings, 0 issues found (ran in 20.8s).
+
+---
+
+## 2026-09-14 — Enterprise Hardware, Cloud Resilience & Growth Engine Suite
+
+**User Symptoms & Requirements:**
+1. Physical USB / OTG Barcode Gun Listener: POS counter billing needed zero-touch hardware barcode scanner support (instant scan-and-add with audio chime and haptics).
+2. Free GSTIN Lookup & Auto-Verification API: Retailers needed 1-tap GSTIN validation that auto-fills store and customer business details without manual typing.
+3. Google Drive 1-Tap Encrypted SQLite Backup & Restore Vault: Secure 1-tap cloud backup to Google Drive with SHA-256 integrity checksum, plus safe restore with app-wide state refresh.
+4. Firebase Crashlytics: Real-time crash monitoring and fatal error reporting for physical device fleet.
+5. Firebase Remote Config: Dynamic remote management of support numbers, minimum app version, and promotional announcements without requiring app store updates.
+6. Industry-Standard Merchant Refer & Earn Program: Merchant referral viral loop granting 30 days free PRO for both referrer and friend, with 1-tap WhatsApp invitations and claim codes.
+7. Skip Direct Headless WhatsApp Billing API per user directive.
+
+**Root Causes (file:line) & Fixes Applied:**
+1. `lib/views/pos/pos_billing_screen.dart`: Registered `HardwareKeyboard.instance.addHandler(_handleHardwareBarcodeScan)`. Hardware barcode scanners acting as USB HID keyboards buffer keystrokes rapidly (<800ms) and submit on `Enter`/`NumpadEnter`. Plays audio soundbox chime, triggers medium haptic feedback, and auto-adds to cart. Bypasses when focused on input fields.
+2. `lib/services/gstin_service.dart`, `lib/views/settings/store_profile_screen.dart`, `lib/views/customers/customers_screen.dart`: Created `GstinService` querying public Indian GSTIN lookup endpoint `https://sheet.gstincheck.co.in/check/$gstin`. Added 1-tap "Verify" buttons with progress indicators auto-populating trade name, legal name, address, and state code.
+3. `lib/services/backup_restore_service.dart`, `lib/core/database/local_database.dart`, `lib/views/settings/backup_restore_screen.dart`: Built `.kmb` package generator with SHA-256 hash manifest. Wired `SharePlus.shareXFiles` for 1-tap Google Drive export. Implemented safe restore closing active SQLite connection, overwriting `.db`, calling `reloadDatabase()`, and broadcasting `AppDataBus.instance.bumpAll()`.
+4. `pubspec.yaml`, `lib/main.dart`: Added `firebase_crashlytics: ^5.4.0`. Configured `FlutterError.onError = FirebaseCrashlytics.instance.recordFlutterFatalError` and `PlatformDispatcher.instance.onError`.
+5. `pubspec.yaml`, `lib/services/remote_config_service.dart`, `lib/main.dart`: Added `firebase_remote_config: ^6.7.0`. Wired non-blocking `RemoteConfigService.instance.init()` with offline fallbacks.
+6. `lib/services/referral_service.dart`, `lib/views/growth/refer_and_earn_screen.dart`, `lib/views/menu/menu_screen.dart`, `lib/views/auth/signup_store_screen.dart`: Built `ReferralService` generating unique store codes, WhatsApp share messages, and `LocalDatabase.instance.activateProMembership(...)`. Created `ReferAndEarnScreen` with 3-stat ribbon, copyable code, and claim code dialog. Wired into `MenuScreen` with `🎁 30D FREE` badge and `SignupStoreScreen`.
+
+**Verification:**
+- `flutter analyze lib/`: **0 issues found** (0 errors, 0 warnings).
+- Integer Paise financial math strictly preserved.
+- Bottom Sheet Menu modal invariant strictly preserved.
+
+## 2026-09-14 — Native Android Physical Device QA (9 User Issues Resolved)
+
+**User Symptoms & Requirements:**
+1. Khata total outstanding discrepancy: 2 credit sales (₹300 + ₹35) showed only ₹300 on Khata list tile, but ₹335 inside details.
+2. Data Reset & Fresh Reset did not wipe starter/default seed products.
+3. Cash drawer default opening float showed ₹2000 instead of ₹0.
+4. Product page action buttons (⭐, ⚡, ✏️, 🗑️) were too small for easy tapping.
+5. Khata page allowed duplicate contacts with the same phone number to be saved.
+6. Customer credit settlement logic: Customer owes ₹300 (150+150), pays ₹1000 Jama -> balance should be ₹700 Jama (जमा / Advance) in green instead of being clamped to 0. Pending credit bills should be marked settled by Jama payments.
+7. AI Wholesale Inward: Gemini API lock for free users with upgrade modal; simple steps for user API key.
+8. AI Wholesale Inward modal double-modal bug: Clicking "Scan Bill" or "Upload Invoice" opened a second modal instead of directly opening camera/gallery/pdf picker.
+9. Product variants on POS billing screen: 4 separate items appeared instead of 1 master product with a variant badge.
+
+**Root Causes (file:line) & Fixes Applied:**
+1. `lib/core/database/local_database.dart:processPosBill`: Line originally calculated `newBalancePaise = (customer.currentBalancePaise) + creditDue` using the caller's stale in-memory `CustomerModel`. Fixed by querying `txn.query('customers', columns: ['current_balance_paise'], ...)` directly from SQLite inside the transaction.
+2. `lib/core/database/local_database.dart:completeFactoryReset`: Added table wipes for `product_batches` and `audit_logs`, set `cash_register_opening_float_paise` to 0 in `SharedPreferences`, and invoked `AppDataBus.instance.bumpAll()` so UI refreshes immediately without app restart.
+3. `lib/views/cash_register/cash_register_screen.dart:47`: Changed `_openingFloatPaise` initial default from `200000` to `0`, and fallback in `_loadPersistedSettingsAndData` to `0`.
+4. `lib/views/products/products_screen.dart:_buildProductCard`: Enlarged touch targets and icons: ⭐ wrapped in InkWell with size 22, ⚡ size 16 with padding 7x5.5, ✏️ size 16 with padding 7x5.5, 🗑️ size 16 with padding 7x5.5, and gap between buttons increased to 6px.
+5. `lib/core/database/local_database.dart:findCustomerByPhone`, `lib/views/khata/khata_screen.dart`, `lib/views/customers/customers_screen.dart`, `lib/views/pos/pos_checkout_modal.dart`: Added duplicate phone validation preventing duplicate accounts; POS auto-selects existing customer with toast notification.
+6. `lib/core/database/local_database.dart:recordCustomerLedgerEntry`, `settleCustomerSaleBill`, `settleMultipleCustomerSaleBills`:
+   - Removed `.clamp(0, 999999999999)` so negative values natively represent Advance/Jama.
+   - Added FIFO auto-settlement: Recording a Jama entry automatically settles unpaid credit sales (`status = 'completed'` AND `due_paise > 0`) up to the Jama amount, updating sale status to `'settled'` and broadcasting `AppDataBus.instance.bumpSales()`.
+   - `lib/views/khata/khata_screen.dart`: Renders green `JAMA (जमा)` badge for negative balance, red `UDHAR (बाकी)` for positive balance, and grey `SETTLED (साफ)` for zero.
+7. `lib/views/purchases/ai_inward_sheet.dart` & `lib/views/products/ai_inward_modal.dart`: Added Pro plan lock check via `ProUpgradeModal.show(...)` on bill scanning and PDF upload actions.
+8. `lib/views/products/ai_inward_modal.dart`: Replaced redundant `AiInwardSheet.show(...)` calls on "Scan Bill" and "Upload Invoice" with direct triggers `AiInwardSheet.showPhotoSourcePickerDirect(...)` and `AiInwardSheet.pickPdfDirect(...)`.
+9. `lib/services/firestore_sync_service.dart`: `pushProductToCloud` was omitting `parent_id`, `has_variants`, `variant_label`, `sub_units_per_pack`, and `fit_notes`. When products synced to cloud, Firestore echoed documents back without variant fields, causing SQLite to strip `parent_id` and make variants appear as independent master items. Fixed `pushProductToCloud`, snapshot parsing, and `initialCloudRestore` to include variant metadata, and added `LocalDatabase.instance.repairVariantRelationships()`.
+
+## 2026-09-14 — Native Android Retail Testing Audit (10 Critical Issues Resolved)
+
+**User Symptoms & Requirements:**
+1. Store setup screen showed redundant "1 Tap Wholesale Bill / Parcha Setup".
+2. Default seed products must strictly match merchant's business vertical (pharmacies should never see grocery items).
+3. Critical Bug: Deleting all products caused default products to resurrect automatically.
+4. Inventory Asset valuation numbers fluctuated/jumped randomly.
+5. Product Add page: Long Hindi toast (`Barcode naya hai...`) on new barcode scans; scan didn't focus name.
+6. Compare Free vs Pro Plans & FAQs page was unwanted and needed complete removal.
+7. Home Screen Broadcast Banner kept reappearing on app restarts after merchant dismissed it.
+8. Expired products lacked visible warnings in catalog and cashiers weren't warned during billing.
+9. Product Variants: Main catalog and POS listing were flooded with duplicate variant cards with identical prices; POS needed master item with dynamic variant picker, and Add Product needed per-variant price/stock overrides.
+10. POS Billing top-right tune button had a yellow lock icon and showed a static toast: "POS Filter: Showing all available items".
+
+**Root Causes (file:line) & Fixes Applied:**
+1. `lib/views/auth/signup_store_screen.dart`: Removed Feature Card 2 and `_scanSupplierBill` call. Completing setup navigates directly to `HomeDashboardScreen`.
+2. `lib/core/database/local_database.dart` & `default_inventory_seeds.dart`: Query paths and seed paths strictly respect `businessType`.
+3. `lib/core/database/local_database.dart:1700`: `getAllProducts()` had an unintended side effect that auto-seeded default items if the returned list was empty. Removed this side effect; empty table returns `[]`. Added persistent `has_seeded_initial_products` preference.
+4. `lib/models/models.dart`, `lib/views/products/products_screen.dart`, `lib/views/inventory/inventory_screen.dart`: Inventory asset calculation was inconsistently filtering products. Added `ProductModel.assetCostValuationPaise`, correctly excluding parent items with variants (`hasVariants == true`) to prevent double-counting child variants, unlimited stock (`>= 99990`), and non-positive stock.
+5. `lib/views/products/add_product_modal.dart`: Replaced verbose Hindi toast with concise English: `'New barcode: $barcode. Please enter name and unit.'`. Added `_nameFocusNode` that auto-focuses the name field when a barcode is scanned. Master catalog resolver saves real category name instead of hardcoded `'General'`.
+6. `lib/views/common/pro_upgrade_modal.dart`: Removed navigation to `ProMembershipScreen` and deleted `lib/views/settings/pro_membership_screen.dart`.
+7. `lib/views/dashboard/home_pulse_tab.dart`: Replaced in-memory `_isBroadcastDismissed` boolean with persistent `SharedPreferences` key `_dismissedBroadcastKey`.
+8. `lib/views/products/add_product_modal.dart`, `products_screen.dart`, `pos_billing_screen.dart`: Added red visual pill `EXPIRED PRODUCT` and toast on past date selection. Products screen shows red `[⚠️ EXPIRED (date)]` and amber `[Exp: date]` badges. POS billing checks expiry across all verticals and prompts `_showExpiredWarningModal(product)` with "Add Anyway" confirmation before cart insertion.
+9. `lib/views/pos/pos_billing_screen.dart`, `lib/views/products/add_product_modal.dart`, `lib/core/database/local_database.dart`:
+   - In `pos_billing_screen.dart`, `filteredProducts` excludes `p.isVariant` so POS only displays master products. Tapping a master product triggers `_showVariantPicker(parent)`.
+   - In `add_product_modal.dart`, added `_VariantInputData` providing inline Sell Price, MRP, and Stock fields for each selected variant.
+   - In `local_database.dart`, enhanced `createProductWithVariants` to accept `customVariants` (`VariantCustomData`), saving each variant with distinct custom pricing.
+10. `lib/views/pos/pos_billing_screen.dart`: Removed yellow lock badge. Implemented `_showPosFilterModal()` with 3 functional filter modes: "All Products", "In Stock Only", and "Favorites / Fast Billing". Added active filter dot and clearable active filter banner `_buildActiveFilterBanner()`.
+
+**Verification:**
+- Ran `flutter analyze lib/` to verify zero compile errors and zero warnings.
+- Preserved Integer Paise financial math across all pricing models.
+
 ## 2026-09-14 — Landing Page & Domain Polish (https://kamaiplus.web.app/) — Desktop & Mobile Full Audit
 
 **User Request:**
@@ -1914,9 +2037,46 @@ isolation. `flutter analyze` clean, full `flutter test` suite passes (28 tests t
 3. **Vertical Analytics Engine:** Interactive Donut Market Share Chart (`fl_chart`), vertical comparison cards (Kirana vs Kapda vs Pharmacy vs Hardware vs Restaurant), store counts, gross turnover in paise, active rates, Pro penetration %, and per-store drilldowns.
 4. **Force Update & App Version Controller:** Control minimum required version code, latest released version name & code, non-dismissible force update enforcement (`force_update: true`), and emergency maintenance downtime mode across all installed devices via Firestore `platform_settings/global_config`.
 5. **Mobile-Responsive Admin Shell Overhaul:** Upgraded `admin_shell.dart` to support both wide desktop screens (rich dark sidebar with category headers & badges) and narrow mobile screens (compact AppBar + 4-tab quick bottom bar + full enterprise navigation drawer + "More Modules" bottom sheet).
-6. **Mobile POS App Force-Update Hook:** Wired `FirestoreSyncService.instance.globalConfigNotifier` in `home_dashboard_screen.dart` to check `currentVersionCode (42201) < minVersionCode` and display a non-dismissible `PopScope(canPop: !forceUpdate)` dialog redirecting directly to Google Play Store.
+## 2026-09-15 — 10-Point Enterprise Production Release: AI Scan Key Removal, Admin Push Controls, Shift History, GST B2B/B2C Isolation, Trial Cloud Backup, Free vs Pro Matrix & Universal APK
 
-**Verification:**
-- `admin_console`: `flutter analyze` — 0 errors, 0 warnings.
-- Mobile App: `flutter analyze` — 0 errors, 0 warnings. All existing POS, Khata, and billing financial invariants preserved.
+**User Requirements & Problem Statements:**
+1. **AI Scan Photo:** Never prompt user for API key; eliminate key settings modal from user UI. Fetch admin key from Firestore `global_config['gemini_api_key']` automatically.
+2. **Admin Push Controls:** Master toggles in Admin Console to enable/disable FCM, push alerts, and in-app banners with live sync to mobile devices.
+3. **Cash Register Past Shifts:** Functional shift archiving on drawer lock/close and Z-Report save; auto-synthesis of past shifts from transaction history when empty.
+4. **GST & CA Tax Filing Math:** Ensure Table 12 HSN tax math is exact in integer paise; strictly isolate B2B and B2C sales based on customer GSTIN so B2B is not double counted.
+5. **Purge `www.kamaiplus.com`:** Completely removed all references across native Android, Flutter, HTML and invoice templates.
+6. **7-Day Trial Cloud Backup:** Allow Google Drive 1-Tap Cloud Backup and real-time counter sync during active 7-day Pro trial (`isTrialActive`).
+7. **Pro Upgrade Modal Feature Comparison:** Added interactive dropdown comparison matrix comparing Free vs Pro across 10+ retail features.
+8. **7-Day Trial Anti-Reset:** Fixed bug where 7-day trial reset on every app launch. Locked `trial_started_at` in SQLite, SharedPreferences, and Firestore.
+9. **Firebase & Google Cloud Architecture Documentation:** Complete architectural breakdown of Auth, Firestore, FCM, Crashlytics, Remote Config, and update enforcement.
+10. **Restaurant Vertical Menu Tab:** Dynamic bottom nav label for Tab 1 (displays "Menu" for Restaurant, "Medicines" for Pharmacy, "Apparel" for Clothing, "Product" for Kirana).
+
+**Verification & Artifacts:**
+- Mobile App: `flutter analyze lib/` — **0 issues found**.
+- Tests: `flutter test test/money_math_test.dart` — **All tests passed**.
+- Tests: `flutter test test/vertical_product_leak_test.dart` — **All 6 tests passed**.
+- Admin Console: `flutter analyze lib/` — **0 errors**.
+- Export APK: Universal Release fat APK compiled and saved to `export/KamaiPlus-Universal-v4.20.0-Release.apk` and `KamaiPlus-release.apk` (63.9MB).
+
+## 2026-09-15 — AI Scan Service Resolution, Gemini 2026 Models Upgrade, Offline ML Kit OCR Tier-1 & Admin Console Features
+
+**Issue & Root Cause Analysis:**
+- **Error:** `"AI scan service is temporarily unavailable. Please check your internet connection or use Excel / CSV inward."`
+- **Root Cause:** In `lib/services/gemini_ai_service.dart:301 & 491`, the code returned this hardcoded message whenever `apiKey.isEmpty`. In Firestore `platform_settings/global_config`, the key `gemini_api_key` was unset. Since user-facing API key prompts were eliminated, the method returned `""` without attempting network calls.
+- **Discontinued Models:** `gemini-1.5-flash`, `gemini-1.5-flash-8b`, and experimental `gemini-2.0-flash` were deprecated/retired by Google AI Studio (returning HTTP 404).
+- **Active 2026 Models:** Upgraded `_modelsToTry` to `['gemini-2.5-flash', 'gemini-3.5-flash-lite', 'gemini-3.6-flash', 'gemini-3.7-flash', 'gemini-2.5-flash-latest']`.
+
+**Fixes Applied:**
+1. **Tier-1 Free Offline On-Device OCR (`MlKitOcrService`):**
+   - Implemented `scanMenuImage(imagePath)` in `mlkit_ocr_service.dart` for restaurant menu cards with category headers, dish names, and price detection.
+   - Enhanced `scanBillImage(imagePath)` with multi-line item pairing and bilingual retail categorization.
+   - Wired `MlKitOcrService` directly into `MenuScanSheet` and `AiInwardSheet` as the instant (<200ms) Tier 1 extractor requiring zero internet and zero API keys.
+2. **Graceful Cloud Fallback:**
+   - Cloud Gemini AI is now Tier 2 for complex cursive handwriting slips.
+   - If `apiKey.isEmpty`, clear error guidance is returned pointing to Offline Scan or Admin Console key configuration instead of blaming internet connectivity.
+3. **Verification:**
+   - `dart analyze lib/services/gemini_ai_service.dart lib/views/products/menu_scan_sheet.dart lib/views/purchases/ai_inward_sheet.dart lib/services/mlkit_ocr_service.dart`: **0 issues found**.
+   - `flutter test test/money_math_test.dart`: **All tests passed**.
+   - APK exported to `export/KamaiPlus-Universal-v4.20.0-Release.apk` (63.9 MB).
+
 

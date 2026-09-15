@@ -349,7 +349,7 @@ class _UpiStandeeModalState extends State<UpiStandeeModal> {
                                     ),
                                     const SizedBox(height: 4),
                                     Text(
-                                      'Store Profile me jakar apna UPI ID set karein taaki counter standee QR ban sake.',
+                                      'Please configure your UPI ID in Store Profile to generate your counter QR standee.',
                                       textAlign: TextAlign.center,
                                       style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF7F1D1D)),
                                     ),

@@ -40,10 +40,10 @@ class QuantityUnitConfig {
 QuantityUnitConfig quantityConfigForUnit(String unit, {int? subUnitsPerPack}) {
   final norm = unit.trim().toLowerCase();
 
-  if (norm == 'kg') {
+  if (norm == 'kg' || norm == 'kilo' || norm == 'kilogram') {
     return const QuantityUnitConfig(
       unitLabel: 'Weight (Kilograms - kg)',
-      decimalNotice: 'Decimals supported (Grams / Kg)',
+      decimalNotice: 'Fractions / Grams supported',
       chips: [
         QuantityChip('10g', 0.01),
         QuantityChip('25g', 0.025),
@@ -53,8 +53,27 @@ QuantityUnitConfig quantityConfigForUnit(String unit, {int? subUnitsPerPack}) {
         QuantityChip('500g', 0.5),
         QuantityChip('750g', 0.75),
         QuantityChip('1 kg', 1),
+        QuantityChip('1.5 kg', 1.5),
         QuantityChip('2 kg', 2),
         QuantityChip('5 kg', 5),
+      ],
+    );
+  }
+
+  if (norm == 'plate' || norm == 'portion' || norm == 'thali' || norm == 'serving' || norm == 'dish') {
+    return const QuantityUnitConfig(
+      unitLabel: 'Portion (Plate / Half / Third)',
+      decimalNotice: 'Fractions supported (Half, Quarter, 1/3)',
+      chips: [
+        QuantityChip('¼ Plate', 0.25),
+        QuantityChip('⅓ Plate', 0.33),
+        QuantityChip('½ Plate', 0.5),
+        QuantityChip('¾ Plate', 0.75),
+        QuantityChip('1 Plate', 1),
+        QuantityChip('1.5 Plate', 1.5),
+        QuantityChip('2 Plates', 2),
+        QuantityChip('3 Plates', 3),
+        QuantityChip('5 Plates', 5),
       ],
     );
   }
@@ -75,26 +94,63 @@ QuantityUnitConfig quantityConfigForUnit(String unit, {int? subUnitsPerPack}) {
     );
   }
 
-  if (norm == 'litre' || norm == 'l') {
+  if (norm == 'litre' || norm == 'liter' || norm == 'l') {
     return const QuantityUnitConfig(
       unitLabel: 'Volume (Litres - L)',
-      decimalNotice: 'Decimals supported (ml / Litres)',
+      decimalNotice: 'Fractions / Millilitres supported',
       chips: [
+        QuantityChip('50ml', 0.05),
         QuantityChip('100ml', 0.1),
-        QuantityChip('250ml', 0.25),
-        QuantityChip('500ml', 0.5),
+        QuantityChip('¼ L (250ml)', 0.25),
+        QuantityChip('½ L (500ml)', 0.5),
+        QuantityChip('¾ L (750ml)', 0.75),
         QuantityChip('1 L', 1),
+        QuantityChip('1.5 L', 1.5),
         QuantityChip('2 L', 2),
         QuantityChip('5 L', 5),
       ],
     );
   }
 
+  if (norm == 'packet' || norm == 'pkt' || norm == 'pack') {
+    return const QuantityUnitConfig(
+      unitLabel: 'Quantity (Packet)',
+      decimalNotice: 'Fractions supported (Quarter, Half, etc.)',
+      chips: [
+        QuantityChip('¼ Pkt', 0.25),
+        QuantityChip('⅓ Pkt', 0.33),
+        QuantityChip('½ Pkt', 0.5),
+        QuantityChip('¾ Pkt', 0.75),
+        QuantityChip('1 Pkt', 1),
+        QuantityChip('1.5 Pkt', 1.5),
+        QuantityChip('2 Pkts', 2),
+        QuantityChip('3 Pkts', 3),
+        QuantityChip('5 Pkts', 5),
+      ],
+    );
+  }
+
+  if (norm == 'piece' || norm == 'pcs' || norm == 'pc' || norm == 'box' || norm == 'bottle' || norm == 'can') {
+    final unitTitle = norm.isNotEmpty ? norm[0].toUpperCase() + norm.substring(1) : 'Piece';
+    return QuantityUnitConfig(
+      unitLabel: 'Quantity ($unitTitle)',
+      decimalNotice: 'Fractions supported (Quarter, Half, Whole)',
+      chips: const [
+        QuantityChip('¼', 0.25),
+        QuantityChip('⅓', 0.33),
+        QuantityChip('½', 0.5),
+        QuantityChip('¾', 0.75),
+        QuantityChip('1', 1),
+        QuantityChip('1.5', 1.5),
+        QuantityChip('2', 2),
+        QuantityChip('3', 3),
+        QuantityChip('5', 5),
+        QuantityChip('10', 10),
+      ],
+    );
+  }
+
   if (norm == 'sqft') {
-    // Hardware items sold by area (tiles, marble, plywood sheets, glass) —
-    // Phase 4 of the KamaiPlus Playbook. A tile job is rarely a whole
-    // number of sq.ft, so half/quarter increments matter here the same
-    // way grams matter for a kg-priced loose item.
     return const QuantityUnitConfig(
       unitLabel: 'Area (Square Feet - sq.ft)',
       decimalNotice: 'Decimals supported (e.g. 2.5 sq.ft)',
@@ -113,9 +169,6 @@ QuantityUnitConfig quantityConfigForUnit(String unit, {int? subUnitsPerPack}) {
   }
 
   if (norm == 'strip' || norm == 'tablets' || norm == 'tablet') {
-    // Pharmacy real-world ground reality: strips contain known tablets per pack (typically 10, 15, 20).
-    // When pack size is specified, offer 1 to pack-1 loose tablet chips so dispensing loose tablets
-    // auto-calculates the exact fractional price per tablet.
     if (subUnitsPerPack != null && subUnitsPerPack > 1) {
       final tabletCounts = <int>[
         for (int i = 1; i < subUnitsPerPack && i <= 15; i++) i,
@@ -137,7 +190,7 @@ QuantityUnitConfig quantityConfigForUnit(String unit, {int? subUnitsPerPack}) {
 
     return const QuantityUnitConfig(
       unitLabel: 'Quantity (Strips)',
-      decimalNotice: 'Strip counts (0.5 for loose/half) — set the strip\'s tablet count on the product for exact tablet billing',
+      decimalNotice: 'Strip counts (0.5 for loose/half)',
       chips: [
         QuantityChip('1 Strip', 1),
         QuantityChip('2 Strips', 2),
@@ -163,21 +216,21 @@ QuantityUnitConfig quantityConfigForUnit(String unit, {int? subUnitsPerPack}) {
     );
   }
 
-  // Default: Packet, Piece, Box, Bottle, etc. — whole counts only.
-  final displayUnitName = norm.isNotEmpty ? (norm[0].toUpperCase() + norm.substring(1)) : 'Packet';
+  // Default: generic whole + fractional counts
+  final displayUnitName = norm.isNotEmpty ? (norm[0].toUpperCase() + norm.substring(1)) : 'Units';
   return QuantityUnitConfig(
     unitLabel: 'Quantity ($displayUnitName)',
-    decimalNotice: 'Whole count / Units',
+    decimalNotice: 'Units & Fractions supported',
     chips: const [
+      QuantityChip('¼', 0.25),
+      QuantityChip('⅓', 0.33),
+      QuantityChip('½', 0.5),
+      QuantityChip('¾', 0.75),
       QuantityChip('1', 1),
       QuantityChip('2', 2),
       QuantityChip('3', 3),
-      QuantityChip('4', 4),
       QuantityChip('5', 5),
-      QuantityChip('6', 6),
       QuantityChip('10', 10),
-      QuantityChip('12', 12),
-      QuantityChip('24', 24),
     ],
   );
 }
