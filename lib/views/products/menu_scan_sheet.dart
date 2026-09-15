@@ -112,7 +112,11 @@ class MenuScanSheet extends StatelessWidget {
       final bytes = await file.readAsBytes();
       if (!context.mounted) return;
 
-      _runExtraction(context, bytes, mimeType: 'image/jpeg');
+      // mlItems is handed along (it is empty here by definition, but the
+      // parameter keeps this path identical in shape to the bill scan) so a
+      // cloud-tier failure can still land the merchant in manual entry rather
+      // than on an error toast with nothing to do next.
+      _runExtraction(context, bytes, mimeType: 'image/jpeg', offlineFallback: mlItems);
     } catch (e) {
       if (context.mounted) {
         InAppNotification.error('Could not open image: $e', context: context);
@@ -120,18 +124,29 @@ class MenuScanSheet extends StatelessWidget {
     }
   }
 
-  void _runExtraction(BuildContext context, Uint8List bytes, {required String mimeType}) {
+  void _runExtraction(
+    BuildContext context,
+    Uint8List bytes, {
+    required String mimeType,
+    List<ExtractedMenuItem> offlineFallback = const [],
+  }) {
     final vert = BusinessVerticals.resolve(BusinessVerticals.activeBusinessTypeNotifier.value);
+
+    // Created ONCE here, not inline in the FutureBuilder's builder below.
+    // showDialog's builder re-runs on any rebuild, and a future constructed
+    // inside it becomes a brand new Gemini call each time — spending another of
+    // the ten free monthly picture scans for a scan started only once.
+    final extraction = GeminiAiService.extractMenuItemsFromImage(
+      bytes,
+      mimeType: mimeType,
+      knownCategories: vert.quickCategories,
+    );
 
     showDialog(
       context: context,
       barrierDismissible: false,
       builder: (dialogCtx) => FutureBuilder<MenuScanResult>(
-        future: GeminiAiService.extractMenuItemsFromImage(
-          bytes,
-          mimeType: mimeType,
-          knownCategories: vert.quickCategories,
-        ),
+        future: extraction,
         builder: (ctx, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return AlertDialog(
@@ -211,11 +226,23 @@ class MenuScanSheet extends StatelessWidget {
             if (!context.mounted) return;
 
             if (result == null || !result.success) {
+              // Cloud AI is the fallback tier, so its failure must not end the
+              // flow. Say plainly what happened, then open the same review
+              // sheet with whatever the offline pass read — or empty, where
+              // "Add Dish Manually" takes over. Previously this returned after
+              // a toast and the merchant was left with nothing.
               InAppNotification.show(
                 context: context,
-                message: result?.errorMessage ?? 'Could not read the menu photo. Please ensure text is sharp and clearly visible.',
+                message: result?.errorMessage ??
+                    'Could not auto-read this menu clearly. Please review or enter the dishes manually.',
                 type: NotificationType.error,
                 duration: const Duration(seconds: 5),
+              );
+              Navigator.pop(context); // close this sheet
+              MenuItemReviewSheet.show(
+                context,
+                initialItems: offlineFallback,
+                onMenuAddComplete: onMenuAddSuccess,
               );
               return;
             }

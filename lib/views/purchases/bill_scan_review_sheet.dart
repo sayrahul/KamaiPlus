@@ -1,13 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:uuid/uuid.dart';
 import '../../core/database/local_database.dart';
 import '../../core/utils/money_formatter.dart';
 import '../../models/models.dart';
-import '../../services/firestore_sync_service.dart';
 import '../common/in_app_notification.dart';
 import '../../services/gemini_ai_service.dart';
+import '../../services/inventory_inward_service.dart';
 
 class BillScanReviewSheet extends StatefulWidget {
   final List<ExtractedBillItem> initialItems;
@@ -252,117 +251,43 @@ class _BillScanReviewSheetState extends State<BillScanReviewSheet> {
     });
 
     try {
-      final bizId = FirestoreSyncService.instance.activeBusinessId;
       final supplierName = _supplierCtrl.text.trim();
       final billNo = _billNoCtrl.text.trim();
 
-      int updatedCount = 0;
-      int createdCount = 0;
-
-      for (final it in _items) {
-        final name = it.nameCtrl.text.trim();
-        if (name.isEmpty) continue;
-
-        final qty = double.tryParse(it.qtyCtrl.text.trim()) ?? 1.0;
-        final costPaise = MoneyFormatter.parseRupeesToPaise(it.costCtrl.text.trim());
-        final sellingPaise = MoneyFormatter.parseRupeesToPaise(it.sellingCtrl.text.trim());
-        final mrpPaise = MoneyFormatter.parseRupeesToPaise(it.mrpCtrl.text.trim());
-
-        final matched = it.matchedProduct ?? _findMatch(name);
-
-        if (matched != null) {
-          // Increment stock of existing SKU
-          final oldStock = matched.stockQuantity;
-          final newStock = oldStock + qty;
-
-          final updatedProd = matched.copyWith(
-            stockQuantity: newStock,
-            purchasePricePaise: costPaise > 0 ? costPaise : matched.purchasePricePaise,
-            sellingPricePaise: sellingPaise > 0 ? sellingPaise : matched.sellingPricePaise,
-            mrpPaise: mrpPaise > 0 ? mrpPaise : matched.mrpPaise,
-          );
-
-          await LocalDatabase.instance.upsertProduct(updatedProd);
-
-          // Audit movement
-          await LocalDatabase.instance.recordInventoryMovement(
-            InventoryMovementModel(
-              id: const Uuid().v4(),
-              businessId: bizId,
-              productId: matched.id,
-              productName: matched.name,
-              movementType: 'PURCHASE',
-              quantity: qty,
-              previousStock: oldStock,
-              newStock: newStock,
-              referenceId: billNo.isNotEmpty ? billNo : 'AI-INWARD',
-              createdAt: DateTime.now(),
+      // Hand every line to the ONE shared inward path. This screen used to do
+      // the writing itself, and two of those writes were wrong:
+      //
+      //  * new products were built with a raw ProductModel(...) that never
+      //    passed businessType, so the constructor default 'grocery' won and a
+      //    restaurant/pharmacy/clothing store could not see the stock it had
+      //    just scanned in — Products, Inventory and POS all filter through
+      //    getAllProducts(businessType:). The same mistake was found and fixed
+      //    in quick_stock_update_modal.dart months earlier; it was never
+      //    carried across to here.
+      //  * existing products were updated as `matched.stockQuantity + qty`
+      //    against a catalog snapshot taken when this sheet opened, then
+      //    written back as a whole row, so any sale rung up while the sheet was
+      //    open got reverted.
+      final result = await InventoryInwardService.applyInward(
+        supplierName: supplierName,
+        referenceId: billNo.isNotEmpty ? billNo : 'AI-INWARD',
+        lines: [
+          for (final it in _items)
+            InwardLine(
+              name: it.nameCtrl.text.trim(),
+              quantity: double.tryParse(it.qtyCtrl.text.trim()) ?? 1.0,
+              unit: it.unit,
+              purchasePricePaise:
+                  MoneyFormatter.parseRupeesToPaise(it.costCtrl.text.trim()),
+              sellingPricePaise:
+                  MoneyFormatter.parseRupeesToPaise(it.sellingCtrl.text.trim()),
+              mrpPaise: MoneyFormatter.parseRupeesToPaise(it.mrpCtrl.text.trim()),
+              categoryName: it.category,
+              matchedProduct: it.matchedProduct ?? _findMatch(it.nameCtrl.text.trim()),
+              matchedMasterProduct: it.matchedMasterProduct,
             ),
-          );
-
-          FirestoreSyncService.instance.pushProductToCloud(updatedProd);
-          updatedCount++;
-        } else {
-          // Insert brand new SKU (Check Master Catalog first for EAN/tax/category)
-          final masterMatched = it.matchedMasterProduct ?? await _findMasterMatch(name);
-          final newId = const Uuid().v4();
-          final newProd = ProductModel(
-            id: newId,
-            businessId: bizId,
-            name: name,
-            barcode: masterMatched?.barcode,
-            categoryId: masterMatched != null && masterMatched.category.isNotEmpty
-                ? masterMatched.category
-                : it.category,
-            purchasePricePaise: costPaise,
-            sellingPricePaise: sellingPaise > 0
-                ? sellingPaise
-                : (masterMatched?.sellingPricePaise ?? (costPaise * 1.15).round()),
-            mrpPaise: mrpPaise > 0
-                ? mrpPaise
-                : (masterMatched?.mrpPaise ?? (costPaise * 1.2).round()),
-            stockQuantity: qty,
-            taxRate: masterMatched?.taxRate ?? 0.0,
-            isTaxInclusive: true,
-            unit: it.unit.isNotEmpty ? it.unit : (masterMatched?.unit ?? 'pcs'),
-            syncStatus: 'pending',
-          );
-
-          await LocalDatabase.instance.upsertProduct(newProd);
-
-          // Audit movement
-          await LocalDatabase.instance.recordInventoryMovement(
-            InventoryMovementModel(
-              id: const Uuid().v4(),
-              businessId: bizId,
-              productId: newId,
-              productName: name,
-              movementType: 'PURCHASE',
-              quantity: qty,
-              previousStock: 0.0,
-              newStock: qty,
-              referenceId: billNo.isNotEmpty ? billNo : 'AI-INWARD',
-              createdAt: DateTime.now(),
-            ),
-          );
-
-          FirestoreSyncService.instance.pushProductToCloud(newProd);
-          createdCount++;
-        }
-      }
-
-      // Upsert supplier if provided
-      if (supplierName.isNotEmpty) {
-        final sup = SupplierModel(
-          id: 'sup_${supplierName.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '_')}',
-          businessId: bizId,
-          name: supplierName,
-          phone: '',
-          category: 'Wholesale Supplier',
-          currentBalancePaise: 0,
-        );
-        await LocalDatabase.instance.upsertSupplier(sup);
-      }
+        ],
+      );
 
       HapticFeedback.mediumImpact();
       widget.onInwardComplete?.call();
@@ -370,7 +295,8 @@ class _BillScanReviewSheetState extends State<BillScanReviewSheet> {
       if (mounted) {
         Navigator.pop(context);
         InAppNotification.success(
-          'Inward Successful! $createdCount new products added, $updatedCount stock quantities updated.',
+          'Inward Successful! ${result.createdCount} new products added, '
+          '${result.updatedCount} stock quantities updated.',
           context: context,
         );
       }

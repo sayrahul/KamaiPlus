@@ -78,8 +78,19 @@ class _CustomersScreenState extends State<CustomersScreen> with DataBusRefresh<C
       _customers.where((c) => c.currentBalancePaise > 0).fold(0, (sum, c) => sum + c.currentBalancePaise);
   int get _activeUdharCount => _customers.where((c) => c.currentBalancePaise > 0).length;
 
-  void _showAddCustomerModal() {
-    if (!_isPro && _customers.length >= 100) {
+  /// Add a customer, or edit [existing] when one is passed.
+  ///
+  /// One modal for both, deliberately. Customer CRM shipped with Create, Read
+  /// and Delete but no Update — the detail sheet offered only a bin icon — and
+  /// the fix for that must not become a second, slightly-different write path.
+  /// LocalDatabase.upsertCustomer is already keyed on id with
+  /// ConflictAlgorithm.replace, so it IS the update; no new repository method
+  /// was needed.
+  void _showAddCustomerModal({CustomerModel? existing}) {
+    final isEditing = existing != null;
+
+    // The free-plan cap counts customers; editing one does not add any.
+    if (!isEditing && !_isPro && _customers.length >= 100) {
       showDialog(
         context: context,
         builder: (ctx) => AlertDialog(
@@ -129,12 +140,16 @@ class _CustomersScreenState extends State<CustomersScreen> with DataBusRefresh<C
       );
       return;
     }
-    final nameCtrl = TextEditingController();
-    final phoneCtrl = TextEditingController();
-    final limitCtrl = TextEditingController(text: '5000');
-    final gstinCtrl = TextEditingController();
+    final nameCtrl = TextEditingController(text: existing?.name ?? '');
+    final phoneCtrl = TextEditingController(text: existing?.phone ?? '');
+    final limitCtrl = TextEditingController(
+      text: existing != null
+          ? (existing.creditLimitPaise ~/ 100).toString()
+          : '5000',
+    );
+    final gstinCtrl = TextEditingController(text: existing?.gstin ?? '');
 
-    bool isVip = false;
+    bool isVip = existing?.isVip ?? false;
     bool isVerifyingGstin = false;
 
     showModalBottomSheet(
@@ -157,7 +172,7 @@ class _CustomersScreenState extends State<CustomersScreen> with DataBusRefresh<C
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text('Add New Customer', style: GoogleFonts.outfit(fontSize: 18, fontWeight: FontWeight.w700)),
+                  Text(isEditing ? 'Edit Customer' : 'Add New Customer', style: GoogleFonts.outfit(fontSize: 18, fontWeight: FontWeight.w700)),
                   IconButton(icon: const Icon(Icons.close_rounded), onPressed: () => Navigator.pop(modalCtx)),
                 ],
               ),
@@ -372,26 +387,40 @@ class _CustomersScreenState extends State<CustomersScreen> with DataBusRefresh<C
                       return;
                     }
                     final cleanPhone = AppValidators.cleanPhone(phoneCtrl.text.trim());
-                    final existingCust = await LocalDatabase.instance.findCustomerByPhone(cleanPhone);
-                    if (existingCust != null) {
+                    final clash = await LocalDatabase.instance.findCustomerByPhone(cleanPhone);
+                    // When editing, finding YOURSELF on this number is not a clash.
+                    if (clash != null && clash.id != existing?.id) {
                       if (modalCtx.mounted) {
-                        InAppNotification.error('Customer with mobile $cleanPhone already exists (${existingCust.name})!', context: modalCtx);
+                        InAppNotification.error('Customer with mobile $cleanPhone already exists (${clash.name})!', context: modalCtx);
                       }
                       return;
                     }
                     final limit = int.tryParse(limitCtrl.text.trim()) ?? 5000;
                     final rawGstin = gstinCtrl.text.trim().toUpperCase();
-                    final newCust = CustomerModel(
-                      id: const Uuid().v4(),
-                      businessId: FirestoreSyncService.instance.activeBusinessId,
+                    final saved = CustomerModel(
+                      // Keep the id when editing, or upsertCustomer would insert
+                      // a duplicate and strand the original's khata ledger.
+                      id: existing?.id ?? const Uuid().v4(),
+                      businessId: existing?.businessId ??
+                          FirestoreSyncService.instance.activeBusinessId,
                       name: name,
                       phone: cleanPhone,
+                      // Not editable on this form — carry it forward rather than
+                      // letting a full-row replace blank it.
+                      address: existing?.address,
                       gstin: rawGstin.isNotEmpty ? rawGstin : null,
                       stateCode: rawGstin.length >= 2 ? rawGstin.substring(0, 2) : null,
+                      // Udhaar owed is ledger-derived money. An edit to a name or
+                      // credit limit must never rewrite it.
+                      currentBalancePaise: existing?.currentBalancePaise ?? 0,
                       creditLimitPaise: limit * 100,
                       isVip: isVip,
+                      syncStatus: 'pending',
                     );
-                    await LocalDatabase.instance.upsertCustomer(newCust);
+                    await LocalDatabase.instance.upsertCustomer(saved);
+                    FirestoreSyncService.instance
+                        .pushCustomerToCloud(saved)
+                        .catchError((_) {});
                     if (!modalCtx.mounted) return;
                     Navigator.pop(modalCtx);
                     _loadCustomers();
@@ -401,7 +430,7 @@ class _CustomersScreenState extends State<CustomersScreen> with DataBusRefresh<C
                     foregroundColor: Colors.white,
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                   ),
-                  child: Text('Save Customer Account', style: GoogleFonts.outfit(fontSize: 15, fontWeight: FontWeight.w700)),
+                  child: Text(isEditing ? 'Save Changes' : 'Save Customer Account', style: GoogleFonts.outfit(fontSize: 15, fontWeight: FontWeight.w700)),
                 ),
               ),
             ],
@@ -478,6 +507,21 @@ class _CustomersScreenState extends State<CustomersScreen> with DataBusRefresh<C
                         Text('+91 ${customer.phone}', style: GoogleFonts.inter(fontSize: 13, color: const Color(0xFF64748B))),
                       ],
                     ),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.edit_outlined, color: Color(0xFF2563EB)),
+                    tooltip: 'Edit Customer',
+                    onPressed: () async {
+                      // Re-read before editing: this sheet may have been open a
+                      // while, and a sale or a cloud sync could have moved the
+                      // khata balance since. Editing from the stale copy would
+                      // write that older balance straight back.
+                      final fresh = await LocalDatabase.instance
+                          .getCustomerById(customer.id);
+                      if (!ctx.mounted) return;
+                      Navigator.pop(ctx);
+                      _showAddCustomerModal(existing: fresh ?? customer);
+                    },
                   ),
                   IconButton(
                     icon: const Icon(Icons.delete_outline_rounded, color: Color(0xFFEF4444)),
@@ -644,7 +688,19 @@ class _CustomersScreenState extends State<CustomersScreen> with DataBusRefresh<C
       builder: (dialogCtx) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: Text('Delete Customer?', style: GoogleFonts.outfit(fontSize: 16, fontWeight: FontWeight.w700)),
-        content: Text('Are you sure you want to delete ${customer.name}? Their transaction ledger will also be permanently deleted.'),
+        content: Text(
+          customer.currentBalancePaise > 0
+              // deleteCustomer drops the customer AND every ledger_transactions
+              // row in one transaction, so an unpaid udhaar balance and the
+              // entire history proving it are destroyed together, with no undo.
+              // Say so in terms the merchant can act on, rather than the
+              // generic line that used to appear regardless of money owed.
+              ? '${customer.name} still owes '
+                  '${MoneyFormatter.formatPaise(customer.currentBalancePaise)} in udhaar. '
+                  'Deleting them erases that outstanding balance AND the full ledger that proves it. '
+                  'This cannot be undone. Settle the khata first if this money is still owed.'
+              : 'Are you sure you want to delete ${customer.name}? Their transaction ledger will also be permanently deleted.',
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(dialogCtx),
@@ -667,7 +723,10 @@ class _CustomersScreenState extends State<CustomersScreen> with DataBusRefresh<C
               foregroundColor: Colors.white,
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
             ),
-            child: Text('Delete', style: GoogleFonts.inter(fontWeight: FontWeight.w700)),
+            child: Text(
+              customer.currentBalancePaise > 0 ? 'Delete Anyway' : 'Delete',
+              style: GoogleFonts.inter(fontWeight: FontWeight.w700),
+            ),
           ),
         ],
       ),

@@ -6,6 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../core/database/local_database.dart';
 import '../core/utils/money_formatter.dart';
+import 'inventory_inward_service.dart';
 import 'remote_config_service.dart';
 
 class ExtractedBillItem {
@@ -80,8 +81,19 @@ class ExtractedBillItem {
       quantity: qty > 0 ? qty : 1.0,
       unit: json['unit']?.toString().toLowerCase() ?? 'pcs',
       purchasePricePaise: purchasePaise,
-      mrpPaise: mrpPaise > 0 ? mrpPaise : (purchasePaise > 0 ? (purchasePaise * 1.2).round() : 10000),
-      sellingPricePaise: sellingPaise > 0 ? sellingPaise : (purchasePaise > 0 ? (purchasePaise * 1.15).round() : 9500),
+      // Same shared markup definition the ML Kit parser and the inward writer
+      // use, so an AI-scanned item cannot be priced differently from a
+      // manually inwarded one.
+      mrpPaise: mrpPaise > 0
+          ? mrpPaise
+          : (purchasePaise > 0
+              ? InventoryInwardService.defaultMrpPaise(purchasePaise)
+              : 10000),
+      sellingPricePaise: sellingPaise > 0
+          ? sellingPaise
+          : (purchasePaise > 0
+              ? InventoryInwardService.defaultSellingPricePaise(purchasePaise)
+              : 9500),
       categoryName: json['category_name'] ?? json['category'] ?? 'General',
     );
   }
@@ -172,6 +184,16 @@ class GeminiAiService {
   static const String _prefKeyCustomApiKey = 'custom_gemini_api_key';
   static const int freeMonthlyPictureScanLimit = 10;
 
+  /// Whole-request budget for one Gemini call.
+  ///
+  /// HttpClient.connectionTimeout only bounds establishing the TCP connection —
+  /// it does NOT bound waiting for the response. With no timeout on req.close()
+  /// or on reading the body, a server that accepted the connection and then
+  /// went quiet left the caller waiting forever, and the scanning dialog that
+  /// wraps this call is barrierDismissible: false, so the merchant was stuck on
+  /// a modal with no way out. That is the "gets stuck" failure this bounds.
+  static const Duration requestTimeout = Duration(seconds: 45);
+
   static const List<String> _modelsToTry = [
     'gemini-2.5-flash',
     'gemini-3.5-flash-lite',
@@ -241,7 +263,8 @@ class GeminiAiService {
       } else {
         req.headers.set('x-goog-api-key', trimmed);
       }
-      final res = await req.close();
+      final res = await req.close().timeout(const Duration(seconds: 10));
+      client.close(force: true);
       return res.statusCode == 200;
     } catch (_) {
       return false;
@@ -377,14 +400,14 @@ class GeminiAiService {
           }
           req.write(jsonEncode(requestPayload));
 
-          final res = await req.close();
-          final responseBody = await res.transform(utf8.decoder).join();
+          final res = await req.close().timeout(requestTimeout);
+          final responseBody = await res
+              .transform(utf8.decoder)
+              .join()
+              .timeout(requestTimeout);
+          client.close(force: true);
 
           if (res.statusCode == 200) {
-            if (isImage) {
-              await incrementScanCount();
-            }
-
             final parsed = jsonDecode(responseBody);
             final candidates = parsed['candidates'] as List?;
             if (candidates != null && candidates.isNotEmpty) {
@@ -407,6 +430,14 @@ class GeminiAiService {
                     errorMessage: 'No items could be recognized on this bill. Please ensure the photo is clear, well-lit, and shows item names and rates.',
                     rawResponse: text,
                   );
+                }
+
+                // Counted only now that the scan actually produced items. It
+                // used to be counted the moment the HTTP call returned 200, so
+                // a response that parsed to nothing still spent one of the ten
+                // free monthly picture scans.
+                if (isImage) {
+                  await incrementScanCount();
                 }
 
                 return AiInwardResult(
@@ -569,8 +600,12 @@ class GeminiAiService {
           }
           req.write(jsonEncode(requestPayload));
 
-          final res = await req.close();
-          final responseBody = await res.transform(utf8.decoder).join();
+          final res = await req.close().timeout(requestTimeout);
+          final responseBody = await res
+              .transform(utf8.decoder)
+              .join()
+              .timeout(requestTimeout);
+          client.close(force: true);
 
           if (res.statusCode == 200) {
             if (isImage) {

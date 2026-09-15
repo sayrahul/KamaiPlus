@@ -135,11 +135,21 @@ class AiInwardSheet extends StatelessWidget {
         return;
       }
 
-      // 2. Fallback to Gemini Deep AI Vision for complex handwritten parcha
+      // 2. Fallback to Gemini Deep AI Vision for complex handwritten parcha.
+      //    mlResult is handed along so that if the cloud tier is unavailable —
+      //    no API key in the Admin Console, no network, a timeout — the failure
+      //    dialog can still offer whatever the offline pass managed to read,
+      //    or plain manual entry, rather than dead-ending on a Close button.
       final bytes = await file.readAsBytes();
       if (!context.mounted) return;
 
-      _runExtraction(context, bytes, mimeType: 'image/jpeg', title: 'Analyzing Bill Photo');
+      _runExtraction(
+        context,
+        bytes,
+        mimeType: 'image/jpeg',
+        title: 'Analyzing Bill Photo',
+        offlineFallback: mlResult,
+      );
     } catch (e) {
       if (context.mounted) {
         InAppNotification.error('Could not open image: $e', context: context);
@@ -204,12 +214,21 @@ class AiInwardSheet extends StatelessWidget {
     Uint8List bytes, {
     required String mimeType,
     required String title,
+    MlKitScanResult? offlineFallback,
   }) {
+    // Created ONCE, here, rather than inline in the FutureBuilder's builder.
+    // showDialog's builder re-runs on any rebuild (a keyboard, a metrics or
+    // theme change), and a future constructed inside it is a NEW call each
+    // time — firing a fresh Gemini request and spending another of the ten free
+    // monthly picture scans, for a scan the merchant only started once.
+    final extraction =
+        GeminiAiService.extractItemsFromImage(bytes, mimeType: mimeType);
+
     showDialog(
       context: context,
       barrierDismissible: false,
       builder: (dialogCtx) => FutureBuilder<AiInwardResult>(
-        future: GeminiAiService.extractItemsFromImage(bytes, mimeType: mimeType),
+        future: extraction,
         builder: (ctx, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
             // Scanning viewfinder animation
@@ -306,7 +325,9 @@ class AiInwardSheet extends StatelessWidget {
                   const SizedBox(width: 10),
                   Expanded(
                     child: Text(
-                      isQuota ? 'Monthly Limit Reached' : 'OCR Scan Failed',
+                      isQuota
+                          ? 'Monthly Limit Reached'
+                          : 'Could not auto-read this clearly',
                       style: GoogleFonts.plusJakartaSans(fontSize: 16, fontWeight: FontWeight.w800),
                     ),
                   ),
@@ -333,6 +354,38 @@ class AiInwardSheet extends StatelessWidget {
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                     ),
                     child: Text('Upgrade to Pro', style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w800)),
+                  )
+                else
+                  // The only way out of this dialog used to be "Close", which
+                  // dropped the merchant back to nothing and threw away the
+                  // offline ML Kit pass entirely. Cloud AI is the FALLBACK
+                  // tier — when it is unavailable (no API key configured in the
+                  // Admin Console, no network, a timeout, a malformed reply)
+                  // the flow has to keep going, either with whatever Tier 1
+                  // did read or as plain manual entry.
+                  ElevatedButton(
+                    onPressed: () {
+                      Navigator.pop(dialogCtx);
+                      BillScanReviewSheet.show(
+                        context,
+                        items: offlineFallback?.items ?? const [],
+                        supplierName: offlineFallback?.supplierName,
+                        billNumber: offlineFallback?.billNumber,
+                        billDate: offlineFallback?.billDate,
+                        onInwardComplete: onInwardComplete,
+                      );
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF0F172A),
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                    ),
+                    child: Text(
+                      (offlineFallback?.items.isNotEmpty ?? false)
+                          ? 'Review Offline Scan'
+                          : 'Enter Manually',
+                      style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w800),
+                    ),
                   ),
               ],
             );

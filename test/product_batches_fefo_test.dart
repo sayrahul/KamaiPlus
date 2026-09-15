@@ -251,4 +251,113 @@ void main() {
       expect(await LocalDatabase.instance.getBatchesForProduct(product.id), isEmpty);
     });
   });
+
+  // Regression group for the September 2026 audit finding: selling a product
+  // that has NO product_batches rows was destroying that product's own,
+  // manually-entered expiry_date and batch_number.
+  //
+  // processPosBill calls _deductStockFefo for every sold item unconditionally.
+  // _deductStockFefo used to fall through to _recomputeProductExpirySummary
+  // even when the product had no batches at all, and that helper derives the
+  // denormalized expiry_date/batch_number FROM the batch list — so an empty
+  // list wrote NULL over both columns. The Inventory "Near Expiry" radar reads
+  // exactly those two columns for any product without batches
+  // (getNearExpiryBatches' no-batch fallback), so one sale silently removed the
+  // product from the expiry radar forever.
+  group('selling does not destroy a hand-entered expiry', () {
+    test('a product with no batches keeps its own expiry_date and batch_number after a sale', () async {
+      final product = _pharmacyProduct(
+        stockQuantity: 20,
+        expiryDate: '2027-03-31',
+        batchNumber: 'MFG-4471',
+      );
+      await LocalDatabase.instance.upsertProduct(product);
+
+      await LocalDatabase.instance.processPosBill(
+        businessId: product.businessId,
+        cartItems: [CartItemModel(product: product, quantity: 1)],
+        paymentMethod: 'cash',
+      );
+
+      final reloaded = (await LocalDatabase.instance.getAllProducts(businessType: 'pharmacy'))
+          .firstWhere((p) => p.id == product.id);
+      expect(reloaded.stockQuantity, 19, reason: 'the sale itself must still work');
+      expect(
+        reloaded.expiryDate,
+        '2027-03-31',
+        reason: 'a hand-entered expiry is the product\'s own data, not a batch summary',
+      );
+      expect(reloaded.batchNumber, 'MFG-4471');
+    });
+
+    test('such a product is still visible on the Near Expiry radar after being sold', () async {
+      final soon = DateTime.now().add(const Duration(days: 20));
+      final expiryStr =
+          '${soon.year}-${soon.month.toString().padLeft(2, '0')}-${soon.day.toString().padLeft(2, '0')}';
+
+      final product = _pharmacyProduct(
+        id: 'p_med_radar',
+        stockQuantity: 12,
+        expiryDate: expiryStr,
+        batchNumber: 'B-99',
+      );
+      await LocalDatabase.instance.upsertProduct(product);
+
+      expect(
+        (await LocalDatabase.instance.getNearExpiryBatches('pharmacy'))
+            .any((r) => r['product_name'] == product.name),
+        isTrue,
+        reason: 'precondition: the radar sees it before any sale',
+      );
+
+      await LocalDatabase.instance.processPosBill(
+        businessId: product.businessId,
+        cartItems: [CartItemModel(product: product, quantity: 2)],
+        paymentMethod: 'cash',
+      );
+
+      expect(
+        (await LocalDatabase.instance.getNearExpiryBatches('pharmacy'))
+            .any((r) => r['product_name'] == product.name),
+        isTrue,
+        reason: 'selling one unit must not remove a near-expiry item from the radar',
+      );
+    });
+
+    test('a batch-tracked product still has its summary recomputed from its batches', () async {
+      final product = _pharmacyProduct(id: 'p_med_batched', stockQuantity: 30);
+      await LocalDatabase.instance.upsertProduct(product);
+      await LocalDatabase.instance.addProductBatch(ProductBatchModel(
+        id: 'b_soon',
+        productId: product.id,
+        businessId: product.businessId,
+        quantity: 10,
+        expiryDate: '2027-01-01',
+        batchNumber: 'SOON',
+        createdAt: DateTime.now(),
+      ));
+      await LocalDatabase.instance.addProductBatch(ProductBatchModel(
+        id: 'b_later',
+        productId: product.id,
+        businessId: product.businessId,
+        quantity: 20,
+        expiryDate: '2028-01-01',
+        batchNumber: 'LATER',
+        createdAt: DateTime.now(),
+      ));
+
+      // Exhaust the soonest batch entirely; the summary must roll forward to
+      // the next one. This is the behaviour the no-batch guard must NOT break.
+      await LocalDatabase.instance.processPosBill(
+        businessId: product.businessId,
+        cartItems: [CartItemModel(product: product, quantity: 10)],
+        paymentMethod: 'cash',
+      );
+
+      final reloaded = (await LocalDatabase.instance.getAllProducts(businessType: 'pharmacy'))
+          .firstWhere((p) => p.id == product.id);
+      expect(reloaded.expiryDate, '2028-01-01');
+      expect(reloaded.batchNumber, 'LATER');
+    });
+  });
 }

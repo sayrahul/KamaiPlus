@@ -1100,6 +1100,158 @@ class SupplierModel {
   );
 }
 
+/// A wholesale purchase / restock order recorded on the Purchases screen.
+///
+/// This model exists because that screen previously had no persistence at all:
+/// orders lived in a plain `List<Map<String, dynamic>>` in widget state,
+/// initialised empty and never read from the database. Creating an order only
+/// called setState, and "Mark Inward Received" set a string on that Map and
+/// showed a success toast reading "marked as Received into Stock!" without
+/// touching a single product row. Everything the merchant entered was lost the
+/// moment the screen was disposed or the app restarted — which is what the
+/// "stock disappears after being added" report was describing.
+///
+/// [stockAppliedAt] is the double-apply guard: receiving an order adds its lines
+/// to inventory exactly once, no matter how many times the button is pressed or
+/// how the screen is re-entered.
+class PurchaseOrderModel {
+  final String id;
+  final String businessId;
+  final String? invoiceNo;
+  final String supplierName;
+  final String? supplierPhone;
+  final String category;
+  final int amountPaise;
+  final int duePaise;
+  final String paymentStatus;
+
+  /// 'Received' or 'In-Transit'.
+  final String status;
+  final int itemsCount;
+
+  /// Line items, each {name, qty, unit, rate_paise, total_paise}. Stored as
+  /// JSON text in one column, the same convention SaleModel uses for its items.
+  final List<Map<String, dynamic>> items;
+
+  final DateTime orderDate;
+  final DateTime? expectedDate;
+
+  /// When this order's lines were actually taken into stock. Null means they
+  /// have not been.
+  final DateTime? stockAppliedAt;
+
+  final String syncStatus;
+
+  PurchaseOrderModel({
+    required this.id,
+    required this.businessId,
+    required this.supplierName,
+    this.invoiceNo,
+    this.supplierPhone,
+    this.category = 'Wholesale Inward',
+    this.amountPaise = 0,
+    this.duePaise = 0,
+    this.paymentStatus = 'Paid (Cash)',
+    this.status = 'In-Transit',
+    this.itemsCount = 0,
+    this.items = const [],
+    required this.orderDate,
+    this.expectedDate,
+    this.stockAppliedAt,
+    this.syncStatus = 'pending',
+  });
+
+  bool get isReceived => status == 'Received';
+  bool get hasStockBeenApplied => stockAppliedAt != null;
+
+  PurchaseOrderModel copyWith({
+    String? invoiceNo,
+    String? supplierName,
+    String? supplierPhone,
+    String? category,
+    int? amountPaise,
+    int? duePaise,
+    String? paymentStatus,
+    String? status,
+    int? itemsCount,
+    List<Map<String, dynamic>>? items,
+    DateTime? orderDate,
+    DateTime? expectedDate,
+    DateTime? stockAppliedAt,
+    String? syncStatus,
+  }) =>
+      PurchaseOrderModel(
+        id: id,
+        businessId: businessId,
+        invoiceNo: invoiceNo ?? this.invoiceNo,
+        supplierName: supplierName ?? this.supplierName,
+        supplierPhone: supplierPhone ?? this.supplierPhone,
+        category: category ?? this.category,
+        amountPaise: amountPaise ?? this.amountPaise,
+        duePaise: duePaise ?? this.duePaise,
+        paymentStatus: paymentStatus ?? this.paymentStatus,
+        status: status ?? this.status,
+        itemsCount: itemsCount ?? this.itemsCount,
+        items: items ?? this.items,
+        orderDate: orderDate ?? this.orderDate,
+        expectedDate: expectedDate ?? this.expectedDate,
+        stockAppliedAt: stockAppliedAt ?? this.stockAppliedAt,
+        syncStatus: syncStatus ?? this.syncStatus,
+      );
+
+  Map<String, dynamic> toMap() => {
+    'id': id,
+    'business_id': businessId,
+    'invoice_no': invoiceNo,
+    'supplier_name': supplierName,
+    'supplier_phone': supplierPhone,
+    'category': category,
+    'amount_paise': amountPaise,
+    'due_paise': duePaise,
+    'payment_status': paymentStatus,
+    'status': status,
+    'items_count': itemsCount,
+    'items_json': jsonEncode(items),
+    'order_date': orderDate.toIso8601String(),
+    'expected_date': expectedDate?.toIso8601String(),
+    'stock_applied_at': stockAppliedAt?.toIso8601String(),
+    'sync_status': syncStatus,
+  };
+
+  factory PurchaseOrderModel.fromMap(Map<String, dynamic> map) {
+    List<Map<String, dynamic>> parsedItems = [];
+    try {
+      final raw = map['items_json'];
+      if (raw != null && raw.toString().isNotEmpty) {
+        parsedItems = List<Map<String, dynamic>>.from(jsonDecode(raw));
+      }
+    } catch (_) {}
+
+    return PurchaseOrderModel(
+      id: map['id'] ?? '',
+      businessId: map['business_id'] ?? '',
+      invoiceNo: map['invoice_no'],
+      supplierName: map['supplier_name'] ?? '',
+      supplierPhone: map['supplier_phone'],
+      category: map['category'] ?? 'Wholesale Inward',
+      amountPaise: map['amount_paise'] ?? 0,
+      duePaise: map['due_paise'] ?? 0,
+      paymentStatus: map['payment_status'] ?? 'Paid (Cash)',
+      status: map['status'] ?? 'In-Transit',
+      itemsCount: map['items_count'] ?? 0,
+      items: parsedItems,
+      orderDate: DateTime.tryParse(map['order_date'] ?? '') ?? DateTime.now(),
+      expectedDate: map['expected_date'] != null
+          ? DateTime.tryParse(map['expected_date'])
+          : null,
+      stockAppliedAt: map['stock_applied_at'] != null
+          ? DateTime.tryParse(map['stock_applied_at'])
+          : null,
+      syncStatus: map['sync_status'] ?? 'pending',
+    );
+  }
+}
+
 class CashRegisterShiftModel {
   final String id;
   final String businessId;

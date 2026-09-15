@@ -127,7 +127,7 @@ class LocalDatabase {
 
     return await openDatabase(
       path,
-      version: 6,
+      version: 7,
       onCreate: _createDB,
       onUpgrade: (db, oldVersion, newVersion) async {
         if (oldVersion < 2) {
@@ -143,6 +143,18 @@ class LocalDatabase {
           await _migrateToV5(db);
         }
         if (oldVersion < 6) {
+          await _repairMistaggedProductsOnDb(db);
+        }
+        // v7: one more repair pass, for installs that were ALREADY on v6.
+        // Those were repaired once at the v6 upgrade and then silently
+        // re-corrupted on every subsequent launch by
+        // _backfillBusinessVerticals, which re-tagged a merchant's own
+        // products by name keyword on every single database open — so a
+        // grocery store's "Rooh Afza Syrup" became business_type 'pharmacy'
+        // and disappeared from Products/Inventory/POS, which all filter on
+        // that column. That re-tagging is now one-time and only ever fills
+        // in UNCLASSIFIED rows; this pass heals the damage it already did.
+        if (oldVersion < 7) {
           await _repairMistaggedProductsOnDb(db);
         }
       },
@@ -437,6 +449,26 @@ class LocalDatabase {
       )
     ''');
     await db.execute('''
+      CREATE TABLE IF NOT EXISTS purchase_orders (
+        id TEXT PRIMARY KEY,
+        business_id TEXT NOT NULL,
+        invoice_no TEXT,
+        supplier_name TEXT NOT NULL,
+        supplier_phone TEXT,
+        category TEXT,
+        amount_paise INTEGER NOT NULL DEFAULT 0,
+        due_paise INTEGER NOT NULL DEFAULT 0,
+        payment_status TEXT,
+        status TEXT NOT NULL DEFAULT 'In-Transit',
+        items_count INTEGER NOT NULL DEFAULT 0,
+        items_json TEXT,
+        order_date TEXT NOT NULL,
+        expected_date TEXT,
+        stock_applied_at TEXT,
+        sync_status TEXT NOT NULL DEFAULT 'pending'
+      )
+    ''');
+    await db.execute('''
       CREATE TABLE IF NOT EXISTS suppliers (
         id TEXT PRIMARY KEY,
         business_id TEXT NOT NULL,
@@ -581,97 +613,78 @@ class LocalDatabase {
 
   /// Automatic vertical isolation: classifies unassigned categories & products
   /// into their correct business verticals so pharmacy/clothing/hardware items NEVER mix into grocery.
-  Future<void> _backfillBusinessVerticals(Database db) async {
+  /// True once [flagKey]'s one-shot migration has already completed on this
+  /// database.
+  ///
+  /// Backed by the existing `app_counters` key/value table (the same one
+  /// getNextInvoiceSequence uses) rather than SharedPreferences, deliberately:
+  /// the app keeps a separate database file per signed-in user
+  /// (see _resolveActiveDbName/switchUser), so a device-global preference would
+  /// let one user's completed migration suppress another user's pending one.
+  /// A flag stored inside the database file follows that file.
+  ///
+  /// Reads fail OPEN (returns false, so the migration runs). Paired with
+  /// _setOneTimeFlag being written only after the work actually succeeded, that
+  /// means a transient error costs one harmless extra pass rather than
+  /// permanently skipping a migration the database still needs.
+  Future<bool> _isOneTimeFlagSet(Database db, String flagKey) async {
     try {
-      // 1. Classify categories
-      await db.execute('''
-        UPDATE categories SET business_type = 'pharmacy' 
-        WHERE id LIKE '%pharma%' OR id LIKE '%med%' 
-           OR name LIKE '%Pharma%' OR name LIKE '%Medicine%' 
-           OR name LIKE '%Tablets%' OR name LIKE '%Syrup%' 
-           OR name LIKE '%First Aid%' OR name LIKE '%Ayurvedic%' 
-           OR name LIKE '%Ointment%' OR name LIKE '%Generic%';
-      ''');
-      await db.execute('''
-        UPDATE categories SET business_type = 'clothing' 
-        WHERE id LIKE '%cloth%' OR name LIKE '%Men%' OR name LIKE '%Women%' 
-           OR name LIKE '%Kids%' OR name LIKE '%Wear%' OR name LIKE '%Apparel%'
-           OR name LIKE '%Saree%' OR name LIKE '%Shirt%' OR name LIKE '%Jeans%';
-      ''');
-      await db.execute('''
-        UPDATE categories SET business_type = 'hardware' 
-        WHERE id LIKE '%hard%' OR name LIKE '%Paint%' OR name LIKE '%Tool%' 
-           OR name LIKE '%Plumbing%' OR name LIKE '%Electrical%' OR name LIKE '%Pipe%'
-           OR name LIKE '%Sanitary%';
-      ''');
-      await db.execute('''
-        UPDATE categories SET business_type = 'restaurant' 
-        WHERE id LIKE '%rest%' OR name LIKE '%Starter%' OR name LIKE '%Beverage%' 
-           OR name LIKE '%Main Course%' OR name LIKE '%Curry%' OR name LIKE '%Roti%'
-           OR name LIKE '%Dessert%';
-      ''');
-      await db.execute('''
-        UPDATE categories SET business_type = 'grocery' 
-        WHERE business_type IS NULL OR business_type = '';
-      ''');
+      final rows = await db.query(
+        'app_counters',
+        where: 'key = ?',
+        whereArgs: [flagKey],
+        limit: 1,
+      );
+      return rows.isNotEmpty &&
+          ((rows.first['last_val'] as num?)?.toInt() ?? 0) > 0;
+    } catch (_) {
+      return false;
+    }
+  }
 
-      // 2. Sync products with their category's business_type
-      await db.execute('''
-        UPDATE products SET business_type = (
-          SELECT categories.business_type FROM categories WHERE categories.id = products.category_id
-        )
-        WHERE category_id IS NOT NULL AND (
-          SELECT categories.business_type FROM categories WHERE categories.id = products.category_id
-        ) IS NOT NULL;
-      ''');
+  /// Marks [flagKey]'s one-shot migration as done. Call this only after the
+  /// migration has actually completed — never up front, or a mid-way failure
+  /// would leave the database half-migrated with no second attempt.
+  Future<void> _setOneTimeFlag(Database db, String flagKey) async {
+    try {
+      await db.insert(
+        'app_counters',
+        {'key': flagKey, 'last_val': 1},
+        conflictAlgorithm: ConflictAlgorithm.replace,
+      );
+    } catch (_) {}
+  }
 
-      // 3. Keyword-based strict classification for products (prevents cross-vertical mixing)
-      await db.execute('''
-        UPDATE products SET business_type = 'pharmacy'
-        WHERE (
-          name LIKE '%Dolo%' OR name LIKE '%Paracetamol%' OR name LIKE '%Cetirizine%' 
-          OR name LIKE '%Azithromycin%' OR name LIKE '%Pantoprazole%' OR name LIKE '%Syrup%' 
-          OR name LIKE '%Tablet%' OR name LIKE '%Capsule%' OR name LIKE '%Ointment%' 
-          OR name LIKE '%Vicks%' OR name LIKE '%Moov%' OR name LIKE '%Volini%' 
-          OR name LIKE '%Band-Aid%' OR name LIKE '%Crocin%' OR name LIKE '%Combiflam%' 
-          OR name LIKE '%Digene%' OR name LIKE '%Betadine%' OR name LIKE '%Strepsils%' 
-          OR name LIKE '%Disprin%' OR name LIKE '%Eno%' OR name LIKE '%Benadryl%'
-          OR name LIKE '%Ascoril%' OR name LIKE '%Inhaler%'
-        );
-      ''');
+  /// This store's permanently-locked business vertical, or null when no profile
+  /// has been saved yet (a brand-new install, before signup completes).
+  ///
+  /// Reads the table directly instead of going through getStoreProfile() so it
+  /// is safe to call from inside onOpen, before `instance.database` has
+  /// finished resolving.
+  Future<String?> _storeVerticalOrNull(Database db) async {
+    try {
+      await _ensureStoreProfileTable(db);
+      final rows = await db.query(
+        'store_profile',
+        where: 'id = ?',
+        whereArgs: ['default_store'],
+        limit: 1,
+      );
+      if (rows.isEmpty) return null;
+      final type = (rows.first['business_type'] as String?)?.trim().toLowerCase();
+      return (type == null || type.isEmpty) ? null : type;
+    } catch (_) {
+      return null;
+    }
+  }
 
-      await db.execute('''
-        UPDATE products SET business_type = 'clothing'
-        WHERE (
-          name LIKE '%Shirt%' OR name LIKE '%T-Shirt%' OR name LIKE '%Jeans%' 
-          OR name LIKE '%Saree%' OR name LIKE '%Kurti%' OR name LIKE '%Trouser%'
-          OR name LIKE '%Suit%' OR name LIKE '%Dress%' OR name LIKE '%Legging%'
-          OR name LIKE '%Shoes%' OR name LIKE '%Sandals%' OR name LIKE '%Innerwear%'
-          OR name LIKE '%Dupatta%'
-        );
-      ''');
-
-      await db.execute('''
-        UPDATE products SET business_type = 'hardware'
-        WHERE (
-          name LIKE '%PVC Pipe%' OR name LIKE '%Hammer%' OR name LIKE '%Apex Emulsion%' 
-          OR name LIKE '%Wire%' OR name LIKE '%Switch%' OR name LIKE '%MCB%'
-          OR name LIKE '%Cement%' OR name LIKE '%Screwdriver%' OR name LIKE '%Nut Bolt%'
-          OR name LIKE '%Washbasin%' OR name LIKE '%LED Bulb%' OR name LIKE '%LED Batten%'
-        );
-      ''');
-
-      await db.execute('''
-        UPDATE products SET business_type = 'restaurant'
-        WHERE (
-          name LIKE '%Masala Chai%' OR name LIKE '%Cold Coffee%' OR name LIKE '%Samosa%' 
-          OR name LIKE '%Spring Roll%' OR name LIKE '%Paneer Butter%' OR name LIKE '%Dal Makhani%'
-          OR name LIKE '%Butter Naan%' OR name LIKE '%Jeera Rice%' OR name LIKE '%Burger%'
-          OR name LIKE '%Gulab Jamun%' OR name LIKE '%Kulfi%'
-        );
-      ''');
-
-      // 3b. Crossover health & hygiene items sold in BOTH Grocery & Pharmacy
+  /// Tags health & hygiene crossover items in the seeded reference catalog as
+  /// sellable in BOTH grocery and pharmacy. Touches `master_catalog` only —
+  /// never a merchant's own `products` rows — so it is idempotent and stays
+  /// outside the one-time backfill flag, ensuring it still applies after
+  /// _seedMasterCatalogIfEmpty re-seeds an emptied catalog.
+  Future<void> _promoteCrossoverMasterCatalogItems(Database db) async {
+    try {
       await db.execute('''
         UPDATE master_catalog SET business_type = 'both'
         WHERE (
@@ -685,12 +698,160 @@ class LocalDatabase {
           OR name LIKE '%Diaper%' OR name LIKE '%Pampers%' OR name LIKE '%Johnson%Baby%'
         );
       ''');
-
-      // 4. Default any remaining to grocery
-      await db.execute('''
-        UPDATE products SET business_type = 'grocery' WHERE business_type IS NULL OR business_type = '';
-      ''');
     } catch (_) {}
+  }
+
+  Future<void> _backfillBusinessVerticals(Database db) async {
+    // Crossover reference-catalog tagging is NOT part of the one-time backfill:
+    // it only ever touches master_catalog (seed reference data, re-created by
+    // _seedMasterCatalogIfEmpty), never a merchant's own products, so it stays
+    // idempotent and safe to re-apply after a re-seed.
+    await _promoteCrossoverMasterCatalogItems(db);
+
+    // Everything below rewrites the merchant's OWN product/category rows, so it
+    // runs EXACTLY ONCE per database. It used to run on every single database
+    // open (onOpen -> _ensureExtraTables -> here), re-classifying already-tagged
+    // products by name keyword every launch. That is what made freshly inwarded
+    // stock vanish: a grocery store's "Rooh Afza Syrup" matched LIKE '%Syrup%',
+    // got re-tagged 'pharmacy', and every screen that filters on business_type
+    // (Products, Inventory, POS, Home Pulse, Expiry Radar) stopped showing it.
+    if (await _isOneTimeFlagSet(db, 'vertical_backfill_v1')) return;
+
+    // Whatever is still unclassified at the end belongs to THIS store's own
+    // permanently-locked vertical — never a hardcoded 'grocery', which used to
+    // strand every non-grocery store's legacy rows in a vertical they cannot see.
+    final fallbackType = await _storeVerticalOrNull(db) ?? 'grocery';
+
+    // Each phase is isolated so one failing statement (an older install missing
+    // a table an ALTER-only migration never created, say) cannot abort the
+    // phases after it — in particular the fallback stamp below, which is what
+    // actually decides whether legacy rows are visible to this store at all.
+    var completed = true;
+
+    try {
+      // 1. Classify categories
+      await db.execute('''
+        UPDATE categories SET business_type = 'pharmacy' 
+        WHERE (business_type IS NULL OR business_type = '')
+           AND (id LIKE '%pharma%' OR id LIKE '%med%' 
+           OR name LIKE '%Pharma%' OR name LIKE '%Medicine%' 
+           OR name LIKE '%Tablets%' OR name LIKE '%Syrup%' 
+           OR name LIKE '%First Aid%' OR name LIKE '%Ayurvedic%' 
+           OR name LIKE '%Ointment%' OR name LIKE '%Generic%');
+      ''');
+      await db.execute('''
+        UPDATE categories SET business_type = 'clothing' 
+        WHERE (business_type IS NULL OR business_type = '')
+           AND (id LIKE '%cloth%' OR name LIKE '%Men%' OR name LIKE '%Women%' 
+           OR name LIKE '%Kids%' OR name LIKE '%Wear%' OR name LIKE '%Apparel%'
+           OR name LIKE '%Saree%' OR name LIKE '%Shirt%' OR name LIKE '%Jeans%');
+      ''');
+      await db.execute('''
+        UPDATE categories SET business_type = 'hardware' 
+        WHERE (business_type IS NULL OR business_type = '')
+           AND (id LIKE '%hard%' OR name LIKE '%Paint%' OR name LIKE '%Tool%' 
+           OR name LIKE '%Plumbing%' OR name LIKE '%Electrical%' OR name LIKE '%Pipe%'
+           OR name LIKE '%Sanitary%');
+      ''');
+      await db.execute('''
+        UPDATE categories SET business_type = 'restaurant' 
+        WHERE (business_type IS NULL OR business_type = '')
+           AND (id LIKE '%rest%' OR name LIKE '%Starter%' OR name LIKE '%Beverage%' 
+           OR name LIKE '%Main Course%' OR name LIKE '%Curry%' OR name LIKE '%Roti%'
+           OR name LIKE '%Dessert%');
+      ''');
+      // Unclassified categories are stamped with the store's own vertical in
+      // step 4 below, alongside unclassified products — same rule, one place.
+
+      // 2. Sync products with their category's business_type
+      await db.execute('''
+        UPDATE products SET business_type = (
+          SELECT categories.business_type FROM categories WHERE categories.id = products.category_id
+        )
+        WHERE (business_type IS NULL OR business_type = '')
+          AND category_id IS NOT NULL AND (
+          SELECT categories.business_type FROM categories WHERE categories.id = products.category_id
+        ) IS NOT NULL;
+      ''');
+
+      // 3. Keyword-based strict classification for products (prevents cross-vertical mixing)
+      await db.execute('''
+        UPDATE products SET business_type = 'pharmacy'
+        WHERE (business_type IS NULL OR business_type = '')
+           AND ((
+          name LIKE '%Dolo%' OR name LIKE '%Paracetamol%' OR name LIKE '%Cetirizine%' 
+          OR name LIKE '%Azithromycin%' OR name LIKE '%Pantoprazole%' OR name LIKE '%Syrup%' 
+          OR name LIKE '%Tablet%' OR name LIKE '%Capsule%' OR name LIKE '%Ointment%' 
+          OR name LIKE '%Vicks%' OR name LIKE '%Moov%' OR name LIKE '%Volini%' 
+          OR name LIKE '%Band-Aid%' OR name LIKE '%Crocin%' OR name LIKE '%Combiflam%' 
+          OR name LIKE '%Digene%' OR name LIKE '%Betadine%' OR name LIKE '%Strepsils%' 
+          OR name LIKE '%Disprin%' OR name LIKE '%Eno%' OR name LIKE '%Benadryl%'
+          OR name LIKE '%Ascoril%' OR name LIKE '%Inhaler%'
+        ));
+      ''');
+
+      await db.execute('''
+        UPDATE products SET business_type = 'clothing'
+        WHERE (business_type IS NULL OR business_type = '')
+           AND ((
+          name LIKE '%Shirt%' OR name LIKE '%T-Shirt%' OR name LIKE '%Jeans%' 
+          OR name LIKE '%Saree%' OR name LIKE '%Kurti%' OR name LIKE '%Trouser%'
+          OR name LIKE '%Suit%' OR name LIKE '%Dress%' OR name LIKE '%Legging%'
+          OR name LIKE '%Shoes%' OR name LIKE '%Sandals%' OR name LIKE '%Innerwear%'
+          OR name LIKE '%Dupatta%'
+        ));
+      ''');
+
+      await db.execute('''
+        UPDATE products SET business_type = 'hardware'
+        WHERE (business_type IS NULL OR business_type = '')
+           AND ((
+          name LIKE '%PVC Pipe%' OR name LIKE '%Hammer%' OR name LIKE '%Apex Emulsion%' 
+          OR name LIKE '%Wire%' OR name LIKE '%Switch%' OR name LIKE '%MCB%'
+          OR name LIKE '%Cement%' OR name LIKE '%Screwdriver%' OR name LIKE '%Nut Bolt%'
+          OR name LIKE '%Washbasin%' OR name LIKE '%LED Bulb%' OR name LIKE '%LED Batten%'
+        ));
+      ''');
+
+      await db.execute('''
+        UPDATE products SET business_type = 'restaurant'
+        WHERE (business_type IS NULL OR business_type = '')
+           AND ((
+          name LIKE '%Masala Chai%' OR name LIKE '%Cold Coffee%' OR name LIKE '%Samosa%' 
+          OR name LIKE '%Spring Roll%' OR name LIKE '%Paneer Butter%' OR name LIKE '%Dal Makhani%'
+          OR name LIKE '%Butter Naan%' OR name LIKE '%Jeera Rice%' OR name LIKE '%Burger%'
+          OR name LIKE '%Gulab Jamun%' OR name LIKE '%Kulfi%'
+        ));
+      ''');
+
+    } catch (_) {
+      completed = false;
+    }
+
+    // 4. Anything still unclassified becomes this store's own vertical. Kept in
+    // its own try so it still runs even if a classification statement above
+    // failed — an unclassified row is invisible to a store whose vertical has
+    // any tagged rows at all (see getAllProducts' fallback), so this is the
+    // step that must not be skipped.
+    try {
+      await db.execute(
+        "UPDATE products SET business_type = ? WHERE business_type IS NULL OR business_type = ''",
+        [fallbackType],
+      );
+      await db.execute(
+        "UPDATE categories SET business_type = ? WHERE business_type IS NULL OR business_type = ''",
+        [fallbackType],
+      );
+    } catch (_) {
+      completed = false;
+    }
+
+    // Only now is the migration recorded as done. If any phase failed, the flag
+    // stays unset and the next launch retries — safe, because every statement
+    // above only ever fills in rows that are still unclassified.
+    if (completed) {
+      await _setOneTimeFlag(db, 'vertical_backfill_v1');
+    }
   }
 
 
@@ -1914,6 +2075,84 @@ class LocalDatabase {
     AppDataBus.instance.bumpProducts();
   }
 
+  /// Adds [delta] to one product's stock and optionally updates its prices, as a
+  /// targeted relative UPDATE inside a transaction.
+  ///
+  /// Deliberately NOT `upsertProduct(product.copyWith(stockQuantity: old + qty))`,
+  /// which is how every inward screen used to do it. That pattern reads a
+  /// ProductModel when a screen opens, adds to the number it captured, and
+  /// writes the whole row back with ConflictAlgorithm.replace — so anything that
+  /// changed in between is silently reverted. Inward happens while the shop is
+  /// open and billing, so the lost update is real: ring up a sale while the
+  /// inward sheet is open, save the inward, and the sale's deduction disappears.
+  /// `stock_quantity = stock_quantity + ?` is evaluated by SQLite against the
+  /// CURRENT row instead, exactly how processPosBill already deducts a sale.
+  ///
+  /// A product at or above the 99999 "unlimited / uncounted" sentinel keeps that
+  /// sentinel — adding a delivery to an uncounted item must not turn it into a
+  /// counted one. Prices still apply in that case.
+  ///
+  /// Returns the before and after quantities so the caller can record an
+  /// accurate InventoryMovementModel without a second read.
+  Future<StockDeltaResult> applyStockDelta(
+    String productId,
+    double delta, {
+    int? purchasePricePaise,
+    int? sellingPricePaise,
+    int? mrpPaise,
+  }) async {
+    final db = await instance.database;
+    final result = await db.transaction((txn) async {
+      final rows = await txn.query(
+        'products',
+        columns: ['stock_quantity'],
+        where: 'id = ?',
+        whereArgs: [productId],
+        limit: 1,
+      );
+      if (rows.isEmpty) {
+        return const StockDeltaResult(previousStock: 0, newStock: 0, found: false);
+      }
+      final previous = (rows.first['stock_quantity'] as num?)?.toDouble() ?? 0.0;
+
+      final priceUpdates = <String, Object?>{'sync_status': 'pending'};
+      if (purchasePricePaise != null && purchasePricePaise > 0) {
+        priceUpdates['purchase_price_paise'] = purchasePricePaise;
+      }
+      if (sellingPricePaise != null && sellingPricePaise > 0) {
+        priceUpdates['selling_price_paise'] = sellingPricePaise;
+      }
+      if (mrpPaise != null && mrpPaise > 0) {
+        priceUpdates['mrp_paise'] = mrpPaise;
+      }
+      await txn.update('products', priceUpdates,
+          where: 'id = ?', whereArgs: [productId]);
+
+      final isUnlimited = previous >= 99999;
+      if (delta != 0 && !isUnlimited) {
+        await txn.rawUpdate(
+          'UPDATE products SET stock_quantity = MAX(0, stock_quantity + ?) WHERE id = ?',
+          [delta, productId],
+        );
+      }
+
+      final after = await txn.query(
+        'products',
+        columns: ['stock_quantity'],
+        where: 'id = ?',
+        whereArgs: [productId],
+        limit: 1,
+      );
+      return StockDeltaResult(
+        previousStock: previous,
+        newStock: (after.first['stock_quantity'] as num?)?.toDouble() ?? previous,
+        found: true,
+      );
+    });
+    AppDataBus.instance.bumpProducts();
+    return result;
+  }
+
   // ==========================================================================
   // PRODUCT BATCHES — real multi-batch FEFO (First-Expiry-First-Out).
   // See ProductBatchModel's doc comment for the design: this table is the
@@ -1971,6 +2210,22 @@ class LocalDatabase {
     final db = await instance.database;
     var remaining = qty;
     final batches = await getBatchesForProduct(productId);
+
+    // A product that was never inwarded through the batch-aware flow has
+    // nothing here to deduct, and — critically — nothing here to summarise
+    // either. Returning now is what makes this the harmless no-op the doc
+    // comment above promises.
+    //
+    // It did NOT used to return: it fell through to
+    // _recomputeProductExpirySummary, which derives expiry_date/batch_number
+    // from the batch list and therefore wrote NULL over both columns whenever
+    // that list was empty. Since processPosBill calls this for EVERY sold item,
+    // selling a single unit of any product whose expiry had been typed in by
+    // hand (add_product_modal, not a batch) permanently erased that expiry —
+    // and with it the product's row in the Inventory "Near Expiry" radar, whose
+    // no-batch fallback reads exactly those two columns.
+    if (batches.isEmpty) return;
+
     for (final batch in batches) {
       if (remaining <= 0) break;
       final take = remaining >= batch.quantity ? batch.quantity : remaining;
@@ -2784,6 +3039,78 @@ class LocalDatabase {
     await db.insert('suppliers', supplier.toMap(), conflictAlgorithm: ConflictAlgorithm.replace);
   }
 
+  // ==========================================================================
+  // PURCHASE / RESTOCK ORDERS
+  //
+  // The Purchases screen had no persistence at all before this: orders lived in
+  // widget state and were gone on dispose, and "Mark Inward Received" never
+  // touched a product row despite saying "Received into Stock!". These give it
+  // a real table; receiving an order routes its lines through
+  // InventoryInwardService, the same path AI bill scan uses.
+  // ==========================================================================
+
+  Future<List<PurchaseOrderModel>> getAllPurchaseOrders({int limit = 200}) async {
+    final db = await instance.database;
+    final rows = await db.query(
+      'purchase_orders',
+      orderBy: 'order_date DESC',
+      limit: limit,
+    );
+    return rows.map((r) => PurchaseOrderModel.fromMap(r)).toList();
+  }
+
+  Future<PurchaseOrderModel?> getPurchaseOrderById(String id) async {
+    final db = await instance.database;
+    final rows = await db.query('purchase_orders',
+        where: 'id = ?', whereArgs: [id], limit: 1);
+    if (rows.isEmpty) return null;
+    return PurchaseOrderModel.fromMap(rows.first);
+  }
+
+  Future<void> upsertPurchaseOrder(PurchaseOrderModel order) async {
+    final db = await instance.database;
+    await db.insert(
+      'purchase_orders',
+      order.toMap(),
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+    AppDataBus.instance.bumpProducts();
+  }
+
+  Future<void> deletePurchaseOrder(String id) async {
+    final db = await instance.database;
+    await db.delete('purchase_orders', where: 'id = ?', whereArgs: [id]);
+    AppDataBus.instance.bumpProducts();
+  }
+
+  /// Next purchase order number, allocated from the shared app_counters table
+  /// the same way getNextInvoiceSequence allocates invoice numbers.
+  ///
+  /// Replaces the screen's old `'PO-${1085 + _purchases.length}'`, which reused
+  /// an id as soon as any order was deleted — delete one, add one, and the new
+  /// order silently overwrote an existing row.
+  Future<String> getNextPurchaseOrderNumber() async {
+    final db = await instance.database;
+    final next = await db.transaction((txn) async {
+      final row = await txn.query('app_counters',
+          where: 'key = ?', whereArgs: ['purchase_order_sequence'], limit: 1);
+      int nextVal;
+      if (row.isEmpty) {
+        final countRes =
+            await txn.rawQuery('SELECT COUNT(*) as count FROM purchase_orders');
+        nextVal = (Sqflite.firstIntValue(countRes) ?? 0) + 1086;
+        await txn.insert('app_counters',
+            {'key': 'purchase_order_sequence', 'last_val': nextVal});
+      } else {
+        nextVal = ((row.first['last_val'] as num?)?.toInt() ?? 1085) + 1;
+        await txn.update('app_counters', {'last_val': nextVal},
+            where: 'key = ?', whereArgs: ['purchase_order_sequence']);
+      }
+      return nextVal;
+    });
+    return 'PO-$next';
+  }
+
   Future<void> deleteSupplier(String id) async {
     final db = await instance.database;
     await db.delete('suppliers', where: 'id = ?', whereArgs: [id]);
@@ -2969,6 +3296,30 @@ class LocalDatabase {
       return [];
     }
   }
+}
+
+/// Before/after stock for a single [LocalDatabase.applyStockDelta] call, so an
+/// inward caller can write an accurate InventoryMovementModel audit row without
+/// re-reading the product.
+///
+/// [found] is false when the product id no longer exists — for example it was
+/// deleted on another device and the cloud listener removed it locally while an
+/// inward sheet was still open. Callers skip the line rather than resurrecting a
+/// deleted product.
+class StockDeltaResult {
+  final double previousStock;
+  final double newStock;
+  final bool found;
+
+  const StockDeltaResult({
+    required this.previousStock,
+    required this.newStock,
+    this.found = true,
+  });
+
+  /// Quantity actually applied. Zero for an "unlimited" (>= 99999) product,
+  /// whose sentinel is intentionally left alone.
+  double get appliedDelta => newStock - previousStock;
 }
 
 class VariantCustomData {

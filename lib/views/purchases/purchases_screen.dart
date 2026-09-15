@@ -4,6 +4,10 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../core/constants/business_vertical_config.dart';
+import '../../core/database/local_database.dart';
+import '../../models/models.dart';
+import '../../services/firestore_sync_service.dart';
+import '../../services/inventory_inward_service.dart';
 import '../../core/utils/money_formatter.dart';
 import '../common/kamai_bottom_nav.dart';
 import '../common/in_app_notification.dart';
@@ -21,13 +25,128 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
   String _selectedFilter = 'All'; // 'All' | 'Received' | 'In-Transit' | 'Udhar Due'
   final TextEditingController _searchCtrl = TextEditingController();
 
-  // Inward Purchase Orders state (Money invariant: integer paise)
-  final List<Map<String, dynamic>> _purchases = [];
+  // Inward Purchase Orders, loaded from the purchase_orders table.
+  //
+  // This list used to be `final List<Map<String, dynamic>> _purchases = []`:
+  // widget state, initialised empty, never read back from anywhere. Creating an
+  // order only called setState, and "Mark Inward Received" set a string on the
+  // Map and showed "marked as Received into Stock!" without touching a single
+  // product row. Everything the merchant typed was gone the moment the screen
+  // was disposed or the app restarted — the "stock disappears after being
+  // added" report. The UI below still reads the same Map keys; only where they
+  // come from, and where they go, has changed.
+  List<Map<String, dynamic>> _purchases = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _loadPurchases();
+  }
 
   @override
   void dispose() {
     _searchCtrl.dispose();
     super.dispose();
+  }
+
+  /// The Map shape the rest of this screen's widgets already expect.
+  Map<String, dynamic> _toRow(PurchaseOrderModel o) => {
+        'id': o.id,
+        'invoice_no': o.invoiceNo ?? '',
+        'supplier': o.supplierName,
+        'category': o.category,
+        'phone': o.supplierPhone ?? '',
+        'date': o.orderDate,
+        'expected_date': o.expectedDate,
+        'amount_paise': o.amountPaise,
+        'due_paise': o.duePaise,
+        'payment_status': o.paymentStatus,
+        'status': o.status,
+        'items_count': o.itemsCount,
+        'items': o.items,
+        'stock_applied': o.hasStockBeenApplied,
+      };
+
+  Future<void> _loadPurchases() async {
+    try {
+      final orders = await LocalDatabase.instance.getAllPurchaseOrders();
+      if (!mounted) return;
+      setState(() {
+        _purchases = orders.map(_toRow).toList();
+      });
+    } catch (_) {
+      // A read failure leaves whatever is already on screen rather than
+      // blanking the list; the next mutation reloads.
+    }
+  }
+
+  /// Takes a purchase order's lines into stock, exactly once.
+  ///
+  /// Routes through InventoryInwardService — the same path AI bill scan uses —
+  /// rather than writing products here. A second write path is precisely what
+  /// produced the divergent behaviour this screen is being fixed for.
+  Future<void> _markReceivedAndInward(Map<String, dynamic> row) async {
+    final id = row['id'] as String;
+    final order = await LocalDatabase.instance.getPurchaseOrderById(id);
+    if (order == null) return;
+
+    // Double-apply guard: re-entering the sheet and pressing again, or a
+    // double tap, must not add the delivery to stock twice.
+    if (order.hasStockBeenApplied) {
+      if (mounted) {
+        InAppNotification.success(
+          '${order.id} is already received into stock.',
+          context: context,
+        );
+      }
+      await _loadPurchases();
+      return;
+    }
+
+    final lines = <InwardLine>[];
+    for (final raw in order.items) {
+      final name = (raw['name'] ?? '').toString().trim();
+      final qty = (raw['qty'] as num?)?.toDouble() ?? 0.0;
+      if (name.isEmpty || qty <= 0) continue;
+      lines.add(InwardLine(
+        name: name,
+        quantity: qty,
+        unit: (raw['unit'] ?? 'pcs').toString(),
+        purchasePricePaise: (raw['rate_paise'] as num?)?.toInt() ?? 0,
+      ));
+    }
+
+    InwardResult? result;
+    if (lines.isNotEmpty) {
+      result = await InventoryInwardService.applyInward(
+        lines: lines,
+        supplierName: order.supplierName,
+        referenceId: order.invoiceNo?.isNotEmpty == true
+            ? order.invoiceNo
+            : order.id,
+      );
+    }
+
+    await LocalDatabase.instance.upsertPurchaseOrder(order.copyWith(
+      status: 'Received',
+      stockAppliedAt: DateTime.now(),
+      syncStatus: 'pending',
+    ));
+    await _loadPurchases();
+
+    if (!mounted) return;
+    if (result == null) {
+      InAppNotification.success(
+        '${order.id} marked as Received. No itemised lines to add to stock.',
+        context: context,
+      );
+    } else {
+      InAppNotification.success(
+        '${order.id} received into stock: ${result.createdCount} new, '
+        '${result.updatedCount} restocked.',
+        context: context,
+      );
+    }
   }
 
   // Filtered purchases
@@ -82,6 +201,16 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
     HapticFeedback.selectionClick();
     final phone = purchase['phone'] as String? ?? '';
     final cleanPhone = phone.replaceAll(RegExp(r'[^0-9]'), '');
+    // Every order used to carry a hardcoded '+919800011222', so this reminder
+    // opened a chat with a number belonging to nobody involved. Say the number
+    // is missing rather than messaging a stranger.
+    if (cleanPhone.isEmpty) {
+      InAppNotification.error(
+        'No phone number saved for this supplier yet.',
+        context: context,
+      );
+      return;
+    }
     final sup = purchase['supplier'];
     final id = purchase['id'];
     final due = purchase['due_paise'] as int;
@@ -127,14 +256,18 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
             child: Text('Cancel', style: GoogleFonts.inter(fontWeight: FontWeight.w600, color: const Color(0xFF64748B))),
           ),
           ElevatedButton(
-            onPressed: () {
+            onPressed: () async {
               HapticFeedback.mediumImpact();
               Navigator.pop(dialogCtx);
               Navigator.pop(sheetCtx);
-              setState(() {
-                _purchases.removeWhere((p) => p['id'] == purchase['id']);
-              });
-              InAppNotification.success('Purchase order ${purchase['id']} deleted', context: context);
+              await LocalDatabase.instance
+                  .deletePurchaseOrder(purchase['id'] as String);
+              await _loadPurchases();
+              if (mounted) {
+                InAppNotification.success(
+                    'Purchase order ${purchase['id']} deleted',
+                    context: context);
+              }
             },
             style: ElevatedButton.styleFrom(
               backgroundColor: const Color(0xFFEF4444),
@@ -421,14 +554,13 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
                       if (!isReceived) ...[
                         Expanded(
                           child: ElevatedButton.icon(
-                            onPressed: () {
+                            onPressed: () async {
                               HapticFeedback.mediumImpact();
-                              setState(() {
-                                purchase['status'] = 'Received';
-                              });
-                              setSheetState(() {});
                               Navigator.pop(ctx);
-                              InAppNotification.success('${purchase['id']} marked as Received into Stock!', context: context);
+                              // Actually writes stock now, through the shared
+                              // inward path, instead of only flipping a string
+                              // on an in-memory Map and claiming success.
+                              await _markReceivedAndInward(purchase);
                             },
                             icon: const Icon(Icons.done_all_rounded, size: 16),
                             label: Text('Mark Inward Received', style: GoogleFonts.outfit(fontSize: 13, fontWeight: FontWeight.w700)),
@@ -903,7 +1035,7 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
                   ),
                   const SizedBox(height: 12),
                   ElevatedButton(
-                    onPressed: () {
+                    onPressed: () async {
                       final supName = supplierCtrl.text.trim();
                       if (supName.isEmpty) return;
                       final rupees = double.tryParse(amountCtrl.text.trim()) ?? 0.0;
@@ -911,32 +1043,71 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
                       final itemsCount = int.tryParse(itemsCtrl.text.trim()) ?? 1;
                       final isCredit = paymentMode.contains('Credit');
 
-                      final newOrder = {
-                        'id': 'PO-${1085 + _purchases.length}',
-                        'invoice_no': invoiceCtrl.text.trim(),
-                        'supplier': supName,
-                        'category': 'Wholesale Inward',
-                        'phone': '+919800011222',
-                        'date': DateTime.now(),
-                        'expected_date': status == 'In-Transit' ? DateTime.now().add(const Duration(days: 2)) : null,
-                        'amount_paise': amountPaise,
-                        'due_paise': isCredit ? amountPaise : 0,
-                        'payment_status': paymentMode,
-                        'status': status,
-                        'items_count': itemsCount,
-                        'items': [
-                          {'name': 'Wholesale Inward Consignment', 'qty': itemsCount, 'unit': 'lots', 'rate_paise': itemsCount > 0 ? (amountPaise ~/ itemsCount) : amountPaise, 'total_paise': amountPaise}
-                        ],
-                      };
-
                       HapticFeedback.heavyImpact();
-                      setState(() {
-                        _purchases.insert(0, newOrder);
-                      });
                       Navigator.pop(ctx);
+
+                      // Sequential id from app_counters, not
+                      // 'PO-${1085 + _purchases.length}'. The old expression
+                      // reused an id as soon as any order was deleted: delete
+                      // one, add one, and the new order overwrote an existing.
+                      final poId = await LocalDatabase.instance
+                          .getNextPurchaseOrderNumber();
+
+                      // Reuse the vendor's real number if we already know it,
+                      // instead of the hardcoded '+919800011222' that every
+                      // order used to carry into the WhatsApp reminder.
+                      String supplierPhone = '';
+                      try {
+                        final known =
+                            await LocalDatabase.instance.getAllSuppliers();
+                        for (final sup in known) {
+                          if (sup.name.toLowerCase() == supName.toLowerCase()) {
+                            supplierPhone = sup.phone;
+                            break;
+                          }
+                        }
+                      } catch (_) {}
+
+                      final order = PurchaseOrderModel(
+                        id: poId,
+                        businessId:
+                            FirestoreSyncService.instance.activeBusinessId,
+                        invoiceNo: invoiceCtrl.text.trim(),
+                        supplierName: supName,
+                        supplierPhone: supplierPhone,
+                        category: 'Wholesale Inward',
+                        amountPaise: amountPaise,
+                        duePaise: isCredit ? amountPaise : 0,
+                        paymentStatus: paymentMode,
+                        status: status,
+                        itemsCount: itemsCount,
+                        items: [
+                          {
+                            'name': 'Wholesale Inward Consignment',
+                            'qty': itemsCount,
+                            'unit': 'lots',
+                            'rate_paise': itemsCount > 0
+                                ? (amountPaise ~/ itemsCount)
+                                : amountPaise,
+                            'total_paise': amountPaise,
+                          }
+                        ],
+                        orderDate: DateTime.now(),
+                        expectedDate: status == 'In-Transit'
+                            ? DateTime.now().add(const Duration(days: 2))
+                            : null,
+                      );
+
+                      await LocalDatabase.instance.upsertPurchaseOrder(order);
+                      await _loadPurchases();
+
+                      if (!mounted) return;
+                      // `this.context` explicitly: the bottom sheet's own
+                      // context was popped above, so the State's is the only
+                      // one still mounted here.
                       InAppNotification.success(
-                        'Inward bill for $supName (${MoneyFormatter.formatINR(amountPaise)}) added!',
-                        context: context,
+                        'Inward bill for $supName (${MoneyFormatter.formatINR(amountPaise)}) saved!',
+                        context: this.context,
                       );
                     },
                     style: ElevatedButton.styleFrom(

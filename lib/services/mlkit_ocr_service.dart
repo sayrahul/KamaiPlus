@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'package:google_mlkit_text_recognition/google_mlkit_text_recognition.dart';
 import 'gemini_ai_service.dart';
+import 'inventory_inward_service.dart';
 
 class MlKitScanResult {
   final List<ExtractedBillItem> items;
@@ -323,8 +324,13 @@ class MlKitOcrService {
 
     final totalPaise = (priceDouble * 100).round();
     final unitCostPaise = qty > 0 ? (totalPaise / qty).round() : totalPaise;
-    final sellingPricePaise = (unitCostPaise * 1.15).round();
-    final mrpPaise = (unitCostPaise * 1.20).round();
+    // One definition of the default retail markup, shared with the Gemini
+    // parser and the inward writer. These two numbers used to be written out
+    // by hand in all three places, so "change the markup" meant changing it
+    // three times and the AI-scanned price could drift from the manual one.
+    final sellingPricePaise =
+        InventoryInwardService.defaultSellingPricePaise(unitCostPaise);
+    final mrpPaise = InventoryInwardService.defaultMrpPaise(unitCostPaise);
 
     return ExtractedBillItem(
       productName: productName,

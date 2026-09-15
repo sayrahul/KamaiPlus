@@ -247,6 +247,80 @@ class FirestoreSyncService {
     }
   }
 
+  /// Builds the [CustomerModel] to persist for a customer document arriving
+  /// from Firestore, MERGED over whatever the device already holds ([local]).
+  ///
+  /// Pure and stateless so it can be driven directly from tests — the live
+  /// listener that calls it cannot be unit-tested without a real Firestore.
+  ///
+  /// Why merging rather than rebuilding from cloud fields alone: the app
+  /// persists customers with a full-row REPLACE (upsertCustomer), and this
+  /// listener fires on the app's OWN writes too, because Firestore echoes every
+  /// write straight back as a snapshot change. The previous reconstruction read
+  /// only name/phone/balance/limit, so within moments of a merchant saving a
+  /// customer it wrote NULL over gstin, state_code and address and reset is_vip
+  /// to false. Losing gstin is a billing bug, not a cosmetic one: processPosBill
+  /// reads customer.gstin to set a B2B invoice's place of supply.
+  ///
+  /// The absent-vs-empty distinction matters. A key MISSING from [data] means
+  /// the writer never knew about that field (a doc written by an older build of
+  /// the app, or by the admin console), so the device's value is the better
+  /// one. A key PRESENT but empty means the merchant deliberately cleared it,
+  /// and that clear must be allowed to win.
+  @visibleForTesting
+  static CustomerModel mergeCloudCustomer({
+    required String id,
+    required String businessId,
+    required Map<String, dynamic> data,
+    required CustomerModel? local,
+  }) {
+    String? cloudTextOrLocal(String key, String? localValue) {
+      if (!data.containsKey(key)) return localValue;
+      final raw = data[key]?.toString().trim() ?? '';
+      return raw.isEmpty ? null : raw;
+    }
+
+    final bool isVip;
+    if (data.containsKey('is_vip')) {
+      isVip = data['is_vip'] == true || data['is_vip'] == 1;
+    } else if (data.containsKey('customer_type')) {
+      // Legacy encoding — VIP used to be expressed only through this string.
+      isVip = data['customer_type']?.toString() == 'vip';
+    } else {
+      isVip = local?.isVip ?? false;
+    }
+
+    final gstin = cloudTextOrLocal('gstin', local?.gstin);
+    final cloudName = data['name']?.toString().trim() ?? '';
+    final cloudPhone = data['phone']?.toString().trim() ?? '';
+
+    return CustomerModel(
+      id: id,
+      businessId: businessId,
+      name: cloudName.isNotEmpty ? cloudName : (local?.name ?? 'Customer'),
+      phone: cloudPhone.isNotEmpty ? cloudPhone : (local?.phone ?? ''),
+      address: cloudTextOrLocal('address', local?.address),
+      gstin: gstin,
+      stateCode: cloudTextOrLocal('state_code', local?.stateCode) ??
+          (gstin != null && gstin.length >= 2 ? gstin.substring(0, 2) : null),
+      // Balance/limit arithmetic is deliberately unchanged, including the
+      // legacy rupees-to-paise conversion applied to a doc that carries only
+      // 'current_balance'. The only change is the final fallback: a doc missing
+      // the field entirely no longer zeroes a real khata balance, it keeps
+      // whatever the device already had.
+      currentBalancePaise: data.containsKey('current_balance_paise')
+          ? ((data['current_balance_paise'] ?? 0) as num).toInt()
+          : (data.containsKey('current_balance')
+              ? (((data['current_balance'] ?? 0) as num) * 100).toInt()
+              : (local?.currentBalancePaise ?? 0)),
+      creditLimitPaise: data.containsKey('credit_limit_paise')
+          ? ((data['credit_limit_paise'] ?? 500000) as num).toInt()
+          : (local?.creditLimitPaise ?? 500000),
+      isVip: isVip,
+      syncStatus: 'synced',
+    );
+  }
+
   void _startLiveCloudListeners() {
     if (!_isInitialized) return;
 
@@ -352,16 +426,16 @@ class FirestoreSyncService {
           final data = change.doc.data();
           if (data != null) {
             try {
-              final customer = CustomerModel(
-                id: change.doc.id,
-                businessId: _activeBusinessId,
-                name: data['name'] ?? 'Customer',
-                phone: data['phone'] ?? '',
-                currentBalancePaise: (data['current_balance_paise'] ?? ((data['current_balance'] ?? 0) * 100)).toInt(),
-                creditLimitPaise: (data['credit_limit_paise'] ?? 500000).toInt(),
-                syncStatus: 'synced',
+              final local =
+                  await LocalDatabase.instance.getCustomerById(change.doc.id);
+              await LocalDatabase.instance.upsertCustomer(
+                mergeCloudCustomer(
+                  id: change.doc.id,
+                  businessId: _activeBusinessId,
+                  data: data,
+                  local: local,
+                ),
               );
-              await LocalDatabase.instance.upsertCustomer(customer);
             } catch (e) {
               debugPrint('Error syncing cloud customer: $e');
             }
@@ -924,10 +998,20 @@ class FirestoreSyncService {
         'name': customer.name,
         'phone': customer.phone,
         'address': customer.address ?? '',
+        // GSTIN and state code were previously never pushed at all, so they
+        // could not survive a round trip: the live listener read the doc back,
+        // found no such fields, and blanked them locally. GSTIN drives B2B
+        // invoicing and place-of-supply, so losing it is a billing bug, not a
+        // cosmetic one.
+        'gstin': customer.gstin ?? '',
+        'state_code': customer.stateCode ?? '',
         'current_balance': customer.currentBalancePaise,
         'current_balance_paise': customer.currentBalancePaise,
         'credit_limit_paise': customer.creditLimitPaise,
         'opening_balance': 0,
+        // Explicit boolean alongside the legacy 'customer_type' string, which
+        // cannot represent a VIP who also carries udhaar.
+        'is_vip': customer.isVip,
         'customer_type': customer.isVip ? 'vip' : (customer.currentBalancePaise > 0 ? 'credit' : 'regular'),
         'sync_status': 'synced',
         'lastSyncedAt': DateTime.now().toIso8601String(),
