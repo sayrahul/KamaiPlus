@@ -742,11 +742,14 @@ class SaleDetailModal extends StatelessWidget {
           int totalItemsToReturn = 0;
 
           for (int i = 0; i < sale.items.length; i++) {
-            final it = sale.items[i];
-            final price = (it['price_paise'] ?? it['selling_price_paise'] ?? 0) as int;
             final qty = returnQtys[i] ?? 0.0;
             if (qty > 0) {
-              totalRefundPaise += (price * qty).toInt();
+              // Valued by SaleModel, the same helper processPartialSalesReturn
+              // uses — so what this sheet shows is exactly what gets refunded.
+              // This previously read `price_paise`/`selling_price_paise`, keys
+              // that do not exist on a sale item, so the total stayed ₹0 no
+              // matter how many items the cashier picked.
+              totalRefundPaise += sale.refundPaiseForItem(i, qty);
               totalItemsToReturn += qty.toInt();
             }
           }
@@ -804,8 +807,15 @@ class SaleDetailModal extends StatelessWidget {
                   ...List.generate(sale.items.length, (i) {
                     final it = sale.items[i];
                     final name = it['product_name'] ?? it['name'] ?? 'Item';
-                    final price = (it['price_paise'] ?? it['selling_price_paise'] ?? 0) as int;
                     final num soldQty = it['quantity'] ?? it['qty'] ?? 1;
+                    // Per-unit value the customer actually paid, derived from
+                    // the line total so it matches the refund maths exactly
+                    // (tax and bill discount included). The old
+                    // `price_paise`/`selling_price_paise` lookup found nothing
+                    // and rendered every row as "₹0.00/unit".
+                    final int price = soldQty > 0
+                        ? (sale.lineEffectivePaidPaise(i) / soldQty).round()
+                        : 0;
                     final num alreadyReturned = it['returned_quantity'] ?? 0;
                     final maxReturnable = (soldQty - alreadyReturned).clamp(0, soldQty).toDouble();
                     final currentReturnQty = returnQtys[i] ?? 0.0;
@@ -1106,10 +1116,21 @@ class SaleDetailModal extends StatelessWidget {
                                     final returnQty = returnQtys[i] ?? 0.0;
                                     if (returnQty > 0) {
                                       itemsToReturn.add({
+                                        // `item_index` lets the database value
+                                        // this against the exact line it came
+                                        // from — two lines on one bill can be
+                                        // the same product at different prices.
+                                        'item_index': i,
                                         'product_id': it['product_id'] ?? it['id'],
                                         'product_name': it['product_name'] ?? it['name'] ?? 'Item',
                                         'return_quantity': returnQty,
-                                        'price_paise': (it['price_paise'] ?? it['selling_price_paise'] ?? 0),
+                                        // Recorded on the return receipt for
+                                        // reference. The refund the customer
+                                        // actually gets is recomputed from the
+                                        // sale inside processPartialSalesReturn
+                                        // — the screen does not get to decide
+                                        // the money.
+                                        'refund_paise': sale.refundPaiseForItem(i, returnQty),
                                         if (it['batch_id'] != null) 'batch_id': it['batch_id'],
                                       });
                                     }

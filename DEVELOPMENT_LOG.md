@@ -2522,3 +2522,62 @@ test. Per-test time went from ~5s alone to ~13s under five-way contention, and p
 30s default under the full suite. Raised the file's timeout rather than weakening
 `_kdfIterations`, and said so in the file so the next person does not "fix" it the wrong
 way round.
+
+---
+
+## 2026-09-16 — Partial sales return refunded ₹0 to everyone
+
+**User symptom:** "Transaction page par item return karte hain, naya modal khulta hai,
+cash refund / store credit option dikhta hai — lekin jab item minus karta hu to amount
+only 0 dikhata hai. Ye wapas jahan the wahan jana chahiye."
+
+**Root cause — one mistake, three copies.** A returned line was valued by reading
+`it['price_paise'] ?? it['selling_price_paise']`. **Neither key exists on a sale item.**
+`CartItemModel.toMap()` writes `unit_price_paise` and `gross_total_paise` (models.dart).
+So on every bill written by the current app, that lookup fell through to `0`:
+
+* `sale_detail_modal.dart:746` — the sheet's running total, so it showed ₹0 however many
+  items the cashier picked, and `:807` rendered every row as "₹0.00/unit";
+* `local_database.dart:1861` (`processPartialSalesReturn`) — the refund actually recorded;
+* `models.dart:765` (`SaleModel.totalRefundedPaise`) — and therefore `netAmountPaise`.
+
+**What that did to the shop.** The return *looked* like it worked because stock genuinely
+came back on the shelf. But with `totalRefundPaise == 0`:
+* the cash branch is guarded by `totalRefundPaise > 0`, so **no expense row was written and
+  no cash ever left the drawer**;
+* the credit branch computed `newBal = currentBal - 0`, leaving the customer's udhar
+  untouched while still writing a **₹0 "Store Credit" line** into their khata statement —
+  which reads to a shopkeeper as if the credit went through;
+* `netAmountPaise` never dropped, so Home Pulse and the Transactions revenue total **kept
+  counting returned goods as full revenue**.
+
+The refund *routing* was correct all along (cash → expense row → drawer; credit/credit_note
+→ balance + ledger). It was only ever being handed a zero.
+
+**Fix — one source of truth for the money.** New on `SaleModel`:
+* `lineEffectivePaidPaise(index)` — what the customer actually paid for that whole line:
+  starts from `gross_total_paise` (falling back to `unit_price_paise × quantity`, then the
+  legacy `price_paise` spellings so older bills still value correctly), **adds tax for
+  tax-exclusive items** (`gross_total_paise` is pre-tax for those — see `processPosBill`),
+  and **apportions the bill-level discount** (`grandTotal` is recoverable exactly as
+  `totalAmount + discount`). Returning every line in full therefore sums to
+  `totalAmountPaise` — precisely what a full refund pays out.
+* `refundPaiseForItem(index, qty)` — prorated, with a whole-line short-circuit so a full
+  return carries no rounding drift.
+
+Both the sheet and `processPartialSalesReturn` now call these, so the screen and the ledger
+cannot disagree about the money. The database **recomputes from the sale** rather than
+trusting a price in the caller's payload — the UI does not get to decide the refund. The
+sheet sends `item_index` so the right line is valued when one bill has the same product
+twice at different prices (`_saleItemIndexFor`, with id/name fallbacks).
+
+**Two guards added:** a cumulative clamp so repeated partial returns can never pay out more
+than `totalAmountPaise`, and a `totalRefundPaise > 0` gate on the khata branch so a
+valueless return stops writing ₹0 lines into a customer's statement.
+
+**Verification:** `test/partial_return_refund_money_test.dart` — 14 tests covering the ₹0
+bug itself, bill-discount apportioning, tax-exclusive refunds, fractional/loose quantities,
+and then the three destinations end to end (cash → drawer expense, credit → udhar reversed,
+credit_note → negative balance = jama), plus restocking, the cumulative clamp, no ₹0 ledger
+noise, and revenue dropping in reports. The pre-existing `sales_return_flow_test.dart`
+still passes unchanged — its legacy `price_paise` fixtures are handled by the fallback.

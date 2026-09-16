@@ -1,5 +1,7 @@
 import 'dart:convert';
 
+import '../core/utils/money_formatter.dart';
+
 String inferBusinessType(String? name, String? category) {
   final text = '${name ?? ''} ${category ?? ''}'.toLowerCase();
   if (text.contains('dettol') ||
@@ -757,14 +759,89 @@ class SaleModel {
   bool get isRefunded => status.toLowerCase() == 'refunded' || status.toLowerCase() == 'returned';
   bool get isPartiallyRefunded => status.toLowerCase() == 'partially_refunded';
 
+  /// What the customer effectively PAID for the whole of item [index], in
+  /// integer paise — tax included, and with this bill's overall discount
+  /// apportioned across the lines.
+  ///
+  /// This is the single source of truth for "how much is this line worth on a
+  /// return", used by both the return modal's on-screen total and
+  /// `processPartialSalesReturn`'s actual refund, so the two can never
+  /// disagree about the money.
+  ///
+  /// Why it is not just `gross_total_paise`:
+  ///  * for a tax-EXCLUSIVE item, `gross_total_paise` is the pre-tax line
+  ///    total, but the customer paid tax on top of it (see `processPosBill`);
+  ///  * `gross_total_paise` is also before any BILL-level discount, so on a
+  ///    discounted bill refunding it raw hands back more than was ever taken.
+  ///
+  /// Returning every line in full therefore adds up to `totalAmountPaise`,
+  /// which is exactly what a full refund (`processSalesReturn`) pays out.
+  int lineEffectivePaidPaise(int index) {
+    if (index < 0 || index >= items.length) return 0;
+    final it = items[index];
+
+    // Line total after any per-item discount. Older rows — and rows written by
+    // other code paths — may carry only a unit price, so fall back to that.
+    // 'price_paise' / 'selling_price_paise' are legacy spellings kept for
+    // bills saved before the current item shape; note that they were ALSO
+    // what the return code mistakenly read on every modern bill, where they
+    // do not exist at all, which is why every refund came out as zero.
+    num lineGross = (it['gross_total_paise'] as num?) ?? 0;
+    if (lineGross <= 0) {
+      final num unit = (it['unit_price_paise'] as num?) ??
+          (it['price_paise'] as num?) ??
+          (it['selling_price_paise'] as num?) ??
+          0;
+      final num qty = (it['quantity'] as num?) ?? (it['qty'] as num?) ?? 0;
+      lineGross = unit * qty;
+    }
+    if (lineGross <= 0) return 0;
+
+    // Add tax for exclusive-tax items, mirroring processPosBill's own maths.
+    final double rate = (it['tax_rate'] as num?)?.toDouble() ?? 0.0;
+    final bool inclusive = it['is_tax_inclusive'] == 1 || it['is_tax_inclusive'] == true;
+    int lineWithTax = lineGross.round();
+    if (rate > 0 && !inclusive) {
+      final gst = MoneyFormatter.calculateGst(
+        grossOrBasePaise: lineWithTax,
+        taxRatePercent: rate,
+        isInclusive: false,
+      );
+      lineWithTax = gst['grossTotal'] ?? lineWithTax;
+    }
+
+    // Apportion the bill-level discount. Every line summed to `grandTotal`
+    // before that discount was applied, and grandTotal is recoverable exactly
+    // as totalAmount + discount (see processPosBill).
+    final int grandTotal = totalAmountPaise + discountPaise;
+    if (discountPaise > 0 && grandTotal > 0) {
+      lineWithTax = (lineWithTax * totalAmountPaise / grandTotal).round();
+    }
+    return lineWithTax < 0 ? 0 : lineWithTax;
+  }
+
+  /// Refundable paise for handing back [returnQty] units of item [index].
+  int refundPaiseForItem(int index, num returnQty) {
+    if (returnQty <= 0 || index < 0 || index >= items.length) return 0;
+    final num soldQty = (items[index]['quantity'] as num?) ??
+        (items[index]['qty'] as num?) ??
+        0;
+    if (soldQty <= 0) return 0;
+
+    final int linePaid = lineEffectivePaidPaise(index);
+    // Returning the whole line pays back the whole line, with no rounding
+    // drift from the proration below.
+    if (returnQty >= soldQty) return linePaid;
+    return (linePaid * returnQty / soldQty).round();
+  }
+
   /// Total refunded paise calculated from cumulative returned items in items_json.
   int get totalRefundedPaise {
     if (isRefunded) return totalAmountPaise;
     int refunded = 0;
-    for (final it in items) {
-      final num price = it['price_paise'] ?? it['selling_price_paise'] ?? 0;
-      final num retQty = it['returned_quantity'] ?? 0;
-      refunded += (price * retQty).toInt();
+    for (int i = 0; i < items.length; i++) {
+      final num retQty = (items[i]['returned_quantity'] as num?) ?? 0;
+      refunded += refundPaiseForItem(i, retQty);
     }
     return refunded > totalAmountPaise ? totalAmountPaise : refunded;
   }

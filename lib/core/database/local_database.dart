@@ -1843,6 +1843,35 @@ class LocalDatabase {
   /// - Reverses customer credit/udhar, grants Store Credit (advance), or records cash drawer outflow
   /// - Inserts record into `sale_returns`
   /// - Updates cumulative returned quantities on the sale invoice
+  /// Matches one entry of a return payload back to its line on the original
+  /// sale, so the refund can be valued from the sale itself.
+  ///
+  /// Prefers the explicit `item_index` the return sheet sends, because two
+  /// lines on one bill can legitimately be the same product (different price
+  /// or discount), and matching those by id alone would value the wrong one.
+  /// Falls back to product id, then name, for payloads built elsewhere.
+  int _saleItemIndexFor(SaleModel sale, Map<String, dynamic> returnItem) {
+    final idx = returnItem['item_index'];
+    if (idx is int && idx >= 0 && idx < sale.items.length) return idx;
+
+    final rid = (returnItem['product_id'] ?? returnItem['id'])?.toString();
+    if (rid != null && rid.isNotEmpty) {
+      for (int i = 0; i < sale.items.length; i++) {
+        final sid = (sale.items[i]['product_id'] ?? sale.items[i]['id'])?.toString();
+        if (sid != null && sid == rid) return i;
+      }
+    }
+
+    final rname = (returnItem['product_name'] ?? returnItem['name'])?.toString();
+    if (rname != null && rname.isNotEmpty) {
+      for (int i = 0; i < sale.items.length; i++) {
+        final sname = (sale.items[i]['product_name'] ?? sale.items[i]['name'])?.toString();
+        if (sname != null && sname == rname) return i;
+      }
+    }
+    return -1;
+  }
+
   Future<String> processPartialSalesReturn({
     required SaleModel sale,
     required List<Map<String, dynamic>> returnItems,
@@ -1856,11 +1885,32 @@ class LocalDatabase {
     final returnNumber = 'RET-${_uuid.v4().substring(0, 8).toUpperCase()}';
     final targetCustId = customerId ?? sale.customerId;
 
+    // Refund value is derived from the SALE, never from whatever price the
+    // caller passed in — the UI and the ledger must agree on the money, and
+    // only one of them should be allowed to decide it.
+    //
+    // This used to read `it['price_paise'] ?? it['selling_price_paise']` off
+    // the caller's map. Neither key exists on a modern sale item (they are
+    // `unit_price_paise` / `gross_total_paise`), so every partial return
+    // computed a refund of exactly ZERO: stock came back on the shelf, the
+    // customer got nothing, no cash left the drawer, no khata was reversed,
+    // and the sale still counted as full revenue in every report.
     int totalRefundPaise = 0;
     for (final it in returnItems) {
-      final num price = it['price_paise'] ?? it['selling_price_paise'] ?? 0;
-      final num qty = it['return_quantity'] ?? it['quantity'] ?? 1;
-      totalRefundPaise += (price * qty).toInt();
+      final num qty = it['return_quantity'] ?? it['quantity'] ?? 0;
+      if (qty <= 0) continue;
+      final int idx = _saleItemIndexFor(sale, it);
+      if (idx < 0) continue;
+      totalRefundPaise += sale.refundPaiseForItem(idx, qty);
+    }
+
+    // Never pay back more than this bill has left to give. Guards both a
+    // caller asking for more than was sold and the cumulative case: two
+    // separate partial returns must not add up past what was actually taken.
+    final int alreadyRefunded = sale.totalRefundedPaise;
+    final int refundableLeft = (sale.totalAmountPaise - alreadyRefunded).clamp(0, sale.totalAmountPaise);
+    if (totalRefundPaise > refundableLeft) {
+      totalRefundPaise = refundableLeft;
     }
 
     await db.transaction((txn) async {
@@ -1972,7 +2022,12 @@ class LocalDatabase {
       );
 
       // 4. Handle Customer Udhar Reversal or Store Credit (Customer Advance)
-      if ((refundMethod == 'credit' || refundMethod == 'credit_note') &&
+      //
+      // Gated on a non-zero refund so a valueless return cannot leave a ₹0
+      // "Store Credit" line sitting in a customer's khata statement, which
+      // reads to a shopkeeper like something went through when nothing did.
+      if (totalRefundPaise > 0 &&
+          (refundMethod == 'credit' || refundMethod == 'credit_note') &&
           targetCustId != null &&
           targetCustId.isNotEmpty) {
         final custRows = await txn.query('customers', where: 'id = ?', whereArgs: [targetCustId]);
