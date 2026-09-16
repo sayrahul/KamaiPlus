@@ -30,6 +30,16 @@ class InvoicePdfService {
           '1. Goods once sold cannot be taken back or exchanged.\n2. Electronic invoice generated via Kamai+ POS System.';
       final footerNote = prefs.getString('custom_invoice_footer') ?? 'Thank you for shopping with us! Visit again.';
       final showDynamicUpiQr = prefs.getBool('invoice_show_dynamic_upi_qr') ?? true;
+      final showLogo = prefs.getBool('invoice_show_logo') ?? true;
+      final showTagline = prefs.getBool('invoice_show_tagline') ?? true;
+      final showOwnerPhone = prefs.getBool('invoice_show_owner_phone') ?? true;
+
+      String storeTagline = '';
+      if (showTagline) {
+        try {
+          storeTagline = (await LocalDatabase.instance.getStoreProfile()).tagline.trim();
+        } catch (_) {}
+      }
       String upiId = prefs.getString('store_upi_id') ?? '';
       if (upiId.isEmpty) {
         try {
@@ -162,11 +172,19 @@ class InvoicePdfService {
       final String? filePath = await _channel.invokeMethod<String>('generateAndSaveInvoicePdf', {
         'invoiceNumber': sale.invoiceNumber,
         'storeName': storeName,
-        'storePhone': storePhone ?? '',
+        // `invoice_show_owner_phone`, `invoice_show_logo` and
+        // `invoice_show_tagline` are read here for the first time. All three
+        // were written by the Invoice Themes screen (which even previews their
+        // effect on a mock bill) and then read by absolutely nothing — a
+        // merchant could turn the logo off and keep printing it.
+        'storePhone': showOwnerPhone ? (storePhone ?? '') : '',
         'storeAddress': storeAddress ?? '',
+        'storeTagline': showTagline ? storeTagline : '',
         'gstin': gstin ?? '',
         'storeState': storeState,
-        'logoPath': logoPath ?? '',
+        // An empty path is exactly how the native engine already represents
+        // "no logo", so honouring the toggle needs no change on that side.
+        'logoPath': showLogo ? (logoPath ?? '') : '',
         'customerName': sale.customerName?.isNotEmpty == true ? sale.customerName : 'Cash Customer',
         'customerPhone': customerPhone ?? sale.customerPhone ?? '',
         'customerGstin': customerGstin,

@@ -29,12 +29,26 @@ class ThermalPrinterService {
           ? storeName
           : (profile.storeName.isNotEmpty ? profile.storeName : 'KamaiPlus Store');
 
+      // Invoice Themes settings apply to thermal receipts too. They used to
+      // be read only by the A4 PDF engine, so a shopkeeper who set their bill
+      // heading to "CASH MEMO" and wrote their own footer saw neither on the
+      // 58mm roll — which, for most kirana counters, is the ONLY bill the
+      // customer ever receives.
+      final invoiceHeading = prefs.getString('invoice_heading') ?? '';
+      final footerNote = prefs.getString('custom_invoice_footer') ?? '';
+      final showOwnerPhone = prefs.getBool('invoice_show_owner_phone') ?? true;
+      final showTagline = prefs.getBool('invoice_show_tagline') ?? true;
+
       final bytes = generateReceiptBytes(
         sale: sale,
         storeName: resolvedStoreName,
-        storePhone: profile.phone,
+        storePhone: showOwnerPhone ? profile.phone : null,
         storeAddress: profile.address,
         storeUpiVpa: profile.upiVpa.trim(),
+        storeGstin: profile.gstin.trim(),
+        storeTagline: showTagline ? profile.tagline.trim() : null,
+        invoiceHeading: invoiceHeading,
+        footerNote: footerNote,
         is80mm: use80mm,
         kickCashDrawer: kickCashDrawer,
       );
@@ -49,12 +63,44 @@ class ThermalPrinterService {
     }
   }
 
+  /// Encodes text for an ESC/POS printer.
+  ///
+  /// `String.codeUnits` (what this used to use everywhere) hands the printer
+  /// raw UTF-16 units truncated to bytes. For plain ASCII that is harmless,
+  /// but a Devanagari store name like "कमाई किराना" truncates each character
+  /// to an arbitrary low byte — printing gibberish, and worse, occasionally
+  /// emitting a byte the printer reads as an ESC/GS control code, which can
+  /// corrupt or abort the whole print job mid-receipt. Anything outside
+  /// Latin-1 is dropped instead, so an unprintable name degrades to a shorter
+  /// line rather than to a broken bill.
+  static List<int> _escText(String text) {
+    // ₹ (U+20B9) is outside Latin-1 and outside every codepage these printers
+    // ship with. Truncating it to a byte produced '¹', so receipts read
+    // "TOTAL: ¹499.00". Spell it out instead — "Rs." is what Indian thermal
+    // bills have always printed anyway.
+    final normalised = text.replaceAll('₹', 'Rs.');
+    final out = <int>[];
+    for (final rune in normalised.runes) {
+      if (rune == 0x0A || rune == 0x0D) {
+        out.add(rune);
+      } else if (rune >= 0x20 && rune <= 0xFF) {
+        out.add(rune);
+      }
+      // Everything else is silently skipped — see doc comment.
+    }
+    return out;
+  }
+
   static Uint8List generateReceiptBytes({
     required SaleModel sale,
     required String storeName,
     String? storePhone,
     String? storeAddress,
     String? storeUpiVpa,
+    String? storeGstin,
+    String? storeTagline,
+    String? invoiceHeading,
+    String? footerNote,
     bool is80mm = false,
     bool kickCashDrawer = true,
   }) {
@@ -69,38 +115,49 @@ class ThermalPrinterService {
 
     // Bold ON (ESC E 1)
     bytes.addAll([0x1B, 0x45, 0x01]);
-    bytes.addAll('$storeName\n'.codeUnits);
+    bytes.addAll(_escText('$storeName\n'));
     bytes.addAll([0x1B, 0x45, 0x00]); // Bold OFF
 
+    if (storeTagline != null && storeTagline.trim().isNotEmpty) {
+      bytes.addAll(_escText('${storeTagline.trim()}\n'));
+    }
     if (storePhone != null && storePhone.isNotEmpty) {
-      bytes.addAll('Ph: $storePhone\n'.codeUnits);
+      bytes.addAll(_escText('Ph: $storePhone\n'));
     }
     if (storeAddress != null && storeAddress.isNotEmpty) {
-      bytes.addAll('$storeAddress\n'.codeUnits);
+      bytes.addAll(_escText('$storeAddress\n'));
+    }
+    if (storeGstin != null && storeGstin.isNotEmpty) {
+      bytes.addAll(_escText('GSTIN: $storeGstin\n'));
+    }
+    if (invoiceHeading != null && invoiceHeading.trim().isNotEmpty) {
+      bytes.addAll([0x1B, 0x45, 0x01]);
+      bytes.addAll(_escText('${invoiceHeading.trim().toUpperCase()}\n'));
+      bytes.addAll([0x1B, 0x45, 0x00]);
     }
 
     // Divider
-    bytes.addAll('${"-" * width}\n'.codeUnits);
+    bytes.addAll(_escText('${"-" * width}\n'));
 
     // Left align body (ESC a 0)
     bytes.addAll([0x1B, 0x61, 0x00]);
-    bytes.addAll('Invoice: ${sale.invoiceNumber}\n'.codeUnits);
-    bytes.addAll('Date: ${sale.createdAt.day}/${sale.createdAt.month}/${sale.createdAt.year} ${sale.createdAt.hour.toString().padLeft(2, '0')}:${sale.createdAt.minute.toString().padLeft(2, '0')}\n'.codeUnits);
+    bytes.addAll(_escText('Invoice: ${sale.invoiceNumber}\n'));
+    bytes.addAll(_escText('Date: ${sale.createdAt.day}/${sale.createdAt.month}/${sale.createdAt.year} ${sale.createdAt.hour.toString().padLeft(2, '0')}:${sale.createdAt.minute.toString().padLeft(2, '0')}\n'));
 
     if (sale.customerName != null && sale.customerName!.isNotEmpty) {
-      bytes.addAll('Customer: ${sale.customerName}\n'.codeUnits);
+      bytes.addAll(_escText('Customer: ${sale.customerName}\n'));
     }
-    bytes.addAll('Payment: ${sale.paymentMethod.toUpperCase()}\n'.codeUnits);
+    bytes.addAll(_escText('Payment: ${sale.paymentMethod.toUpperCase()}\n'));
 
-    bytes.addAll('${"-" * width}\n'.codeUnits);
+    bytes.addAll(_escText('${"-" * width}\n'));
 
     // Column Headers: ITEM | QTY | AMT
     if (width == cols58mm) {
-      bytes.addAll('Item             Qty      Amt\n'.codeUnits);
+      bytes.addAll(_escText('Item             Qty      Amt\n'));
     } else {
-      bytes.addAll('Item                          Qty       Amount\n'.codeUnits);
+      bytes.addAll(_escText('Item                          Qty       Amount\n'));
     }
-    bytes.addAll('${"-" * width}\n'.codeUnits);
+    bytes.addAll(_escText('${"-" * width}\n'));
 
     // Items list
     for (var item in sale.items) {
@@ -114,33 +171,37 @@ class ThermalPrinterService {
         final shortName = name.length > 14 ? name.substring(0, 14) : name.padRight(14);
         final q = qtyStr.padLeft(5);
         final a = amtStr.padLeft(10);
-        bytes.addAll('$shortName $q $a\n'.codeUnits);
+        bytes.addAll(_escText('$shortName $q $a\n'));
       } else {
         final shortName = name.length > 26 ? name.substring(0, 26) : name.padRight(26);
         final q = qtyStr.padLeft(8);
         final a = amtStr.padLeft(12);
-        bytes.addAll('$shortName $q $a\n'.codeUnits);
+        bytes.addAll(_escText('$shortName $q $a\n'));
       }
     }
 
-    bytes.addAll('${"-" * width}\n'.codeUnits);
+    bytes.addAll(_escText('${"-" * width}\n'));
 
     // Total Amount (Bold)
     bytes.addAll([0x1B, 0x45, 0x01]);
     final String totalText = 'TOTAL: ${MoneyFormatter.formatINR(sale.totalAmountPaise)}';
     bytes.addAll([0x1B, 0x61, 0x02]); // Right align
-    bytes.addAll('$totalText\n'.codeUnits);
+    bytes.addAll(_escText('$totalText\n'));
     bytes.addAll([0x1B, 0x45, 0x00]); // Bold OFF
 
     // UPI ID line if available
     if (storeUpiVpa != null && storeUpiVpa.isNotEmpty) {
       bytes.addAll([0x1B, 0x61, 0x01]); // Center
-      bytes.addAll('UPI: $storeUpiVpa\n'.codeUnits);
+      bytes.addAll(_escText('UPI: $storeUpiVpa\n'));
     }
 
-    // Footer
+    // Footer — the merchant's own note from Invoice Themes when they set one,
+    // falling back to the generic line only when they haven't.
     bytes.addAll([0x1B, 0x61, 0x01]); // Center
-    bytes.addAll('\nThank you for your visit!\nKamaiPlus Smart POS\n\n\n'.codeUnits);
+    final resolvedFooter = (footerNote != null && footerNote.trim().isNotEmpty)
+        ? footerNote.trim()
+        : 'Thank you for your visit!';
+    bytes.addAll(_escText('\n$resolvedFooter\nKamaiPlus Smart POS\n\n\n'));
 
     // Drawer Kick (ESC p 0 25 250)
     if (kickCashDrawer) {
@@ -198,22 +259,22 @@ class ThermalPrinterService {
     // Large + bold "KOT" header — this ticket is read fast, standing at a
     // kitchen counter, not sat down with a bill.
     bytes.addAll([0x1D, 0x21, 0x11]); // GS ! — double width + double height
-    bytes.addAll('KITCHEN ORDER\n'.codeUnits);
+    bytes.addAll(_escText('KITCHEN ORDER\n'));
     bytes.addAll([0x1D, 0x21, 0x00]); // back to normal size
 
     if (sale.tableNumber != null && sale.tableNumber!.isNotEmpty) {
       bytes.addAll([0x1B, 0x45, 0x01]);
-      bytes.addAll('TABLE ${sale.tableNumber}\n'.codeUnits);
+      bytes.addAll(_escText('TABLE ${sale.tableNumber}\n'));
       bytes.addAll([0x1B, 0x45, 0x00]);
     } else {
-      bytes.addAll('PARCEL / TAKEAWAY\n'.codeUnits);
+      bytes.addAll(_escText('PARCEL / TAKEAWAY\n'));
     }
 
-    bytes.addAll('${"-" * width}\n'.codeUnits);
+    bytes.addAll(_escText('${"-" * width}\n'));
     bytes.addAll([0x1B, 0x61, 0x00]); // Left align
-    bytes.addAll('Order: ${sale.invoiceNumber}\n'.codeUnits);
-    bytes.addAll('Time: ${sale.createdAt.hour.toString().padLeft(2, '0')}:${sale.createdAt.minute.toString().padLeft(2, '0')}\n'.codeUnits);
-    bytes.addAll('${"-" * width}\n'.codeUnits);
+    bytes.addAll(_escText('Order: ${sale.invoiceNumber}\n'));
+    bytes.addAll(_escText('Time: ${sale.createdAt.hour.toString().padLeft(2, '0')}:${sale.createdAt.minute.toString().padLeft(2, '0')}\n'));
+    bytes.addAll(_escText('${"-" * width}\n'));
 
     // Items — name + qty large and bold, no prices anywhere on a KOT.
     for (var item in sale.items) {
@@ -223,17 +284,17 @@ class ThermalPrinterService {
       final String? notes = item['notes']?.toString();
 
       bytes.addAll([0x1B, 0x45, 0x01]); // Bold on
-      bytes.addAll('${qtyStr}x $name\n'.codeUnits);
+      bytes.addAll(_escText('${qtyStr}x $name\n'));
       bytes.addAll([0x1B, 0x45, 0x00]); // Bold off
 
       if (notes != null && notes.trim().isNotEmpty) {
-        bytes.addAll('   >> ${notes.trim()}\n'.codeUnits);
+        bytes.addAll(_escText('   >> ${notes.trim()}\n'));
       }
     }
 
-    bytes.addAll('${"-" * width}\n'.codeUnits);
+    bytes.addAll(_escText('${"-" * width}\n'));
     bytes.addAll([0x1B, 0x61, 0x01]); // Center
-    bytes.addAll('\n\n'.codeUnits);
+    bytes.addAll(_escText('\n\n'));
 
     // Auto-cut paper — no cash-drawer kick on a KOT.
     bytes.addAll([0x1D, 0x56, 0x42, 0x00]);

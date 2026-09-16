@@ -94,10 +94,13 @@ class _GstReportsScreenState extends State<GstReportsScreen> with DataBusRefresh
   bool get _isProUser =>
       _profile.isProEffective || FirestoreSyncService.isProNotifier.value;
 
-  /// Filters sales strictly by selected period
+  /// Filters sales strictly by selected period.
+  /// Excludes refunded/returned sales from GST computations.
   List<SaleModel> get _periodSales {
     final now = DateTime.now();
     return _allSales.where((s) {
+      // B3: Exclude refunded/returned sales from all GST calculations
+      if (s.isRefunded) return false;
       switch (_selectedPeriod) {
         case 'This Month':
           return s.createdAt.year == now.year && s.createdAt.month == now.month;
@@ -127,6 +130,7 @@ class _GstReportsScreenState extends State<GstReportsScreen> with DataBusRefresh
     return GstExportService.instance.generateHsnSummary(
       sales: _periodSales,
       productsMap: _productsMap,
+      profile: _profile,
     );
   }
 
@@ -212,11 +216,44 @@ class _GstReportsScreenState extends State<GstReportsScreen> with DataBusRefresh
         );
         description = 'Tally ERP / Prime XML Sales Vouchers Import';
       } else {
+        // B4: GSTR-1 JSON requires store GSTIN — block export if missing
+        if (_profile.gstin.trim().isEmpty) {
+          setState(() => _isExporting = false);
+          if (!mounted) return;
+          _showGstinMissingDialog();
+          return;
+        }
+        // Pass all sales (including refunded) — service separates active vs credit notes
+        final allPeriodSales = _allSales.where((s) {
+          final now = DateTime.now();
+          switch (_selectedPeriod) {
+            case 'This Month':
+              return s.createdAt.year == now.year && s.createdAt.month == now.month;
+            case 'Last Month':
+              final target = DateTime(now.year, now.month - 1);
+              return s.createdAt.year == target.year && s.createdAt.month == target.month;
+            case 'Q1 (Apr-Jun)':
+              final q1Start = DateTime(now.year, 4, 1);
+              final q1End = DateTime(now.year, 6, 30, 23, 59, 59);
+              return s.createdAt.isAfter(q1Start) && s.createdAt.isBefore(q1End);
+            case 'Q2 (Jul-Sep)':
+              final q2Start = DateTime(now.year, 7, 1);
+              final q2End = DateTime(now.year, 9, 30, 23, 59, 59);
+              return s.createdAt.isAfter(q2Start) && s.createdAt.isBefore(q2End);
+            case 'Q3 (Oct-Dec)':
+              final q3Start = DateTime(now.year, 10, 1);
+              final q3End = DateTime(now.year, 12, 31, 23, 59, 59);
+              return s.createdAt.isAfter(q3Start) && s.createdAt.isBefore(q3End);
+            default:
+              return true;
+          }
+        }).toList();
         file = await GstExportService.instance.generateGstr1Json(
           profile: _profile,
           period: _selectedPeriod,
-          sales: _periodSales,
+          sales: allPeriodSales,
           hsnList: _hsnList,
+          customersMap: _customersMap,
         );
         description = 'GSTN Portal GSTR-1 Offline Tool JSON Schema';
       }
@@ -356,6 +393,74 @@ class _GstReportsScreenState extends State<GstReportsScreen> with DataBusRefresh
               foregroundColor: Colors.white,
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
             ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// B4: Shows a dialog when GSTR-1 JSON export is attempted without store GSTIN
+  void _showGstinMissingDialog() {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: Colors.white,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: const Color(0xFFFEF2F2),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: const Color(0xFFFCA5A5)),
+              ),
+              child: const Icon(Icons.warning_amber_rounded, color: Color(0xFFDC2626), size: 22),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Store GSTIN Required',
+                    style: GoogleFonts.plusJakartaSans(fontSize: 16, fontWeight: FontWeight.w900),
+                  ),
+                  Text(
+                    'Cannot generate GSTR-1 JSON',
+                    style: GoogleFonts.inter(fontSize: 10.5, color: const Color(0xFFDC2626), fontWeight: FontWeight.w700),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        content: Text(
+          'GSTR-1 JSON for GST portal upload requires your store GSTIN number.\n\n'
+          'Please set your GSTIN in Settings > Store Profile before exporting.\n\n'
+          'You can still export CA Excel CSV and Tally XML without GSTIN.',
+          style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF475569), height: 1.4),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text('Close', style: GoogleFonts.inter(fontWeight: FontWeight.w600, color: const Color(0xFF64748B))),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(ctx);
+              // User can manually navigate to store profile from Menu
+              InAppNotification.info(
+                'Open Menu > Store Profile to set your GSTIN number.',
+                context: context,
+              );
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF0F172A),
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            ),
+            child: Text('OK', style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w800)),
           ),
         ],
       ),

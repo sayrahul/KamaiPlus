@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:uuid/uuid.dart';
 import '../../core/database/local_database.dart';
 import '../../core/utils/money_formatter.dart';
 import '../../models/models.dart';
@@ -183,6 +184,205 @@ class SaleDetailModal extends StatelessWidget {
     } catch (_) {}
   }
 
+  Future<CustomerModel?> _pickOrAddCustomer(BuildContext context) async {
+    final customers = await LocalDatabase.instance.getAllCustomers();
+    if (!context.mounted) return null;
+
+    return await showModalBottomSheet<CustomerModel>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (sheetCtx) {
+        String query = '';
+        final nameCtrl = TextEditingController();
+        final phoneCtrl = TextEditingController();
+        bool isCreatingNew = false;
+        String? createError;
+
+        return StatefulBuilder(
+          builder: (ctx, setLocalState) {
+            final filtered = customers.where((c) {
+              final q = query.toLowerCase();
+              return c.name.toLowerCase().contains(q) || c.phone.contains(q);
+            }).toList();
+
+            return Padding(
+              padding: EdgeInsets.only(
+                left: 18,
+                right: 18,
+                top: 16,
+                bottom: MediaQuery.of(ctx).viewInsets.bottom + 20,
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        isCreatingNew ? 'New Customer for Credit' : 'Select Customer for Credit',
+                        style: GoogleFonts.plusJakartaSans(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w800,
+                          color: const Color(0xFF0F172A),
+                        ),
+                      ),
+                      TextButton(
+                        onPressed: () {
+                          setLocalState(() {
+                            isCreatingNew = !isCreatingNew;
+                            createError = null;
+                          });
+                        },
+                        child: Text(
+                          isCreatingNew ? 'Search Existing' : '+ Add New',
+                          style: GoogleFonts.inter(fontWeight: FontWeight.w700, color: const Color(0xFF2563EB)),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  if (!isCreatingNew) ...[
+                    TextField(
+                      onChanged: (v) => setLocalState(() => query = v),
+                      decoration: InputDecoration(
+                        hintText: 'Search by name or mobile number...',
+                        prefixIcon: const Icon(Icons.search_rounded, size: 20),
+                        contentPadding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    ConstrainedBox(
+                      constraints: const BoxConstraints(maxHeight: 250),
+                      child: filtered.isEmpty
+                          ? Padding(
+                              padding: const EdgeInsets.all(20),
+                              child: Center(
+                                child: Text(
+                                  'No matching customer found.\nTap "+ Add New" above to create.',
+                                  textAlign: TextAlign.center,
+                                  style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF94A3B8)),
+                                ),
+                              ),
+                            )
+                          : ListView.separated(
+                              shrinkWrap: true,
+                              itemCount: filtered.length,
+                              separatorBuilder: (c, i) => const Divider(height: 1),
+                              itemBuilder: (c, idx) {
+                                final cust = filtered[idx];
+                                return ListTile(
+                                  dense: true,
+                                  contentPadding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                                  leading: CircleAvatar(
+                                    backgroundColor: const Color(0xFFEFF6FF),
+                                    child: Text(
+                                      cust.name.isNotEmpty ? cust.name[0].toUpperCase() : 'C',
+                                      style: const TextStyle(color: Color(0xFF1D4ED8), fontWeight: FontWeight.bold),
+                                    ),
+                                  ),
+                                  title: Text(cust.name, style: GoogleFonts.inter(fontWeight: FontWeight.w700, fontSize: 13)),
+                                  subtitle: Text(cust.phone, style: GoogleFonts.inter(fontSize: 11, color: const Color(0xFF64748B))),
+                                  trailing: Text(
+                                    cust.currentBalancePaise > 0
+                                        ? 'Udhar: ${MoneyFormatter.formatINR(cust.currentBalancePaise)}'
+                                        : (cust.currentBalancePaise < 0
+                                            ? 'Jama: ${MoneyFormatter.formatINR(cust.currentBalancePaise.abs())}'
+                                            : 'Settled'),
+                                    style: GoogleFonts.inter(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w700,
+                                      color: cust.currentBalancePaise > 0
+                                          ? const Color(0xFFDC2626)
+                                          : (cust.currentBalancePaise < 0 ? const Color(0xFF16A34A) : const Color(0xFF64748B)),
+                                    ),
+                                  ),
+                                  onTap: () => Navigator.pop(sheetCtx, cust),
+                                );
+                              },
+                            ),
+                    ),
+                  ] else ...[
+                    TextField(
+                      controller: nameCtrl,
+                      textCapitalization: TextCapitalization.words,
+                      decoration: InputDecoration(
+                        labelText: 'Customer Name *',
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                        contentPadding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    TextField(
+                      controller: phoneCtrl,
+                      keyboardType: TextInputType.phone,
+                      maxLength: 10,
+                      decoration: InputDecoration(
+                        labelText: '10-Digit Mobile Number *',
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                        contentPadding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
+                        counterText: '',
+                        errorText: createError,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton(
+                        onPressed: () async {
+                          final name = nameCtrl.text.trim();
+                          final phone = phoneCtrl.text.trim();
+                          if (name.isEmpty) {
+                            setLocalState(() => createError = 'Please enter name');
+                            return;
+                          }
+                          if (phone.length != 10) {
+                            setLocalState(() => createError = 'Please enter valid 10-digit mobile number');
+                            return;
+                          }
+                          final existing = await LocalDatabase.instance.findCustomerByPhone(phone);
+                          if (existing != null) {
+                            if (sheetCtx.mounted) {
+                              Navigator.pop(sheetCtx, existing);
+                            }
+                            return;
+                          }
+                          final newCust = CustomerModel(
+                            id: const Uuid().v4(),
+                            businessId: sale.businessId,
+                            name: name,
+                            phone: phone,
+                            currentBalancePaise: 0,
+                          );
+                          await LocalDatabase.instance.upsertCustomer(newCust);
+                          if (sheetCtx.mounted) {
+                            Navigator.pop(sheetCtx, newCust);
+                          }
+                        },
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF2563EB),
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                        ),
+                        child: const Text('Save & Select Customer'),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
   void _confirmSalesReturn(BuildContext context) async {
     HapticFeedback.mediumImpact();
     final profile = await LocalDatabase.instance.getStoreProfile();
@@ -197,6 +397,18 @@ class SaleDetailModal extends StatelessWidget {
         ? sale.totalAmountPaise
         : (sale.paymentMethod == 'split' ? sale.splitCreditPaise : 0);
     final isUdhar = creditDue > 0;
+
+    CustomerModel? linkedCustomer;
+    if (sale.customerId != null && sale.customerId!.isNotEmpty) {
+      final custs = await LocalDatabase.instance.getAllCustomers();
+      try {
+        linkedCustomer = custs.firstWhere((c) => c.id == sale.customerId);
+      } catch (_) {}
+    } else if (sale.customerPhone != null && sale.customerPhone!.isNotEmpty) {
+      linkedCustomer = await LocalDatabase.instance.findCustomerByPhone(sale.customerPhone!);
+    }
+
+    String selectedRefundMethod = isUdhar ? 'credit' : 'cash';
     final pinController = TextEditingController();
     String? pinError;
 
@@ -276,53 +488,100 @@ class SaleDetailModal extends StatelessWidget {
                     ],
                   ),
                 ),
-                const SizedBox(height: 10),
-                if (isUdhar) ...[
-                  Container(
-                    padding: const EdgeInsets.all(10),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFFEF2F2),
-                      borderRadius: BorderRadius.circular(10),
-                      border: Border.all(color: const Color(0xFFFCA5A5)),
+                const SizedBox(height: 12),
+                Text(
+                  'REFUND METHOD',
+                  style: GoogleFonts.inter(fontSize: 10.5, fontWeight: FontWeight.w800, color: const Color(0xFF475569), letterSpacing: 0.5),
+                ),
+                const SizedBox(height: 6),
+                Row(
+                  children: [
+                    ChoiceChip(
+                      label: Text('Cash', style: GoogleFonts.inter(fontSize: 11.5, fontWeight: FontWeight.w700)),
+                      selected: selectedRefundMethod == 'cash',
+                      selectedColor: const Color(0xFFECFDF5),
+                      labelStyle: TextStyle(color: selectedRefundMethod == 'cash' ? const Color(0xFF065F46) : const Color(0xFF64748B)),
+                      onSelected: (v) {
+                        if (v) setDialogState(() => selectedRefundMethod = 'cash');
+                      },
                     ),
-                    child: Row(
-                      children: [
-                        const Icon(Icons.account_balance_wallet_outlined, size: 18, color: Color(0xFFDC2626)),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            'Customer ${sale.customerName ?? ""} credit balance of ${MoneyFormatter.formatINR(creditDue)} will be reversed immediately.',
-                            style: GoogleFonts.inter(fontSize: 11.5, fontWeight: FontWeight.w600, color: const Color(0xFF991B1B)),
-                          ),
+                    const SizedBox(width: 8),
+                    if (isUdhar) ...[
+                      ChoiceChip(
+                        label: Text('Reverse Udhar', style: GoogleFonts.inter(fontSize: 11.5, fontWeight: FontWeight.w700)),
+                        selected: selectedRefundMethod == 'credit',
+                        selectedColor: const Color(0xFFFFF1F2),
+                        labelStyle: TextStyle(color: selectedRefundMethod == 'credit' ? const Color(0xFF991B1B) : const Color(0xFF64748B)),
+                        onSelected: (v) {
+                          if (v) setDialogState(() => selectedRefundMethod = 'credit');
+                        },
+                      ),
+                      const SizedBox(width: 8),
+                    ],
+                    ChoiceChip(
+                      label: Text('Store Credit', style: GoogleFonts.inter(fontSize: 11.5, fontWeight: FontWeight.w700)),
+                      selected: selectedRefundMethod == 'credit_note',
+                      selectedColor: const Color(0xFFEFF6FF),
+                      labelStyle: TextStyle(color: selectedRefundMethod == 'credit_note' ? const Color(0xFF1D4ED8) : const Color(0xFF64748B)),
+                      onSelected: (v) {
+                        if (v) setDialogState(() => selectedRefundMethod = 'credit_note');
+                      },
+                    ),
+                  ],
+                ),
+                if (selectedRefundMethod == 'credit_note') ...[
+                  const SizedBox(height: 8),
+                  InkWell(
+                    onTap: () async {
+                      final picked = await _pickOrAddCustomer(context);
+                      if (picked != null) {
+                        setDialogState(() => linkedCustomer = picked);
+                      }
+                    },
+                    borderRadius: BorderRadius.circular(10),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                      decoration: BoxDecoration(
+                        color: linkedCustomer != null ? const Color(0xFFF0FDF4) : const Color(0xFFEFF6FF),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(
+                          color: linkedCustomer != null ? const Color(0xFF86EFAC) : const Color(0xFF93C5FD),
                         ),
-                      ],
-                    ),
-                  ),
-                ] else ...[
-                  Container(
-                    padding: const EdgeInsets.all(10),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFFFFBEB),
-                      borderRadius: BorderRadius.circular(10),
-                      border: Border.all(color: const Color(0xFFFDE68A)),
-                    ),
-                    child: Row(
-                      children: [
-                        const Icon(Icons.payments_outlined, size: 18, color: Color(0xFFD97706)),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            'Refund ${MoneyFormatter.formatINR(sale.totalAmountPaise)} (${sale.paymentMethod.toUpperCase()}) to customer.',
-                            style: GoogleFonts.inter(fontSize: 11.5, fontWeight: FontWeight.w600, color: const Color(0xFF92400E)),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(
+                            linkedCustomer != null ? Icons.account_circle_rounded : Icons.person_add_alt_1_rounded,
+                            size: 16,
+                            color: linkedCustomer != null ? const Color(0xFF16A34A) : const Color(0xFF2563EB),
                           ),
-                        ),
-                      ],
+                          const SizedBox(width: 6),
+                          Expanded(
+                            child: Text(
+                              linkedCustomer != null
+                                  ? 'Credit to: ${linkedCustomer!.name} (${linkedCustomer!.phone})'
+                                  : 'Tap to Link Customer *',
+                              style: GoogleFonts.inter(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w700,
+                                color: linkedCustomer != null ? const Color(0xFF15803D) : const Color(0xFF1D4ED8),
+                              ),
+                            ),
+                          ),
+                          Text(
+                            linkedCustomer != null ? 'Change' : 'Select',
+                            style: GoogleFonts.inter(
+                              fontSize: 10.5,
+                              fontWeight: FontWeight.w700,
+                              color: linkedCustomer != null ? const Color(0xFF16A34A) : const Color(0xFF2563EB),
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
                   ),
                 ],
-                const SizedBox(height: 14),
-
-                // PIN Input field
+                const SizedBox(height: 12),
                 Text(
                   'ENTER OWNER / MANAGER PIN *',
                   style: GoogleFonts.inter(fontSize: 10.5, fontWeight: FontWeight.w800, color: const Color(0xFF475569), letterSpacing: 0.5),
@@ -364,7 +623,6 @@ class SaleDetailModal extends StatelessWidget {
             ElevatedButton.icon(
               onPressed: () async {
                 final enteredPin = pinController.text.trim();
-                // Validate PIN (Default 1234 or 0000)
                 if (enteredPin.length < 4) {
                   setDialogState(() => pinError = 'Enter 4-digit PIN (Default: 1234)');
                   HapticFeedback.heavyImpact();
@@ -372,6 +630,11 @@ class SaleDetailModal extends StatelessWidget {
                 }
                 if (enteredPin != '1234' && enteredPin != '0000') {
                   setDialogState(() => pinError = 'Wrong PIN! Default Master PIN is 1234');
+                  HapticFeedback.heavyImpact();
+                  return;
+                }
+                if (selectedRefundMethod == 'credit_note' && linkedCustomer == null) {
+                  setDialogState(() => pinError = 'Please link a customer for Store Credit');
                   HapticFeedback.heavyImpact();
                   return;
                 }
@@ -383,23 +646,28 @@ class SaleDetailModal extends StatelessWidget {
                   // 1. Record in Security Audit Logs
                   await LocalDatabase.instance.logAuditAction(
                     action: 'SALES_RETURN_REFUND',
-                    details: 'Invoice #${sale.invoiceNumber} returned (${sale.items.length} items). Reason: Customer Refund/Return.',
+                    details: 'Invoice #${sale.invoiceNumber} returned (${sale.items.length} items). Method: $selectedRefundMethod.',
                     amountPaise: sale.totalAmountPaise,
                     userPin: enteredPin,
                   );
 
                   // 2. Process Sales Return
-                  await LocalDatabase.instance.processSalesReturn(sale: sale);
+                  await LocalDatabase.instance.processSalesReturn(
+                    sale: sale,
+                    refundMethod: selectedRefundMethod,
+                    reason: 'Full Void / Customer Return',
+                    customerId: linkedCustomer?.id,
+                  );
 
                   await NativeNotificationService.showNotification(
                     title: '↩️ Sales Return Done: #${sale.invoiceNumber}',
-                    body: 'Stock restored to inventory & ${isUdhar ? "Udhar reversed" : "Refund recorded"}.',
+                    body: 'Stock restored to inventory & $selectedRefundMethod refund recorded.',
                   );
 
                   if (context.mounted) {
                     Navigator.pop(context);
                     InAppNotification.success(
-                      'Invoice #${sale.invoiceNumber} returned! Stock restocked & audit log saved.',
+                      'Invoice #${sale.invoiceNumber} returned! Stock restocked & records updated.',
                       context: context,
                     );
                   }
@@ -440,6 +708,16 @@ class SaleDetailModal extends StatelessWidget {
 
     final isUdhar = sale.paymentMethod == 'credit' || (sale.paymentMethod == 'split' && sale.splitCreditPaise > 0);
 
+    CustomerModel? linkedCustomer;
+    if (sale.customerId != null && sale.customerId!.isNotEmpty) {
+      final custs = await LocalDatabase.instance.getAllCustomers();
+      try {
+        linkedCustomer = custs.firstWhere((c) => c.id == sale.customerId);
+      } catch (_) {}
+    } else if (sale.customerPhone != null && sale.customerPhone!.isNotEmpty) {
+      linkedCustomer = await LocalDatabase.instance.findCustomerByPhone(sale.customerPhone!);
+    }
+
     final returnQtys = <int, double>{};
     for (int i = 0; i < sale.items.length; i++) {
       returnQtys[i] = 0.0;
@@ -450,6 +728,7 @@ class SaleDetailModal extends StatelessWidget {
     final pinController = TextEditingController();
     String? pinError;
 
+    if (!context.mounted) return;
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -685,6 +964,58 @@ class SaleDetailModal extends StatelessWidget {
                       ),
                     ],
                   ),
+                  if (selectedRefundMethod == 'credit_note') ...[
+                    const SizedBox(height: 8),
+                    InkWell(
+                      onTap: () async {
+                        final picked = await _pickOrAddCustomer(context);
+                        if (picked != null) {
+                          setSheetState(() => linkedCustomer = picked);
+                        }
+                      },
+                      borderRadius: BorderRadius.circular(10),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                        decoration: BoxDecoration(
+                          color: linkedCustomer != null ? const Color(0xFFF0FDF4) : const Color(0xFFEFF6FF),
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(
+                            color: linkedCustomer != null ? const Color(0xFF86EFAC) : const Color(0xFF93C5FD),
+                          ),
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(
+                              linkedCustomer != null ? Icons.account_circle_rounded : Icons.person_add_alt_1_rounded,
+                              size: 18,
+                              color: linkedCustomer != null ? const Color(0xFF16A34A) : const Color(0xFF2563EB),
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                linkedCustomer != null
+                                    ? 'Store Credit Account: ${linkedCustomer!.name} (${linkedCustomer!.phone})'
+                                    : 'Tap to Link Customer for Store Credit *',
+                                style: GoogleFonts.inter(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w700,
+                                  color: linkedCustomer != null ? const Color(0xFF15803D) : const Color(0xFF1D4ED8),
+                                ),
+                              ),
+                            ),
+                            Text(
+                              linkedCustomer != null ? 'Change' : 'Select',
+                              style: GoogleFonts.inter(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w700,
+                                color: linkedCustomer != null ? const Color(0xFF16A34A) : const Color(0xFF2563EB),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
                   const SizedBox(height: 14),
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
@@ -760,6 +1091,11 @@ class SaleDetailModal extends StatelessWidget {
                                     HapticFeedback.heavyImpact();
                                     return;
                                   }
+                                  if (selectedRefundMethod == 'credit_note' && linkedCustomer == null) {
+                                    setSheetState(() => pinError = 'Please link a customer for Store Credit');
+                                    HapticFeedback.heavyImpact();
+                                    return;
+                                  }
 
                                   Navigator.pop(sheetCtx);
                                   HapticFeedback.heavyImpact();
@@ -774,6 +1110,7 @@ class SaleDetailModal extends StatelessWidget {
                                         'product_name': it['product_name'] ?? it['name'] ?? 'Item',
                                         'return_quantity': returnQty,
                                         'price_paise': (it['price_paise'] ?? it['selling_price_paise'] ?? 0),
+                                        if (it['batch_id'] != null) 'batch_id': it['batch_id'],
                                       });
                                     }
                                   }
@@ -785,11 +1122,12 @@ class SaleDetailModal extends StatelessWidget {
                                       refundMethod: selectedRefundMethod,
                                       reason: reasonController.text.trim(),
                                       userPin: enteredPin,
+                                      customerId: linkedCustomer?.id,
                                     );
 
                                     await NativeNotificationService.showNotification(
                                       title: '↩️ Return Processed: $retNum',
-                                      body: '$totalItemsToReturn item(s) restocked. Refund: ${MoneyFormatter.formatINR(totalRefundPaise)}',
+                                      body: '$totalItemsToReturn item(s) restocked. Refund: ${MoneyFormatter.formatINR(totalRefundPaise)} ($selectedRefundMethod)',
                                     );
 
                                     if (context.mounted) {
@@ -1004,7 +1342,9 @@ class SaleDetailModal extends StatelessWidget {
                 ...sale.items.map((it) {
                   final name = it['product_name'] ?? it['name'] ?? 'Item';
                   final qty = it['quantity'] ?? it['qty'] ?? 1;
+                  final num returnedQty = it['returned_quantity'] ?? 0;
                   final pricePaise = it['gross_total_paise'] ?? ((it['price'] as int? ?? 0) * (qty as num).toInt());
+                  final isItemReturned = returnedQty >= qty;
 
                   return Padding(
                     padding: const EdgeInsets.symmetric(vertical: 4),
@@ -1012,13 +1352,38 @@ class SaleDetailModal extends StatelessWidget {
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         Expanded(
-                          child: Text(
-                            '${qty}x $name',
-                            style: GoogleFonts.inter(
-                              fontSize: 12.5,
-                              fontWeight: FontWeight.w600,
-                              color: const Color(0xFF1E293B),
-                            ),
+                          child: Row(
+                            children: [
+                              Flexible(
+                                child: Text(
+                                  '${qty}x $name',
+                                  style: GoogleFonts.inter(
+                                    fontSize: 12.5,
+                                    fontWeight: FontWeight.w600,
+                                    color: isItemReturned ? const Color(0xFF94A3B8) : const Color(0xFF1E293B),
+                                    decoration: isItemReturned ? TextDecoration.lineThrough : null,
+                                  ),
+                                ),
+                              ),
+                              if (returnedQty > 0) ...[
+                                const SizedBox(width: 6),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFFFEE2E2),
+                                    borderRadius: BorderRadius.circular(4),
+                                  ),
+                                  child: Text(
+                                    isItemReturned ? 'Returned' : 'Ret: $returnedQty',
+                                    style: GoogleFonts.inter(
+                                      fontSize: 9.5,
+                                      fontWeight: FontWeight.w700,
+                                      color: const Color(0xFFDC2626),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ],
                           ),
                         ),
                         Text(
@@ -1026,7 +1391,8 @@ class SaleDetailModal extends StatelessWidget {
                           style: GoogleFonts.plusJakartaSans(
                             fontSize: 13,
                             fontWeight: FontWeight.w700,
-                            color: const Color(0xFF0F172A),
+                            color: isItemReturned ? const Color(0xFF94A3B8) : const Color(0xFF0F172A),
+                            decoration: isItemReturned ? TextDecoration.lineThrough : null,
                           ),
                         ),
                       ],
@@ -1034,11 +1400,49 @@ class SaleDetailModal extends StatelessWidget {
                   );
                 }),
                 const Divider(height: 16, color: Color(0xFFE2E8F0)),
+                if (sale.isPartiallyRefunded) ...[
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        'Original Billed',
+                        style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF64748B)),
+                      ),
+                      Text(
+                        MoneyFormatter.formatINR(sale.totalAmountPaise),
+                        style: GoogleFonts.inter(
+                          fontSize: 12,
+                          color: const Color(0xFF64748B),
+                          decoration: TextDecoration.lineThrough,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 2),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        'Refunded Items',
+                        style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w600, color: const Color(0xFFE11D48)),
+                      ),
+                      Text(
+                        '- ${MoneyFormatter.formatINR(sale.totalRefundedPaise)}',
+                        style: GoogleFonts.inter(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                          color: const Color(0xFFE11D48),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                ],
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     Text(
-                      'Total Payable',
+                      sale.isPartiallyRefunded ? 'Net Payable / Kept' : 'Total Payable',
                       style: GoogleFonts.plusJakartaSans(
                         fontSize: 13.5,
                         fontWeight: FontWeight.w800,
@@ -1046,7 +1450,7 @@ class SaleDetailModal extends StatelessWidget {
                       ),
                     ),
                     Text(
-                      MoneyFormatter.formatINR(sale.totalAmountPaise),
+                      MoneyFormatter.formatINR(sale.isPartiallyRefunded ? sale.netAmountPaise : sale.totalAmountPaise),
                       style: GoogleFonts.plusJakartaSans(
                         fontSize: 18,
                         fontWeight: FontWeight.w900,
@@ -1161,6 +1565,111 @@ class SaleDetailModal extends StatelessWidget {
                   ),
                 ],
               ),
+            ),
+          ],
+
+          // Return Receipts History (If any return occurred)
+          if (sale.isPartiallyRefunded || sale.isRefunded) ...[
+            const SizedBox(height: 12),
+            FutureBuilder<List<Map<String, dynamic>>>(
+              future: LocalDatabase.instance.getSaleReturns(sale.id),
+              builder: (ctx, snapshot) {
+                final returns = snapshot.data ?? [];
+                if (returns.isEmpty) return const SizedBox.shrink();
+
+                return Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFFFF1F2),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: const Color(0xFFFECDD3)),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Row(
+                            children: [
+                              const Icon(Icons.assignment_return_rounded, size: 16, color: Color(0xFFE11D48)),
+                              const SizedBox(width: 6),
+                              Text(
+                                'Return Receipts History (${returns.length})',
+                                style: GoogleFonts.plusJakartaSans(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w800,
+                                  color: const Color(0xFF9F1239),
+                                ),
+                              ),
+                            ],
+                          ),
+                          Text(
+                            '- ${MoneyFormatter.formatINR(sale.totalRefundedPaise)}',
+                            style: GoogleFonts.plusJakartaSans(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w800,
+                              color: const Color(0xFFE11D48),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      ...returns.map((ret) {
+                        final retNum = ret['return_number'] ?? 'RET';
+                        final method = (ret['refund_method'] ?? 'cash').toString().toUpperCase();
+                        final amt = (ret['total_refund_paise'] as int?) ?? 0;
+                        final dateStr = ret['created_at'] != null
+                            ? DateFormat('d MMM, hh:mm a').format(DateTime.tryParse(ret['created_at']) ?? DateTime.now())
+                            : '';
+                        final methodLabel = method == 'CREDIT_NOTE'
+                            ? 'STORE CREDIT'
+                            : (method == 'CREDIT' ? 'UDHAR REVERSAL' : 'CASH REFUND');
+
+                        return Container(
+                          margin: const EdgeInsets.only(bottom: 4),
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: const Color(0xFFFFE4E6)),
+                          ),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    '$retNum • $methodLabel',
+                                    style: GoogleFonts.inter(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w700,
+                                      color: const Color(0xFF881337),
+                                    ),
+                                  ),
+                                  Text(
+                                    dateStr,
+                                    style: GoogleFonts.inter(fontSize: 9.5, color: const Color(0xFF94A3B8)),
+                                  ),
+                                ],
+                              ),
+                              Text(
+                                MoneyFormatter.formatINR(amt),
+                                style: GoogleFonts.plusJakartaSans(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w800,
+                                  color: const Color(0xFFE11D48),
+                                ),
+                              ),
+                            ],
+                          ),
+                        );
+                      }),
+                    ],
+                  ),
+                );
+              },
             ),
           ],
           const SizedBox(height: 16),

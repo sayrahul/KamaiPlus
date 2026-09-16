@@ -1283,8 +1283,14 @@ class _StoreProfileScreenState extends State<StoreProfileScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              // Do NOT fall back to a real name/number here. This line used to
+              // read `: "Divyaang Pratishthan"` and `: "9595997711"` — one
+              // specific person's details, shown as "Logged in as ..." to
+              // every merchant whose own owner name or phone happened to be
+              // blank. Show the honest placeholder instead.
               Text(
-                'Logged in as ${_ownerNameCtrl.text.isNotEmpty ? _ownerNameCtrl.text : "Divyaang Pratishthan"} (${_phoneCtrl.text.isNotEmpty ? _phoneCtrl.text : "9595997711"})',
+                'Logged in as ${_ownerNameCtrl.text.isNotEmpty ? _ownerNameCtrl.text : "Store Owner"}'
+                '${_phoneCtrl.text.isNotEmpty ? " (${_phoneCtrl.text})" : ""}',
                 style: GoogleFonts.outfit(
                   fontSize: 13,
                   fontWeight: FontWeight.w700,

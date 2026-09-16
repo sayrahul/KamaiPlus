@@ -39,6 +39,16 @@ class MoneyFormatter {
     decimalDigits: 0,
   );
 
+  static final NumberFormat _indianNumberFormatter = NumberFormat.decimalPattern('en_IN');
+
+  /// Formats a plain RUPEE count with Indian digit grouping and no symbol:
+  /// 1499 -> "1,499", 125000 -> "1,25,000". For headline prices and counts
+  /// that are rendered next to their own ₹ sign or unit label.
+  ///
+  /// Takes rupees, not paise, on purpose — it is for labels, not money maths.
+  /// Anything that computes or charges an amount must stay in integer paise.
+  static String formatIndianNumber(int rupees) => _indianNumberFormatter.format(rupees);
+
   /// Formats integer paise into Indian currency string: 49900 -> "₹499.00"
   static String formatPaise(int paise, {bool hideZeroDecimals = false}) => formatINR(paise, hideZeroDecimals: hideZeroDecimals);
 

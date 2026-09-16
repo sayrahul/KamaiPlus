@@ -505,6 +505,11 @@ public class MainActivity extends FlutterFragmentActivity implements TextToSpeec
                                 String gstin = call.argument("gstin");
                                 String storeState = call.argument("storeState");
                                 String logoPath = call.argument("logoPath");
+                                // Store tagline, honouring the "Show Tagline" toggle in Invoice
+                                // Themes. That setting was previously saved and read by nothing —
+                                // the PDF engine had no tagline argument at all, so the toggle did
+                                // nothing whichever way a merchant set it.
+                                final String storeTagline = call.argument("storeTagline");
                                 String customerName = call.argument("customerName");
                                 String customerPhone = call.argument("customerPhone");
                                 String customerGstin = call.argument("customerGstin");
@@ -703,6 +708,13 @@ public class MainActivity extends FlutterFragmentActivity implements TextToSpeec
 
                                         canvas.drawText(storeName.toUpperCase(), textLeft, 54, whiteStoreName);
                                         float storeSubY = 67;
+                                        if (storeTagline != null && !storeTagline.trim().isEmpty()) {
+                                            String tag = storeTagline.length() > 46 ? storeTagline.substring(0, 46) + "..." : storeTagline;
+                                            Paint taglinePaint = new Paint(whiteSubPaint);
+                                            taglinePaint.setTextSize(7.5f);
+                                            canvas.drawText(tag, textLeft, storeSubY, taglinePaint);
+                                            storeSubY += 10;
+                                        }
                                         if (storeAddress != null && !storeAddress.trim().isEmpty()) {
                                             String addr = storeAddress.length() > 42 ? storeAddress.substring(0, 42) + "..." : storeAddress;
                                             canvas.drawText(addr, textLeft, storeSubY, whiteSubPaint);

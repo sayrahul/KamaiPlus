@@ -141,18 +141,27 @@ class FirestoreSyncService {
         'platform': 'android_native',
       };
 
-      // Only push Pro subscription fields if merchant is Pro (protecting Admin grants)
-      if (effectiveIsPro) {
-        bizPayload['is_pro'] = true;
-        bizPayload['pro_plan'] = effectivePlan;
-        bizPayload['pro_expiry'] = effectiveExpiry;
-        bizPayload['subscription_tier'] = effectivePlan;
-        bizPayload['subscription_expires_at'] = effectiveExpiry;
-        bizPayload['subscription_valid_until'] = effectiveExpiry;
-        if (profile.razorpayPaymentId.isNotEmpty) {
-          bizPayload['razorpay_payment_id'] = profile.razorpayPaymentId;
-        }
+      // Pro subscription fields are deliberately NOT pushed from the device
+      // any more, and firestore.rules now rejects a client write that changes
+      // them. They used to be written here and in razorpay_service.dart, which
+      // — combined with rules letting a business owner write any field on
+      // their own document — meant Pro could be switched on with no payment at
+      // all. The only things that may grant paid Pro in the cloud now are the
+      // `verifyRazorpayPayment` Cloud Function (Admin SDK, after asking
+      // Razorpay what actually happened) and the Admin Console.
+      //
+      // Trial state is different: it is not a paid entitlement, it carries no
+      // revenue, and the Admin Console's drop-off radar needs to see it — so
+      // it still syncs.
+      if (profile.trialStartedAt.isNotEmpty) {
+        bizPayload['trial_started_at'] = profile.trialStartedAt;
       }
+      // Local Pro state is still reported, under a name the rules treat as
+      // ordinary telemetry, so support can see what the device believes
+      // without that belief being able to grant anything.
+      bizPayload['device_reported_pro'] = effectiveIsPro;
+      bizPayload['device_reported_plan'] = effectiveIsPro ? effectivePlan : '';
+      bizPayload['device_reported_expiry'] = effectiveIsPro ? effectiveExpiry : '';
 
       await firestore.collection('businesses').doc(bizId).set(bizPayload, SetOptions(merge: true));
 
@@ -173,11 +182,10 @@ class FirestoreSyncService {
           'updated_at': FieldValue.serverTimestamp(),
         };
 
-        if (effectiveIsPro) {
-          merchantPayload['is_pro'] = true;
-          merchantPayload['subscription_tier'] = effectivePlan;
-          merchantPayload['subscription_expires_at'] = effectiveExpiry;
-        }
+        // Same rule as businesses/{bizId} above: the device does not get to
+        // assert its own paid entitlement. Reported as telemetry only.
+        merchantPayload['device_reported_pro'] = effectiveIsPro;
+        merchantPayload['device_reported_tier'] = effectiveIsPro ? effectivePlan : '';
 
         if (currentUid != null && currentUid.isNotEmpty) {
           await firestore.collection('merchants').doc(currentUid).set(merchantPayload, SetOptions(merge: true));
@@ -317,6 +325,14 @@ class FirestoreSyncService {
           ? ((data['credit_limit_paise'] ?? 500000) as num).toInt()
           : (local?.creditLimitPaise ?? 500000),
       isVip: isVip,
+      // A doc that predates the birthday field must not blank a birthday the
+      // device already has — same "missing key ≠ empty value" rule the
+      // balance fallback above follows.
+      birthday: () {
+        final raw = data['birthday']?.toString().trim();
+        if (raw == null || raw.isEmpty) return local?.birthday;
+        return raw;
+      }(),
       syncStatus: 'synced',
     );
   }
@@ -1012,6 +1028,9 @@ class FirestoreSyncService {
         // Explicit boolean alongside the legacy 'customer_type' string, which
         // cannot represent a VIP who also carries udhaar.
         'is_vip': customer.isVip,
+        // Birthday as MM-DD. Pushed so it survives a device change or restore
+        // — same class of round-trip loss the GSTIN comment above describes.
+        'birthday': customer.birthday ?? '',
         'customer_type': customer.isVip ? 'vip' : (customer.currentBalancePaise > 0 ? 'credit' : 'regular'),
         'sync_status': 'synced',
         'lastSyncedAt': DateTime.now().toIso8601String(),

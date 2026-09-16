@@ -10,6 +10,7 @@ import '../../core/database/local_database.dart';
 import '../../core/utils/money_formatter.dart';
 import '../../models/models.dart';
 import '../../services/razorpay_service.dart';
+import '../../services/remote_config_service.dart';
 import 'in_app_notification.dart';
 
 class ProUpgradeModal extends StatefulWidget {
@@ -89,7 +90,17 @@ class _ProUpgradeModalState extends State<ProUpgradeModal> {
     return diff.isNegative ? Duration.zero : diff;
   }
 
-  int get _basePricePaise => _isAnnual ? 149900 : 19900;
+  /// Plan price in integer paise, from Firebase Remote Config so a price
+  /// change does not need an app release. Falls back to the baked-in defaults
+  /// (₹1499 / ₹199) offline and before the first fetch.
+  ///
+  /// NOTE: `verifyRazorpayPayment` in functions/index.js holds a server-side
+  /// minimum per plan so a tampered client cannot pay ₹1 and claim a year.
+  /// Raising a price here is safe; lowering one below that floor needs the
+  /// function's PLAN_RULES updated and redeployed too.
+  int get _basePricePaise => _isAnnual
+      ? RemoteConfigService.instance.proAnnualPricePaise
+      : RemoteConfigService.instance.proMonthlyPricePaise;
 
   /// A minimum floor so a misconfigured or malicious coupon document can
   /// never bring the charge to ₹0 — this hits Razorpay's live key, so the
@@ -223,10 +234,18 @@ class _ProUpgradeModalState extends State<ProUpgradeModal> {
         ? _profile.storeName
         : (_profile.ownerName.isNotEmpty ? _profile.ownerName : 'Retail Merchant');
 
-    final priceAmount = _isAnnual ? '1,499' : '199';
+    // Formatted from the same Remote Config value the charge uses, so the
+    // headline price can never drift from what Razorpay is actually asked for.
+    final priceAmount = MoneyFormatter.formatIndianNumber(_basePricePaise ~/ 100);
     final periodText = _isAnnual ? '/ year' : '/ month';
+    // "Just ₹125 / month" was hardcoded against the ₹1499 annual price. Now
+    // derived, so a price change from Remote Config can't leave the app
+    // advertising a per-month figure that does not divide into what it charges.
+    final annualPerMonth = MoneyFormatter.formatIndianNumber(
+      (RemoteConfigService.instance.proAnnualPrice / 12).round(),
+    );
     final billingSubtext = _isAnnual
-        ? 'Just ₹125 / month • Instant 1-Year Full Access'
+        ? 'Just ₹$annualPerMonth / month • Instant 1-Year Full Access'
         : 'Billed monthly • Cancel anytime';
 
     return Dialog(
@@ -490,7 +509,7 @@ class _ProUpgradeModalState extends State<ProUpgradeModal> {
                                       ),
                                       const SizedBox(height: 6),
                                       Text(
-                                        '₹199 / mo',
+                                        '₹${MoneyFormatter.formatIndianNumber(RemoteConfigService.instance.proMonthlyPrice)} / mo',
                                         style: GoogleFonts.outfit(
                                           fontSize: 16,
                                           fontWeight: FontWeight.w900,

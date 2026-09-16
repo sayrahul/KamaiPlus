@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../core/database/local_database.dart';
+import '../../services/remote_config_service.dart';
 import '../../services/referral_service.dart';
 import '../common/in_app_notification.dart';
 
@@ -202,11 +203,11 @@ class _ReferAndEarnScreenState extends State<ReferAndEarnScreen> {
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   Text(
-                                    'Invite Merchants • Get 30 Days Free PRO',
+                                    'Invite Merchants • Get ${RemoteConfigService.instance.referralRewardDays} Days Free PRO',
                                     style: GoogleFonts.outfit(fontSize: 14.5, fontWeight: FontWeight.w800, color: Colors.white),
                                   ),
                                   Text(
-                                    'When referred store starts billing, you earn 30 days of PRO.',
+                                    'When referred store starts billing, you earn ${RemoteConfigService.instance.referralRewardDays} days of PRO.',
                                     style: GoogleFonts.inter(fontSize: 11, color: const Color(0xFF94A3B8)),
                                   ),
                                 ],
@@ -382,7 +383,7 @@ class _ReferAndEarnScreenState extends State<ReferAndEarnScreen> {
                               ),
                               const Spacer(),
                               Text(
-                                'GET 15 DAYS FREE',
+                                'GET 30 DAYS FREE',
                                 style: GoogleFonts.inter(fontSize: 9, fontWeight: FontWeight.w800, color: const Color(0xFFB45309)),
                               ),
                             ],
@@ -445,7 +446,7 @@ class _ReferAndEarnScreenState extends State<ReferAndEarnScreen> {
                           const SizedBox(width: 6),
                           Expanded(
                             child: Text(
-                              'Referral Code "${_stats.appliedReferralCode}" applied • 15 Days Free PRO Unlocked',
+                              'Referral Code "${_stats.appliedReferralCode}" applied • ${RemoteConfigService.instance.referralRewardDays} Days Free PRO Unlocked',
                               style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w700, color: const Color(0xFF065F46)),
                             ),
                           ),

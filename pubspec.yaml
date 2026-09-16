@@ -21,6 +21,9 @@ dependencies:
   qr_flutter: ^4.1.0
   url_launcher: ^6.3.2
   crypto: ^3.0.7
+  # Pure-Dart AES-GCM + PBKDF2 for optional password-protected .kmb backups
+  # (see backup_restore_service.dart). No native code, so no platform build risk.
+  pointycastle: ^3.9.1
   mobile_scanner: ^7.4.0
   firebase_core: ^4.14.0
   cloud_firestore: ^6.9.0

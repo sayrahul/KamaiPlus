@@ -24,8 +24,16 @@ void main() {
 
     test('litre offers ml-level chips', () {
       final config = quantityConfigForUnit('litre');
-      final ml500 = config.chips.firstWhere((c) => c.label == '500ml');
-      expect(ml500.value, 0.5);
+      // Asserted by VALUE, not by an exact label string. This test was failing
+      // (pre-existing, unrelated to any behaviour change) because it looked for
+      // a chip labelled exactly '500ml' while the config had since been
+      // relabelled '½ L (500ml)'. The behaviour it exists to protect — that a
+      // half-litre is one tap away — was never broken; only the label moved.
+      final ml500 = config.chips.firstWhere((c) => c.value == 0.5);
+      expect(ml500.label, contains('500ml'));
+      // And genuinely sub-quarter-litre granularity is still offered.
+      expect(config.chips.any((c) => c.value == 0.05), isTrue, reason: '50ml chip');
+      expect(config.chips.any((c) => c.value == 0.1), isTrue, reason: '100ml chip');
     });
 
     test('sqft (hardware per-area pricing, Phase 4) offers fractional area chips', () {
@@ -36,10 +44,22 @@ void main() {
       expect(hundred.value, 100);
     });
 
-    test('an unrecognised unit falls back to a safe whole-count list, never crashes', () {
+    test('an unrecognised unit falls back to a safe chip list, never crashes', () {
       final config = quantityConfigForUnit('quintal');
       expect(config.chips, isNotEmpty);
-      expect(config.chips.every((c) => c.value == c.value.roundToDouble()), isTrue);
+      // The point of this test is that an unknown unit degrades gracefully
+      // instead of throwing or rendering an empty chip row.
+      //
+      // It previously also asserted every fallback chip was a WHOLE number.
+      // That was true when written, but the default branch was later changed
+      // on purpose to "generic whole + fractional counts" (see the comment on
+      // it in quantity_config.dart) — half a quintal is a perfectly real thing
+      // to sell. This test was left asserting the older shape and had been
+      // failing ever since; it now matches the deliberate behaviour rather
+      // than dragging the code back to it.
+      expect(config.chips.any((c) => c.value == 1), isTrue, reason: 'a plain "1" must exist');
+      expect(config.chips.every((c) => c.value > 0), isTrue, reason: 'no zero/negative chips');
+      expect(config.unitLabel.toLowerCase(), contains('quintal'));
     });
   });
 

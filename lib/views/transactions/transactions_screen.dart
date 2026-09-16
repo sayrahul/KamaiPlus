@@ -222,22 +222,10 @@ class _TransactionsScreenState extends State<TransactionsScreen> with DataBusRef
     return list;
   }
 
-  int get _totalRevenuePaise => _filteredSales.where((s) => !s.isRefunded).fold(0, (sum, s) => sum + s.totalAmountPaise);
-  int get _cashRevenuePaise => _filteredSales.where((s) => !s.isRefunded).fold(0, (sum, s) {
-    if (s.paymentMethod == 'cash') return sum + s.totalAmountPaise;
-    if (s.paymentMethod == 'split') return sum + s.splitCashPaise;
-    return sum;
-  });
-  int get _upiRevenuePaise => _filteredSales.where((s) => !s.isRefunded).fold(0, (sum, s) {
-    if (s.paymentMethod == 'upi') return sum + s.totalAmountPaise;
-    if (s.paymentMethod == 'split') return sum + s.splitUpiPaise;
-    return sum;
-  });
-  int get _creditDuePaise => _filteredSales.where((s) => !s.isRefunded).fold(0, (sum, s) {
-    if (s.paymentMethod == 'credit') return sum + s.totalAmountPaise;
-    if (s.paymentMethod == 'split') return sum + s.splitCreditPaise;
-    return sum;
-  });
+  int get _totalRevenuePaise => _filteredSales.fold(0, (sum, s) => sum + s.netAmountPaise);
+  int get _cashRevenuePaise => _filteredSales.fold(0, (sum, s) => sum + s.netCashAmountPaise);
+  int get _upiRevenuePaise => _filteredSales.fold(0, (sum, s) => sum + s.netUpiAmountPaise);
+  int get _creditDuePaise => _filteredSales.fold(0, (sum, s) => sum + s.netCreditAmountPaise);
 
   void _sendWhatsAppReceipt(SaleModel sale) async {
     HapticFeedback.lightImpact();
@@ -1070,6 +1058,7 @@ class _TransactionsScreenState extends State<TransactionsScreen> with DataBusRef
   // =========================================================================
   Widget _buildSaleInvoiceCard(SaleModel sale) {
     final isRefunded = sale.isRefunded;
+    final isPartiallyRefunded = sale.isPartiallyRefunded;
     final isUdhar = sale.paymentMethod == 'credit';
     final isUpi = sale.paymentMethod == 'upi';
     final isSplit = sale.paymentMethod == 'split';
@@ -1077,23 +1066,27 @@ class _TransactionsScreenState extends State<TransactionsScreen> with DataBusRef
 
     final modeColor = isRefunded
         ? const Color(0xFFDC2626)
-        : (isSplit
-            ? const Color(0xFF6366F1)
-            : (isUdhar
-                ? const Color(0xFFDC2626)
-                : isUpi
-                    ? const Color(0xFF0284C7)
-                    : const Color(0xFF059669)));
+        : (isPartiallyRefunded
+            ? const Color(0xFFD97706)
+            : (isSplit
+                ? const Color(0xFF6366F1)
+                : (isUdhar
+                    ? const Color(0xFFDC2626)
+                    : isUpi
+                        ? const Color(0xFF0284C7)
+                        : const Color(0xFF059669))));
 
     final modeBg = isRefunded
         ? const Color(0xFFFEE2E2)
-        : (isSplit
-            ? const Color(0xFFEEF2FF)
-            : (isUdhar
-                ? const Color(0xFFFEF2F2)
-                : isUpi
-                    ? const Color(0xFFF0F9FF)
-                    : const Color(0xFFECFDF5)));
+        : (isPartiallyRefunded
+            ? const Color(0xFFFEF3C7)
+            : (isSplit
+                ? const Color(0xFFEEF2FF)
+                : (isUdhar
+                    ? const Color(0xFFFEF2F2)
+                    : isUpi
+                        ? const Color(0xFFF0F9FF)
+                        : const Color(0xFFECFDF5))));
 
     // Items preview
     String itemsSummary = '';
@@ -1107,12 +1100,16 @@ class _TransactionsScreenState extends State<TransactionsScreen> with DataBusRef
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
       decoration: BoxDecoration(
-        color: isRefunded ? const Color(0xFFFFF1F2) : Colors.white,
+        color: isRefunded
+            ? const Color(0xFFFFF1F2)
+            : (isPartiallyRefunded ? const Color(0xFFFFFBEB) : Colors.white),
         borderRadius: BorderRadius.circular(14),
         border: Border.all(
           color: isRefunded
               ? const Color(0xFFFCA5A5)
-              : (isUdhar ? const Color(0xFFFED7AA) : const Color(0xFFE2E8F0)),
+              : (isPartiallyRefunded
+                  ? const Color(0xFFFCD34D)
+                  : (isUdhar ? const Color(0xFFFED7AA) : const Color(0xFFE2E8F0))),
           width: 1.1,
         ),
         boxShadow: [
@@ -1149,13 +1146,15 @@ class _TransactionsScreenState extends State<TransactionsScreen> with DataBusRef
                       child: Icon(
                         isRefunded
                             ? Icons.replay_rounded
-                            : (isSplit
-                                ? Icons.call_split_rounded
-                                : (isUdhar
-                                    ? Icons.book_rounded
-                                    : isUpi
-                                        ? Icons.qr_code_2_rounded
-                                        : Icons.payments_rounded)),
+                            : (isPartiallyRefunded
+                                ? Icons.assignment_return_rounded
+                                : (isSplit
+                                    ? Icons.call_split_rounded
+                                    : (isUdhar
+                                        ? Icons.book_rounded
+                                        : isUpi
+                                            ? Icons.qr_code_2_rounded
+                                            : Icons.payments_rounded))),
                         color: modeColor,
                         size: 18,
                       ),
@@ -1185,7 +1184,11 @@ class _TransactionsScreenState extends State<TransactionsScreen> with DataBusRef
                                   borderRadius: BorderRadius.circular(4),
                                 ),
                                 child: Text(
-                                  isRefunded ? 'RETURNED' : sale.paymentMethod.toUpperCase(),
+                                  isRefunded
+                                      ? 'RETURNED'
+                                      : (isPartiallyRefunded
+                                          ? '${sale.paymentMethod.toUpperCase()} • RET'
+                                          : sale.paymentMethod.toUpperCase()),
                                   style: GoogleFonts.inter(
                                     fontSize: 9,
                                     fontWeight: FontWeight.w800,
@@ -1212,7 +1215,7 @@ class _TransactionsScreenState extends State<TransactionsScreen> with DataBusRef
                       crossAxisAlignment: CrossAxisAlignment.end,
                       children: [
                         Text(
-                          MoneyFormatter.formatINR(sale.totalAmountPaise),
+                          MoneyFormatter.formatINR(isPartiallyRefunded ? sale.netAmountPaise : sale.totalAmountPaise),
                           style: GoogleFonts.outfit(
                             fontSize: 16,
                             fontWeight: FontWeight.w900,
@@ -1222,32 +1225,43 @@ class _TransactionsScreenState extends State<TransactionsScreen> with DataBusRef
                                 : (isUdhar ? const Color(0xFFDC2626) : const Color(0xFF0F172A)),
                           ).copyWith(fontFeatures: MoneyFormatter.tabularFeatures),
                         ),
-                        const SizedBox(height: 2),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
-                          decoration: BoxDecoration(
-                            color: isRefunded
-                                ? const Color(0xFFFEE2E2)
-                                : (isSplit
-                                    ? const Color(0xFFEEF2FF)
-                                    : (isUdhar ? const Color(0xFFFEF2F2) : const Color(0xFFECFDF5))),
-                            borderRadius: BorderRadius.circular(4),
-                          ),
-                          child: Text(
-                            isRefunded
-                                ? 'REFUNDED'
-                                : (isSplit ? 'SPLIT' : (isUdhar ? 'UDHAR' : 'PAID')),
+                        if (isPartiallyRefunded) ...[
+                          Text(
+                            'Ret: -${MoneyFormatter.formatINR(sale.totalRefundedPaise)}',
                             style: GoogleFonts.inter(
-                              fontSize: 9,
-                              fontWeight: FontWeight.w800,
-                              color: isRefunded
-                                  ? const Color(0xFFDC2626)
-                                  : (isSplit
-                                      ? const Color(0xFF6366F1)
-                                      : (isUdhar ? const Color(0xFFDC2626) : const Color(0xFF059669))),
+                              fontSize: 9.5,
+                              fontWeight: FontWeight.w600,
+                              color: const Color(0xFFE11D48),
                             ),
                           ),
-                        ),
+                        ] else ...[
+                          const SizedBox(height: 2),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
+                            decoration: BoxDecoration(
+                              color: isRefunded
+                                  ? const Color(0xFFFEE2E2)
+                                  : (isSplit
+                                      ? const Color(0xFFEEF2FF)
+                                      : (isUdhar ? const Color(0xFFFEF2F2) : const Color(0xFFECFDF5))),
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: Text(
+                              isRefunded
+                                  ? 'REFUNDED'
+                                  : (isSplit ? 'SPLIT' : (isUdhar ? 'UDHAR' : 'PAID')),
+                              style: GoogleFonts.inter(
+                                fontSize: 9,
+                                fontWeight: FontWeight.w800,
+                                color: isRefunded
+                                    ? const Color(0xFFDC2626)
+                                    : (isSplit
+                                        ? const Color(0xFF6366F1)
+                                        : (isUdhar ? const Color(0xFFDC2626) : const Color(0xFF059669))),
+                              ),
+                            ),
+                          ),
+                        ],
                       ],
                     ),
                   ],

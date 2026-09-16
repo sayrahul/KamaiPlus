@@ -347,14 +347,31 @@ class _GrowthCampaignsScreenState extends State<GrowthCampaignsScreen> {
     },
   ];
 
+  /// Birthday campaigns fire for anyone whose birthday falls within the next
+  /// week, which is how long a shopkeeper realistically needs to act on it.
+  static const int _birthdayWindowDays = 7;
+
+  /// True when this customer has a REAL recorded birthday inside the window.
+  ///
+  /// This used to be `c.name.length % 3 == 0` — literally "names whose letter
+  /// count divides by three", with a comment admitting it was simulated,
+  /// because `CustomerModel` had no birthday field at all. A shopkeeper
+  /// pressing Send was WhatsApping "Happy Birthday" offers to whichever
+  /// customers happened to have a name of the right length. There is now a
+  /// real `birthday` field (MM-DD, no year) set from the Customers screen.
+  static bool _hasUpcomingBirthday(CustomerModel c) {
+    final days = c.daysUntilBirthday();
+    return days != null && days <= _birthdayWindowDays;
+  }
+
   List<CustomerModel> get _filteredCustomers {
     return _customers.where((c) {
       if (_selectedAudience == 'Udhar Due') return c.currentBalancePaise > 0;
-      if (_selectedAudience == 'VIP') return c.creditLimitPaise >= 1000000;
-      if (_selectedAudience == 'Birthdays') {
-        // Simulating 2-3 customer birthdays for Kirana/Retail loyalty
-        return c.name.length % 3 == 0;
-      }
+      // VIP means the merchant explicitly flagged them as VIP, not "has a
+      // large udhar limit" — the old rule treated the biggest borrowers as
+      // the best customers, which is close to the opposite of the truth.
+      if (_selectedAudience == 'VIP') return c.isVip;
+      if (_selectedAudience == 'Birthdays') return _hasUpcomingBirthday(c);
       return true;
     }).toList();
   }
@@ -438,7 +455,7 @@ Welcome to our store! Visit today.
   @override
   Widget build(BuildContext context) {
     final queue = _filteredCustomers;
-    final birthdayCount = _customers.where((c) => c.name.length % 3 == 0).length;
+    final birthdayCount = _customers.where(_hasUpcomingBirthday).length;
 
     return Scaffold(
       backgroundColor: const Color(0xFFF8FAFC),
@@ -1083,7 +1100,7 @@ Welcome to our store! Visit today.
               children: [
                 {'key': 'All', 'label': 'All (${_customers.length})'},
                 {'key': 'Udhar Due', 'label': 'Due Balance (${_customers.where((c) => c.currentBalancePaise > 0).length})'},
-                {'key': 'VIP', 'label': 'VIP (${_customers.where((c) => c.creditLimitPaise >= 1000000).length})'},
+                {'key': 'VIP', 'label': 'VIP (${_customers.where((c) => c.isVip).length})'},
                 {'key': 'Birthdays', 'label': '🎂 Birthdays ($birthdayCount)'},
               ].map((item) {
                 final isSel = _selectedAudience == item['key'];

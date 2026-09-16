@@ -166,7 +166,11 @@ class _ProductsScreenState extends State<ProductsScreen> with DataBusRefresh<Pro
     );
   }
 
-  void _openAddProductSheet({ProductModel? existingProduct, String? parentIdForNewVariant}) {
+  void _openAddProductSheet({
+    ProductModel? existingProduct,
+    String? parentIdForNewVariant,
+    String? initialBarcode,
+  }) {
     AddProductModal.show(
       context,
       existingProduct: existingProduct,
@@ -174,6 +178,7 @@ class _ProductsScreenState extends State<ProductsScreen> with DataBusRefresh<Pro
       categories: _categories,
       onSaved: () => _loadData(),
       onSwitchToAiInward: () => _openAiInwardSheet(),
+      initialBarcode: initialBarcode,
     );
   }
 
@@ -241,10 +246,23 @@ class _ProductsScreenState extends State<ProductsScreen> with DataBusRefresh<Pro
               );
             }
           } else {
+            // Nothing in the store, the master catalog, or any online barcode
+            // repository knows this code. Previously this just dropped the raw
+            // barcode into the search box, leaving the merchant staring at an
+            // empty result list with no hint that the next step is to add the
+            // product — and then re-typing the 13-digit number by hand. Open
+            // the Add Product form with the barcode already filled in.
             setState(() {
-              _searchCtrl.text = scanned;
-              _searchQuery = scanned;
+              _searchCtrl.text = '';
+              _searchQuery = '';
             });
+            if (mounted) {
+              InAppNotification.info(
+                'New barcode $scanned — add its details once and it is yours forever.',
+                context: context,
+              );
+              _openAddProductSheet(initialBarcode: scanned);
+            }
           }
         }
       }

@@ -408,7 +408,14 @@ class MasterProductModel {
       categoryId: categoryId,
       mrpPaise: mrpPaise,
       sellingPricePaise: sPrice,
-      purchasePricePaise: (mrpPaise * 0.85).round(),
+      // Deliberately 0, not an invented number. This used to be
+      // `(mrpPaise * 0.85).round()` — a made-up 15% margin that nobody
+      // entered and no supplier bill supports. It flowed straight into the
+      // Home Pulse "Estimated Profit" tile and the inventory valuation, so
+      // every catalog-imported SKU quietly reported a fictional profit. A
+      // zero cost is honest ("not known yet") and the merchant sets the real
+      // buying rate on first inward or from Edit Product.
+      purchasePricePaise: 0,
       stockQuantity: initialStock,
       taxRate: taxRate,
       isTaxInclusive: true,
@@ -436,6 +443,12 @@ class CustomerModel {
   final String syncStatus;
   final bool isVip;
 
+  /// Birthday as `MM-DD` (e.g. `08-14`). Day and month only — a shopkeeper
+  /// knows the date, not the year, and does not need to store one. Null means
+  /// not recorded, which is the honest default; the Birthday campaign simply
+  /// skips such customers rather than guessing.
+  final String? birthday;
+
   CustomerModel({
     required this.id,
     required this.businessId,
@@ -448,6 +461,7 @@ class CustomerModel {
     this.creditLimitPaise = 500000, // Default ₹5,000 limit
     this.syncStatus = 'synced',
     this.isVip = false,
+    this.birthday,
   });
 
   Map<String, dynamic> toMap() => {
@@ -462,7 +476,31 @@ class CustomerModel {
     'credit_limit_paise': creditLimitPaise,
     'sync_status': syncStatus,
     'is_vip': isVip ? 1 : 0,
+    'birthday': birthday,
   };
+
+  /// Days until this customer's next birthday, or null when none is recorded.
+  /// 0 means today.
+  int? daysUntilBirthday([DateTime? now]) {
+    final raw = birthday?.trim();
+    if (raw == null || raw.isEmpty) return null;
+    final m = RegExp(r'^(\d{1,2})-(\d{1,2})$').firstMatch(raw);
+    if (m == null) return null;
+    final month = int.tryParse(m.group(1)!);
+    final day = int.tryParse(m.group(2)!);
+    if (month == null || day == null || month < 1 || month > 12 || day < 1 || day > 31) {
+      return null;
+    }
+    final today = now ?? DateTime.now();
+    final midnight = DateTime(today.year, today.month, today.day);
+    var next = DateTime(midnight.year, month, day);
+    // A 29 Feb birthday in a non-leap year rolls to 1 March, which is what
+    // DateTime(year, 2, 29) already does — no special case needed.
+    if (next.isBefore(midnight)) {
+      next = DateTime(midnight.year + 1, month, day);
+    }
+    return next.difference(midnight).inDays;
+  }
 
   factory CustomerModel.fromMap(Map<String, dynamic> map) => CustomerModel(
     id: map['id'] ?? '',
@@ -476,6 +514,7 @@ class CustomerModel {
     creditLimitPaise: map['credit_limit_paise'] ?? 500000,
     syncStatus: map['sync_status'] ?? 'pending',
     isVip: map['is_vip'] == 1 || map['is_vip'] == true,
+    birthday: map['birthday']?.toString(),
   );
 
   CustomerModel copyWith({
@@ -488,6 +527,7 @@ class CustomerModel {
     int? creditLimitPaise,
     String? syncStatus,
     bool? isVip,
+    String? birthday,
   }) => CustomerModel(
     id: id,
     businessId: businessId,
@@ -500,6 +540,7 @@ class CustomerModel {
     creditLimitPaise: creditLimitPaise ?? this.creditLimitPaise,
     syncStatus: syncStatus ?? this.syncStatus,
     isVip: isVip ?? this.isVip,
+    birthday: birthday ?? this.birthday,
   );
 }
 
@@ -554,6 +595,13 @@ class CartItemModel {
     'quantity': quantity,
     'unit_price_paise': unitPricePaise,
     'gross_total_paise': grossTotalPaise,
+    // Buying rate FROZEN at the moment of sale. Profit must be computed from
+    // what the goods actually cost when they were sold, not from whatever the
+    // product's cost price happens to be weeks later — supplier rates move,
+    // and re-reading the current cost would silently rewrite history every
+    // time a new purchase came in. 0 means "cost not known for this line",
+    // which the profit maths treats as uncosted rather than as free stock.
+    'cost_price_paise': product.purchasePricePaise,
     'tax_rate': product.taxRate,
     'is_tax_inclusive': product.isTaxInclusive ? 1 : 0,
     'discount_type': discountType,
@@ -707,6 +755,63 @@ class SaleModel {
   }
 
   bool get isRefunded => status.toLowerCase() == 'refunded' || status.toLowerCase() == 'returned';
+  bool get isPartiallyRefunded => status.toLowerCase() == 'partially_refunded';
+
+  /// Total refunded paise calculated from cumulative returned items in items_json.
+  int get totalRefundedPaise {
+    if (isRefunded) return totalAmountPaise;
+    int refunded = 0;
+    for (final it in items) {
+      final num price = it['price_paise'] ?? it['selling_price_paise'] ?? 0;
+      final num retQty = it['returned_quantity'] ?? 0;
+      refunded += (price * retQty).toInt();
+    }
+    return refunded > totalAmountPaise ? totalAmountPaise : refunded;
+  }
+
+  /// Net revenue paise after deducting returned items.
+  int get netAmountPaise {
+    if (isRefunded) return 0;
+    final net = totalAmountPaise - totalRefundedPaise;
+    return net > 0 ? net : 0;
+  }
+
+  /// Net cash collected from this sale after refunds.
+  int get netCashAmountPaise {
+    if (isRefunded) return 0;
+    if (paymentMethod == 'cash') return netAmountPaise;
+    if (paymentMethod == 'split') {
+      final splitCash = splitCashPaise;
+      if (splitCash <= 0) return 0;
+      final remaining = netAmountPaise;
+      return splitCash > remaining ? remaining : splitCash;
+    }
+    return 0;
+  }
+
+  /// Net UPI collected from this sale.
+  int get netUpiAmountPaise {
+    if (isRefunded) return 0;
+    if (paymentMethod == 'upi') return netAmountPaise;
+    if (paymentMethod == 'split') {
+      final splitUpi = splitUpiPaise;
+      if (splitUpi <= 0) return 0;
+      final remaining = netAmountPaise - netCashAmountPaise;
+      return splitUpi > remaining ? (remaining > 0 ? remaining : 0) : splitUpi;
+    }
+    return 0;
+  }
+
+  /// Net Credit due for this sale after returns.
+  int get netCreditAmountPaise {
+    if (isRefunded) return 0;
+    if (paymentMethod == 'credit') return netAmountPaise;
+    if (paymentMethod == 'split') {
+      final remaining = netAmountPaise - netCashAmountPaise - netUpiAmountPaise;
+      return remaining > 0 ? remaining : 0;
+    }
+    return 0;
+  }
 }
 
 class LedgerTransactionModel {
@@ -1329,3 +1434,48 @@ class CartTabModel {
 
 typedef CartTab = CartTabModel;
 
+
+/// Real, cost-based profit figures for a single day.
+///
+/// Deliberately reports how much of the day's revenue it could actually cost
+/// (`costedRevenuePaise`) alongside how much it could not (`uncostedRevenuePaise`),
+/// so the dashboard can say "partial" instead of presenting an incomplete
+/// margin as if it were the whole picture.
+class DayProfitSummary {
+  /// Revenue minus cost of goods, for lines with a known buying rate only.
+  final int grossMarginPaise;
+
+  /// [grossMarginPaise] minus the day's logged expenses.
+  final int netProfitPaise;
+
+  /// Revenue from lines that had a known buying rate.
+  final int costedRevenuePaise;
+
+  /// Revenue from lines with no buying rate on record — excluded from margin.
+  final int uncostedRevenuePaise;
+
+  /// How many sold lines had no buying rate on record.
+  final int uncostedLineCount;
+
+  final int expensesPaise;
+
+  const DayProfitSummary({
+    required this.grossMarginPaise,
+    required this.netProfitPaise,
+    required this.costedRevenuePaise,
+    required this.uncostedRevenuePaise,
+    required this.uncostedLineCount,
+    required this.expensesPaise,
+  });
+
+  /// True when at least one sold line had no buying rate, i.e. the margin
+  /// shown is computed over only part of the day's sales.
+  bool get isPartial => uncostedLineCount > 0;
+
+  /// Share of the day's revenue the margin actually covers, 0.0 to 1.0.
+  double get costCoverage {
+    final total = costedRevenuePaise + uncostedRevenuePaise;
+    if (total <= 0) return 1.0;
+    return costedRevenuePaise / total;
+  }
+}

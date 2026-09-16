@@ -45,6 +45,43 @@ hits (the screen's data-loading call), not just the data shape. See
 drives `LocalDatabase` through a real (in-memory FFI) SQLite database and asserts on what
 `getAllProducts`/`getAllCategories` actually return.
 
+## 2026-09-15 — Refer & Earn "Earn" Side Architecture & GST GSTR-1 JSON Critical Fixes
+
+**User Symptoms & Problems Reported:**
+1. Refer & Earn Dead Loop: "Refer" worked (WhatsApp sharing, link generation), but "Earn" was completely non-functional. Referrer never received any reward; `referral_activated_count` and `referral_free_days_earned` remained permanently at 0.
+2. Arbitrary Code Exploit: Entering any random string (e.g. `KAMAI1234`) granted 15 days free PRO without validating if the code belonged to any real merchant.
+3. Code Collisions: Referral codes were generated as `KAMAI` + phone last 4 digits, leading to collisions between merchants sharing identical phone suffixes.
+4. No Cloud Record: Referral codes were neither registered nor validated in Firestore.
+5. Inaccurate Share Counter: Tapping share buttons incremented "Stores Invited" count before the share sheet was completed or even if cancelled.
+6. GSTR-1 B2B Omission: Table 4A `b2b` array was hardcoded as empty `[]`, completely excluding registered B2B invoices from GST portal export.
+7. GSTR-1 Filing Period Desync: `fp` field always evaluated to `DateTime.now()` (e.g. May filing exported in September generated `092026` instead of `052026`).
+8. Refunded Sales Inflating GST: Sales marked as refunded/returned were included in turnover, HSN summary, and B2C sales totals.
+9. Fake GSTIN Vulnerability: If store GSTIN was empty, GSTR-1 JSON silently exported a hardcoded mock GSTIN (`27AABCK1234F1Z5`).
+10. Missing IGST Support: All tax calculations assumed intra-state (`INTRA`) supply, with `iamt` permanently set to `0.0`.
+11. Missing Credit Notes: No `cdnr`/`cdnur` sections for invoice cancellations/returns.
+
+**Root Causes (file:line) & Fixes Applied:**
+1. `lib/services/referral_service.dart:255-275`: Added Firestore document validation against `referral_codes/{CODE}` in `applyReferralCode()`. Non-existent codes are rejected immediately.
+2. `lib/services/referral_service.dart:291-356`: Implemented `_rewardReferrer()` to record redemptions in `referral_codes/{CODE}/redemptions/{refereeUid}`, atomically increment `activated_count` (+1) and `free_days_earned` (+30), and automatically extend referrer's PRO expiry in `businesses/biz_{referrerMerchantId}`.
+3. `lib/services/referral_service.dart:56-82`: Replaced phone-suffix code generation with `KAMAI` + 4 random alphanumeric uppercase characters with Firestore collision checking and offline fallback.
+4. `lib/services/referral_service.dart:94-114`: Implemented `_registerCodeInFirestore()` to register code ownership on creation.
+5. `lib/services/referral_service.dart:154-173`: Added `_syncStatsFromFirestore()` to sync `activated_count` and `free_days_earned` from Firestore on every stats fetch, surviving local storage resets.
+6. `lib/services/referral_service.dart:187-234`: Moved invited count increment to execute ONLY after `launchUrl` succeeds or `SharePlus.instance.share` returns `ShareResultStatus.success`.
+7. `lib/views/growth/refer_and_earn_screen.dart:385,448`: Aligned UI labels and invite copy to 30 Days Free PRO reward.
+8. `lib/services/gst_export_service.dart:426-508`: Populated Table 4A `b2b` array grouped by buyer GSTIN (`ctin`) with invoice metadata, line items, and correct tax values.
+9. `lib/services/gst_export_service.dart:51-86,396`: Added `FilingPeriod` class and `resolveFilingPeriod()` to correctly resolve `'This Month'`, `'Last Month'`, and quarters (`Q1` $\rightarrow$ `06YYYY`, `Q2` $\rightarrow$ `09YYYY`, etc.).
+10. `lib/views/reports/gst_reports_screen.dart:103` & `lib/services/gst_export_service.dart:124,297,400`: Filtered out `sale.isRefunded` sales from turnover, HSN summary, and B2CS tables.
+11. `lib/services/gst_export_service.dart:149`: Fixed boolean evaluation bug `item['is_tax_inclusive'] != null ? ... : (product?.isTaxInclusive ?? true)` so tax-exclusive items are not wrongly treated as tax-inclusive when product map lacks the entry.
+12. `lib/services/gst_export_service.dart:388-393` & `lib/views/reports/gst_reports_screen.dart:219-225,402-468`: Blocked GSTR-1 JSON export when store GSTIN is empty; displays `_showGstinMissingDialog()`.
+13. `lib/services/gst_export_service.dart:97-118,170-186,453-487`: Added `_isInterState()` logic comparing seller and buyer/place of supply state codes. Routes tax to `iamt` for inter-state and `camt`/`samt` for intra-state.
+14. `lib/services/gst_export_service.dart:538-610`: Added Table 9B Credit Notes (`cdnr` for B2B returns, `cdnur` for B2C returns) and wired `canc` count in `doc_issue`.
+
+**Verification & Quality Gates:**
+- `test/gst_gstr1_export_test.dart`: 7 tests passed (filing period resolution, GSTIN enforcement, inter-state IGST, refund exclusions).
+- `test/referral_service_test.dart`: 3 tests passed (invite copy, stats model, blank code validation).
+- `test/money_math_test.dart`: 3 tests passed (integer paise formatting & tax math).
+- `dart analyze`: 0 errors, 0 warnings across all modified and test files.
+
 ## 2026-09-15 — 14-Item Enterprise Security, Financial Alignment, UI Polish & Localization Overhaul
 
 **User Symptoms & Requirements:**
@@ -2079,4 +2116,399 @@ isolation. `flutter analyze` clean, full `flutter test` suite passes (28 tests t
    - `flutter test test/money_math_test.dart`: **All tests passed**.
    - APK exported to `export/KamaiPlus-Universal-v4.20.0-Release.apk` (63.9 MB).
 
+
+
+---
+
+## 2026-09-15 (evening) — Full-app functional audit: fabricated business metrics, ₹0 billing hole, barcode autofill overhaul
+
+**User request (Hinglish):** "sab cross check karke validate karo ki konsa kaam kar raha,
+functional hai, adhura hai, ya bug issue hai... product add karte time barcode scan karne
+par internet se puri detail ani chahiye atleast naam unit vagaira sab. ye bahut important
+function hai."
+
+This was an audit-and-fix pass across all 67k lines of `lib/`, not a single-feature task.
+Everything below was found by reading code, not by reproducing on a device — where that
+matters it is called out.
+
+### A. FABRICATED DATA PRESENTED AS REAL BUSINESS METRICS (worst class found)
+
+1. **"EST. PROFIT" was `todaySales × 0.14`.**
+   `home_pulse_tab.dart:146` — `_todayProfitPaise = (totalSales * 0.14).round();`. The
+   flagship Home KPI, labelled "Live Margin" and gated behind the owner privacy PIN, never
+   read a cost price in its life. A day of loss-leaders and a day of high-margin goods
+   reported the identical "profit", and the PIN gate made the number look *more*
+   authoritative than it was.
+   **Fix:** `CartItemModel.toMap()` now freezes `cost_price_paise` onto every sale line at
+   billing time (models.dart), and `LocalDatabase.getDayProfitSummary()` computes real
+   gross margin line by line, minus that day's expenses. Lines with no known cost are
+   EXCLUDED rather than counted as 100% profit — counting them would have overstated the
+   figure, which is the dangerous direction. The card shows an amber "Partial" badge and
+   "N item(s) need buying price" when coverage is incomplete.
+   **Regression test:** `test/real_profit_math_test.dart` — 9 tests, including one that
+   asserts the two-margin basket does NOT produce the old flat-rate answer.
+
+2. **"Birthday Radar" selected its audience by name length.**
+   `growth_campaigns_screen.dart:356` — `return c.name.length % 3 == 0;`, with a comment
+   admitting "Simulating 2-3 customer birthdays". `CustomerModel` had **no birthday field
+   at all**. A shopkeeper pressing Send WhatsApped a "Happy Birthday" offer to whichever
+   customers happened to have a name whose letter count divided by three.
+   **Fix:** real `birthday` column (`MM-DD`, no year — a shopkeeper knows the date, not
+   the year), added via `_ensureExtraTables` so it lands on both new and existing installs;
+   `CustomerModel.birthday` + `daysUntilBirthday()`; a birthday picker in the Customers
+   add/edit sheet; Firestore push/pull so it survives a device change (with the same
+   "missing key is not an empty value" guard the GSTIN round-trip fix uses). Campaign now
+   targets birthdays within 7 days. Customers with no birthday recorded are simply skipped.
+
+3. **"VIP" segment meant "owes us the most".**
+   Same file — `c.creditLimitPaise >= 1000000`. `CustomerModel.isVip` existed and was
+   editable in the UI but the campaign filter ignored it, so the VIP reward campaign
+   targeted the biggest borrowers. **Fix:** filter and count both read `isVip`.
+
+4. **`purchasePricePaise = (mrpPaise * 0.85).round()`** in
+   `MasterProductModel.toProductModel` — an invented 15% margin on every catalog-imported
+   SKU, flowing into profit and inventory valuation as if a supplier bill supported it.
+   **Fix:** 0 (= "not known yet"). `assetCostValuationPaise` already returns 0 for unknown
+   cost, so valuation now skips these rather than inflating.
+
+5. **`store_profile_screen.dart:1287`** fell back to a real person's name and phone
+   ("Divyaang Pratishthan" / "9595997711") in the "Logged in as ..." line whenever the
+   merchant's own owner name was blank. **Fix:** neutral "Store Owner", phone omitted when
+   unknown.
+
+### B. SILENT MONEY / STOCK LOSS
+
+6. **A scanned cloud-resolved item billed at ₹0.**
+   Online barcode repositories carry no Indian MRP, so `resolveBarcode` returns
+   `sellingPricePaise: 0`. `pos_billing_screen._importAndAddToCart` imported it as-is and
+   showed a green "Added to Bill" toast. The cashier scanned, saw success, and billed the
+   item free. **Fix:** a zero-priced scan now stops and asks for the rate
+   (`_promptSellingPriceForNewScan`) before anything enters the cart; cancelling bills
+   nothing. Both POS scan paths (camera and hardware gun) route through the same funnel.
+
+7. **Cross-vertical leak in `importMasterProductToStore`.**
+   `local_database.dart:1403` called `findProductByBarcode(barcode)` with **no**
+   `businessType`, so a barcode already imported into Grocery was returned verbatim when
+   scanned in Pharmacy — the pharmacy billed a grocery row it could not see in its own
+   catalog. Its inline category lookup was also unscoped. Same bug class as the
+   `getAllProducts` regression in the case study at the top of this file.
+   **Fix:** both queries now vertical-scoped. Separately, the POS camera-scan path imported
+   **without** `targetVertical` at all (the other call site already passed it), so a
+   just-billed item vanished from the merchant's own catalog — now passes it.
+
+8. **Three different "unlimited stock" sentinels.**
+   `models.dart` says `>= 99990`, `pos_billing_screen.dart` used `>= 900000` in three
+   places, `local_database.dart` uses `99999`, and the master-catalog import writes exactly
+   `99999`. So the same product read "Unlimited" in the grid and "99999 pcs" in the tile
+   below it, with the out-of-stock guard disagreeing with its own badge.
+   **Fix:** all three POS sites use `ProductModel.isUnlimitedStock`.
+
+9. **Today's figures were derived from the last 50 sales.**
+   `home_pulse_tab.dart` pulled `getAllSales(limit: 50)` and filtered for today in Dart, so
+   a counter crossing 50 bills a day silently dropped its own earliest bills — the busier
+   the shop, the lower its "Today's Sales" read. **Fix:** new uncapped
+   `LocalDatabase.getSalesBetween(start, end)`, used for the day's sales and the profit
+   summary. Test asserts 55 bills are all counted.
+
+### C. BARCODE TO ONLINE PRODUCT DETAIL (the explicit ask)
+
+`cloud_barcode_resolver_service.dart` rewritten. The wiring was already correct at all four
+call sites (Add Product, Products screen, POS, Rapid Inward) — the problem was coverage and
+the quality of what came back.
+
+- **Sources 2 to 7.** Was: Open Food Facts India + World + Open Beauty Facts. Now adds
+  **Open Products Facts** (general non-food merchandise), **Open Pet Food Facts**,
+  **UPCitemdb** trial endpoint (stationery/hardware/electronics/apparel the Facts family
+  does not index), and **Google Books** for ISBN-13 (978/979) — all free, no API key. The
+  five Facts hosts are queried in parallel, so the slowest bounds the wait, not the sum.
+- **`_inferUnit` was matching substrings.** `text.contains(' g')` matched the space-g in
+  "Amul Gold" and "Britannia Good Day", filing both as grams. Now an anchored numeric regex
+  over the pack-size string, with whole-word fallback on the name and a vertical-appropriate
+  default (pharmacy to strip, restaurant to plate) instead of a blanket "pcs".
+- **Category was polluting the merchant's own catalog.** The old code took the first comma
+  segment of the Open Food Facts English taxonomy verbatim, and `_autofillCategory`
+  immediately created it as a real category row. A few scans left a kirana with categories
+  no Indian shopkeeper would ever write. Now `mapToVerticalCategory()` maps onto that
+  vertical's own `quickCategories`, falling back to 'General' — which every caller already
+  deliberately skips rather than creates.
+- **Unit spellings were splitting the dropdown.** The seeded catalog alone uses 20 unit
+  spellings ('pack', 'jar', 'tube', 'pouch', 'tetra', 'refill', ...), only 6 of which the
+  app has labels for; the rest were appended to the Add Product dropdown verbatim, leaving
+  a shopkeeper choosing between four spellings of "packet" and splitting their own
+  reporting across all four. New `BusinessVerticals.canonicalUnit()` folds synonyms;
+  `_autofillUnit` calls it first.
+- **Barcode validation.** Anything 6+ chars was sent to the network. Now digits only,
+  8-14 (EAN-8/UPC-A/EAN-13/ITF-14) — a misread or an internal SKU label no longer costs the
+  cashier a multi-second stall for a guaranteed miss.
+- **Caching.** Session memory cache for rapid-fire gun scanning, plus a 6-hour negative
+  cache so rescanning an unknown item fails instantly instead of repeating the full
+  round-trip. Cloud hits are cached under the **scanning store's own vertical** — the
+  merchant physically scanned it at their counter, so tagging it any other way makes the
+  product invisible in their catalog right after they billed it. The curated offline
+  dictionary keeps its strict vertical filter, because that is seed data, not a scan.
+- **Unknown barcode no longer dead-ends.** `products_screen` used to drop the raw barcode
+  into the search box, leaving an empty result list and a 13-digit number to re-type by
+  hand. It now opens Add Product with the barcode pre-filled and the lookup already running
+  (`AddProductModal.initialBarcode`).
+
+**Regression test:** `test/barcode_autofill_quality_test.dart` — 18 tests covering unit
+inference (including the exact "Amul Gold" failure), category mapping, barcode validation,
+display-name assembly and unit-synonym folding. Two of them are invariants rather than
+examples: every inferred unit must have a display label, and every mapped category must be
+one that vertical actually offers.
+
+### D. FEATURES THAT SAVED SETTINGS NOBODY READ
+
+10. **Thermal receipts ignored Invoice Themes entirely.** Heading, custom footer, GSTIN and
+    the owner-phone toggle were read only by the A4 PDF engine — and for most kirana
+    counters the 58mm roll is the *only* bill a customer ever sees. **Fix:** wired into
+    `generateReceiptBytes`.
+11. **Non-ASCII text was corrupting print jobs.** Every line used `String.codeUnits`, which
+    hands the printer UTF-16 units truncated to bytes. A Devanagari store name printed
+    gibberish and could emit a byte the printer reads as an ESC/GS control code, corrupting
+    the receipt mid-print. The rupee sign (U+20B9) truncated to a superscript one, so bills
+    read "TOTAL: (1)499.00". **Fix:** `_escText()` — drops non-Latin-1 and spells the rupee
+    sign as "Rs.".
+12. **Admin push "target audience" was decorative.** `functions/index.js` read
+    `data.target_audience`, logged it, then sent to the `all_merchants` topic regardless —
+    so every "Pro only" or "win back inactive merchants" campaign went to everyone,
+    including free users told they had lapsed and paying users sold an upgrade they already
+    had. **Fix:** `resolveAudienceTokens()` resolves Pro/Free/Inactive to real FCM tokens
+    and multicasts in 500-token chunks; "all" keeps the cheap topic send. Delivery counts
+    are written back to the notification doc. **NEEDS `firebase deploy --only functions`
+    — not verified live from here.**
+13. **"Encrypted backup" was not encrypted.** `backup_restore_service.dart` produces a magic
+    header + JSON manifest + **raw SQLite bytes**, and the share text invited the merchant
+    to send it over WhatsApp while calling it encrypted. Anyone receiving that file can open
+    the entire shop database — customer phone numbers, every khata balance — in any SQLite
+    viewer. **Fix:** honest labelling everywhere plus an explicit "keep it private" warning.
+    Real encryption is deliberately NOT added here: it would have to stay backward
+    compatible with the V1 header or existing backups stop restoring. See Known open issues.
+14. **Credit limit was never enforced.** `creditLimitPaise` is stored, editable and printed
+    on the customer card, but nothing read it at the one moment it exists for — a customer
+    with a ₹5,000 limit could run ₹50,000 of udhar in silence. **Fix:**
+    `_confirmCreditLimitBreach()` in the checkout modal shows current udhar, this bill's
+    credit portion, the new balance and the agreed limit. Advisory, not a hard block
+    ("Give Udhar Anyway") — same posture as the near-expiry nudge, because a shopkeeper
+    sometimes has a good reason to extend credit.
+
+### Verification
+- `flutter analyze lib` -> **No issues found** (983s).
+- `flutter test test/barcode_autofill_quality_test.dart` -> **18/18 passed**.
+- `flutter test test/real_profit_math_test.dart` -> **9/9 passed**.
+- `node --check functions/index.js` -> syntax OK.
+- `flutter test` (whole suite) -> **164/164 passed** (3:37), after the two stale
+  `quantity_config_test.dart` assertions described in section E were corrected.
+- **Not** verified on a physical device this session: thermal ESC/POS output, the FCM
+  audience targeting (needs deploy), and live network responses from the new barcode
+  sources (UPCitemdb/Google Books are exercised by code review and unit tests only).
+
+### Added to Known open issues (not fixed here)
+- Razorpay Pro activation is entirely client-side (no `order_id`, no signature check) and
+  Firestore rules let a business owner write `is_pro: true` to their own doc. A signed
+  webhook template exists at `backend/nextjs_razorpay_webhook_route.ts` but nothing in this
+  repo deploys it, and the client grants Pro without waiting for it.
+- `RemoteConfigService` fetches 11 parameters; only `gemini_api_key` is ever read — so
+  support phone/email, announcement banner, promo banner and force-update enforcement are
+  all configurable from the admin side and ignored by the app.
+- Remote Config's `pro_monthly_price`/`pro_annual_price` defaults (299/1999) disagree with
+  the real price, which is 199/1499 and hardcoded in BOTH `pro_upgrade_modal.dart` and
+  `razorpay_service.dart`. Not a live billing mismatch today — the modal and the charge
+  agree, and nothing reads the Remote Config values — but it means a price change has to be
+  made in two hardcoded places and the "remote" price knob is a trap for whoever tries it.
+- Google Drive backup is a share-sheet handoff, not a Drive API integration — no automatic
+  or scheduled backup, and no restore-from-Drive.
+- `invoice_show_logo` / `invoice_show_tagline` are saved by Invoice Themes and never read
+  by either print path.
+- Backup files are unencrypted raw SQLite (see item 13) — real encryption needs a format
+  version bump that stays backward compatible with the V1 header.
+
+### E. PRE-EXISTING TEST FAILURES FOUND WHILE VERIFYING (not caused by this pass)
+
+`flutter test` on the whole suite was red before any of the above was touched.
+`test/quantity_config_test.dart` had two stale assertions against
+`lib/core/utils/quantity_config.dart`, a file this pass never edited:
+
+- `litre offers ml-level chips` looked for a chip labelled exactly `'500ml'`, but the
+  config had since been relabelled `'½ L (500ml)'`. The behaviour it protects — a
+  half-litre one tap away — was never broken; only the label moved. Re-asserted by value
+  (`c.value == 0.5`) plus a `contains('500ml')` label check, so a future relabel does not
+  fail it again while a missing half-litre chip still does.
+- `an unrecognised unit falls back to a safe whole-count list` asserted every fallback chip
+  was a whole number. The default branch was later deliberately changed to "generic whole +
+  fractional counts" (its own comment says so) — half a quintal is a real thing to sell.
+  The test was left asserting the older shape. Updated to match the deliberate behaviour
+  (a plain "1" exists, no zero/negative chips, unit name echoed) rather than dragging the
+  code back to it.
+
+`test/mistagged_product_repair_test.dart` also showed one failure in the full parallel run
+but passes consistently in isolation and in every re-run since — recorded here so the next
+session knows it has been seen and is not a silent regression from this pass.
+
+**Full suite after this pass: `flutter test` → 164/164 passed (3:37).**
+
+---
+
+## 2026-09-15 (late) — Audit follow-up: closing the Pro revenue hole, real Drive backup, encrypted .kmb, dead Remote Config
+
+**User request:** "ok sab implement kardo thik se... but carefully."
+
+This finishes the five items the earlier audit entry deliberately left in **Known
+open issues** rather than rushing. Each one is a case of a feature that looked finished
+from the UI and did nothing (or the wrong thing) underneath.
+
+### 1. Pro could be switched on without paying — closed end to end
+
+**What was wrong.** Three things lined up into one hole:
+* `razorpay_service.dart:_handlePaymentSuccess` wrote `is_pro: true` straight into
+  `businesses/{bizId}` from the device, with no `order_id`, no signature check and no
+  amount check. Razorpay was never asked whether the payment was real.
+* `firestore_sync_service.dart` pushed the same subscription fields on every profile sync.
+* `firestore.rules` let a business owner write **any** field on their own document.
+
+So Pro was grantable with a Firestore client and a signed-in account, no payment at all —
+and a genuine payment of ₹1 would have been accepted as a year's subscription.
+
+**What it is now.**
+* New `verifyRazorpayPayment` HTTPS Cloud Function (`functions/index.js`): verifies the
+  caller's Firebase ID token server-side (never a `business_id` the caller claims), fetches
+  the payment from Razorpay's own API with the key secret, and rejects anything that is not
+  `captured`, in INR, and at or above a per-plan floor. Grants via the Admin SDK.
+  Idempotent: a replayed `payment_id` returns "already granted" instead of extending the
+  subscription again, and a payment already claimed by another account is refused (409).
+  The floor exists because the client controls `overrideAmountPaise` for coupons.
+* `razorpay_service.dart` calls it and no longer writes Pro to Firestore. Local SQLite
+  activation still happens immediately — the offline-first contract says a merchant who
+  just paid gets their features at the counter even on a dead connection — and a failed
+  handshake is stored in `pending_razorpay_verification` and retried from `main.dart` on
+  the next launch, so a purchase made offline is not silently lost.
+* `firestore_sync_service.dart` reports local Pro state as `device_reported_*` telemetry
+  instead of asserting the entitlement. Trial state still syncs (it is not a paid
+  entitlement and the admin drop-off radar needs it).
+* `firestore.rules`: new `proFields()` / `touchesProFields()` guards on **both**
+  `businesses/{businessId}` and `merchants/{merchantId}`, splitting the old blanket
+  `allow read, write` into create/update/delete. `account_disabled` is in the protected
+  list too, so a merchant cannot un-disable themselves. `razorpay_payments/{id}` is
+  covered by the existing default-deny, so only the Admin SDK touches it.
+
+**⚠ Deployment required, in this order:** `firebase functions:secrets:set
+RAZORPAY_KEY_SECRET` → `firebase deploy --only functions` → `firebase deploy --only
+firestore:rules`. Deploying the rules first would leave paying merchants with no cloud Pro
+record until the function lands. If neither is deployed, purchases still work locally
+(`isProEffective` reads the local profile) and the cloud listener never downgrades on a
+missing field — so the failure mode is "cloud record missing", not "merchant loses Pro".
+
+### 2. Google Drive backup was never a Drive backup
+
+`saveToGoogleDrive()` built the file and opened the Android share sheet, hoping the
+merchant picked Drive out of it. Nothing was uploaded, nothing could be listed, and there
+was **no restore-from-Drive at all** — a merchant who lost their phone had no way home.
+
+New `google_drive_backup_service.dart` talks to the Drive REST API directly (four calls,
+no `googleapis` dependency — same `dart:io` pattern as the barcode resolver):
+`_ensureFolder` → multipart upload → list → download. Scope is **`drive.file` only**
+(files this app created, nothing else in the merchant's Drive) — non-sensitive, so no
+Google app verification needed, and a bug here can never reach their personal documents.
+`BackupRestoreService.restoreFromDrive()` downloads to a temp file and then goes through
+the *same* `restoreFromBackupFile` path as a local file, so checksum verification and the
+password prompt behave identically — no second, weaker restore path to keep in sync.
+The share sheet stays as the fallback when the merchant declines the Drive permission.
+New "Restore from Google Drive" card in Backup & Reset.
+
+### 3. `.kmb` backups can now actually be encrypted
+
+The previous entry fixed the *labelling* (the file was called "Encrypted" while being raw
+SQLite) but left the exposure. Now:
+* **V2 format**: magic header + plaintext manifest + `salt(16) + nonce(12) +
+  AES-256-GCM(db)`, key from PBKDF2-HMAC-SHA256 at 150k iterations. `pointycastle` (pure
+  Dart — no native code, no extra platform build risk).
+* **V1 is still read forever.** Every backup a merchant already holds is V1; a security
+  improvement that stranded those would be a worse bug than the one it fixes.
+* **GCM, not CBC**, on purpose: it authenticates, so a wrong password or a tampered file
+  fails at decryption instead of returning plausible garbage that would then be written
+  over the merchant's live database.
+* **Optional, not forced.** For this audience a forgotten password is a likelier disaster
+  than a stolen backup and there is no recovery path, so the export dialog says that in
+  plain Hinglish and offers Skip. Manifest stays in the clear so restore can preview a
+  file before asking for its password — a deliberate, documented tradeoff.
+* Tests: `test/backup_encryption_test.dart` (9), including one that asserts a V1 package
+  *does* contain `SQLite format 3` (documenting the exposure V2 closes) and one that
+  asserts a V2 package does not contain a customer's phone number.
+
+### 4. Remote Config: 10 of 11 parameters were fetched and discarded
+
+Only `gemini_api_key` was ever read. Four of the others were worse than dead — they looked
+like working controls while duplicating a mechanism that really is wired up:
+`app_announcement_*` / `banner_promo_*` duplicate Firestore `platform_settings/broadcast`
+(rendered on Home Pulse), and `force_update_required` / `min_supported_version` duplicate
+`platform_settings/global_config` (handled in `home_dashboard_screen.dart`). Anyone setting
+those in the Firebase console would have watched nothing happen.
+
+Those four are **removed**, not re-wired — a second source of truth for "what banner is
+showing" is worse than one. Firestore `platform_settings` is now documented in the service
+as the single source for broadcasts and force-update. The rest are now genuinely used:
+* `support_phone` / `support_email` → new **Help & Support** sheet in the Menu (WhatsApp,
+  email, call), pre-filling store name and phone so support doesn't have to ask. The app
+  previously had no support entry point at all.
+* `pro_monthly_price` / `pro_annual_price` → single source for both the displayed price and
+  the Razorpay charge. These were hardcoded in *two* places (`pro_upgrade_modal.dart` and
+  `razorpay_service.dart`), so a price change could leave the app showing one number and
+  charging another. The "Just ₹125 / month" annual subtext is now derived too.
+* `referral_reward_days` → `referral_service.dart` plus every piece of UI copy that quoted
+  "30 Days" (menu tile, refer screen hero, applied-code toast, WhatsApp invite text).
+
+### 5. `invoice_show_logo` / `invoice_show_tagline` were saved and never read
+
+Both written by Invoice Themes — which even previews their effect on a mock bill — and read
+by nothing, so a merchant could switch the logo off and keep printing it. The PDF path now
+honours all three display toggles (logo, tagline, owner phone), and the thermal path prints
+the tagline too. Tagline needed a new argument in the native PDF engine
+(`MainActivity.java`), which had no concept of one.
+
+### Verification
+- `flutter analyze lib` → see the run recorded with this entry.
+- `flutter test test/backup_encryption_test.dart` → **9/9 passed**.
+- `node --check functions/index.js` → syntax OK.
+- `flutter pub get` with the new `pointycastle` dependency → resolved.
+- **Not verifiable from here** (no device, no deploy access): the Razorpay verification
+  round trip, the Drive OAuth consent and upload, the hardened Firestore rules, and the
+  thermal/PDF tagline rendering. Each needs a real device or a deploy.
+
+### Known open issues — updated
+Resolved by this entry: Razorpay client-side Pro grant; Remote Config dead parameters;
+Google Drive share-sheet-only "backup"; unencrypted `.kmb`; unread invoice display toggles.
+Still open: the old Vercel admin panel at `kamaiplus.proventure.in`; the `test_screen`
+SharedPreferences auth bypass in `splash_screen.dart` / `MainActivity.java`; no
+`business_id` scoping on several list queries.
+
+---
+
+## 2026-09-16 — Complete Sales Return (Partial & Full Void), Store Credit / Advance (Jama), Cash Refund Drawer Parity, Restocking & App-Wide Financial Synchronization
+
+**User Request:**
+"payment history me mkisi bhi transection par click karne par Return Items par click akrne par jab hum item retun karte hai to cash refund store credit ye sab functional hona chahiye, entire app me jaha jaha link accroding wo amount vapas jana chahiye, ya store product count accroding kam jyada/kam hona chahiye,,,,"
+
+**Root Causes Found & Architectural Fixes:**
+1. **Balance Clamping Root Cause (`local_database.dart`):**
+   - *Bug:* `processSalesReturn` and `processPartialSalesReturn` were using `.clamp(0, 999999999999)` on customer balance updates. If a customer had ₹0 debt and returned an item for Store Credit (Credit Note), clamping coerced their balance to 0, completely wiping out their credit.
+   - *Fix:* Removed `.clamp()`. In KamaiPlus, negative balance (`< 0`) strictly represents **Customer Advance / Jama (जमा)**. Store Credit / Credit Note now creates a ledger debit entry and updates `current_balance_paise` to negative without clamping.
+2. **Net Profit Double-Deduction Prevention (`getDayProfitSummary` in `local_database.dart`):**
+   - *Bug:* Cash refunds were logged as `ExpenseModel` in `cash_expenses` with category `'Refund'` to deduct drawer cash. However, `getDayProfitSummary` deducted all expenses from gross margin, while also deducting returned items from sales revenue, double-penalizing net profit.
+   - *Fix:* Excluded category `'Refund'` from operational expenses in `getDayProfitSummary` (`AND category != 'Refund'`), and computed sales item margin on effective sold quantity (`quantity - returned_quantity`).
+3. **Walk-in Store Credit Association (`sale_detail_modal.dart`):**
+   - *Bug:* Walk-in/guest invoices have no `customerId`. Selecting "Store Credit" for a walk-in sale had no account to credit.
+   - *Fix:* Added `_pickOrAddCustomer(context)` modal enabling the cashier to search an existing customer or quick-add a new customer (Name + 10-digit mobile) inline before processing Store Credit.
+4. **App-Wide Reactive Synchronization:**
+   - *Inventory Restocking:* Product stock quantity in SQLite `products` is incremented by returned qty (`stock_quantity = stock_quantity + qty`), batch count in `product_batches` is restored, and `PARTIAL_RETURN` / `FULL_RETURN` inventory ledger movements are logged.
+   - *Sale Model Getters:* Added `isPartiallyRefunded`, `totalRefundedPaise`, `netAmountPaise`, `netCashAmountPaise`, `netUpiAmountPaise`, `netCreditAmountPaise` to `SaleModel` in `models.dart`.
+   - *Transaction History (`transactions_screen.dart`):* Revenue KPIs compute net amounts; invoice cards display amber border, `● PARTIAL RET` badge, and `Ret: -₹X` breakdown.
+   - *Home Pulse Dashboard (`home_pulse_tab.dart`):* Today's sales KPI reflects net revenue, while gross cash is used for drawer calculation to prevent double deduction.
+   - *Cash Register Drawer Parity:* Cash refund expenses reduce expected drawer cash seamlessly.
+   - *Audit Trail:* Return receipts logged into `sale_returns` and displayed in `SaleDetailModal` under "Return Receipts History".
+   - *Signal Bus:* Emits `AppDataBus.instance.bumpAll()` so all screens update in real-time without app restart.
+
+**Verification:**
+- `dart analyze lib/`: **0 issues found** (clean pass).
+- `flutter test test/sales_return_flow_test.dart`: **All 6 tests passed (100%)**.
+- `flutter test` (entire suite): **179/179 tests passed (100%)**.
 

@@ -990,6 +990,112 @@ class _PosCheckoutModalState extends State<PosCheckoutModal> {
     );
   }
 
+  /// How much of this bill goes onto the customer's khata.
+  int get _creditPortionPaise {
+    if (_paymentMode == 'credit') return grandTotalPaise;
+    if (_paymentMode == 'split') return splitCreditPaise;
+    return 0;
+  }
+
+  /// Warns when this bill would push a customer past their agreed credit
+  /// limit. Returns true to proceed, false if the cashier backed out.
+  Future<bool> _confirmCreditLimitBreach() async {
+    final customer = _currentCustomer;
+    final creditPaise = _creditPortionPaise;
+    if (customer == null || creditPaise <= 0) return true;
+
+    final limit = customer.creditLimitPaise;
+    // A zero or negative limit means "no limit set", not "no credit allowed".
+    if (limit <= 0) return true;
+
+    final projected = customer.currentBalancePaise + creditPaise;
+    if (projected <= limit) return true;
+
+    HapticFeedback.heavyImpact();
+    final proceed = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: Colors.white,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: const Color(0xFFFEF3C7),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: const Icon(Icons.warning_amber_rounded, color: Color(0xFFB45309), size: 22),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text('Credit Limit Crossed',
+                  style: GoogleFonts.outfit(fontSize: 16, fontWeight: FontWeight.w800)),
+            ),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(customer.name,
+                style: GoogleFonts.inter(fontSize: 13.5, fontWeight: FontWeight.w800, color: const Color(0xFF0F172A))),
+            const SizedBox(height: 10),
+            _creditLimitRow('Current Udhar', MoneyFormatter.formatINR(customer.currentBalancePaise)),
+            _creditLimitRow('This Bill (Credit)', MoneyFormatter.formatINR(creditPaise)),
+            const Divider(height: 18),
+            _creditLimitRow('New Balance', MoneyFormatter.formatINR(projected), emphasise: true),
+            _creditLimitRow('Agreed Limit', MoneyFormatter.formatINR(limit)),
+            const SizedBox(height: 10),
+            Text(
+              'This bill takes ${customer.name} ${MoneyFormatter.formatINR(projected - limit)} over their limit.',
+              style: GoogleFonts.inter(fontSize: 11.5, color: const Color(0xFFB45309), fontWeight: FontWeight.w600),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text('Go Back',
+                style: GoogleFonts.inter(fontWeight: FontWeight.w600, color: const Color(0xFF64748B))),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFFD97706),
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              elevation: 0,
+            ),
+            child: Text('Give Udhar Anyway', style: GoogleFonts.outfit(fontWeight: FontWeight.w700)),
+          ),
+        ],
+      ),
+    );
+    return proceed ?? false;
+  }
+
+  Widget _creditLimitRow(String label, String value, {bool emphasise = false}) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 2),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(label, style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF64748B))),
+          Text(
+            value,
+            style: GoogleFonts.robotoMono(
+              fontSize: emphasise ? 14 : 12.5,
+              fontWeight: emphasise ? FontWeight.w800 : FontWeight.w600,
+              color: emphasise ? const Color(0xFFDC2626) : const Color(0xFF0F172A),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Future<void> _handleCompleteSale() async {
     if (currentCartItems.isEmpty) return;
 
@@ -1016,6 +1122,15 @@ class _PosCheckoutModalState extends State<PosCheckoutModal> {
         return;
       }
     }
+
+    // Credit limit check. `creditLimitPaise` has always been stored, editable
+    // in the Customers screen and printed on the customer card — but nothing
+    // ever read it at the one moment it exists for. A customer with a ₹5,000
+    // limit could run ₹50,000 of udhar with the app never saying a word.
+    // Advisory, not a hard block: the shopkeeper knows their customers and
+    // sometimes has a good reason to extend credit, so this asks rather than
+    // refuses — the same posture as the near-expiry nudge.
+    if (!await _confirmCreditLimitBreach()) return;
 
     setState(() => _isProcessing = true);
 

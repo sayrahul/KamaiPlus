@@ -54,6 +54,8 @@ The Bottom Navigation Bar has 5 items. The navigation contract is strictly defin
 7. **Pro Upgrade Modal Comparison Matrix:** Interactive expandable table (`Free vs Pro Comparison`) inside `ProUpgradeModal` detailing 10+ feature comparisons with animated chevron toggle.
 8. **Permanent 7-Day Trial Anti-Reset:** `trial_started_at` is an immutable timestamp stored in SQLite `store_profile`, `SharedPreferences`, and Firestore. Once granted, it counts down strictly and can never be re-granted or reset on subsequent logins or app opens.
 9. **Restaurant Tab Label:** Tab 1 dynamically renders "Menu" for Restaurant vertical (`business_type = 'restaurant'`), "Medicines" for Pharmacy, "Apparel" for Clothing, "Items" for Hardware, and "Product" for Kirana.
+10. **Refer & Earn Architecture & Anti-Exploit:** Referral codes are registered and validated against Firestore `referral_codes/{CODE}`. Random/unregistered codes are strictly rejected. Codes are formatted as `KAMAI` + 4 random alphanumeric chars. Applying a valid code awards 30 days Free PRO to the referee, creates a redemption record, and awards the referrer +1 active store and +30 days Free PRO. Stats sync from Firestore on launch.
+11. **GST GSTR-1 Portal Compliance:** Table 4A `b2b` array is populated with valid buyer GSTIN invoices. Filing period `fp` is dynamically resolved to the filing month (MMYYYY). Store GSTIN is strictly required (blocking modal prevents invalid JSON export). Refunded sales are excluded from sales registers and populated into Table 9B Credit Notes (`cdnr`/`cdnur`). Inter-state supply is detected and mapped to 100% IGST (`iamt`).
 
 
 
@@ -123,11 +125,19 @@ The Bottom Navigation Bar has 5 items. The navigation contract is strictly defin
 * Z-Report generation with 1-tap WhatsApp summary share.
 * Has persistent `KamaiBottomNav()`.
 
-### 7. 📜 Transaction History (`lib/views/transactions/transactions_screen.dart`)
+### 7. 📜 Transaction History & Sales Return (`lib/views/transactions/transactions_screen.dart`, `sale_detail_modal.dart`)
 * Renamed to **Transaction History**.
 * Fast invoice search, date filters (*All*, *Today*, *Yesterday*, *7 Days*, *Month*).
 * Payment mode filters (*All*, *Cash*, *UPI*, *Udhar*).
 * Invoice details bottom sheet with thermal receipt printing and WhatsApp share.
+* **Locked Sales Return & Refund Architecture:**
+  - **Tukdo me Wapsi (Partial Return) & Full Void:** Supported with item quantity steppers, Master PIN (1234/0000) protection, and reason logging.
+  - **Inventory Restock Guarantee:** Returned items immediately restock SQLite `products.stock_quantity = stock_quantity + qty`, restore batch quantity in `product_batches`, and log `inventory_movements` as `PARTIAL_RETURN`.
+  - **Store Credit / Customer Advance (Jama):** Never clamped to 0. Negative balances natively indicate Customer Jama (Advance). For walk-in bills without an attached customer, the cashier is prompted via `_pickOrAddCustomer` to search or quick-create a customer (Name + 10-digit phone) so store credit is never orphaned.
+  - **Cash Drawer Parity:** Cash refunds create an expense under category `'Refund'`, accurately reducing expected drawer cash without double-deducting from daily net profit (`getDayProfitSummary`).
+  - **Net Revenue KPIs & Badges:** Partially returned sales display amber border, `● PARTIAL RET` badge, and reflect net revenue across transaction metrics and Dashboard (`HomePulseTab`).
+  - **Audit Trail:** Return receipts logged in SQLite `sale_returns` and displayed under Return Receipts History.
+  - **Reactive Bus:** Emits `AppDataBus.instance.bumpAll()` so all screens update synchronously without app reboot.
 * Has persistent `KamaiBottomNav()`.
 
 ### 8. 📡 Inventory & Expiry Radar (`lib/views/inventory/inventory_screen.dart`)
@@ -1548,7 +1558,7 @@ Comprehensive enterprise-grade retail UX upgrade suite aligned with PhonePe Busi
        - Auto-extracts legal name, trade name, principal place of business address, state code, and registration status (Active/Inactive).
        - Store Profile: 1-tap "Verify" button on GSTIN field auto-fills Store Name, Address, and State.
        - Customers Directory: Added GSTIN input with "Verify" button for B2B wholesale buyers, auto-filling Customer Name and State Code.
-    3. **Google Drive 1-Tap Encrypted SQLite Backup & Restore Vault (`backup_restore_service.dart`, `local_database.dart`, `backup_restore_screen.dart`):**
+    3. **Google Drive 1-Tap SQLite Backup & Restore Vault (NOT encrypted — see 2026-09-15 audit, locked decision 15) (`backup_restore_service.dart`, `local_database.dart`, `backup_restore_screen.dart`):**
        - Formats local SQLite database into `.kmb` (KamaiPlus Encrypted Backup) package with SHA-256 integrity checksum, schema version, store name, and ISO timestamp manifest.
        - 1-Tap Cloud Backup: Dispatches via Android Share Sheet (`SharePlus.shareXFiles`) directly to Google Drive, WhatsApp, or Gmail.
        - Safe Database Restore: Uses `FilePicker` to pick `.kmb` or `.db` backup file, validates checksum, closes active SQLite connection, replaces database file, calls `LocalDatabase.instance.reloadDatabase()`, and broadcasts `AppDataBus.instance.bumpAll()`.
@@ -1570,3 +1580,155 @@ Comprehensive enterprise-grade retail UX upgrade suite aligned with PhonePe Busi
        - Integrated into `SignupStoreScreen` with optional "Referral / Invite Code" field granting 15 days free PRO on signup.
 
 
+
+---
+
+## 🔒 LOCKED DECISIONS — 2026-09-15 Functional Audit Pass
+
+These are correctness and honesty rules, not cosmetic preferences. Reverting any of them
+puts a wrong number in front of a shopkeeper who is making money decisions with it.
+Full reasoning and the code locations live in `DEVELOPMENT_LOG.md`'s
+"2026-09-15 (evening) — Full-app functional audit" entry.
+
+### Numbers shown to the merchant must come from the merchant's own data
+
+1. **Home "EST. PROFIT" is real cost-based margin, never a percentage of turnover.**
+   Computed by `LocalDatabase.getDayProfitSummary()` from `cost_price_paise`, which
+   `CartItemModel.toMap()` freezes onto every sale line at billing time. Never reintroduce
+   `totalSales * <any constant>`. Profit is *frozen* cost, not the product's current cost —
+   re-reading current cost would rewrite history every time a supplier rate changed.
+2. **An unknown cost is excluded from profit, never treated as zero cost.** Treating it as
+   zero would report the full sale price as margin. The card shows a "Partial" badge and
+   "N item(s) need buying price" instead. Same rule in `assetCostValuationPaise`.
+3. **No invented prices, anywhere.** `MasterProductModel.toProductModel` sets
+   `purchasePricePaise: 0`, not `mrp * 0.85`. If the merchant did not enter it and no
+   supplier bill supports it, it is 0 and the UI says so.
+4. **Campaign audiences filter on real fields only.** Birthdays read `CustomerModel.birthday`
+   (a real `MM-DD` column). VIP reads `isVip`. Never a stand-in like `name.length % 3` or
+   "has a big credit limit". A customer with no birthday recorded is skipped, not guessed.
+5. **Day totals are queried by date range (`getSalesBetween`), never derived by filtering a
+   capped "recent N sales" list.** A busy counter must not shrink its own day's figures.
+
+### Barcode scan → product detail (this is a headline feature — treat it as load-bearing)
+
+6. **Resolution ladder in `CloudBarcodeResolverService`:** session cache → local master
+   catalog → curated offline dictionary → Open* Facts family (5 hosts, in parallel) →
+   UPCitemdb → Google Books (ISBN only). All free, no API key. Negative results are cached
+   for 6 hours so a rescan of an unknown item does not stall the counter again.
+7. **Online repositories carry no Indian MRP, so a cloud-resolved item arrives at ₹0 —
+   and ₹0 must NEVER silently enter a bill.** `pos_billing_screen` prompts for the selling
+   price first; cancelling bills nothing. Any new scan-to-cart path must go through
+   `_importAndAddToCart`, which owns this guard.
+8. **Anything resolved from the internet is tagged with the SCANNING STORE's active
+   vertical**, and every import passes `targetVertical`. The merchant scanned it at their
+   own counter; tagging it otherwise makes the product invisible in their catalog right
+   after they billed it. The curated offline dictionary keeps its strict vertical filter —
+   that is seed data, not a scan.
+9. **Foreign taxonomies never become the merchant's categories.** `mapToVerticalCategory()`
+   maps onto that vertical's own `quickCategories`, else 'General' (which callers skip
+   rather than create). Do not go back to taking the first comma segment of the Open Food
+   Facts category string.
+10. **Units are canonicalised before use** via `BusinessVerticals.canonicalUnit()`. The
+    seeded catalog alone has 20 spellings for ~6 real units; letting them through splits
+    the shopkeeper's own reporting across four spellings of "packet".
+11. **A barcode is digits only, 8–14 long.** Anything else is a misread or an internal SKU
+    label and must not cost the cashier a network round-trip.
+12. **An unknown barcode opens Add Product pre-filled** (`AddProductModal.initialBarcode`),
+    never a dead-end empty search the merchant has to re-type 13 digits into.
+
+### Print & settings
+
+13. **Thermal receipts honour Invoice Themes** (heading, custom footer, GSTIN, owner-phone
+    toggle). For most kirana counters the 58mm roll is the only bill a customer ever sees,
+    so "it works on the A4 PDF" is not good enough.
+14. **All ESC/POS text goes through `ThermalPrinterService._escText()`.** Never
+    `String.codeUnits` — it hands the printer truncated UTF-16 that can emit a control byte
+    and corrupt the print job mid-receipt. The rupee sign prints as "Rs.".
+
+### Honesty in labelling
+
+15. **The `.kmb` backup is NOT encrypted** — magic header + JSON manifest + raw SQLite. The
+    UI and share text say so and warn the merchant to keep it private. Do not re-add the
+    word "Encrypted" without actually encrypting it (and keeping V1 backups restorable).
+16. **No real person's name or phone as a UI fallback.** Blank owner name renders
+    "Store Owner", not someone's actual details.
+
+### Credit
+
+17. **Credit limit is checked at checkout** (`_confirmCreditLimitBreach`) and is ADVISORY —
+    it shows current udhar, this bill's credit portion, the new balance and the agreed
+    limit, then offers "Give Udhar Anyway". Deliberately not a hard block: a shopkeeper
+    knows their customers. Same posture as the near-expiry nudge.
+
+---
+
+## 🔒 LOCKED DECISIONS — 2026-09-15 Audit Follow-up (entitlement, cloud backup, config)
+
+Reasoning and code locations live in `DEVELOPMENT_LOG.md`'s
+"2026-09-15 (late) — Audit follow-up" entry.
+
+### Paid entitlement
+
+18. **A device can NEVER grant itself Pro.** `verifyRazorpayPayment` (Cloud Function,
+    Admin SDK) and the Admin Console are the only writers of `is_pro`, `pro_plan`,
+    `pro_expiry`, `subscription_*`, `razorpay_payment_id`, `coupon_code_used` and
+    `account_disabled`. `firestore.rules` enforces this on BOTH `businesses/{id}` and
+    `merchants/{id}` via `proFields()` / `touchesProFields()`. Never re-add a client write
+    of those fields, and never collapse the split create/update/delete rules back into a
+    blanket `allow read, write`.
+19. **The server asks Razorpay, not the app.** The function verifies the caller's Firebase
+    ID token, fetches the payment from Razorpay's API, and rejects anything not `captured`,
+    not INR, or below the per-plan floor in `PLAN_RULES`. The floor exists because the
+    client controls `overrideAmountPaise` for coupons — **lowering a plan price in Remote
+    Config below its floor requires updating and redeploying the function too.**
+20. **One payment grants Pro once.** A replayed `payment_id` returns already-granted; a
+    payment claimed by a different account is refused. Do not remove the
+    `razorpay_payments/{paymentId}` receipt doc — it is what makes this idempotent.
+21. **Local activation stays optimistic and immediate.** A merchant who just paid gets
+    their features at the counter even with no connection; the cloud record is the durable
+    truth. A failed handshake is stored in `pending_razorpay_verification` and retried from
+    `main.dart` on next launch — never drop that retry, or an offline purchase is lost.
+22. **The device reports Pro as `device_reported_*` telemetry only.** Trial state
+    (`trial_started_at`) still syncs — it is not a paid entitlement and the admin drop-off
+    radar needs it.
+
+### Cloud backup
+
+23. **Google Drive backup is a real Drive API upload**, not a share-sheet handoff. Scope is
+    `drive.file` only (this app's own files) — never widen it to `drive`, which would reach
+    the merchant's personal documents and require Google app verification.
+24. **Restore-from-Drive goes through `restoreFromBackupFile`**, the same path as a local
+    file, so checksum verification and the password prompt behave identically. Do not add a
+    second restore path.
+25. **The share sheet stays as the fallback** when Drive permission is declined — losing
+    the upload must not mean losing the ability to get a backup off the phone at all.
+
+### Backup format
+
+26. **V1 (plain) `.kmb` files must keep restoring forever.** Every backup a merchant
+    already holds is V1. A security change that stranded those would be worse than the
+    exposure it fixes.
+27. **V2 is AES-256-GCM under a PBKDF2 key** (150k iterations, pointycastle — pure Dart).
+    GCM specifically, because it authenticates: a wrong password or tampered file fails at
+    decryption instead of returning garbage that would overwrite the live database.
+28. **Encryption is optional and the warning is blunt.** For this audience a forgotten
+    password is a likelier disaster than a stolen backup, and there is no recovery path.
+    Never make it mandatory or silent.
+29. **The manifest stays in the clear** so restore can preview a file before asking for its
+    password — a deliberate tradeoff: store name and counts leak, customer numbers and
+    balances do not.
+
+### Configuration
+
+30. **Firestore `platform_settings` is the single source for broadcasts and force-update**
+    (`/broadcast` and `/global_config`). Remote Config's `app_announcement_*`,
+    `banner_promo_*`, `force_update_required` and `min_supported_version` were REMOVED
+    because they duplicated it while doing nothing. Do not re-add them.
+31. **Remote Config owns: support phone/email, Pro plan prices, referral reward days,
+    Gemini key.** Pro prices have exactly one source — `RemoteConfigService` — read by both
+    the upgrade modal's display and the Razorpay charge. They were previously hardcoded in
+    both places, so the app could show one price and charge another.
+32. **Invoice Themes display toggles are actually honoured**: `invoice_show_logo`,
+    `invoice_show_tagline` and `invoice_show_owner_phone` on the A4 PDF, and heading /
+    footer / GSTIN / tagline / owner-phone on the thermal receipt. A setting that has a
+    live preview must change the real bill.

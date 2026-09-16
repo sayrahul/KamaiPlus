@@ -8,19 +8,38 @@ class RemoteConfigService {
   FirebaseRemoteConfig? _remoteConfig;
   bool _isInitialized = false;
 
-  /// Default values for fallback when offline
+  /// Default values, used offline and before the first successful fetch.
+  ///
+  /// **Deliberately short.** This map used to carry eleven parameters, of
+  /// which exactly one (`gemini_api_key`) was ever read anywhere in the app —
+  /// the rest were fetched on every launch and silently discarded. Worse, four
+  /// of them looked like working controls while duplicating a mechanism that
+  /// really is wired up:
+  ///
+  ///   * `app_announcement_*` / `banner_promo_*` — the live in-app banner
+  ///     comes from Firestore `platform_settings/broadcast` (see
+  ///     `FirestoreSyncService.broadcastNotifier`, rendered on Home Pulse).
+  ///   * `force_update_required` / `min_supported_version` — force update
+  ///     comes from Firestore `platform_settings/global_config` (see
+  ///     `home_dashboard_screen.dart`'s `_forceUpdatePromptShown` flow).
+  ///
+  /// Anyone setting those in the Firebase Remote Config console would have
+  /// watched nothing happen. They are removed rather than re-wired, because
+  /// adding a second source of truth for "what banner is showing" is worse
+  /// than having one. **Firestore `platform_settings` is the single source for
+  /// broadcasts and force-update. Remote Config is for the values below.**
   static const Map<String, dynamic> _defaults = {
     'support_phone': '919595997711',
     'support_email': 'support@kamaiplus.com',
-    'pro_monthly_price': 299,
-    'pro_annual_price': 1999,
+    // Integer RUPEES (not paise) — these are console-facing values a
+    // non-engineer edits. Converted to paise at the point of use.
+    // NOTE: `verifyRazorpayPayment` in functions/index.js holds its own
+    // server-side minimum for each plan, so that a tampered client cannot pay
+    // ₹1 and claim a year. Raising a price here is safe; lowering one below
+    // that floor needs the function's PLAN_RULES updated and redeployed too.
+    'pro_monthly_price': 199,
+    'pro_annual_price': 1499,
     'referral_reward_days': 30,
-    'app_announcement_enabled': false,
-    'app_announcement_text': '',
-    'force_update_required': false,
-    'min_supported_version': '4.20.0',
-    'banner_promo_active': false,
-    'banner_promo_message': '',
     'gemini_api_key': '',
   };
 
@@ -46,17 +65,33 @@ class RemoteConfigService {
     }
   }
 
-  // Getters with safe fallbacks
-  String get supportPhone => _remoteConfig?.getString('support_phone') ?? _defaults['support_phone'];
-  String get supportEmail => _remoteConfig?.getString('support_email') ?? _defaults['support_email'];
-  int get proMonthlyPrice => _remoteConfig?.getInt('pro_monthly_price') ?? _defaults['pro_monthly_price'];
-  int get proAnnualPrice => _remoteConfig?.getInt('pro_annual_price') ?? _defaults['pro_annual_price'];
-  int get referralRewardDays => _remoteConfig?.getInt('referral_reward_days') ?? _defaults['referral_reward_days'];
-  bool get isAnnouncementEnabled => _remoteConfig?.getBool('app_announcement_enabled') ?? false;
-  String get announcementText => _remoteConfig?.getString('app_announcement_text') ?? '';
-  bool get forceUpdateRequired => _remoteConfig?.getBool('force_update_required') ?? false;
-  String get minSupportedVersion => _remoteConfig?.getString('min_supported_version') ?? '4.20.0';
-  bool get isBannerPromoActive => _remoteConfig?.getBool('banner_promo_active') ?? false;
-  String get bannerPromoMessage => _remoteConfig?.getString('banner_promo_message') ?? '';
+  /// Reads a string, falling back to the baked-in default when Remote Config
+  /// has not fetched yet OR has fetched an empty value. `getString` returns ''
+  /// for a parameter that exists but is blank, and '' is never a useful
+  /// support phone number.
+  String _string(String key) {
+    final v = _remoteConfig?.getString(key).trim() ?? '';
+    return v.isNotEmpty ? v : (_defaults[key] as String);
+  }
+
+  int _int(String key) {
+    final v = _remoteConfig?.getInt(key) ?? 0;
+    return v > 0 ? v : (_defaults[key] as int);
+  }
+
+  String get supportPhone => _string('support_phone');
+  String get supportEmail => _string('support_email');
+
+  /// Pro plan prices in integer RUPEES. Use [proMonthlyPricePaise] /
+  /// [proAnnualPricePaise] for anything that touches money maths — this app's
+  /// financial invariant is integer paise.
+  int get proMonthlyPrice => _int('pro_monthly_price');
+  int get proAnnualPrice => _int('pro_annual_price');
+
+  int get proMonthlyPricePaise => proMonthlyPrice * 100;
+  int get proAnnualPricePaise => proAnnualPrice * 100;
+
+  int get referralRewardDays => _int('referral_reward_days');
+
   String get geminiApiKey => _remoteConfig?.getString('gemini_api_key') ?? '';
 }

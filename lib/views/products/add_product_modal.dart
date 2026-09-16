@@ -38,6 +38,12 @@ class AddProductModal extends StatefulWidget {
   final VoidCallback onSaved;
   final VoidCallback onSwitchToAiInward;
 
+  /// Barcode to open the form with, already scanned. The form fills it in and
+  /// immediately runs the online lookup, so scanning an item the shop does not
+  /// stock yet goes straight to a pre-filled Add Product form instead of
+  /// dead-ending on an empty search result the merchant has to re-type.
+  final String? initialBarcode;
+
   const AddProductModal({
     super.key,
     this.existingProduct,
@@ -45,6 +51,7 @@ class AddProductModal extends StatefulWidget {
     required this.categories,
     required this.onSaved,
     required this.onSwitchToAiInward,
+    this.initialBarcode,
   });
 
   static Future<void> show(
@@ -54,6 +61,7 @@ class AddProductModal extends StatefulWidget {
     required List<CategoryModel> categories,
     required VoidCallback onSaved,
     required VoidCallback onSwitchToAiInward,
+    String? initialBarcode,
   }) {
     return showModalBottomSheet(
       context: context,
@@ -66,6 +74,7 @@ class AddProductModal extends StatefulWidget {
         categories: categories,
         onSaved: onSaved,
         onSwitchToAiInward: onSwitchToAiInward,
+        initialBarcode: initialBarcode,
       ),
     );
   }
@@ -134,7 +143,7 @@ class _AddProductModalState extends State<AddProductModal> {
     // product still reflects its real saved state.
     _isUnlimitedStock = p != null ? (p.stockQuantity >= 99999) : true;
     _nameCtrl = TextEditingController(text: p?.name ?? '');
-    _barcodeCtrl = TextEditingController(text: p?.barcode ?? '');
+    _barcodeCtrl = TextEditingController(text: p?.barcode ?? widget.initialBarcode ?? '');
     _sellPriceCtrl = TextEditingController(
       text: p != null ? (p.sellingPricePaise / 100).toStringAsFixed(2) : '',
     );
@@ -217,6 +226,17 @@ class _AddProductModalState extends State<AddProductModal> {
       }
     } else {
       _selectedTaxRate = 0.0;
+    }
+
+    // Opened straight from a scan of an unknown barcode: run the same online
+    // lookup the in-form scan button runs, so the merchant lands on a form
+    // that is already filling itself in. Post-frame because the lookup shows
+    // an in-app notification, which needs a mounted context.
+    final scanned = widget.initialBarcode?.trim();
+    if (p == null && scanned != null && scanned.isNotEmpty) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _lookupAndAutofillBarcode(scanned);
+      });
     }
   }
 
@@ -455,7 +475,12 @@ class _AddProductModalState extends State<AddProductModal> {
 
   void _autofillUnit(String unitRaw) {
     if (unitRaw.trim().isEmpty) return;
-    final clean = unitRaw.trim().toLowerCase();
+    // Fold synonyms first ('pack'/'pouch'/'sachet' → packet, 'jar'/'tin' →
+    // btl, ...). Without this every unfamiliar spelling coming out of the
+    // master catalog or an online barcode lookup was appended to the dropdown
+    // verbatim, leaving the shopkeeper choosing between four spellings of the
+    // same unit and splitting their own stock reporting across all four.
+    final clean = BusinessVerticals.canonicalUnit(unitRaw);
     final match = _units.firstWhere(
       (u) => (u['val'] ?? '').toLowerCase() == clean,
       orElse: () => {},
@@ -463,9 +488,9 @@ class _AddProductModalState extends State<AddProductModal> {
     if (match.isNotEmpty) {
       _selectedUnit = match['val']!;
     } else {
-      final customLabel = BusinessVerticals.unitDisplayLabels[clean] ?? '${unitRaw.trim()} (${unitRaw.trim()})';
-      _units.add({'label': customLabel, 'val': unitRaw.trim()});
-      _selectedUnit = unitRaw.trim();
+      final customLabel = BusinessVerticals.unitDisplayLabels[clean] ?? '$clean ($clean)';
+      _units.add({'label': customLabel, 'val': clean});
+      _selectedUnit = clean;
     }
   }
 

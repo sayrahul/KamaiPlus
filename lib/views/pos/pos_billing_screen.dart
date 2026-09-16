@@ -343,20 +343,140 @@ class _PosBillingScreenState extends State<PosBillingScreen>
     });
   }
 
-  Future<void> _importAndAddToCart(MasterProductModel masterItem) async {
+  /// Single funnel for "scanned barcode resolved to something not yet in this
+  /// store's catalog → create it and drop it in the bill".
+  ///
+  /// Two things here are load-bearing and were previously missing:
+  ///
+  /// 1. **Price guard.** Online barcode repositories (Open Food Facts,
+  ///    UPCitemdb, ...) carry no Indian MRP, so a cloud-resolved item arrives
+  ///    with `sellingPricePaise == 0`. The old code imported it as-is and
+  ///    cheerfully announced "Added to Bill" — the cashier scanned, saw a
+  ///    green toast, and billed the item at **₹0**. The shop silently ate the
+  ///    whole sale. Now a zero-priced item stops and asks for the rate first.
+  /// 2. **Vertical tag.** Importing without `targetVertical` tagged the new
+  ///    product with whatever vertical the resolver guessed, so a pharmacy
+  ///    could bill an item that then never appeared in its own catalog
+  ///    (`getAllProducts` filters on that column). The other call site
+  ///    already passed it; this one did not.
+  Future<void> _importAndAddToCart(MasterProductModel masterItem, {String? sourceLabel}) async {
+    if (!mounted) return;
     HapticFeedback.selectionClick();
-    final imported = await LocalDatabase.instance.importMasterProductToStore(masterItem);
+    final activeType = BusinessVerticals.activeBusinessTypeNotifier.value;
+
+    int? priceOverride;
+    if (masterItem.sellingPricePaise <= 0 && masterItem.mrpPaise <= 0) {
+      priceOverride = await _promptSellingPriceForNewScan(masterItem);
+      if (priceOverride == null) return; // Cashier cancelled — bill nothing.
+      if (!mounted) return;
+    }
+
+    final imported = await LocalDatabase.instance.importMasterProductToStore(
+      masterItem,
+      targetVertical: activeType,
+      customSellingPricePaise: priceOverride,
+    );
     _addToCart(imported);
     await _loadData();
     if (mounted) {
       InAppNotification.show(
         context: context,
-        message: 'Added to Bill: ${imported.name}',
+        message: '${sourceLabel ?? 'Added to Bill'}: ${imported.name}',
         customIcon: Icons.auto_awesome,
         customColor: Colors.amber,
         duration: const Duration(milliseconds: 1200),
       );
     }
+  }
+
+  /// Asks the cashier for a selling price for a barcode that resolved online
+  /// but has no price attached. Returns paise, or null if cancelled.
+  Future<int?> _promptSellingPriceForNewScan(MasterProductModel item) async {
+    final priceCtrl = TextEditingController();
+    final result = await showDialog<int>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: Colors.white,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: const Color(0xFFECFDF5),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: const Icon(Icons.sell_rounded, color: Color(0xFF059669), size: 20),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                'Set Selling Price',
+                style: GoogleFonts.outfit(fontSize: 16, fontWeight: FontWeight.w800),
+              ),
+            ),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              item.name,
+              style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w700, color: const Color(0xFF0F172A)),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'Found online, but no Indian MRP is available for this barcode. '
+              'Enter the rate you sell it at — it will be saved to your catalog.',
+              style: GoogleFonts.inter(fontSize: 11.5, color: const Color(0xFF64748B)),
+            ),
+            const SizedBox(height: 14),
+            TextField(
+              controller: priceCtrl,
+              autofocus: true,
+              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              style: GoogleFonts.robotoMono(fontSize: 20, fontWeight: FontWeight.w800),
+              decoration: InputDecoration(
+                prefixText: '₹ ',
+                hintText: '0.00',
+                filled: true,
+                fillColor: const Color(0xFFF8FAFC),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+              onSubmitted: (v) {
+                final p = MoneyFormatter.parseRupeesToPaise(v);
+                if (p > 0) Navigator.pop(ctx, p);
+              },
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, null),
+            child: Text('Cancel',
+                style: GoogleFonts.inter(fontWeight: FontWeight.w600, color: const Color(0xFF64748B))),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              final p = MoneyFormatter.parseRupeesToPaise(priceCtrl.text);
+              if (p <= 0) return;
+              Navigator.pop(ctx, p);
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF059669),
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              elevation: 0,
+            ),
+            child: Text('Add to Bill', style: GoogleFonts.outfit(fontWeight: FontWeight.w700)),
+          ),
+        ],
+      ),
+    );
+    priceCtrl.dispose();
+    return result;
   }
 
   int get cartTotalPaise {
@@ -499,7 +619,14 @@ class _PosBillingScreenState extends State<PosBillingScreen>
                     separatorBuilder: (context, index) => const SizedBox(height: 8),
                     itemBuilder: (ctx, i) {
                       final v = variants[i];
-                      final isOutOfStock = v.stockQuantity <= 0 && v.stockQuantity < 900000;
+                      // Uses the single canonical sentinel from ProductModel.
+                      // This line (and the two below) hardcoded 900000 while
+                      // models.dart defines unlimited as >= 99990, and the
+                      // master-catalog import writes exactly 99999 — so the
+                      // same product read "∞ Unlimited" in one widget and
+                      // "99999 pcs" in the next, with the out-of-stock guard
+                      // disagreeing with its own badge.
+                      final isOutOfStock = !v.isUnlimitedStock && v.stockQuantity <= 0;
                       final sizeText = (v.size != null && v.size!.isNotEmpty) ? v.size! : 'V${i + 1}';
                       return InkWell(
                         onTap: isOutOfStock
@@ -588,7 +715,7 @@ class _PosBillingScreenState extends State<PosBillingScreen>
 
   void _addProductDirectlyToCart(ProductModel product) {
     final currentQty = _cart[product.id]?.quantity.toInt() ?? 0;
-    final isUnlimited = product.stockQuantity >= 900000;
+    final isUnlimited = product.isUnlimitedStock;
 
     if (!isUnlimited && (product.stockQuantity <= 0 || currentQty >= product.stockQuantity)) {
       HapticFeedback.heavyImpact();
@@ -754,20 +881,10 @@ class _PosBillingScreenState extends State<PosBillingScreen>
           businessType: activeType,
         );
         if (masterMatch != null && mounted) {
-          final imported = await LocalDatabase.instance.importMasterProductToStore(
-            masterMatch,
-            targetVertical: activeType,
-          );
-          _addToCart(imported);
-          _loadData(); // Update background products list
-          if (mounted) {
-            InAppNotification.show(
-              context: context,
-              message: 'Master SKU Added: ${imported.name}',
-              customIcon: Icons.auto_awesome,
-              customColor: Colors.amber,
-            );
-          }
+          // Routed through _importAndAddToCart so the zero-price guard and
+          // the active-vertical tag apply here too, exactly as they do on
+          // the hardware-scanner path.
+          await _importAndAddToCart(masterMatch, sourceLabel: 'Master SKU Added');
         } else {
           // Fallback 2: Cloud Barcode Resolver (Open Food Facts & Indian Barcode DB)
           final cloudMatch = await CloudBarcodeResolverService.instance.resolveBarcode(
@@ -775,20 +892,7 @@ class _PosBillingScreenState extends State<PosBillingScreen>
             businessType: activeType,
           );
           if (cloudMatch != null && mounted) {
-            final imported = await LocalDatabase.instance.importMasterProductToStore(
-              cloudMatch,
-              targetVertical: activeType,
-            );
-            _addToCart(imported);
-            _loadData();
-            if (mounted) {
-              InAppNotification.show(
-                context: context,
-                message: 'Cloud SKU Added: ${imported.name}',
-                customIcon: Icons.cloud_done_rounded,
-                customColor: Colors.cyanAccent,
-              );
-            }
+            await _importAndAddToCart(cloudMatch, sourceLabel: 'Cloud SKU Added');
           } else {
             if (mounted) {
               InAppNotification.show(
@@ -2342,7 +2446,7 @@ class _PosProductGridItemState extends State<_PosProductGridItem> {
   @override
   Widget build(BuildContext context) {
     final isInCart = widget.inCartQty > 0;
-    final isUnlimited = widget.product.stockQuantity >= 900000;
+    final isUnlimited = widget.product.isUnlimitedStock;
     final effectiveStock = (widget.product.stockQuantity - widget.inCartQty);
     final isStockDepleted = !isUnlimited && effectiveStock <= 0;
 

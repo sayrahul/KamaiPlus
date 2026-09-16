@@ -484,6 +484,73 @@ class BusinessVerticals {
     'btl': 'Bottle (btl)',
   };
 
+  /// Everyday synonyms that all mean one of the canonical units above.
+  ///
+  /// The seeded master catalog and the online barcode repositories between
+  /// them emit ~20 different unit spellings ('pack', 'jar', 'tube', 'pouch',
+  /// 'tetra', 'refill', 'pcs', ...), but only a handful are real units in
+  /// this app. Anything unrecognised used to be appended to the Add Product
+  /// unit dropdown verbatim, so a few barcode scans left a shopkeeper picking
+  /// between "Packet (pkt)", "pack (pack)", "pouch (pouch)" and "sachet
+  /// (sachet)" — four spellings of the same thing, which then split their own
+  /// reporting. Map, don't invent.
+  static const Map<String, String> _unitSynonyms = {
+    'pack': 'packet',
+    'pkt': 'packet',
+    'pouch': 'packet',
+    'sachet': 'packet',
+    'bag': 'packet',
+    'refill': 'packet',
+    'pcs': 'piece',
+    'pc': 'piece',
+    'nos': 'piece',
+    'no': 'piece',
+    'unit': 'piece',
+    'bar': 'piece',
+    'cake': 'piece',
+    'tube': 'piece',
+    'tray': 'piece',
+    'cup': 'piece',
+    'bottle': 'btl',
+    'btl': 'btl',
+    'jar': 'btl',
+    'can': 'btl',
+    'tin': 'btl',
+    'tetra': 'btl',
+    'tetrapack': 'btl',
+    'g': 'gram',
+    'gm': 'gram',
+    'gms': 'gram',
+    'grams': 'gram',
+    'kgs': 'kg',
+    'l': 'litre',
+    'ltr': 'litre',
+    'liter': 'litre',
+    'ltrs': 'litre',
+    'carton': 'box',
+    'tab': 'strip',
+    'tablet': 'strip',
+    'tablets': 'strip',
+    'dz': 'dozen',
+    'mtr': 'meter',
+    'm': 'meter',
+    'ft': 'foot',
+  };
+
+  /// Folds any unit spelling onto one this app actually knows. Returns the
+  /// input trimmed and lower-cased when there is no sensible mapping, so a
+  /// genuinely new unit still survives rather than being silently discarded.
+  static String canonicalUnit(String raw) {
+    final clean = raw.trim().toLowerCase();
+    if (clean.isEmpty) return 'piece';
+    if (unitDisplayLabels.containsKey(clean)) {
+      // 'g' and 'pkt' are aliases already present in the label map; fold them
+      // onto their primary spelling so reporting never splits.
+      return _unitSynonyms[clean] ?? clean;
+    }
+    return _unitSynonyms[clean] ?? clean;
+  }
+
   /// Global reactive notifier for instant UI update when merchant changes vertical in Settings
   static final ValueNotifier<String> activeBusinessTypeNotifier = ValueNotifier<String>('grocery');
 

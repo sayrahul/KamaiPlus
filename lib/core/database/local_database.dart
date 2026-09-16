@@ -514,6 +514,14 @@ class LocalDatabase {
       await db.execute('ALTER TABLE customers ADD COLUMN is_vip INTEGER DEFAULT 0');
     } catch (_) {}
     try {
+      // Customer birthday as 'MM-DD' — day and month only, deliberately no
+      // year. A shopkeeper knows "Ramesh ka birthday 14 August hai"; they do
+      // not know, and have no business storing, the year. Added because the
+      // Birthday campaign in growth_campaigns_screen.dart had no real field
+      // to read and was selecting its audience with `name.length % 3 == 0`.
+      await db.execute('ALTER TABLE customers ADD COLUMN birthday TEXT');
+    } catch (_) {}
+    try {
       await db.execute('ALTER TABLE sales ADD COLUMN customer_gstin TEXT');
     } catch (_) {}
     try {
@@ -1400,7 +1408,23 @@ class LocalDatabase {
     double initialStock = 99999.0, // Default: Unlimited / Uncounted
     int? customSellingPricePaise,
   }) async {
-    final existing = await findProductByBarcode(masterItem.barcode);
+    final effectiveVertical = masterItem.businessType == 'both'
+        ? 'both'
+        : ((targetVertical != null && targetVertical.isNotEmpty)
+            ? targetVertical
+            : masterItem.businessType);
+
+    // Vertical-scoped duplicate check. This used to call
+    // findProductByBarcode(barcode) with no vertical, so a barcode already
+    // imported into the Grocery catalog was returned verbatim when the SAME
+    // barcode was scanned in Pharmacy — the pharmacy billed a grocery row it
+    // could not see in its own catalog, and any stock deduction landed on the
+    // other vertical's product. Same cross-vertical leak class as the
+    // getAllProducts regression in DEVELOPMENT_LOG.md's case study.
+    final existing = await findProductByBarcode(
+      masterItem.barcode,
+      businessType: effectiveVertical == 'both' ? null : effectiveVertical,
+    );
     if (existing != null) {
       return existing;
     }
@@ -1416,19 +1440,17 @@ class LocalDatabase {
       }
     }
 
-    final effectiveVertical = masterItem.businessType == 'both'
-        ? 'both'
-        : ((targetVertical != null && targetVertical.isNotEmpty)
-            ? targetVertical
-            : masterItem.businessType);
-
     String? categoryId;
     if (masterItem.category.isNotEmpty && masterItem.category.toLowerCase() != 'general') {
       final db = await instance.database;
+      // Vertical-scoped too, matching findOrCreateCategoryId. Without the
+      // business_type clause an import could silently attach the product to a
+      // same-named category belonging to a different vertical, which then
+      // hides the product behind a category pill it never shows under.
       final existingCat = await db.query(
         'categories',
-        where: 'LOWER(TRIM(name)) = ?',
-        whereArgs: [masterItem.category.trim().toLowerCase()],
+        where: "LOWER(TRIM(name)) = ? AND (business_type = ? OR business_type = 'both')",
+        whereArgs: [masterItem.category.trim().toLowerCase(), effectiveVertical],
         limit: 1,
       );
       if (existingCat.isNotEmpty) {
@@ -1662,16 +1684,28 @@ class LocalDatabase {
   // --- 1-TAP SALES RETURN / REFUND ENGINE ---
   Future<void> processSalesReturn({
     required SaleModel sale,
+    String refundMethod = 'cash', // 'cash', 'credit', 'credit_note'
     String reason = 'Customer Return',
+    String? customerId,
   }) async {
     final db = await instance.database;
+    final returnId = _uuid.v4();
+    final returnNumber = 'RET-${_uuid.v4().substring(0, 8).toUpperCase()}';
+    final targetCustId = customerId ?? sale.customerId;
 
     await db.transaction((txn) async {
-      // 1. Mark sale status as 'refunded'
+      // 1. Mark sale status as 'refunded' and mark all items fully returned
+      final updatedItems = sale.items.map((it) {
+        final m = Map<String, dynamic>.from(it);
+        m['returned_quantity'] = m['quantity'] ?? m['qty'] ?? 1;
+        return m;
+      }).toList();
+
       await txn.update(
         'sales',
         {
           'status': 'refunded',
+          'items_json': jsonEncode(updatedItems),
           'sync_status': 'pending',
         },
         where: 'id = ?',
@@ -1705,6 +1739,15 @@ class LocalDatabase {
             WHERE id = ?
           ''', [qty, targetProdId]);
 
+          final batchId = it['batch_id'];
+          if (batchId != null && batchId.toString().isNotEmpty) {
+            await txn.rawUpdate('''
+              UPDATE product_batches
+              SET quantity = quantity + ?
+              WHERE id = ?
+            ''', [qty, batchId.toString()]);
+          }
+
           final movement = InventoryMovementModel(
             id: _uuid.v4(),
             businessId: sale.businessId,
@@ -1714,72 +1757,90 @@ class LocalDatabase {
             quantity: qty,
             previousStock: currentStock,
             newStock: newStock,
-            referenceId: sale.id,
+            referenceId: returnNumber,
             createdAt: DateTime.now(),
           );
           await txn.insert('inventory_movements', movement.toMap());
         }
       }
 
-      // 3. If credit or split-credit was used, reverse customer udhar balance & record ledger entry
-      final creditDue = sale.paymentMethod == 'credit'
-          ? sale.totalAmountPaise
-          : (sale.paymentMethod == 'split' ? sale.splitCreditPaise : 0);
+      // 3. Insert record into sale_returns
+      await txn.insert('sale_returns', {
+        'id': returnId,
+        'sale_id': sale.id,
+        'return_number': returnNumber,
+        'items_returned_json': jsonEncode(updatedItems),
+        'total_refund_paise': sale.totalAmountPaise,
+        'refund_method': refundMethod,
+        'reason': reason,
+        'created_at': DateTime.now().toIso8601String(),
+        'sync_status': 'pending',
+      });
 
-      if (creditDue > 0 && sale.customerId != null && sale.customerId!.isNotEmpty) {
-        final custRows = await txn.query('customers', where: 'id = ?', whereArgs: [sale.customerId]);
+      // 4. Handle Customer Credit / Store Credit
+      final effectiveMethod = (refundMethod == 'credit' || refundMethod == 'credit_note')
+          ? refundMethod
+          : (sale.paymentMethod == 'credit' ? 'credit' : 'cash');
+
+      if ((effectiveMethod == 'credit' || effectiveMethod == 'credit_note') &&
+          targetCustId != null &&
+          targetCustId.isNotEmpty) {
+        final custRows = await txn.query('customers', where: 'id = ?', whereArgs: [targetCustId]);
         if (custRows.isNotEmpty) {
-          final currentBal = custRows.first['current_balance_paise'] as int;
-          final newBal = (currentBal - creditDue).clamp(0, 999999999999);
+          final currentBal = (custRows.first['current_balance_paise'] as int?) ?? 0;
+          // Sacred financial rule: No clamping! Negative balance natively represents Jama (Advance)
+          final refundPaise = sale.totalAmountPaise;
+          final newBal = currentBal - refundPaise;
 
           await txn.rawUpdate('''
             UPDATE customers
             SET current_balance_paise = ?
             WHERE id = ?
-          ''', [newBal, sale.customerId]);
+          ''', [newBal, targetCustId]);
 
           final ledgerEntry = LedgerTransactionModel(
             id: _uuid.v4(),
             businessId: sale.businessId,
-            customerId: sale.customerId!,
-            type: 'debit', // Reversing credit debt
-            amountPaise: creditDue,
+            customerId: targetCustId,
+            type: 'debit',
+            amountPaise: refundPaise,
             balanceAfterPaise: newBal,
-            description: 'Sales Return / Refund #${sale.invoiceNumber}',
-            referenceId: sale.id,
+            description: effectiveMethod == 'credit_note'
+                ? 'Store Credit: Full Return #$returnNumber (Inv #${sale.invoiceNumber})'
+                : 'Udhar Reversal: Full Return #$returnNumber (Inv #${sale.invoiceNumber})',
+            referenceId: returnId,
             createdAt: DateTime.now(),
             syncStatus: 'pending',
           );
           await txn.insert('ledger_transactions', ledgerEntry.toMap());
         }
-      }
+      } else if (effectiveMethod == 'cash') {
+        final cashToRefund = sale.paymentMethod == 'cash'
+            ? sale.totalAmountPaise
+            : (sale.paymentMethod == 'split' ? sale.splitCashPaise : sale.totalAmountPaise);
 
-      // 4. If cash or split-cash was paid, record cash drawer refund outflow entry
-      final cashToRefund = sale.paymentMethod == 'cash'
-          ? sale.totalAmountPaise
-          : (sale.paymentMethod == 'split' ? sale.splitCashPaise : 0);
-
-      if (cashToRefund > 0) {
-        final refundExpense = ExpenseModel(
-          id: _uuid.v4(),
-          businessId: sale.businessId,
-          title: 'Cash Refund: #${sale.invoiceNumber}',
-          amountPaise: cashToRefund,
-          category: 'Refund',
-          createdAt: DateTime.now(),
-          note: reason,
-        );
-        await txn.insert('expenses', refundExpense.toMap());
+        if (cashToRefund > 0) {
+          final refundExpense = ExpenseModel(
+            id: _uuid.v4(),
+            businessId: sale.businessId,
+            title: 'Cash Refund: #$returnNumber (Inv #${sale.invoiceNumber})',
+            amountPaise: cashToRefund,
+            category: 'Refund',
+            createdAt: DateTime.now(),
+            note: reason,
+          );
+          await txn.insert('expenses', refundExpense.toMap());
+        }
       }
     });
 
-    // A return can touch all four: sale status, restocked items, udhar reversal, cash out.
-    AppDataBus.instance.bumpSaleCompleted(affectsCustomer: true, affectsCash: true);
+    // App-wide instant reactive notification across all open tabs
+    AppDataBus.instance.bumpAll();
   }
 
   /// Processes partial sales return (Tukdo me wapsi):
   /// - Restocks only the returned items into SQLite inventory
-  /// - Reverses customer credit/udhar or records cash drawer outflow
+  /// - Reverses customer credit/udhar, grants Store Credit (advance), or records cash drawer outflow
   /// - Inserts record into `sale_returns`
   /// - Updates cumulative returned quantities on the sale invoice
   Future<String> processPartialSalesReturn({
@@ -1788,10 +1849,12 @@ class LocalDatabase {
     required String refundMethod, // 'cash', 'credit', 'credit_note'
     String reason = 'Partial Customer Return',
     String? userPin,
+    String? customerId,
   }) async {
     final db = await instance.database;
     final returnId = _uuid.v4();
     final returnNumber = 'RET-${_uuid.v4().substring(0, 8).toUpperCase()}';
+    final targetCustId = customerId ?? sale.customerId;
 
     int totalRefundPaise = 0;
     for (final it in returnItems) {
@@ -1828,6 +1891,15 @@ class LocalDatabase {
             SET stock_quantity = stock_quantity + ?
             WHERE id = ?
           ''', [qty, targetProdId]);
+
+          final batchId = it['batch_id'];
+          if (batchId != null && batchId.toString().isNotEmpty) {
+            await txn.rawUpdate('''
+              UPDATE product_batches
+              SET quantity = quantity + ?
+              WHERE id = ?
+            ''', [qty, batchId.toString()]);
+          }
 
           final movement = InventoryMovementModel(
             id: _uuid.v4(),
@@ -1899,27 +1971,32 @@ class LocalDatabase {
         whereArgs: [sale.id],
       );
 
-      // 4. Handle Customer Udhar / Credit Reversal
-      if (refundMethod == 'credit' && sale.customerId != null && sale.customerId!.isNotEmpty) {
-        final custRows = await txn.query('customers', where: 'id = ?', whereArgs: [sale.customerId]);
+      // 4. Handle Customer Udhar Reversal or Store Credit (Customer Advance)
+      if ((refundMethod == 'credit' || refundMethod == 'credit_note') &&
+          targetCustId != null &&
+          targetCustId.isNotEmpty) {
+        final custRows = await txn.query('customers', where: 'id = ?', whereArgs: [targetCustId]);
         if (custRows.isNotEmpty) {
-          final currentBal = custRows.first['current_balance_paise'] as int;
-          final newBal = (currentBal - totalRefundPaise).clamp(0, 999999999999);
+          final currentBal = (custRows.first['current_balance_paise'] as int?) ?? 0;
+          // Sacred financial rule: No clamping! Negative balance natively represents Jama (Advance)
+          final newBal = currentBal - totalRefundPaise;
 
           await txn.rawUpdate('''
             UPDATE customers
             SET current_balance_paise = ?
             WHERE id = ?
-          ''', [newBal, sale.customerId]);
+          ''', [newBal, targetCustId]);
 
           final ledgerEntry = LedgerTransactionModel(
             id: _uuid.v4(),
             businessId: sale.businessId,
-            customerId: sale.customerId!,
+            customerId: targetCustId,
             type: 'debit',
             amountPaise: totalRefundPaise,
             balanceAfterPaise: newBal,
-            description: 'Partial Return #$returnNumber (Inv #${sale.invoiceNumber})',
+            description: refundMethod == 'credit_note'
+                ? 'Store Credit: Return #$returnNumber (Inv #${sale.invoiceNumber})'
+                : 'Udhar Reversal: Return #$returnNumber (Inv #${sale.invoiceNumber})',
             referenceId: returnId,
             createdAt: DateTime.now(),
             syncStatus: 'pending',
@@ -1941,11 +2018,8 @@ class LocalDatabase {
       }
     });
 
-    AppDataBus.instance.bumpSaleCompleted(
-      affectsCustomer: refundMethod == 'credit',
-      affectsCash: refundMethod == 'cash',
-    );
-    AppDataBus.instance.bumpProducts();
+    // App-wide instant reactive notification across all open tabs
+    AppDataBus.instance.bumpAll();
 
     return returnNumber;
   }
@@ -2487,6 +2561,88 @@ class LocalDatabase {
     final db = await instance.database;
     final result = await db.query('sales', orderBy: 'created_at DESC', limit: limit);
     return result.map((json) => SaleModel.fromMap(json)).toList();
+  }
+
+  /// Every sale in a half-open date range, with NO row cap.
+  ///
+  /// Added because "today's" figures were being derived by pulling the last
+  /// N sales and filtering them in Dart — a shop that crossed N bills in a
+  /// day had its own day silently truncated, and the busier the shop, the
+  /// more wrong the dashboard got.
+  Future<List<SaleModel>> getSalesBetween(DateTime start, DateTime end) async {
+    final db = await instance.database;
+    final result = await db.query(
+      'sales',
+      where: 'created_at >= ? AND created_at < ?',
+      whereArgs: [start.toIso8601String(), end.toIso8601String()],
+      orderBy: 'created_at DESC',
+    );
+    return result.map((json) => SaleModel.fromMap(json)).toList();
+  }
+
+  /// Real gross margin for a day, computed line by line from the buying rate
+  /// frozen onto each sale item at billing time.
+  ///
+  /// This replaces `todaySales * 0.14` — a hardcoded 14% of turnover that the
+  /// Home dashboard presented as "Est. Profit / Live Margin" behind an owner
+  /// PIN. It moved with revenue no matter what the shop actually bought at,
+  /// so a day selling nothing but loss-leaders and a day selling nothing but
+  /// high-margin goods reported the identical "profit".
+  ///
+  /// Lines whose cost is unknown (0 — never inwarded with a buying price, or
+  /// billed before cost was frozen onto the line) are EXCLUDED from the
+  /// margin rather than counted as 100% profit, and reported separately so
+  /// the UI can tell the owner the figure is partial instead of quietly
+  /// overstating it.
+  Future<DayProfitSummary> getDayProfitSummary(DateTime day) async {
+    final start = DateTime(day.year, day.month, day.day);
+    final end = start.add(const Duration(days: 1));
+
+    final sales = await getSalesBetween(start, end);
+    int costedRevenue = 0;
+    int costOfGoods = 0;
+    int uncostedRevenue = 0;
+    int uncostedLines = 0;
+
+    for (final sale in sales) {
+      if (sale.isRefunded) continue;
+      for (final raw in sale.items) {
+        final rawQty = (raw['quantity'] as num?)?.toDouble() ?? 0.0;
+        final returnedQty = (raw['returned_quantity'] as num?)?.toDouble() ?? 0.0;
+        final qty = (rawQty - returnedQty).clamp(0.0, rawQty);
+        if (qty <= 0) continue;
+
+        final lineRevenue = (raw['gross_total_paise'] as num?)?.toInt() ??
+            (((raw['unit_price_paise'] as num?)?.toInt() ?? 0) * qty).round();
+        final unitCost = (raw['cost_price_paise'] as num?)?.toInt() ?? 0;
+
+        if (unitCost <= 0) {
+          uncostedRevenue += lineRevenue;
+          uncostedLines++;
+          continue;
+        }
+        costedRevenue += lineRevenue;
+        costOfGoods += (unitCost * qty).round();
+      }
+    }
+
+    final expenses = await getAllExpenses();
+    // Exclude 'Refund' category because cash refund is a drawer balancing outflow, not an operational expense
+    final dayExpenses = expenses
+        .where((e) =>
+            e.category != 'Refund' &&
+            !e.createdAt.isBefore(start) &&
+            e.createdAt.isBefore(end))
+        .fold<int>(0, (sum, e) => sum + e.amountPaise);
+
+    return DayProfitSummary(
+      grossMarginPaise: costedRevenue - costOfGoods,
+      netProfitPaise: costedRevenue - costOfGoods - dayExpenses,
+      costedRevenuePaise: costedRevenue,
+      uncostedRevenuePaise: uncostedRevenue,
+      uncostedLineCount: uncostedLines,
+      expensesPaise: dayExpenses,
+    );
   }
 
   Future<List<LedgerTransactionModel>> getLedgerForCustomer(String customerId) async {

@@ -17,6 +17,7 @@ import 'services/share_target_service.dart';
 import 'services/home_widget_service.dart';
 import 'services/workmanager_sync_service.dart';
 import 'services/in_app_update_service.dart';
+import 'services/razorpay_service.dart';
 import 'views/splash/splash_screen.dart';
 import 'views/auth/login_screen.dart';
 import 'core/localization/app_language_service.dart';
@@ -127,6 +128,13 @@ void main() async {
 
   // 10. Check for Google Play Store In-App Updates
   InAppUpdateService.instance.checkForUpdates();
+
+  // 10b. Finish any Pro purchase whose server-side verification never landed
+  // (paid on a dead connection, or the app was killed between the Razorpay
+  // callback and the handshake). No-op when there is nothing pending, and the
+  // backend treats a replayed payment id as already-granted rather than
+  // extending the subscription again.
+  RazorpayService.instance.retryPendingVerification();
 
   runApp(const KamaiPlusApp());
 }

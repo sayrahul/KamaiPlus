@@ -39,6 +39,22 @@ class _CustomersScreenState extends State<CustomersScreen> with DataBusRefresh<C
   String _search = '';
   String _filter = 'All';
 
+  static const List<String> _monthNames = [
+    'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+    'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+  ];
+
+  /// Renders a stored `MM-DD` birthday as "14 Aug". Returns the raw value if
+  /// it is not in the expected shape rather than throwing on bad data.
+  static String _formatBirthdayLabel(String mmDd) {
+    final parts = mmDd.split('-');
+    if (parts.length != 2) return mmDd;
+    final month = int.tryParse(parts[0]);
+    final day = int.tryParse(parts[1]);
+    if (month == null || day == null || month < 1 || month > 12) return mmDd;
+    return '$day ${_monthNames[month - 1]}';
+  }
+
   @override
   void initState() {
     super.initState();
@@ -151,6 +167,7 @@ class _CustomersScreenState extends State<CustomersScreen> with DataBusRefresh<C
 
     bool isVip = existing?.isVip ?? false;
     bool isVerifyingGstin = false;
+    String? birthdayMmDd = existing?.birthday;
 
     showModalBottomSheet(
       context: context,
@@ -329,6 +346,84 @@ class _CustomersScreenState extends State<CustomersScreen> with DataBusRefresh<C
                 ),
               ),
               const SizedBox(height: 12),
+              // Birthday (day + month only, no year). Feeds the Birthday
+              // campaign in WhatsApp Growth, which before this field existed
+              // had nothing real to filter on.
+              InkWell(
+                borderRadius: BorderRadius.circular(12),
+                onTap: () async {
+                  final now = DateTime.now();
+                  final existingParts = birthdayMmDd?.split('-');
+                  final initial = (existingParts != null && existingParts.length == 2)
+                      ? DateTime(
+                          now.year,
+                          int.tryParse(existingParts[0]) ?? now.month,
+                          int.tryParse(existingParts[1]) ?? now.day,
+                        )
+                      : now;
+                  final picked = await showDatePicker(
+                    context: modalCtx,
+                    initialDate: initial,
+                    // A full calendar year — the year itself is thrown away,
+                    // only day and month are kept.
+                    firstDate: DateTime(now.year, 1, 1),
+                    lastDate: DateTime(now.year, 12, 31),
+                    helpText: 'Select Birthday (day & month)',
+                  );
+                  if (picked != null) {
+                    setModalState(() {
+                      birthdayMmDd =
+                          '${picked.month.toString().padLeft(2, '0')}-${picked.day.toString().padLeft(2, '0')}';
+                    });
+                  }
+                },
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF8FAFC),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: const Color(0xFFE2E8F0)),
+                  ),
+                  child: Row(
+                    children: [
+                      const Text('🎂', style: TextStyle(fontSize: 18)),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Birthday (optional)',
+                              style: GoogleFonts.outfit(fontSize: 13, fontWeight: FontWeight.w700),
+                            ),
+                            Text(
+                              birthdayMmDd == null
+                                  ? 'Not set — tap to add for birthday offers'
+                                  : _formatBirthdayLabel(birthdayMmDd!),
+                              style: GoogleFonts.inter(
+                                fontSize: 10.5,
+                                color: birthdayMmDd == null
+                                    ? const Color(0xFF64748B)
+                                    : const Color(0xFF059669),
+                                fontWeight: birthdayMmDd == null ? FontWeight.w400 : FontWeight.w700,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      if (birthdayMmDd != null)
+                        IconButton(
+                          icon: const Icon(Icons.close_rounded, size: 18, color: Color(0xFF94A3B8)),
+                          onPressed: () => setModalState(() => birthdayMmDd = null),
+                          tooltip: 'Clear birthday',
+                        )
+                      else
+                        const Icon(Icons.calendar_month_rounded, size: 18, color: Color(0xFF94A3B8)),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
                 decoration: BoxDecoration(
@@ -415,6 +510,7 @@ class _CustomersScreenState extends State<CustomersScreen> with DataBusRefresh<C
                       currentBalancePaise: existing?.currentBalancePaise ?? 0,
                       creditLimitPaise: limit * 100,
                       isVip: isVip,
+                      birthday: birthdayMmDd,
                       syncStatus: 'pending',
                     );
                     await LocalDatabase.instance.upsertCustomer(saved);

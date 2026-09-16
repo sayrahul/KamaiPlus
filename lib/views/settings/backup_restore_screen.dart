@@ -4,6 +4,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../../core/database/local_database.dart';
 import '../../services/firestore_sync_service.dart';
 import '../../services/backup_restore_service.dart';
+import '../../services/google_drive_backup_service.dart';
 import '../common/in_app_notification.dart';
 import '../common/kamai_bottom_nav.dart';
 import '../common/pro_upgrade_modal.dart';
@@ -65,9 +66,12 @@ class _BackupRestoreScreenState extends State<BackupRestoreScreen> {
       }
       return;
     }
+    final driveChoice = await _askBackupPassword();
+    if (driveChoice == null) return; // Cancelled.
+    if (!mounted) return;
     setState(() => _isBackingUpDrive = true);
     try {
-      final res = await BackupRestoreService.instance.saveToGoogleDrive();
+      final res = await BackupRestoreService.instance.saveToGoogleDrive(password: driveChoice.password);
       if (!mounted) return;
       if (res.success) {
         InAppNotification.show(
@@ -88,11 +92,362 @@ class _BackupRestoreScreenState extends State<BackupRestoreScreen> {
 
   Future<void> _shareEncryptedBackup() async {
     HapticFeedback.lightImpact();
+    final choice = await _askBackupPassword();
+    if (choice == null) return; // Cancelled.
     try {
-      await BackupRestoreService.instance.shareBackupFile();
+      await BackupRestoreService.instance.shareBackupFile(password: choice.password);
     } catch (e) {
       if (mounted) InAppNotification.error('Share failed: $e', context: context);
     }
+  }
+
+  /// Offers password protection before a backup leaves the device.
+  ///
+  /// Returns null if the merchant cancelled. A `_BackupPasswordChoice` with a
+  /// null password means "export without protection" — a real choice, not a
+  /// failure: the `.kmb` file is only useful to the shopkeeper who made it,
+  /// and for this audience a forgotten password is a likelier disaster than a
+  /// stolen backup. There is no recovery path, so the dialog says so in plain
+  /// words instead of quietly defaulting either way.
+  Future<_BackupPasswordChoice?> _askBackupPassword() async {
+    final ctrl = TextEditingController();
+    final confirmCtrl = TextEditingController();
+    String? error;
+
+    final result = await showDialog<_BackupPasswordChoice>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
+          backgroundColor: Colors.white,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+          title: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFEF3C7),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: const Icon(Icons.lock_rounded, color: Color(0xFFB45309), size: 20),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text('Protect this backup?',
+                    style: GoogleFonts.outfit(fontSize: 16, fontWeight: FontWeight.w800)),
+              ),
+            ],
+          ),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'This file holds your whole shop — every sale, every customer '
+                  'number and every khata balance. Anyone who opens it can read '
+                  'all of it.',
+                  style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF475569)),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: ctrl,
+                  obscureText: true,
+                  autofocus: true,
+                  decoration: InputDecoration(
+                    labelText: 'Password (optional)',
+                    hintText: 'At least 6 characters',
+                    filled: true,
+                    fillColor: const Color(0xFFF8FAFC),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                ),
+                const SizedBox(height: 10),
+                TextField(
+                  controller: confirmCtrl,
+                  obscureText: true,
+                  decoration: InputDecoration(
+                    labelText: 'Confirm password',
+                    errorText: error,
+                    filled: true,
+                    fillColor: const Color(0xFFF8FAFC),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFFEF2F2),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: const Color(0xFFFECACA)),
+                  ),
+                  child: Text(
+                    '⚠️ Yaad rakhein: password bhool gaye to ye backup kabhi '
+                    'restore nahi hoga. Koi recovery nahi hai.',
+                    style: GoogleFonts.inter(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      color: const Color(0xFF991B1B),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, null),
+              child: Text('Cancel',
+                  style: GoogleFonts.inter(fontWeight: FontWeight.w600, color: const Color(0xFF64748B))),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, const _BackupPasswordChoice(null)),
+              child: Text('Skip',
+                  style: GoogleFonts.inter(fontWeight: FontWeight.w700, color: const Color(0xFFD97706))),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                final pwd = ctrl.text;
+                if (pwd.length < 6) {
+                  setDialogState(() => error = 'Use at least 6 characters');
+                  return;
+                }
+                if (pwd != confirmCtrl.text) {
+                  setDialogState(() => error = 'Passwords do not match');
+                  return;
+                }
+                Navigator.pop(ctx, _BackupPasswordChoice(pwd));
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF059669),
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                elevation: 0,
+              ),
+              child: Text('Protect', style: GoogleFonts.outfit(fontWeight: FontWeight.w700)),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    ctrl.dispose();
+    confirmCtrl.dispose();
+    return result;
+  }
+
+  /// Lists the merchant's own Drive backups and restores the chosen one.
+  ///
+  /// Before this existed, a Drive "backup" could only ever be written, never
+  /// read back — so a merchant who lost their phone had no route home unless
+  /// they had separately kept the file. The download goes through the same
+  /// `restoreFromBackupFile` path as a local file, so the checksum check and
+  /// the password prompt behave identically.
+  Future<void> _restoreFromDrive() async {
+    HapticFeedback.mediumImpact();
+    if (!_canAccessCloud) {
+      if (mounted) {
+        ProUpgradeModal.show(context, triggerFeature: 'Google Drive Cloud Restore');
+      }
+      return;
+    }
+
+    setState(() => _isRestoring = true);
+    List<DriveBackupFile> files;
+    try {
+      files = await GoogleDriveBackupService.instance.listBackups();
+    } finally {
+      if (mounted) setState(() => _isRestoring = false);
+    }
+    if (!mounted) return;
+
+    if (files.isEmpty) {
+      InAppNotification.show(
+        context: context,
+        message: 'No KamaiPlus backups found in your Google Drive yet.',
+        type: NotificationType.warning,
+      );
+      return;
+    }
+
+    final chosen = await showModalBottomSheet<DriveBackupFile>(
+      context: context,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
+      ),
+      builder: (ctx) => SafeArea(
+        top: false,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 18, 20, 20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Restore from Google Drive',
+                  style: GoogleFonts.outfit(fontSize: 17, fontWeight: FontWeight.w800)),
+              const SizedBox(height: 4),
+              Text('This replaces everything currently on this phone.',
+                  style: GoogleFonts.inter(fontSize: 11.5, color: const Color(0xFFDC2626))),
+              const SizedBox(height: 14),
+              ConstrainedBox(
+                constraints: const BoxConstraints(maxHeight: 340),
+                child: ListView.separated(
+                  shrinkWrap: true,
+                  itemCount: files.length,
+                  separatorBuilder: (_, _) => const SizedBox(height: 8),
+                  itemBuilder: (_, i) {
+                    final f = files[i];
+                    final when = f.modifiedAt;
+                    final subtitle = [
+                      if (when != null)
+                        '${when.day}/${when.month}/${when.year}',
+                      if (f.readableSize.isNotEmpty) f.readableSize,
+                    ].join(' • ');
+                    return InkWell(
+                      borderRadius: BorderRadius.circular(12),
+                      onTap: () => Navigator.pop(ctx, f),
+                      child: Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFF8FAFC),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: const Color(0xFFE2E8F0)),
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.cloud_download_rounded,
+                                color: Color(0xFF0284C7), size: 20),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(f.name,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: GoogleFonts.inter(
+                                          fontSize: 12.5, fontWeight: FontWeight.w700)),
+                                  if (subtitle.isNotEmpty)
+                                    Text(subtitle,
+                                        style: GoogleFonts.inter(
+                                            fontSize: 10.5, color: const Color(0xFF64748B))),
+                                ],
+                              ),
+                            ),
+                            const Icon(Icons.chevron_right_rounded, color: Color(0xFF94A3B8)),
+                          ],
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    if (chosen == null || !mounted) return;
+
+    setState(() => _isRestoring = true);
+    try {
+      var res = await BackupRestoreService.instance.restoreFromDrive(chosen.id);
+      if (res.needsPassword && mounted) {
+        final pwd = await _promptRestorePassword(res.metadata ??
+            BackupMetadata(
+              formatVersion: '2.0',
+              storeName: chosen.name,
+              exportDate: '',
+              productsCount: 0,
+              salesCount: 0,
+              customersCount: 0,
+              checksum: '',
+              dbSizeBytes: 0,
+            ));
+        if (pwd == null || pwd.trim().isEmpty) {
+          if (mounted) {
+            InAppNotification.error('Restore cancelled — no password entered.', context: context);
+          }
+          return;
+        }
+        res = await BackupRestoreService.instance.restoreFromDrive(chosen.id, password: pwd);
+      }
+      if (!mounted) return;
+      if (res.success) {
+        await _loadStats();
+        if (!mounted) return;
+        InAppNotification.show(
+          context: context,
+          message: res.message,
+          customIcon: Icons.cloud_done_rounded,
+          customColor: const Color(0xFF10B981),
+        );
+      } else {
+        InAppNotification.error(res.message, context: context);
+      }
+    } finally {
+      if (mounted) setState(() => _isRestoring = false);
+    }
+  }
+
+  /// Asked only when the picked `.kmb` turns out to be password protected.
+  Future<String?> _promptRestorePassword(BackupMetadata metadata) async {
+    final ctrl = TextEditingController();
+    final result = await showDialog<String>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: Colors.white,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+        title: Text('Backup is locked',
+            style: GoogleFonts.outfit(fontSize: 16, fontWeight: FontWeight.w800)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              '${metadata.storeName} • ${metadata.productsCount} products, '
+              '${metadata.salesCount} sales',
+              style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF64748B)),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: ctrl,
+              obscureText: true,
+              autofocus: true,
+              onSubmitted: (v) => Navigator.pop(ctx, v),
+              decoration: InputDecoration(
+                labelText: 'Backup password',
+                filled: true,
+                fillColor: const Color(0xFFF8FAFC),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, null),
+            child: Text('Cancel',
+                style: GoogleFonts.inter(fontWeight: FontWeight.w600, color: const Color(0xFF64748B))),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, ctrl.text),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF059669),
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              elevation: 0,
+            ),
+            child: Text('Unlock', style: GoogleFonts.outfit(fontWeight: FontWeight.w700)),
+          ),
+        ],
+      ),
+    );
+    ctrl.dispose();
+    return result;
   }
 
   Future<void> _restoreFromBackupFile() async {
@@ -128,7 +483,9 @@ class _BackupRestoreScreenState extends State<BackupRestoreScreen> {
 
     setState(() => _isRestoring = true);
     try {
-      final res = await BackupRestoreService.instance.pickAndRestore();
+      final res = await BackupRestoreService.instance.pickAndRestore(
+        onPasswordNeeded: _promptRestorePassword,
+      );
       if (!mounted) return;
       if (res.success) {
         await _loadStats();
@@ -490,7 +847,7 @@ class _BackupRestoreScreenState extends State<BackupRestoreScreen> {
                   iconColor: const Color(0xFF0284C7),
                   iconBg: const Color(0xFFE0F2FE),
                   title: 'Google Drive 1-Tap Cloud Backup',
-                  subtitle: 'Direct encrypted SQLite backup to your Google account',
+                  subtitle: 'Opens the share sheet — pick Google Drive to save it there',
                   badge: _canAccessCloud ? (_isPro && !_isTrialActive ? 'DRIVE' : '7D TRIAL') : 'PRO',
                   buttonLabel: _isBackingUpDrive ? 'Saving...' : (_canAccessCloud ? 'Drive Backup' : '🔒 Upgrade'),
                   onTap: () {
@@ -506,8 +863,8 @@ class _BackupRestoreScreenState extends State<BackupRestoreScreen> {
                   icon: Icons.share_rounded,
                   iconColor: const Color(0xFFD97706),
                   iconBg: const Color(0xFFFFFBEB),
-                  title: 'Export Encrypted Backup (.kmb)',
-                  subtitle: 'Share via WhatsApp, Email, or File Manager',
+                  title: 'Export Backup File (.kmb)',
+                  subtitle: 'Optional password protection • keep the file private',
                   buttonLabel: 'Export File',
                   onTap: _shareEncryptedBackup,
                 ),
@@ -520,6 +877,17 @@ class _BackupRestoreScreenState extends State<BackupRestoreScreen> {
                   subtitle: 'Pick .kmb backup file to recover all data',
                   buttonLabel: _isRestoring ? 'Restoring...' : 'Restore File',
                   onTap: _restoreFromBackupFile,
+                ),
+                const SizedBox(height: 10),
+                _buildActionCard(
+                  icon: Icons.cloud_download_rounded,
+                  iconColor: const Color(0xFF0284C7),
+                  iconBg: const Color(0xFFE0F2FE),
+                  title: 'Restore from Google Drive',
+                  subtitle: 'Pick one of your uploaded backups — no file hunting',
+                  badge: _canAccessCloud ? (_isPro && !_isTrialActive ? 'DRIVE' : '7D TRIAL') : 'PRO',
+                  buttonLabel: _isRestoring ? 'Working...' : (_canAccessCloud ? 'Browse Drive' : '🔒 Upgrade'),
+                  onTap: _restoreFromDrive,
                 ),
                 const SizedBox(height: 10),
                 _buildActionCard(
@@ -954,4 +1322,16 @@ class _BackupRestoreScreenState extends State<BackupRestoreScreen> {
       ),
     );
   }
+}
+
+/// Result of the pre-export password prompt.
+///
+/// A null [password] means the merchant deliberately chose "Skip" — export
+/// without protection — which is different from cancelling the export
+/// entirely (represented by a null `_BackupPasswordChoice`). Collapsing those
+/// two into one nullable String would make "no password" and "don't export"
+/// indistinguishable.
+class _BackupPasswordChoice {
+  final String? password;
+  const _BackupPasswordChoice(this.password);
 }

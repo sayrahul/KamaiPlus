@@ -67,6 +67,12 @@ class _HomePulseTabState extends State<HomePulseTab> with DataBusRefresh<HomePul
   int _todaySalesPaise = 0;
   int _todayBillsCount = 0;
   int _todayProfitPaise = 0;
+
+  /// How many of today's sold lines had no buying rate on record. Those lines
+  /// are excluded from the margin above (counting them as 100% profit would
+  /// overstate it), so a non-zero value means the figure shown is partial and
+  /// the card says so rather than pretending otherwise.
+  int _uncostedLineCount = 0;
   int _cashInHandPaise = 0;
   int _marketUdharPaise = 0;
   int _debtorsCount = 0;
@@ -110,12 +116,15 @@ class _HomePulseTabState extends State<HomePulseTab> with DataBusRefresh<HomePul
       final sales = await LocalDatabase.instance.getAllSales(limit: 50);
       final products = await LocalDatabase.instance.getAllProducts(businessType: activeType);
 
-
-      final todaySales = sales.where((s) =>
-          !s.isRefunded &&
-          s.createdAt.year == now.year &&
-          s.createdAt.month == now.month &&
-          s.createdAt.day == now.day).toList();
+      // Today's figures come from a date-ranged query, NOT from filtering the
+      // most recent 50 sales. On a counter that crosses 50 bills in a day the
+      // old approach silently dropped the earliest bills of that same day, so
+      // the busier the shop got, the lower its "Today's Sales" read.
+      final dayStart = DateTime(now.year, now.month, now.day);
+      final rawTodaySales = await LocalDatabase.instance
+          .getSalesBetween(dayStart, dayStart.add(const Duration(days: 1)));
+      final todayActiveSales = rawTodaySales.where((s) => !s.isRefunded).toList();
+      final profitSummary = await LocalDatabase.instance.getDayProfitSummary(now);
 
       final customers = await LocalDatabase.instance.getAllCustomers();
       final debtors = customers.where((c) => c.currentBalancePaise > 0).toList();
@@ -127,8 +136,10 @@ class _HomePulseTabState extends State<HomePulseTab> with DataBusRefresh<HomePul
           e.createdAt.month == now.month &&
           e.createdAt.day == now.day).fold(0, (sum, e) => sum + e.amountPaise);
 
-      final totalSales = todaySales.fold(0, (sum, s) => sum + s.totalAmountPaise);
-      final cashSales = todaySales.fold(0, (sum, s) {
+      // Total net sales revenue reflects both full voids and partial item returns
+      final totalSales = rawTodaySales.fold(0, (sum, s) => sum + s.netAmountPaise);
+      // Cash in drawer parity with CashRegisterScreen: gross cash collected minus all expenses & cash refunds
+      final grossCashSales = rawTodaySales.fold(0, (sum, s) {
         if (s.paymentMethod == 'cash') return sum + s.totalAmountPaise;
         if (s.paymentMethod == 'split') return sum + s.splitCashPaise;
         return sum;
@@ -136,14 +147,15 @@ class _HomePulseTabState extends State<HomePulseTab> with DataBusRefresh<HomePul
 
       final prefs = await SharedPreferences.getInstance();
       final openingFloat = prefs.getInt('cash_register_opening_float_paise') ?? 0;
-      final calculatedCash = (openingFloat + cashSales - todayExp);
+      final calculatedCash = (openingFloat + grossCashSales - todayExp);
       final dismissedBroadcastKey = prefs.getString('dismissed_broadcast_key');
 
       if (mounted) {
         setState(() {
           _todaySalesPaise = totalSales;
-          _todayBillsCount = todaySales.length;
-          _todayProfitPaise = (totalSales * 0.14).round();
+          _todayBillsCount = todayActiveSales.length;
+          _todayProfitPaise = profitSummary.netProfitPaise;
+          _uncostedLineCount = profitSummary.uncostedLineCount;
           _cashInHandPaise = calculatedCash > 0 ? calculatedCash : 0;
           _marketUdharPaise = totalUdhar;
           _debtorsCount = debtors.length;
@@ -344,12 +356,14 @@ class _HomePulseTabState extends State<HomePulseTab> with DataBusRefresh<HomePul
                 title: 'EST. PROFIT',
                 titleColor: const Color(0xFF0284C7),
                 titleIcon: Icons.currency_rupee_rounded,
-                badgeText: 'Live Margin',
-                badgeBg: const Color(0xFFF0F9FF),
-                badgeColor: const Color(0xFF0284C7),
+                badgeText: _uncostedLineCount > 0 ? 'Partial' : 'Live Margin',
+                badgeBg: _uncostedLineCount > 0 ? const Color(0xFFFEF3C7) : const Color(0xFFF0F9FF),
+                badgeColor: _uncostedLineCount > 0 ? const Color(0xFFB45309) : const Color(0xFF0284C7),
                 amount: _formatDisplayPaise(_todayProfitPaise, _isProfitHidden),
                 amountColor: const Color(0xFF0284C7),
-                footerLabel: 'Net Margin',
+                footerLabel: _uncostedLineCount > 0
+                    ? '$_uncostedLineCount item(s) need buying price'
+                    : 'Sales − Cost − Expenses',
                 actionLabel: _isProfitHidden ? 'Show' : 'Hide',
                 actionColor: const Color(0xFF0284C7),
                 borderColor: const Color(0xFFBAE6FD),

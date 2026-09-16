@@ -81,6 +81,41 @@ service cloud.firestore {
     // BUSINESS PROFILES & SUBCOLLECTIONS (STRICT MULTI-COUNTER ISOLATION)
     // =========================================================================
 
+    // PAID ENTITLEMENT FIELDS — a client may NEVER change these.
+    //
+    // Pro used to be grantable from the device: razorpay_service.dart wrote
+    // `is_pro: true` straight into businesses/{bizId}, firestore_sync_service
+    // pushed the same fields on every sync, and the rule below let a business
+    // owner write anything on their own document. Between them, Pro could be
+    // switched on with no payment at all, and a real payment was never checked
+    // against Razorpay.
+    //
+    // The only writers now are the `verifyRazorpayPayment` Cloud Function
+    // (Admin SDK — bypasses these rules entirely, after asking Razorpay what
+    // actually happened) and the Admin Console (isAdmin()). The app reports
+    // what it believes under `device_reported_*` keys instead, which are
+    // ordinary telemetry and carry no entitlement.
+    // =========================================================================
+    function proFields() {
+      return [
+        'is_pro', 'pro_plan', 'pro_expiry', 'pro_activated_at', 'pro_granted_by',
+        'subscription_tier', 'subscription_expires_at', 'subscription_valid_until',
+        'razorpay_payment_id', 'coupon_code_used', 'account_disabled'
+      ];
+    }
+
+    // Only ever called from an `update` rule, where `resource` is guaranteed
+    // to exist — creates are handled separately with a plain keys() check,
+    // because there is no prior document to diff against.
+    //
+    // `affectedKeys()` returns keys whose values actually CHANGED, so a client
+    // re-syncing a document that already carries the same Pro values is not
+    // blocked; only an attempt to alter them is.
+    function touchesProFields() {
+      return request.resource.data.diff(resource.data)
+        .affectedKeys().hasAny(proFields());
+    }
+
     // Root Business Document (Store profile, settings, Pro status).
     // Admin read: Merchant Directory listing/detail. Admin write: Pro
     // subscription grants/revokes (the app already live-listens on this doc
@@ -88,7 +123,13 @@ service cloud.firestore {
     // "Live Business Profile Stream (Immediate Pro Upgrade / Downgrade sync
     // from Admin Portal)").
     match /businesses/{businessId} {
-      allow read, write: if isBusinessOwner(businessId) || isAdmin();
+      allow read: if isBusinessOwner(businessId) || isAdmin();
+      allow create: if isAdmin() ||
+        (isBusinessOwner(businessId) &&
+         !request.resource.data.keys().hasAny(proFields()));
+      allow update: if isAdmin() ||
+        (isBusinessOwner(businessId) && !touchesProFields());
+      allow delete: if isAdmin() || isBusinessOwner(businessId);
 
       // Products Catalog (SKUs, Barcodes, Pricing, Stock)
       match /products/{productId} {
@@ -129,11 +170,22 @@ service cloud.firestore {
     // MERCHANTS DIRECTORY (SUPER ADMIN & FAST LOOKUP MIRROR)
     // =========================================================================
     match /merchants/{merchantId} {
-      allow read, write: if isAdmin() || (isAuthenticated() && (
-        merchantId == 'biz_' + request.auth.uid ||
-        merchantId == request.auth.uid ||
-        isBusinessOwner(merchantId)
-      ));
+      function ownsMerchantDoc() {
+        return isAuthenticated() && (
+          merchantId == 'biz_' + request.auth.uid ||
+          merchantId == request.auth.uid ||
+          isBusinessOwner(merchantId)
+        );
+      }
+      allow read: if isAdmin() || ownsMerchantDoc();
+      // Mirrors businesses/{businessId}: this doc also carries is_pro and
+      // subscription_tier, so a client must not be able to grant itself Pro
+      // here either — the Admin Console and the verifyRazorpayPayment Cloud
+      // Function are the only writers of those fields.
+      allow create: if isAdmin() ||
+        (ownsMerchantDoc() && !request.resource.data.keys().hasAny(proFields()));
+      allow update: if isAdmin() || (ownsMerchantDoc() && !touchesProFields());
+      allow delete: if isAdmin() || ownsMerchantDoc();
     }
 
     // =========================================================================
