@@ -213,7 +213,13 @@ service cloud.firestore {
     // =========================================================================
     // PLATFORM SETTINGS (broadcast messages, remote config) — every signed-in
     // merchant's app reads these; only the admin console writes them.
+    // Exception: `ai_config` stores the Gemini API key, so it is strictly
+    // admin-only read/write — merchants may never inspect the raw key.
     // =========================================================================
+    match /platform_settings/ai_config {
+      allow read, write: if isAdmin();
+    }
+
     match /platform_settings/{settingId} {
       allow read: if isAuthenticated();
       allow write: if isAdmin();

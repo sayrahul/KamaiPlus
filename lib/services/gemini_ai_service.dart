@@ -355,11 +355,15 @@ class GeminiAiService {
       client = HttpClient();
       client.connectionTimeout = const Duration(seconds: 30);
 
+      final prefs = await SharedPreferences.getInstance();
+      final businessType = prefs.getString('business_type') ?? 'grocery';
+
       final req = await client.postUrl(Uri.parse(_aiEndpoint));
       req.headers.set(HttpHeaders.contentTypeHeader, 'application/json');
       req.headers.set(HttpHeaders.authorizationHeader, 'Bearer $idToken');
       req.write(jsonEncode({
         'kind': kind,
+        'business_type': businessType,
         'mime_type': mimeType,
         'data_base64': base64Encode(fileBytes),
       }));

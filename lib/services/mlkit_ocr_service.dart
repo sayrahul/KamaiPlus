@@ -84,9 +84,20 @@ class MlKitOcrService {
       'dessert': 'Desserts',
       'ice cream': 'Desserts',
       'thali': 'Thali Special',
+      'chicken': 'Chicken Special',
+      'mutton': 'Mutton Special',
+      'fish': 'Fish & Seafood',
+      'egg': 'Egg Special',
+      'non-veg': 'Non-Veg Special',
+      'non veg': 'Non-Veg Special',
+      'seafood': 'Fish & Seafood',
+      'kabab': 'Starters & Tandoor',
+      'kebab': 'Starters & Tandoor',
+      'tandoor': 'Starters & Tandoor',
     };
 
-    final priceEndRegex = RegExp(r'(?:₹|Rs\.?|INR)?\s*(\d{2,4})\s*$', caseSensitive: false);
+    // Supports "320", "320/-", "Rs. 320/-", "320 /-"
+    final priceEndRegex = RegExp(r'(?:₹|Rs\.?|INR)?\s*(\d{2,4})\s*(?:/[-–—]?|/-)?\s*$', caseSensitive: false);
 
     for (int i = 0; i < lines.length; i++) {
       final line = lines[i];
@@ -121,9 +132,10 @@ class MlKitOcrService {
         final price = int.tryParse(priceStr) ?? 0;
         if (price >= 10 && price <= 5000) {
           String dishName = line.substring(0, match.start).trim();
+          dishName = dishName.replaceFirst(RegExp(r'^\d+[\.\)\-\s]\s*'), '').trim();
           dishName = dishName.replaceAll(RegExp(r'[\.\-_/:\*#@~]+$'), '').trim();
           dishName = dishName.replaceAll(RegExp(r'^[\.\-_/:\*#@~]+'), '').trim();
-          if (dishName.length >= 2 && !RegExp(r'^\d+$').hasMatch(dishName)) {
+          if (_isValidDishName(dishName)) {
             items.add(ExtractedMenuItem(
               dishName: dishName,
               priceInPaise: price * 100,
@@ -137,12 +149,14 @@ class MlKitOcrService {
       // Check 2: Dish name on line i and standalone price on line i+1 (multi-column)
       if (i + 1 < lines.length) {
         final nextLine = lines[i + 1].trim();
-        final standalonePrice = RegExp(r'^(?:₹|Rs\.?|INR)?\s*(\d{2,4})\s*$', caseSensitive: false).firstMatch(nextLine);
+        final standalonePrice = RegExp(r'^(?:₹|Rs\.?|INR)?\s*(\d{2,4})\s*(?:/[-–—]?|/-)?\s*$', caseSensitive: false).firstMatch(nextLine);
         if (standalonePrice != null && line.length >= 3 && !priceEndRegex.hasMatch(line)) {
           final price = int.tryParse(standalonePrice.group(1)!) ?? 0;
           if (price >= 10 && price <= 5000) {
-            String dishName = line.replaceAll(RegExp(r'[\.\-_/:\*#@~]+$'), '').trim();
-            if (dishName.length >= 2 && !RegExp(r'^\d+$').hasMatch(dishName)) {
+            String dishName = line.replaceFirst(RegExp(r'^\d+[\.\)\-\s]\s*'), '').trim();
+            dishName = dishName.replaceAll(RegExp(r'[\.\-_/:\*#@~]+$'), '').trim();
+            dishName = dishName.replaceAll(RegExp(r'^[\.\-_/:\*#@~]+'), '').trim();
+            if (_isValidDishName(dishName)) {
               items.add(ExtractedMenuItem(
                 dishName: dishName,
                 priceInPaise: price * 100,
@@ -157,6 +171,20 @@ class MlKitOcrService {
     }
 
     return items;
+  }
+
+  static bool _isValidDishName(String name) {
+    final clean = name.trim().toLowerCase();
+    if (clean.length < 2) return false;
+    // Reject if composed purely of digits, spaces, and punctuation (e.g. "360/-|", "120", "---")
+    if (RegExp(r'^[\d\s\.\-_/:\*#@~|₹,;()]+$').hasMatch(clean)) return false;
+    // Blacklisted column header and metadata words
+    const blacklisted = {
+      'rate', 'item', 'items', 'price', 'rate/-', 'mrp', 'sr', 'no', 'sr.',
+      'dish', 'name', 'menu', 'half', 'full', 'qty', 'amount', 'total', 's.no'
+    };
+    if (blacklisted.contains(clean)) return false;
+    return true;
   }
 
   /// Intelligent retail invoice line parser
@@ -263,7 +291,7 @@ class MlKitOcrService {
   ExtractedBillItem? _parseItemLine(String line) {
     // Look for price or numbers at the end of line
     // e.g. "Basmati Rice 10kg 950.00" or "Amul Butter 100g 55"
-    final priceRegex = RegExp(r'(?:₹|Rs\.?|INR)?\s*(\d+(?:\.\d{1,2})?)\s*$', caseSensitive: false);
+    final priceRegex = RegExp(r'(?:₹|Rs\.?|INR)?\s*(\d+(?:\.\d{1,2})?)\s*(?:/[-–—]?|/-)?\s*$', caseSensitive: false);
     final match = priceRegex.firstMatch(line);
     if (match == null) return null;
 

@@ -11,6 +11,7 @@ import 'vertical_analytics_screen.dart';
 import 'push_notifications_screen.dart';
 import 'coupons_screen.dart';
 import 'broadcast_screen.dart';
+import 'ai_settings_screen.dart';
 
 class _NavItem {
   final IconData icon;
@@ -110,6 +111,14 @@ class _AdminShellState extends State<AdminShell> {
       category: 'PLATFORM',
       badge: 'v4.21',
       build: () => const BroadcastScreen(),
+    ),
+    _NavItem(
+      icon: Icons.auto_awesome_outlined,
+      selectedIcon: Icons.auto_awesome_rounded,
+      label: 'AI & Vision Engine',
+      category: 'PLATFORM',
+      badge: 'GEMINI',
+      build: () => const AiSettingsScreen(),
     ),
   ];
 

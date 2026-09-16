@@ -119,27 +119,7 @@ class AiInwardSheet extends StatelessWidget {
 
       if (file == null) return;
 
-      // 1. Instant On-Device ML Kit OCR (Free, Offline, <200ms)
-      final mlResult = await MlKitOcrService.instance.scanBillImage(file.path);
-      if (mlResult.items.isNotEmpty) {
-        if (!context.mounted) return;
-        Navigator.pop(context); // close sheet
-        BillScanReviewSheet.show(
-          context,
-          items: mlResult.items,
-          supplierName: mlResult.supplierName,
-          billNumber: mlResult.billNumber,
-          billDate: mlResult.billDate,
-          onInwardComplete: onInwardComplete,
-        );
-        return;
-      }
-
-      // 2. Fallback to Gemini Deep AI Vision for complex handwritten parcha.
-      //    mlResult is handed along so that if the cloud tier is unavailable —
-      //    no API key in the Admin Console, no network, a timeout — the failure
-      //    dialog can still offer whatever the offline pass managed to read,
-      //    or plain manual entry, rather than dead-ending on a Close button.
+      // 1. Primary: Gemini Deep AI Vision
       final bytes = await file.readAsBytes();
       if (!context.mounted) return;
 
@@ -148,7 +128,7 @@ class AiInwardSheet extends StatelessWidget {
         bytes,
         mimeType: 'image/jpeg',
         title: 'Analyzing Bill Photo',
-        offlineFallback: mlResult,
+        filePath: file.path,
       );
     } catch (e) {
       if (context.mounted) {
@@ -214,13 +194,10 @@ class AiInwardSheet extends StatelessWidget {
     Uint8List bytes, {
     required String mimeType,
     required String title,
+    String? filePath,
     MlKitScanResult? offlineFallback,
   }) {
     // Created ONCE, here, rather than inline in the FutureBuilder's builder.
-    // showDialog's builder re-runs on any rebuild (a keyboard, a metrics or
-    // theme change), and a future constructed inside it is a NEW call each
-    // time — firing a fresh Gemini request and spending another of the ten free
-    // monthly picture scans, for a scan the merchant only started once.
     final extraction =
         GeminiAiService.extractItemsFromImage(bytes, mimeType: mimeType);
 
@@ -267,7 +244,7 @@ class AiInwardSheet extends StatelessWidget {
                           border: Border.all(color: const Color(0xFF10B981).withValues(alpha: 0.4)),
                         ),
                         child: Text(
-                          'AI VISION',
+                          'GEMINI AI',
                           style: GoogleFonts.inter(fontSize: 9, fontWeight: FontWeight.w800, color: const Color(0xFF34D399)),
                         ),
                       ),
@@ -308,7 +285,7 @@ class AiInwardSheet extends StatelessWidget {
           }
 
           final res = snapshot.data;
-          if (res == null || !res.success) {
+          if (res == null || !res.success || res.items.isEmpty) {
             final isQuota = res?.isQuotaExceeded ?? false;
             return AlertDialog(
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
@@ -342,7 +319,28 @@ class AiInwardSheet extends StatelessWidget {
                   onPressed: () => Navigator.pop(dialogCtx),
                   child: Text('Close', style: GoogleFonts.plusJakartaSans(color: const Color(0xFF64748B))),
                 ),
-                if (isQuota)
+                if (isQuota) ...[
+                  TextButton(
+                    onPressed: () async {
+                      Navigator.pop(dialogCtx);
+                      MlKitScanResult? fallback = offlineFallback;
+                      if (fallback == null && filePath != null) {
+                        try {
+                          fallback = await MlKitOcrService.instance.scanBillImage(filePath);
+                        } catch (_) {}
+                      }
+                      if (!context.mounted) return;
+                      BillScanReviewSheet.show(
+                        context,
+                        items: fallback?.items ?? const [],
+                        supplierName: fallback?.supplierName,
+                        billNumber: fallback?.billNumber,
+                        billDate: fallback?.billDate,
+                        onInwardComplete: onInwardComplete,
+                      );
+                    },
+                    child: Text('Use Offline Scan', style: GoogleFonts.plusJakartaSans(color: const Color(0xFF10B981), fontWeight: FontWeight.w700)),
+                  ),
                   ElevatedButton(
                     onPressed: () {
                       Navigator.pop(dialogCtx);
@@ -354,24 +352,24 @@ class AiInwardSheet extends StatelessWidget {
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                     ),
                     child: Text('Upgrade to Pro', style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w800)),
-                  )
-                else
-                  // The only way out of this dialog used to be "Close", which
-                  // dropped the merchant back to nothing and threw away the
-                  // offline ML Kit pass entirely. Cloud AI is the FALLBACK
-                  // tier — when it is unavailable (no API key configured in the
-                  // Admin Console, no network, a timeout, a malformed reply)
-                  // the flow has to keep going, either with whatever Tier 1
-                  // did read or as plain manual entry.
+                  ),
+                ] else
                   ElevatedButton(
-                    onPressed: () {
+                    onPressed: () async {
                       Navigator.pop(dialogCtx);
+                      MlKitScanResult? fallback = offlineFallback;
+                      if (fallback == null && filePath != null) {
+                        try {
+                          fallback = await MlKitOcrService.instance.scanBillImage(filePath);
+                        } catch (_) {}
+                      }
+                      if (!context.mounted) return;
                       BillScanReviewSheet.show(
                         context,
-                        items: offlineFallback?.items ?? const [],
-                        supplierName: offlineFallback?.supplierName,
-                        billNumber: offlineFallback?.billNumber,
-                        billDate: offlineFallback?.billDate,
+                        items: fallback?.items ?? const [],
+                        supplierName: fallback?.supplierName,
+                        billNumber: fallback?.billNumber,
+                        billDate: fallback?.billDate,
                         onInwardComplete: onInwardComplete,
                       );
                     },
@@ -381,9 +379,7 @@ class AiInwardSheet extends StatelessWidget {
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                     ),
                     child: Text(
-                      (offlineFallback?.items.isNotEmpty ?? false)
-                          ? 'Review Offline Scan'
-                          : 'Enter Manually',
+                      'Review Offline / Enter Manually',
                       style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w800),
                     ),
                   ),

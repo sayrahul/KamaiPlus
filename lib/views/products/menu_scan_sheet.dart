@@ -95,28 +95,16 @@ class MenuScanSheet extends StatelessWidget {
 
       if (file == null) return;
 
-      // 1. Instant On-Device ML Kit OCR (Free, Offline, Zero-API Key, <200ms)
-      final mlItems = await MlKitOcrService.instance.scanMenuImage(file.path);
-      if (mlItems.isNotEmpty) {
-        if (!context.mounted) return;
-        Navigator.pop(context); // close sheet
-        MenuItemReviewSheet.show(
-          context,
-          initialItems: mlItems,
-          onMenuAddComplete: onMenuAddSuccess,
-        );
-        return;
-      }
-
-      // 2. Cloud AI Fallback for complex layouts
+      // 1. Primary: Gemini Deep AI Vision
       final bytes = await file.readAsBytes();
       if (!context.mounted) return;
 
-      // mlItems is handed along (it is empty here by definition, but the
-      // parameter keeps this path identical in shape to the bill scan) so a
-      // cloud-tier failure can still land the merchant in manual entry rather
-      // than on an error toast with nothing to do next.
-      _runExtraction(context, bytes, mimeType: 'image/jpeg', offlineFallback: mlItems);
+      _runExtraction(
+        context,
+        bytes,
+        mimeType: 'image/jpeg',
+        filePath: file.path,
+      );
     } catch (e) {
       if (context.mounted) {
         InAppNotification.error('Could not open image: $e', context: context);
@@ -128,14 +116,11 @@ class MenuScanSheet extends StatelessWidget {
     BuildContext context,
     Uint8List bytes, {
     required String mimeType,
-    List<ExtractedMenuItem> offlineFallback = const [],
+    required String filePath,
   }) {
     final vert = BusinessVerticals.resolve(BusinessVerticals.activeBusinessTypeNotifier.value);
 
     // Created ONCE here, not inline in the FutureBuilder's builder below.
-    // showDialog's builder re-runs on any rebuild, and a future constructed
-    // inside it becomes a brand new Gemini call each time — spending another of
-    // the ten free monthly picture scans for a scan started only once.
     final extraction = GeminiAiService.extractMenuItemsFromImage(
       bytes,
       mimeType: mimeType,
@@ -171,7 +156,7 @@ class MenuScanSheet extends StatelessWidget {
                           ),
                           const SizedBox(width: 8),
                           Text(
-                            'Reading Menu',
+                            'AI Menu Vision',
                             style: GoogleFonts.outfit(fontSize: 15, fontWeight: FontWeight.w700, color: Colors.white),
                           ),
                         ],
@@ -184,7 +169,7 @@ class MenuScanSheet extends StatelessWidget {
                           border: Border.all(color: const Color(0xFF10B981).withValues(alpha: 0.4)),
                         ),
                         child: Text(
-                          'AI VISION',
+                          'GEMINI AI',
                           style: GoogleFonts.inter(fontSize: 9, fontWeight: FontWeight.w800, color: const Color(0xFF34D399)),
                         ),
                       ),
@@ -206,12 +191,18 @@ class MenuScanSheet extends StatelessWidget {
                         Positioned(
                           bottom: 16,
                           child: Text(
-                            'Reading dish names & prices...',
+                            'Reading dish names, prices & categories...',
                             style: GoogleFonts.plusJakartaSans(color: const Color(0xFF94A3B8), fontSize: 11),
                           ),
                         ),
                       ],
                     ),
+                  ),
+                  const SizedBox(height: 16),
+                  const LinearProgressIndicator(
+                    valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF10B981)),
+                    backgroundColor: Color(0xFF334155),
+                    minHeight: 4,
                   ),
                 ],
               ),
@@ -219,38 +210,58 @@ class MenuScanSheet extends StatelessWidget {
           }
 
           final result = snapshot.data;
-          WidgetsBinding.instance.addPostFrameCallback((_) {
+          WidgetsBinding.instance.addPostFrameCallback((_) async {
             if (!dialogCtx.mounted) return;
             Navigator.of(dialogCtx).pop();
 
             if (!context.mounted) return;
 
-            if (result == null || !result.success) {
-              // Cloud AI is the fallback tier, so its failure must not end the
-              // flow. Say plainly what happened, then open the same review
-              // sheet with whatever the offline pass read — or empty, where
-              // "Add Dish Manually" takes over. Previously this returned after
-              // a toast and the merchant was left with nothing.
-              InAppNotification.show(
-                context: context,
-                message: result?.errorMessage ??
-                    'Could not auto-read this menu clearly. Please review or enter the dishes manually.',
-                type: NotificationType.error,
-                duration: const Duration(seconds: 5),
-              );
-              Navigator.pop(context); // close this sheet
+            // 1. Success with Gemini Cloud AI
+            if (result != null && result.success && result.items.isNotEmpty) {
+              Navigator.pop(context); // close menu scan sheet
               MenuItemReviewSheet.show(
                 context,
-                initialItems: offlineFallback,
+                initialItems: result.items,
                 onMenuAddComplete: onMenuAddSuccess,
               );
               return;
             }
 
-            Navigator.pop(context); // close this sheet
+            // 2. Offline Fallback: ML Kit OCR
+            List<ExtractedMenuItem> offlineItems = [];
+            try {
+              offlineItems = await MlKitOcrService.instance.scanMenuImage(filePath);
+            } catch (_) {}
+
+            if (!context.mounted) return;
+
+            if (offlineItems.isNotEmpty) {
+              InAppNotification.show(
+                context: context,
+                message: 'Loaded ${offlineItems.length} dishes using offline OCR scanner.',
+                type: NotificationType.warning,
+              );
+              Navigator.pop(context); // close menu scan sheet
+              MenuItemReviewSheet.show(
+                context,
+                initialItems: offlineItems,
+                onMenuAddComplete: onMenuAddSuccess,
+              );
+              return;
+            }
+
+            // 3. Both Gemini and offline OCR failed
+            InAppNotification.show(
+              context: context,
+              message: result?.errorMessage ??
+                  'Could not auto-read this menu clearly. Please review or enter the dishes manually.',
+              type: NotificationType.error,
+              duration: const Duration(seconds: 5),
+            );
+            Navigator.pop(context); // close menu scan sheet
             MenuItemReviewSheet.show(
               context,
-              initialItems: result.items,
+              initialItems: const [],
               onMenuAddComplete: onMenuAddSuccess,
             );
           });

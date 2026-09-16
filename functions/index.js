@@ -405,9 +405,9 @@ const GEMINI_API_KEY = defineSecret("GEMINI_API_KEY");
 
 /** Tried in order; the first that answers wins. */
 const AI_MODELS = [
+  "gemini-3.6-flash",
   "gemini-2.5-flash",
   "gemini-3.5-flash-lite",
-  "gemini-3.6-flash",
   "gemini-3.7-flash",
   "gemini-2.5-flash-latest",
 ];
@@ -418,43 +418,87 @@ const FREE_MONTHLY_IMAGE_SCANS = 10;
 /** Hard ceiling on an upload. Keeps one bad request from burning the budget. */
 const MAX_UPLOAD_BYTES = 8 * 1024 * 1024;
 
-const BILL_PROMPT =
-  "You are an expert Indian retail inventory AI. Extract all inventory purchase items, supplier details, and bill metadata from this supplier bill / mandi parcha slip / invoice.\n" +
-  "Format response strictly as JSON with this schema:\n" +
-  "{\n" +
-  '  "supplier_name": "string (Wholesale / Mandi vendor name or empty)",\n' +
-  '  "bill_number": "string (Invoice / memo number or empty)",\n' +
-  '  "bill_date": "YYYY-MM-DD or empty",\n' +
-  '  "items": [\n' +
-  "    {\n" +
-  '      "product_name": "string (brand + item + weight/size)",\n' +
-  '      "quantity": number,\n' +
-  '      "unit": "pcs|kg|gram|litre|strip|box|packet",\n' +
-  '      "purchase_price_paise": number (cost price in paise, e.g. Rs 120 = 12000),\n' +
-  '      "mrp_paise": number (MRP in paise),\n' +
-  '      "selling_price_paise": number (store selling price in paise),\n' +
-  '      "barcode": "string (EAN/UPC digits if printed, else empty)",\n' +
-  '      "expiry_date": "YYYY-MM-DD or empty",\n' +
-  '      "category_name": "string"\n' +
-  "    }\n" +
-  "  ]\n" +
-  "}\n" +
-  "Do not output any markdown ticks, preamble, or comments. Output ONLY valid JSON.";
+/**
+ * Dynamically builds an intelligent, multi-vertical OCR & extraction prompt.
+ * Instructs Gemini to self-adapt based on document visual layout:
+ * - Restaurant / Cafe / Dhaba menu cards (clean dish names, portion sizes, veg/non-veg classification, 320/- to paise)
+ * - Grocery / Kirana wholesaler tax invoices / mandi parcha slips (brand + item + pack, units, purchase rate vs MRP)
+ * - Pharmacy / Medical distributor invoices (medicine strength, batch no, expiry YYYY-MM-DD, packaging)
+ * - Apparel / Garments (style, size S/M/L, color, piece rate)
+ * - Handwritten notebook parchas / slips in Hindi / Hinglish / English
+ */
+function buildUniversalAiPrompt(kind, clientVertical) {
+  const isMenu = kind === "menu";
+  const vertical = (clientVertical || "general retail").toLowerCase();
 
-const MENU_PROMPT =
-  "You are an expert Indian restaurant menu AI. Extract every dish and drink from this menu card photo.\n" +
-  "Format response strictly as JSON with this schema:\n" +
-  "{\n" +
-  '  "items": [\n' +
-  "    {\n" +
-  '      "product_name": "string (dish name as printed)",\n' +
-  '      "selling_price_paise": number (price in paise, e.g. Rs 120 = 12000),\n' +
-  '      "category_name": "string (menu section, e.g. Starters, Main Course, Beverages)",\n' +
-  '      "is_veg": boolean\n' +
-  "    }\n" +
-  "  ]\n" +
-  "}\n" +
-  "Do not output any markdown ticks, preamble, or comments. Output ONLY valid JSON.";
+  return `You are an elite Indian retail AI assistant specializing in computer vision, OCR, and inventory/menu extraction for small and medium Indian retail and food businesses (Kirana, Restaurants, Medical/Pharmacy, Apparel/Garments, Electronics, Hardware).
+
+CONTEXT & BUSINESS PROFILE:
+- Upload Intent: ${isMenu ? "Menu Card / Rate Card / Catalog Scan" : "Inventory Purchase Bill / Supplier Invoice / Mandi Slip / Parcha"}
+- Declared Merchant Vertical: "${vertical}"
+
+SELF-ADAPTATION & INTELLIGENCE (CRITICAL):
+Indian merchants upload diverse physical documents. You must visually inspect the document and intelligently adapt:
+
+1. RESTAURANT / DHABA / CAFE / FOOD MENU:
+   - Extract EVERY dish, snack, bread, rice, beverage, and dessert visible.
+   - Clean names: Remove leading numbers or bullets (e.g., convert "21.Chicken Hydrabadi(5pcs)" -> "Chicken Hydrabadi (5pcs)").
+   - Preserve portion sizes in the name (e.g., "Mutton Kasa (4pcs)", "Kadai Paneer (Half)", "Dal Makhani (Full)").
+   - Determine Vegetarian status strictly:
+     * Non-Veg (is_veg: false): contains chicken, mutton, gosht, murgh, fish, machhli, egg, anda, prawn, keema, pork, crab, duck, kabab.
+     * Veg (is_veg: true): paneer, dal, sabzi, aloo, gobi, naan, roti, rice, beverages, chai, coffee, desserts, etc.
+   - Categorize logically: Starters, Main Course Gravy, Biryani & Rice, Breads & Roti, Beverages, Desserts, Chinese, Snacks.
+
+2. GROCERY / KIRANA / GENERAL STORE BILL:
+   - Extract Brand + Product Name + Weight/Volume (e.g., "Aashirvaad Shuddh Chakki Atta 5kg", "Fortune Refined Sunlite Oil 1L", "Tata Salt 1kg", "Maggi 2-Min 70g").
+   - Extract Quantity, Unit (kg, gram, litre, ml, packet, box, pcs), Purchase Cost, and MRP.
+
+3. PHARMACY / MEDICAL DISTRIBUTOR INVOICE:
+   - Extract Medicine Name + Strength (e.g., "Dolo 650mg", "Azithral 500mg", "Pantocid 40mg").
+   - Extract Batch Number, Expiry Date (convert MM/YY or MM/YYYY to YYYY-MM-DD), packaging (strip, box, bottle, vial, tube).
+
+4. APPAREL / CLOTHING / FOOTWEAR:
+   - Extract Style/Item name, Size (S/M/L/XL or 28/30/32/34), Color, piece count, and rate.
+
+5. MANDI PARCHA / HANDWRITTEN NOTEBOOK SLIP:
+   - Carefully read Hindi/Devanagari/Hinglish handwriting (e.g., "चना दाल 50kg @ 68 = 3400", "प्याज 2 बोरी 80kg").
+   - Extract item name, quantity, unit, and rate accurately.
+
+PRICING & INDIAN CURRENCY RULES (STRICT):
+- Rates in India often end with "/-" (e.g. "320/-", "340/-", "1,200/-") or have "Rs.", "Rs", "INR", "₹".
+- ALL prices MUST be returned as INTEGER PAISE (1 Rupee = 100 paise):
+  * "320/-" or "₹320" -> 32000
+  * "340/-" -> 34000
+  * "1200/-" -> 120000
+  * "45.50" -> 4550
+- If only one price is visible, use it for both selling_price_paise and purchase_price_paise.
+- Never use null or decimals for paise values. Always use integers.
+
+RESPONSE SCHEMA (JSON ONLY):
+Return strictly valid JSON matching this exact structure, with no markdown code blocks, no backticks, no explanatory text:
+{
+  "supplier_name": "Supplier/Vendor name or empty string",
+  "bill_number": "Invoice/slip number or empty string",
+  "bill_date": "YYYY-MM-DD or empty string",
+  "detected_document_type": "menu | invoice | slip | handwritten | catalog",
+  "items": [
+    {
+      "product_name": "Clean product or dish name",
+      "quantity": 1,
+      "unit": "pcs",
+      "purchase_price_paise": 32000,
+      "mrp_paise": 32000,
+      "selling_price_paise": 32000,
+      "category_name": "Category or menu section",
+      "is_veg": false,
+      "barcode": "",
+      "expiry_date": "",
+      "batch_number": ""
+    }
+  ]
+}
+DO NOT RETURN AN EMPTY ITEMS ARRAY. Extract every line item that can be identified.`;
+}
 
 /** Calls Gemini, walking the model list until one answers. */
 async function callGemini(apiKey, prompt, mimeType, base64Data) {
@@ -539,6 +583,7 @@ exports.aiExtract = onRequest(
       // 2. What are they sending?
       const body = req.body || {};
       const kind = String(body.kind || "bill").toLowerCase();
+      const clientVertical = String(body.business_type || "").trim().toLowerCase();
       const mimeType = String(body.mime_type || "image/jpeg");
       const dataB64 = String(body.data_base64 || "");
 
@@ -564,9 +609,11 @@ exports.aiExtract = onRequest(
       const monthKey = new Date().toISOString().slice(0, 7); // YYYY-MM
       const usageRef = db.collection("ai_usage").doc(`${bizId}_${monthKey}`);
 
+      const bizSnap = await db.collection("businesses").doc(bizId).get();
+      const b = bizSnap.exists ? bizSnap.data() : {};
+      const merchantVertical = clientVertical || b?.business_type || "general retail";
+
       if (isImage) {
-        const bizSnap = await db.collection("businesses").doc(bizId).get();
-        const b = bizSnap.exists ? bizSnap.data() : {};
         const proExpiry = b?.pro_expiry ? Date.parse(b.pro_expiry) : 0;
         const isPro =
           !(b?.is_pro === false || b?.is_pro === 0) &&
@@ -593,15 +640,42 @@ exports.aiExtract = onRequest(
       }
 
       // 4. Extract.
+      // Dynamic key from Firestore platform_settings/ai_config, fallback to Secret Manager
+      let activeApiKey = GEMINI_API_KEY.value();
+      try {
+        const configDoc = await db.collection("platform_settings").doc("ai_config").get();
+        if (configDoc.exists) {
+          const cfg = configDoc.data();
+          if (cfg && typeof cfg.api_key === "string" && cfg.api_key.trim().length > 10) {
+            activeApiKey = cfg.api_key.trim();
+          }
+        }
+      } catch (e) {
+        console.warn("[AI] Could not read platform_settings/ai_config, using secret:", e.message);
+      }
+
+      const prompt = buildUniversalAiPrompt(kind, merchantVertical);
       const result = await callGemini(
-        GEMINI_API_KEY.value(),
-        kind === "menu" ? MENU_PROMPT : BILL_PROMPT,
+        activeApiKey,
+        prompt,
         mimeType,
         dataB64
       );
 
       if (!result.ok) {
         console.error("[AI] extraction failed:", result.error);
+        // Telemetry for Admin Console
+        try {
+          await db.collection("platform_settings").doc("ai_config").set(
+            {
+              status: result.error && result.error.includes("429") ? "quota_exhausted" : "error",
+              last_error: result.error || "Unknown error",
+              last_error_at: new Date().toISOString(),
+            },
+            { merge: true }
+          );
+        } catch (_) {}
+
         res.status(502).json({
           error: "AI could not read this file right now. Try the offline scan, or upload Excel / CSV.",
           detail: result.error,
@@ -609,12 +683,79 @@ exports.aiExtract = onRequest(
         return;
       }
 
-      const items = Array.isArray(result.json?.items) ? result.json.items : [];
+      // Record successful health telemetry for Admin Console
+      try {
+        await db.collection("platform_settings").doc("ai_config").set(
+          {
+            status: "healthy",
+            last_success_at: new Date().toISOString(),
+            last_used_model: result.model || "gemini-3.6-flash",
+          },
+          { merge: true }
+        );
+      } catch (_) {}
+
+      const rawItems = Array.isArray(result.json?.items) ? result.json.items : [];
+      const cleanItems = rawItems
+        .map((raw) => {
+          let name = String(raw.product_name || raw.name || "").trim();
+          // Strip leading numbering e.g. "21.", "1.", "1)", "#5", "- "
+          name = name.replace(/^[\d#]+[\.\)\-\:\s]+/, "").trim();
+
+          let sellPaise = Number(raw.selling_price_paise) || 0;
+          let buyPaise = Number(raw.purchase_price_paise) || 0;
+          let mrpPaise = Number(raw.mrp_paise) || 0;
+
+          // Harmonize prices if one is present and others are 0
+          if (sellPaise > 0 && buyPaise === 0) buyPaise = sellPaise;
+          if (buyPaise > 0 && sellPaise === 0) sellPaise = buyPaise;
+          if (mrpPaise === 0) mrpPaise = Math.max(sellPaise, buyPaise);
+
+          let qty = Number(raw.quantity) || 1;
+          let unit = String(raw.unit || "pcs").trim().toLowerCase();
+          let category = String(raw.category_name || raw.category || "General").trim();
+
+          // Smart non-veg detection across Indian cuisines
+          const lowerName = name.toLowerCase();
+          const lowerCat = category.toLowerCase();
+          const nonVegTerms = [
+            "chicken", "mutton", "fish", "egg", "anda", "murgh", "gosht",
+            "keema", "prawn", "crab", "pork", "beef", "non-veg", "seafood",
+            "kabab", "tikka", "duck", "meat"
+          ];
+          const isExplicitlyNonVeg = nonVegTerms.some(
+            (term) => lowerName.includes(term) || lowerCat.includes(term)
+          );
+
+          let isVeg = raw.is_veg;
+          if (isExplicitlyNonVeg) {
+            isVeg = false;
+          } else if (isVeg === undefined || isVeg === null) {
+            isVeg = true;
+          } else {
+            isVeg = Boolean(isVeg);
+          }
+
+          return {
+            product_name: name,
+            quantity: qty,
+            unit: unit || "pcs",
+            purchase_price_paise: Math.round(buyPaise),
+            mrp_paise: Math.round(mrpPaise),
+            selling_price_paise: Math.round(sellPaise),
+            category_name: category,
+            is_veg: isVeg,
+            barcode: String(raw.barcode || "").trim(),
+            expiry_date: String(raw.expiry_date || "").trim(),
+            batch_number: String(raw.batch_number || "").trim(),
+          };
+        })
+        .filter((i) => i.product_name.length > 0);
 
       // 5. Only a scan that actually produced items costs the merchant one of
       //    their ten. A response that parsed to nothing used to still be
       //    counted on the device.
-      if (isImage && items.length > 0) {
+      if (isImage && cleanItems.length > 0) {
         await usageRef.set(
           {
             business_id: bizId,
@@ -626,8 +767,13 @@ exports.aiExtract = onRequest(
         );
       }
 
-      console.log(`[AI] ${kind} via ${result.model}: ${items.length} item(s) for ${bizId}`);
-      res.status(200).json({ ...result.json, items, model: result.model });
+      console.log(`[AI] ${kind} (${merchantVertical}) via ${result.model}: ${cleanItems.length} item(s) for ${bizId}`);
+      res.status(200).json({
+        ...result.json,
+        items: cleanItems,
+        detected_vertical: merchantVertical,
+        model: result.model,
+      });
     } catch (error) {
       console.error("[AI] aiExtract failed:", error);
       res.status(500).json({ error: "AI scan failed. Please try again." });

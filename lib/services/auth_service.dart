@@ -19,12 +19,17 @@ class AuthService {
   bool get isSignedIn => _auth.currentUser != null;
   Stream<User?> get authStateChanges => _auth.authStateChanges();
 
+  /// Web Client ID from google-services.json (client_type: 3).
+  /// MANDATORY for google_sign_in v7+ to generate an ID token on Android Credential Manager.
+  static const String serverClientId =
+      '714323283488-p39mse5qsgofq7u1iva651cpucvt988u.apps.googleusercontent.com';
+
   /// Initialize the GoogleSignIn singleton (call once on startup)
   Future<void> initGoogleSignIn() async {
     if (_googleSignInInitialized) return;
     try {
       await GoogleSignIn.instance.initialize(
-        clientId: null, // Android uses google-services.json automatically
+        serverClientId: serverClientId,
       );
       _googleSignInInitialized = true;
     } catch (e) {
@@ -42,10 +47,17 @@ class AuthService {
 
       // 2. Obtain ID Token from authenticated account
       final GoogleSignInAuthentication googleAuth = googleUser.authentication;
+      final String? idToken = googleAuth.idToken;
+
+      if (idToken == null || idToken.isEmpty) {
+        throw Exception(
+          'Google authentication completed but no ID token was returned. Please verify Google Play Services is up to date.',
+        );
+      }
 
       // 3. Create Firebase Credential using idToken (sufficient for Firebase Auth)
       final OAuthCredential credential = GoogleAuthProvider.credential(
-        idToken: googleAuth.idToken,
+        idToken: idToken,
       );
 
       // 4. Sign in to Firebase Auth with Credential
@@ -70,12 +82,13 @@ class AuthService {
 
       return userCredential;
     } on GoogleSignInException catch (e) {
-      if (e.code == GoogleSignInExceptionCode.canceled) {
+      debugPrint('GoogleSignInException: code=${e.code}, description=${e.description}');
+      // Only treat as clean user cancel if there is no underlying error description
+      if (e.code == GoogleSignInExceptionCode.canceled && (e.description == null || e.description!.isEmpty)) {
         debugPrint('Google Sign-In canceled by user.');
         return null;
       }
-      debugPrint('GoogleSignInException: ${e.description}');
-      rethrow;
+      throw Exception('Google Sign-In error: ${e.description ?? e.code.name}');
     } catch (e) {
       debugPrint('Error signing in with Google: $e');
       rethrow;

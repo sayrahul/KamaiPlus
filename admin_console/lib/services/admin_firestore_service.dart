@@ -1,5 +1,7 @@
+import 'dart:convert';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:http/http.dart' as http;
 import '../models/admin_models.dart';
 
 /// Every collection the admin console touches, in one typed place — so a
@@ -467,6 +469,123 @@ class AdminFirestoreService {
     // Sort by revenue descending
     stats.sort((a, b) => b.totalRevenuePaise.compareTo(a.totalRevenuePaise));
     return stats;
+  }
+
+  // ---------------------------------------------------------------------
+  // AI & Gemini Engine Configuration (platform_settings/ai_config)
+  // ---------------------------------------------------------------------
+
+  Stream<Map<String, dynamic>?> watchAiConfig() {
+    return _db
+        .collection('platform_settings')
+        .doc('ai_config')
+        .snapshots()
+        .map((doc) => doc.exists ? doc.data() : null);
+  }
+
+  Future<Map<String, dynamic>?> getAiConfig() async {
+    final doc = await _db.collection('platform_settings').doc('ai_config').get();
+    return doc.exists ? doc.data() : null;
+  }
+
+  Future<void> saveAiConfig({
+    required String apiKey,
+    String activeModel = 'gemini-3.6-flash',
+    String? status,
+  }) async {
+    final user = FirebaseAuth.instance.currentUser;
+    await _db.collection('platform_settings').doc('ai_config').set({
+      'api_key': apiKey.trim(),
+      'active_model': activeModel.trim(),
+      'status': status ?? 'healthy',
+      'last_error': null,
+      'last_error_at': null,
+      'updated_at': FieldValue.serverTimestamp(),
+      'updated_by': user?.email ?? user?.uid ?? 'admin',
+    }, SetOptions(merge: true));
+  }
+
+  /// Live validation test against Google Gemini API directly from admin console
+  Future<Map<String, dynamic>> testGeminiApiKey(
+    String apiKey, {
+    String model = 'gemini-3.6-flash',
+  }) async {
+    final cleanKey = apiKey.trim();
+    if (cleanKey.isEmpty) {
+      return {'success': false, 'message': 'API Key cannot be empty.'};
+    }
+
+    final stopwatch = Stopwatch()..start();
+    try {
+      final url = Uri.parse(
+        'https://generativelanguage.googleapis.com/v1beta/models/$model:generateContent?key=$cleanKey',
+      );
+      final response = await http
+          .post(
+            url,
+            headers: {'Content-Type': 'application/json'},
+            body: jsonEncode({
+              'contents': [
+                {
+                  'parts': [
+                    {'text': 'Ping: respond with "OK" only'}
+                  ]
+                }
+              ]
+            }),
+          )
+          .timeout(const Duration(seconds: 15));
+
+      stopwatch.stop();
+      final ms = stopwatch.elapsedMilliseconds;
+
+      if (response.statusCode == 200) {
+        final body = jsonDecode(response.body);
+        final reply = body?['candidates']?[0]?['content']?['parts']?[0]?['text'] ?? '';
+        return {
+          'success': true,
+          'statusCode': 200,
+          'latencyMs': ms,
+          'reply': reply.toString().trim(),
+          'message': 'API Key is 100% active and healthy! ($ms ms)',
+        };
+      } else {
+        Map<String, dynamic>? errorJson;
+        try {
+          errorJson = jsonDecode(response.body);
+        } catch (_) {}
+        final errMsg = errorJson?['error']?['message'] ?? 'HTTP ${response.statusCode}';
+        return {
+          'success': false,
+          'statusCode': response.statusCode,
+          'latencyMs': ms,
+          'message': 'Google API Error (${response.statusCode}): $errMsg',
+        };
+      }
+    } catch (e) {
+      stopwatch.stop();
+      return {
+        'success': false,
+        'message': 'Network/Connection Error: $e',
+      };
+    }
+  }
+
+  /// Total AI usage across all businesses for this calendar month
+  Stream<int> watchTotalAiScansThisMonth() {
+    final monthKey = DateTime.now().toIso8601String().substring(0, 7); // YYYY-MM
+    return _db.collection('ai_usage').snapshots().map((snap) {
+      int total = 0;
+      for (final doc in snap.docs) {
+        if (doc.id.endsWith(monthKey)) {
+          final count = doc.data()['image_scans'];
+          if (count is num) {
+            total += count.toInt();
+          }
+        }
+      }
+      return total;
+    });
   }
 }
 

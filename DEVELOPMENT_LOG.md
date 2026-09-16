@@ -44,6 +44,64 @@ hits (the screen's data-loading call), not just the data shape. See
 `test/vertical_product_leak_test.dart` (added 2026‑09‑11) for the corrected pattern — it
 drives `LocalDatabase` through a real (in-memory FFI) SQLite database and asserts on what
 `getAllProducts`/`getAllCategories` actually return.
+## 2026-09-16 — Primary Cloud Gemini AI Vision Engine with Resilient Offline ML Kit Fallback (Fix for "Review Menu (3)" Inverted Execution Flow)
+
+**User Symptoms & Bug Report:**
+- User tested the restaurant menu card on their Android device.
+- The app presented a "Review Menu (3)" modal showing only 3 corrupted items:
+  1. `Rate` ₹ 320.00
+  2. `Mutton Hydrabadi(4pcs)` ₹ 440.00
+  3. `360/-|` ₹ 380.00
+- 14 out of 17 dishes were completely missing, and column headers ("Rate") / OCR noise ("360/-|") were added as dishes!
+- User reported: *"app main api working hai but result thik se de nahi raha...kuch galat ho raha hai"*.
+
+**Root Causes (file:line):**
+1. `lib/views/products/menu_scan_sheet.dart:98-109`: Inverted execution order! The app was calling `MlKitOcrService.instance.scanMenuImage(file.path)` *before* Gemini Cloud AI. If `mlItems.isNotEmpty`, it immediately popped the sheet and displayed those items without **EVER CALLING GEMINI CLOUD AI**! When offline regex matched 3 lines, `mlItems.length == 3` short-circuited the flow and completely bypassed Gemini.
+2. `lib/views/purchases/ai_inward_sheet.dart:122-136`: Same inverted architecture was present in purchase bill inward (`scanBillImage` ran first, skipping Gemini if any line matched).
+3. `lib/services/mlkit_ocr_service.dart:134-165`: Naive regex allowed punctuation strings like `360/-|` and column header words like `Rate` to pass as dish names.
+
+**Fixes Applied:**
+1. `lib/views/products/menu_scan_sheet.dart:87-260`:
+   - Made **Gemini Deep AI Vision the PRIMARY scan engine**! It immediately shows the "AI Menu Vision" scanning viewfinder and calls `GeminiAiService.extractMenuItemsFromImage`.
+   - On success (`result.success && result.items.isNotEmpty`), it opens `MenuItemReviewSheet` with all items extracted by Gemini.
+   - If Gemini fails (offline, network timeout, quota exceeded), it gracefully falls back to `MlKitOcrService.instance.scanMenuImage` as the offline fallback with a toast notifying the merchant.
+2. `lib/views/purchases/ai_inward_sheet.dart:111-385`:
+   - Made Gemini Deep AI Vision the primary engine for purchase bill scans.
+   - Offline ML Kit OCR is provided as a seamless fallback if offline or quota limit is reached.
+3. `lib/services/mlkit_ocr_service.dart:176-188`:
+   - Added `_isValidDishName()` rejecting punctuation/number-only strings (`RegExp(r'^[\d\s\.\-_/:\*#@~|₹,;()]+$')`) and blacklisting column headers (`rate`, `item`, `price`, `mrp`, `sr`, `dish`, `name`, `menu`, `half`, `full`, `qty`, `amount`, `total`).
+4. `pubspec.yaml`: Bumped to `version: 4.22.0+42205`.
+
+**Verification & Quality Gates:**
+- `flutter analyze lib`: 0 issues found (clean pass in 102s).
+- Compiled Release APK: `build\app\outputs\flutter-apk\app-release.apk` (64.8MB), copied to `play_store_assets/KamaiPlus_v4.22.0_release_v42205.apk`.
+- Gemini live test on image extracted all 17 dishes accurately with zero noise.
+
+---
+
+## 2026-09-16 — Universal Multi-Vertical Vision AI Architecture, Live Admin Key Management, and Indian Menu OCR Fix
+
+**User Symptoms & Requirements:**
+1. Menu Card Blank Output: User uploaded Indian restaurant menu card image with Chicken/Mutton dishes and prices ending in `/-` (e.g. `320/-`, `340/-`). Phone screen returned completely blank (0 dishes detected).
+2. Live AI & Vision Engine Settings in Admin Console: Required dynamic API key management, real-time quota/health monitoring, in-browser key ping test with latency check, and hot-swapping keys without rebuilding or redeploying the Flutter mobile app.
+3. Multi-Vertical Self-Adapting Intelligence: Gemini vision prompt must intelligently adapt to whatever merchants upload across all Indian retail verticals (Kirana/Grocery, Restaurant/Dhaba/Cafe, Pharmacy/Medical, Apparel/Garments, Electronics, Hardware), including handwritten slips and mandi parchas, without returning blank outputs.
+4. Release Artifacts for Production: Generation of release `.apk` for direct mobile installation and release `.aab` for Play Store release with versionCode `42204`.
+
+**Root Causes (file:line) & Fixes Applied:**
+1. `lib/services/mlkit_ocr_service.dart:120-165`: Offline ML Kit OCR regex `r'(\d{2,4})\s*$'` required digits directly at line end, failing to match Indian retail prices formatted as `320/-`. Fixed regex to `r'(?:₹|Rs\.?|INR)?\s*(\d{2,4})\s*(?:/[-–—]?|/-)?\s*$'`. Added non-veg culinary keywords (`chicken`, `mutton`, `fish`, `egg`, `keema`, `gosht`, `murgh`, `seafood`, `kabab`) and serial number stripping.
+2. `functions/index.js:421-508`: Replaced static prompts with `buildUniversalAiPrompt(kind, clientVertical)`. The prompt instructs Gemini to self-adapt based on document visual layout, strictly classify vegetarian status, parse `/-` rates into integer paise, and extract all line items. Post-processing cleans dish numbering, harmonizes prices, and detects non-veg items across Indian cuisine terms.
+3. `functions/index.js:595-608`: Dynamic Firestore API key resolution from `platform_settings/ai_config` before falling back to Secret Manager `GEMINI_API_KEY`, enabling 0-redeploy instant key rotation from Admin Console. Added health telemetry recording (`status: healthy` vs `quota_exhausted`).
+4. `admin_console/lib/screens/ai_settings_screen.dart`: Complete dark SaaS mission control card for AI & Vision Engine with Live Health indicator, Active Key viewer, Engine dropdown, HTTP ping test, and Monthly scan analytics. Deployed to `https://kamaiplus-admin.web.app`.
+5. `lib/services/gemini_ai_service.dart:358-366`: Updated `_callProxy` to pass `business_type` from `SharedPreferences` to ensure Cloud Function knows active store vertical.
+6. `pubspec.yaml`: Bumped version from `4.22.0+42203` to `4.22.0+42204`.
+
+**Verification & Quality Gates:**
+- Tested user image `media_1789559934140.png` live against `gemini-3.6-flash`: extracted 17/17 dishes with 100% accuracy, clean prices (e.g. ₹320.00), non-veg classification (`is_veg: false`), and categories (`Chicken`, `Mutton`).
+- `dart analyze lib/services/gemini_ai_service.dart`: 0 issues found.
+- Admin Web Console deployed to `https://kamaiplus-admin.web.app`: Verified HTTP 200 live.
+- Cloud Function `aiExtract`: Deployed and verified live.
+
+---
 
 ## 2026-09-15 — Refer & Earn "Earn" Side Architecture & GST GSTR-1 JSON Critical Fixes
 
@@ -3001,3 +3059,124 @@ sync is affected.
 
 ⚠ **Deploy needed:** `firebase deploy --only firestore:rules` (for the Revenue screen to
 read anything) and `firebase deploy --only hosting:admin`.
+
+---
+
+## 2026-09-16 — SESSION SIGN-OFF: v4.22.0 (42202) ready to upload
+
+Final state, verified live rather than assumed — every line below was checked against the
+deployed project, not recalled from earlier in the session.
+
+### Deployed and confirmed working
+| Thing | How it was verified |
+|---|---|
+| `aiExtract` | Live, `POST` with no token returns **401** (not 404) |
+| `GEMINI_API_KEY` secret | Authenticates against the Gemini models endpoint — **HTTP 200** |
+| `verifyRazorpayPayment` | Live (v2, us-central1); Razorpay key pair verified AUTH OK earlier |
+| `onAdminPushCreated` | Live |
+| Firestore rules | Live ruleset carries `proFields`, `razorpay_payments`, `ai_usage` |
+| Admin console | Live bundle contains `Subscription Revenue` and `admin_revoked` — the Revenue screen and the revoke fix are both on `kamaiplus-admin.web.app` |
+
+**The deploy-before-release blocker recorded in the previous entry is therefore CLOSED.**
+The app in this build can reach everything it depends on.
+
+### Artifacts
+* `play_store_assets/KamaiPlus_v4.22.0_release.aab` — 97.6 MB, signed, 3 ABIs. **This is
+  what Play Console takes**; it has required App Bundles since 2021.
+* `export/KamaiPlus-Universal-v4.22.0-Release.apk` — 64.8 MB, signed, 3 ABIs, carries the
+  `aiExtract` endpoint and the `v4.22.0` string. Direct install / QA only.
+* Gradle reports `versionCode 42202` / `versionName 4.22.0` (read from
+  `android/local.properties`, which is what `build.gradle.kts` uses).
+
+### The only thing left before upload: device verification
+Nothing in this release was exercised on a physical phone from here. `PLAY_STORE_RELEASE.md`
+carries the 9-point checklist; the one that must not be skipped is **a real ₹199 payment**
+producing `pro_granted_by: "razorpay_verified"` in Firestore. If that fails, a paying
+merchant does not get what they paid for, and it is far better to find it before a 100%
+rollout. Recommended: staged rollout at 10–20% first.
+
+### Known open, carried forward
+* `lib/views/pos/payment_modal.dart` — 319 lines, referenced nowhere. A trap: someone
+  fixing a payment bug there would watch nothing change. Left in place pending a decision.
+* Admin console "Lifetime revenue" (merchant shop takings) is gross of returns and no longer
+  agrees with the app's net revenue after the partial-return fix. Needs a cloud hook on the
+  return path.
+* Partial returns recorded **before** the ₹0 refund fix still sit at `total_refund_paise: 0`
+  in `sale_returns`. Whether any exist in live data is still unanswered — if the collection
+  is empty, there is nothing to repair and this can be struck out.
+* `test_screen` SharedPreferences auth bypass (load-bearing for widgets/shortcuts).
+* `kamaiplus.proventure.in` stays live by owner decision — and is NOT built from this repo,
+  so it lacks the 2026-09-16 entitlement fixes.
+* Two test files (`backup_encryption_test`, and occasionally the DB-heavy inward/repair
+  tests) time out under heavy parallel CPU load — notably if a `flutter build` runs
+  concurrently. They pass in isolation. Do not "fix" these by weakening assertions.
+
+---
+
+## 2026-09-16 — Cloud Functions: aiExtract deployed, GEMINI_API_KEY secret configured, firestore.rules deployed
+
+1. **GEMINI_API_KEY Secret**:
+   - Secret version 3 set via `firebase functions:secrets:set GEMINI_API_KEY` using Google AI Studio / Gemini API key provided by user.
+   - Updated `env.local` to match.
+2. **Cloud Function Deployment**:
+   - `firebase deploy --only functions:aiExtract` successfully completed.
+   - Live function URL: `https://aiextract-ussl4l5kua-uc.a.run.app` (canonical: `https://us-central1-kamaiplus.cloudfunctions.net/aiExtract`).
+3. **Firestore Rules**:
+   - `firebase deploy --only firestore:rules` successfully released to cloud.
+4. **Verification**:
+   - HTTP probe to `https://us-central1-kamaiplus.cloudfunctions.net/aiExtract` returned `Status: 401 { error: 'Missing Authorization bearer token' }` as expected, confirming live routing and authentication guard.
+
+---
+
+## 2026-09-16 — Auth: Google Sign-In account picker loop fixed (`serverClientId` wired for v7)
+
+- **Bug reported:** Live version user cannot log in — after picking email in the Google account sheet, the sheet opens again in a loop, and auth never completes.
+- **Root cause (`lib/services/auth_service.dart:26`):**
+  - `google_sign_in: ^7.2.0` on Android Credential Manager requires an explicit `serverClientId` (OAuth 2.0 Web Client ID) passed into `GoogleSignIn.instance.initialize(serverClientId: ...)`.
+  - Previously called `initialize(clientId: null)` assuming `google-services.json` would be auto-read, which was true in v6 but broken in v7's Credential Manager rewrite.
+  - As a result, Google Identity Services returned `idToken == null`.
+  - Calling `GoogleAuthProvider.credential(idToken: null)` failed and was caught as `GoogleSignInExceptionCode.canceled`, which silently returned `null` without an error notification, creating an endless re-prompt loop.
+- **The fix (`lib/services/auth_service.dart`):**
+  - Added `static const String serverClientId = '714323283488-p39mse5qsgofq7u1iva651cpucvt988u.apps.googleusercontent.com'`.
+  - Passed `serverClientId: serverClientId` in `GoogleSignIn.instance.initialize()`.
+  - Added explicit check: if `googleAuth.idToken` is null/empty, throw a descriptive exception instead of passing null to `GoogleAuthProvider.credential`.
+  - Refined `GoogleSignInException` handler: only treat as a clean user dismissal if `description` is null/empty; if an underlying error exists, surface it to `InAppNotification.error`.
+- **Verification:**
+  - `flutter analyze lib` passed with 0 issues.
+
+---
+
+## 2026-09-16 — AI Extraction: Fresh Free-Tier Gemini API Key Activated (Secret Version 4)
+
+1. **New Gemini Free-Tier Key Activated**:
+   - User provided fresh key `AQ.Ab8RN6...bwNg` created in a standalone Google AI Studio project with 100% active free tier quota (15 RPM / 1,500 requests/day).
+   - Direct probe verified live inference with `gemini-3.6-flash`: `HTTP 200 OK` (output: `HELLO_KAMAIPLUS`).
+2. **Secret Manager & Cloud Functions Updated**:
+   - Updated `AI_MODELS` in `functions/index.js` to put `gemini-3.6-flash` first so live bill/menu extractions succeed on the first attempt with 0 latency penalty from deprecated models.
+   - Set secret version 4 via `firebase functions:secrets:set GEMINI_API_KEY --data-file ... --force`.
+   - Re-deployed `aiExtract` via `firebase deploy --only functions:aiExtract --debug` (1 functions deployed, 0 errored).
+   - Live endpoint probe verified: `POST` with no auth header returns `401 { error: 'Missing Authorization bearer token' }`.
+   - Updated local secret in `env.local`.
+
+---
+
+## 2026-09-16 — Admin Console: AI & Vision Engine Settings & Zero-Downtime Dynamic Key Rotation
+
+1. **New Admin Console Screen (`admin_console/lib/screens/ai_settings_screen.dart`)**:
+   - Live Health Hero Card: Realtime 🟢 Healthy / 🔴 Quota Exhausted / Error telemetry badge.
+   - Active Key Display: Masked string with show/hide toggle and clipboard copy.
+   - Target Model Selector: Dropdown for `gemini-3.6-flash` (Recommended), `gemini-2.5-flash`, `gemini-flash-latest`.
+   - Live Key Testing: Direct in-browser HTTP ping against Google Gemini API with round-trip latency (ms) and status reporting.
+   - Live Hot-Reload Save: Writes to Firestore `platform_settings/ai_config`, taking effect across all devices instantly without rebuilding app or deploying functions.
+   - Live Usage Metrics: Reads `ai_usage` to aggregate total scans performed platform-wide this calendar month.
+   - Zero-Cost Guide: 4-step embedded walkthrough for generating 100% free Gemini keys from AI Studio in new projects.
+
+2. **Backend & Rules Integration**:
+   - `firestore.rules`: Added strict `match /platform_settings/ai_config { allow read, write: if isAdmin(); }` so merchants cannot inspect the owner's API key. Deployed via `firebase deploy --only firestore:rules`.
+   - `functions/index.js`: `aiExtract` now reads `platform_settings/ai_config` dynamically from Firestore first, falling back to Secret Manager `GEMINI_API_KEY.value()`. Emits real-time success / error telemetry back to Firestore for the Admin Console. Deployed via `firebase deploy --only functions:aiExtract --debug`.
+   - Seeding: Initialized `platform_settings/ai_config` in Firestore with the verified active key.
+
+3. **Verification**:
+   - `flutter analyze lib` in root: **0 issues found** (100.7s clean).
+   - `flutter analyze lib` in `admin_console`: **0 errors, 0 warnings** in new files.
+   - `aiExtract` live probe: **HTTP 401 Unauthorized** (auth guard active).
