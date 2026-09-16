@@ -193,6 +193,9 @@ class _RapidBarcodeInwardScreenState extends State<RapidBarcodeInwardScreen> wit
         unit: cloudItem.unit,
         mrpPaise: cloudItem.mrpPaise,
         sellingPricePaise: cloudItem.sellingPricePaise,
+        // Gun-scanning is fast and half-attentive by design; an AI-derived
+        // name is exactly the row that needs a second look before it is saved.
+        isAiGuess: CloudBarcodeResolverService.instance.wasAiGuess(barcode),
       );
       return;
     }
@@ -220,6 +223,7 @@ class _RapidBarcodeInwardScreenState extends State<RapidBarcodeInwardScreen> wit
     required String unit,
     required int mrpPaise,
     required int sellingPricePaise,
+    bool isAiGuess = false,
   }) async {
     final activeType = BusinessVerticals.activeBusinessTypeNotifier.value;
     String targetCatId = _selectedCategoryId;
@@ -258,6 +262,9 @@ class _RapidBarcodeInwardScreenState extends State<RapidBarcodeInwardScreen> wit
         _isResolving = false;
       });
 
+      if (isAiGuess) {
+        _showToast('AI guess — check the name against the pack before saving');
+      }
       _sellPriceFocusNode.requestFocus();
     }
   }

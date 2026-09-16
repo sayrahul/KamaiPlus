@@ -586,12 +586,16 @@ class FirestoreSyncService {
       if (docSnap.exists && docSnap.data() != null) {
         final data = docSnap.data()!;
         globalConfigNotifier.value = data;
-        final geminiKey = data['gemini_api_key']?.toString().trim();
-        if (geminiKey != null && geminiKey.isNotEmpty) {
-          SharedPreferences.getInstance().then((prefs) {
-            prefs.setString('cached_gemini_api_key', geminiKey);
-          });
-        }
+
+        // The Gemini key is deliberately NOT read or cached here any more.
+        //
+        // This listener used to copy platform_settings/global_config's
+        // `gemini_api_key` into SharedPreferences on every merchant's phone —
+        // the exact exposure the aiExtract proxy was built to close. Extraction
+        // has gone through the server since then, so nothing on the device ever
+        // needs the key; it was pure liability sitting in plaintext app data.
+        // Any copy left over from an older build is purged on startup by
+        // GeminiAiService.purgeAnyCachedApiKey().
       }
     }, onError: (_) {});
 

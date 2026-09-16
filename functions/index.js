@@ -5,6 +5,24 @@ const { getFirestore, FieldValue } = require("firebase-admin/firestore");
 
 initializeApp();
 
+const {
+  resolveModels,
+  buildUniversalAiPrompt,
+  parseModelJson,
+  normalizeExtractedItem,
+  DEFAULT_AI_MODELS,
+  istDayKey,
+  FREE_DAILY_IMAGE_SCANS,
+  PRO_DAILY_IMAGE_SCANS,
+} = require("./ai_extract_core");
+
+const {
+  hasValidCheckDigit,
+  normalizeBarcode,
+  buildBarcodePrompt,
+  normalizeBarcodeResult,
+} = require("./barcode_core");
+
 /** Devices FCM lets us address in a single multicast call. */
 const MULTICAST_CHUNK = 500;
 
@@ -403,156 +421,108 @@ exports.verifyRazorpayPayment = onRequest(
 
 const GEMINI_API_KEY = defineSecret("GEMINI_API_KEY");
 
-/** Tried in order; the first that answers wins. */
-const AI_MODELS = [
-  "gemini-3.6-flash",
-  "gemini-2.5-flash",
-  "gemini-3.5-flash-lite",
-  "gemini-3.7-flash",
-  "gemini-2.5-flash-latest",
-];
-
-/** Free plan allowance per calendar month, per business. Pro is unlimited. */
-const FREE_MONTHLY_IMAGE_SCANS = 10;
-
 /** Hard ceiling on an upload. Keeps one bad request from burning the budget. */
 const MAX_UPLOAD_BYTES = 8 * 1024 * 1024;
 
+/** HTTP statuses that mean "try again", as opposed to "this model is wrong". */
+const TRANSIENT_STATUSES = new Set([429, 500, 502, 503, 504]);
+
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
 /**
- * Dynamically builds an intelligent, multi-vertical OCR & extraction prompt.
- * Instructs Gemini to self-adapt based on document visual layout:
- * - Restaurant / Cafe / Dhaba menu cards (clean dish names, portion sizes, veg/non-veg classification, 320/- to paise)
- * - Grocery / Kirana wholesaler tax invoices / mandi parcha slips (brand + item + pack, units, purchase rate vs MRP)
- * - Pharmacy / Medical distributor invoices (medicine strength, batch no, expiry YYYY-MM-DD, packaging)
- * - Apparel / Garments (style, size S/M/L, color, piece rate)
- * - Handwritten notebook parchas / slips in Hindi / Hinglish / English
+ * Calls Gemini, walking the model list until one answers.
+ *
+ * Two behaviours the previous version lacked:
+ *
+ * 1. maxOutputTokens. It was unset, so the response was capped at the model
+ *    default. A dense menu page (a 60-dish rate card is ordinary) ran past that
+ *    cap, the JSON was cut off mid-object, JSON.parse threw, and the merchant
+ *    got "AI could not read this file" for a photo the model had read fine.
+ *    MAX_AI_OUTPUT_TOKENS is sized for roughly 200 items.
+ *
+ * 2. Retry on transient failures. A single 429 or 503 on the good model used to
+ *    fall straight through to the weaker models and then to a 502, which is how
+ *    a working setup still produced "offline OCR" junk for the merchant.
  */
-function buildUniversalAiPrompt(kind, clientVertical) {
-  const isMenu = kind === "menu";
-  const vertical = (clientVertical || "general retail").toLowerCase();
+const MAX_AI_OUTPUT_TOKENS = 16384;
 
-  return `You are an elite Indian retail AI assistant specializing in computer vision, OCR, and inventory/menu extraction for small and medium Indian retail and food businesses (Kirana, Restaurants, Medical/Pharmacy, Apparel/Garments, Electronics, Hardware).
-
-CONTEXT & BUSINESS PROFILE:
-- Upload Intent: ${isMenu ? "Menu Card / Rate Card / Catalog Scan" : "Inventory Purchase Bill / Supplier Invoice / Mandi Slip / Parcha"}
-- Declared Merchant Vertical: "${vertical}"
-
-SELF-ADAPTATION & INTELLIGENCE (CRITICAL):
-Indian merchants upload diverse physical documents. You must visually inspect the document and intelligently adapt:
-
-1. RESTAURANT / DHABA / CAFE / FOOD MENU:
-   - Extract EVERY dish, snack, bread, rice, beverage, and dessert visible.
-   - Clean names: Remove leading numbers or bullets (e.g., convert "21.Chicken Hydrabadi(5pcs)" -> "Chicken Hydrabadi (5pcs)").
-   - Preserve portion sizes in the name (e.g., "Mutton Kasa (4pcs)", "Kadai Paneer (Half)", "Dal Makhani (Full)").
-   - Determine Vegetarian status strictly:
-     * Non-Veg (is_veg: false): contains chicken, mutton, gosht, murgh, fish, machhli, egg, anda, prawn, keema, pork, crab, duck, kabab.
-     * Veg (is_veg: true): paneer, dal, sabzi, aloo, gobi, naan, roti, rice, beverages, chai, coffee, desserts, etc.
-   - Categorize logically: Starters, Main Course Gravy, Biryani & Rice, Breads & Roti, Beverages, Desserts, Chinese, Snacks.
-
-2. GROCERY / KIRANA / GENERAL STORE BILL:
-   - Extract Brand + Product Name + Weight/Volume (e.g., "Aashirvaad Shuddh Chakki Atta 5kg", "Fortune Refined Sunlite Oil 1L", "Tata Salt 1kg", "Maggi 2-Min 70g").
-   - Extract Quantity, Unit (kg, gram, litre, ml, packet, box, pcs), Purchase Cost, and MRP.
-
-3. PHARMACY / MEDICAL DISTRIBUTOR INVOICE:
-   - Extract Medicine Name + Strength (e.g., "Dolo 650mg", "Azithral 500mg", "Pantocid 40mg").
-   - Extract Batch Number, Expiry Date (convert MM/YY or MM/YYYY to YYYY-MM-DD), packaging (strip, box, bottle, vial, tube).
-
-4. APPAREL / CLOTHING / FOOTWEAR:
-   - Extract Style/Item name, Size (S/M/L/XL or 28/30/32/34), Color, piece count, and rate.
-
-5. MANDI PARCHA / HANDWRITTEN NOTEBOOK SLIP:
-   - Carefully read Hindi/Devanagari/Hinglish handwriting (e.g., "चना दाल 50kg @ 68 = 3400", "प्याज 2 बोरी 80kg").
-   - Extract item name, quantity, unit, and rate accurately.
-
-PRICING & INDIAN CURRENCY RULES (STRICT):
-- Rates in India often end with "/-" (e.g. "320/-", "340/-", "1,200/-") or have "Rs.", "Rs", "INR", "₹".
-- ALL prices MUST be returned as INTEGER PAISE (1 Rupee = 100 paise):
-  * "320/-" or "₹320" -> 32000
-  * "340/-" -> 34000
-  * "1200/-" -> 120000
-  * "45.50" -> 4550
-- If only one price is visible, use it for both selling_price_paise and purchase_price_paise.
-- Never use null or decimals for paise values. Always use integers.
-
-RESPONSE SCHEMA (JSON ONLY):
-Return strictly valid JSON matching this exact structure, with no markdown code blocks, no backticks, no explanatory text:
-{
-  "supplier_name": "Supplier/Vendor name or empty string",
-  "bill_number": "Invoice/slip number or empty string",
-  "bill_date": "YYYY-MM-DD or empty string",
-  "detected_document_type": "menu | invoice | slip | handwritten | catalog",
-  "items": [
-    {
-      "product_name": "Clean product or dish name",
-      "quantity": 1,
-      "unit": "pcs",
-      "purchase_price_paise": 32000,
-      "mrp_paise": 32000,
-      "selling_price_paise": 32000,
-      "category_name": "Category or menu section",
-      "is_veg": false,
-      "barcode": "",
-      "expiry_date": "",
-      "batch_number": ""
-    }
-  ]
-}
-DO NOT RETURN AN EMPTY ITEMS ARRAY. Extract every line item that can be identified.`;
-}
-
-/** Calls Gemini, walking the model list until one answers. */
-async function callGemini(apiKey, prompt, mimeType, base64Data) {
+async function callGemini(apiKey, prompt, mimeType, base64Data, models) {
   let lastError = "No model responded";
+  const list = Array.isArray(models) && models.length ? models : DEFAULT_AI_MODELS;
 
-  for (const model of AI_MODELS) {
-    try {
-      const res = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "x-goog-api-key": apiKey,
-          },
-          body: JSON.stringify({
-            contents: [
-              {
-                parts: [
-                  { text: prompt },
-                  { inline_data: { mime_type: mimeType, data: base64Data } },
-                ],
-              },
-            ],
-            generationConfig: {
-              temperature: 0.1,
-              response_mime_type: "application/json",
+  for (const model of list) {
+    // Only the first-choice model is worth waiting on; after that, move down
+    // the list rather than making the merchant stare at the scanning dialog.
+    const attempts = model === list[0] ? 3 : 1;
+
+    for (let attempt = 1; attempt <= attempts; attempt++) {
+      try {
+        const res = await fetch(
+          `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "x-goog-api-key": apiKey,
             },
-          }),
+            body: JSON.stringify({
+              contents: [
+                {
+                  parts: [
+                    { text: prompt },
+                    { inline_data: { mime_type: mimeType, data: base64Data } },
+                  ],
+                },
+              ],
+              generationConfig: {
+                // Near-zero: this is transcription, not writing. Any creativity
+                // here shows up as an invented dish in someone's catalog.
+                temperature: 0.05,
+                response_mime_type: "application/json",
+                maxOutputTokens: MAX_AI_OUTPUT_TOKENS,
+              },
+            }),
+          }
+        );
+
+        if (!res.ok) {
+          lastError = `${model}: HTTP ${res.status}`;
+          if (TRANSIENT_STATUSES.has(res.status) && attempt < attempts) {
+            await sleep(700 * attempt);
+            continue;
+          }
+          break; // 400/403/404 — a different model is the only hope.
         }
-      );
 
-      if (!res.ok) {
-        lastError = `${model}: HTTP ${res.status}`;
-        // 404 = model retired, 429 = quota. Both are worth trying the next
-        // model for; anything else usually is not, but the loop is cheap.
-        continue;
+        const body = await res.json();
+        const candidate = body?.candidates?.[0];
+        const text = candidate?.content?.parts?.[0]?.text;
+
+        if (!text) {
+          // A safety block or a MAX_TOKENS stop with no text — say which, so
+          // the Admin Console's last_error is actionable instead of "empty".
+          const reason =
+            candidate?.finishReason ||
+            body?.promptFeedback?.blockReason ||
+            "empty response";
+          lastError = `${model}: ${reason}`;
+          break;
+        }
+
+        const json = parseModelJson(text);
+        return { ok: true, json, model, truncated: candidate?.finishReason === "MAX_TOKENS" };
+      } catch (e) {
+        lastError = `${model}: ${e.message}`;
+        if (attempt < attempts) {
+          await sleep(700 * attempt);
+          continue;
+        }
       }
-
-      const body = await res.json();
-      const text = body?.candidates?.[0]?.content?.parts?.[0]?.text;
-      if (!text) {
-        lastError = `${model}: empty response`;
-        continue;
-      }
-
-      const cleaned = text.replace(/```json/g, "").replace(/```/g, "").trim();
-      return { ok: true, json: JSON.parse(cleaned), model };
-    } catch (e) {
-      lastError = `${model}: ${e.message}`;
     }
   }
   return { ok: false, error: lastError };
 }
+
 
 exports.aiExtract = onRequest(
   { secrets: [GEMINI_API_KEY], cors: true, region: "us-central1", memory: "512MiB", timeoutSeconds: 120 },
@@ -606,52 +576,72 @@ exports.aiExtract = onRequest(
 
       // 3. Quota — server-side, so clearing app data no longer resets it.
       //    PDFs stay free and unlimited, matching the app's own copy.
-      const monthKey = new Date().toISOString().slice(0, 7); // YYYY-MM
-      const usageRef = db.collection("ai_usage").doc(`${bizId}_${monthKey}`);
+      const dayKey = istDayKey();
+      const usageRef = db.collection("ai_usage").doc(`${bizId}_${dayKey}`);
 
       const bizSnap = await db.collection("businesses").doc(bizId).get();
       const b = bizSnap.exists ? bizSnap.data() : {};
       const merchantVertical = clientVertical || b?.business_type || "general retail";
 
+      let dailyLimit = FREE_DAILY_IMAGE_SCANS;
+      let usedToday = 0;
+
       if (isImage) {
         const proExpiry = b?.pro_expiry ? Date.parse(b.pro_expiry) : 0;
-        const isPro =
+        const isPaidPro =
           !(b?.is_pro === false || b?.is_pro === 0) &&
           (b?.is_pro === true || b?.subscription_tier === "annual" || b?.subscription_tier === "monthly") &&
           (!proExpiry || proExpiry > Date.now());
 
-        // A live trial counts as Pro for AI, same as everywhere else in the app.
+        // A live trial unlocks the FEATURE, but is metered at the free rate.
         const trialStart = b?.trial_started_at ? Date.parse(b.trial_started_at) : 0;
         const inTrial = trialStart > 0 && Date.now() < trialStart + 7 * 24 * 60 * 60 * 1000;
 
-        if (!isPro && !inTrial) {
-          const usage = await usageRef.get();
-          const used = usage.exists ? usage.data()?.image_scans || 0 : 0;
-          if (used >= FREE_MONTHLY_IMAGE_SCANS) {
-            res.status(429).json({
-              error: `Free plan includes ${FREE_MONTHLY_IMAGE_SCANS} AI picture scans per month. Upgrade to Pro for unlimited scans, or use Excel / CSV inward (unlimited free).`,
-              quota_exceeded: true,
-              used,
-              limit: FREE_MONTHLY_IMAGE_SCANS,
-            });
-            return;
-          }
+        dailyLimit = isPaidPro ? PRO_DAILY_IMAGE_SCANS : FREE_DAILY_IMAGE_SCANS;
+
+        const usage = await usageRef.get();
+        usedToday = usage.exists ? usage.data()?.image_scans || 0 : 0;
+
+        if (usedToday >= dailyLimit) {
+          res.status(429).json({
+            error: isPaidPro
+              ? `You have used all ${PRO_DAILY_IMAGE_SCANS} Pro AI scans for today. The limit resets at midnight. Excel / CSV inward stays unlimited.`
+              : `${inTrial ? "Trial" : "Free"} plan includes ${FREE_DAILY_IMAGE_SCANS} AI picture scans per day. ` +
+                `Upgrade to Pro for ${PRO_DAILY_IMAGE_SCANS} per day, or use Excel / CSV inward (unlimited free).`,
+            quota_exceeded: true,
+            used: usedToday,
+            limit: dailyLimit,
+            is_pro: isPaidPro,
+            resets_at: `${dayKey} 24:00 IST`,
+          });
+          return;
         }
       }
 
       // 4. Extract.
-      // Dynamic key from Firestore platform_settings/ai_config, fallback to Secret Manager
+      // Dynamic key AND model order from Firestore platform_settings/ai_config,
+      // falling back to Secret Manager and the built-in list.
       let activeApiKey = GEMINI_API_KEY.value();
+      let aiConfig = null;
       try {
         const configDoc = await db.collection("platform_settings").doc("ai_config").get();
         if (configDoc.exists) {
-          const cfg = configDoc.data();
-          if (cfg && typeof cfg.api_key === "string" && cfg.api_key.trim().length > 10) {
-            activeApiKey = cfg.api_key.trim();
+          aiConfig = configDoc.data() || null;
+          if (aiConfig && typeof aiConfig.api_key === "string" && aiConfig.api_key.trim().length > 10) {
+            activeApiKey = aiConfig.api_key.trim();
           }
         }
       } catch (e) {
         console.warn("[AI] Could not read platform_settings/ai_config, using secret:", e.message);
+      }
+
+      if (!activeApiKey || activeApiKey.trim().length < 10) {
+        console.error("[AI] No usable Gemini API key (neither ai_config.api_key nor the GEMINI_API_KEY secret)");
+        res.status(503).json({
+          error: "AI scanning is not configured yet. Please contact support.",
+          detail: "missing_api_key",
+        });
+        return;
       }
 
       const prompt = buildUniversalAiPrompt(kind, merchantVertical);
@@ -659,7 +649,8 @@ exports.aiExtract = onRequest(
         activeApiKey,
         prompt,
         mimeType,
-        dataB64
+        dataB64,
+        resolveModels(aiConfig)
       );
 
       if (!result.ok) {
@@ -689,7 +680,7 @@ exports.aiExtract = onRequest(
           {
             status: "healthy",
             last_success_at: new Date().toISOString(),
-            last_used_model: result.model || "gemini-3.6-flash",
+            last_used_model: result.model || "unknown",
           },
           { merge: true }
         );
@@ -697,60 +688,8 @@ exports.aiExtract = onRequest(
 
       const rawItems = Array.isArray(result.json?.items) ? result.json.items : [];
       const cleanItems = rawItems
-        .map((raw) => {
-          let name = String(raw.product_name || raw.name || "").trim();
-          // Strip leading numbering e.g. "21.", "1.", "1)", "#5", "- "
-          name = name.replace(/^[\d#]+[\.\)\-\:\s]+/, "").trim();
-
-          let sellPaise = Number(raw.selling_price_paise) || 0;
-          let buyPaise = Number(raw.purchase_price_paise) || 0;
-          let mrpPaise = Number(raw.mrp_paise) || 0;
-
-          // Harmonize prices if one is present and others are 0
-          if (sellPaise > 0 && buyPaise === 0) buyPaise = sellPaise;
-          if (buyPaise > 0 && sellPaise === 0) sellPaise = buyPaise;
-          if (mrpPaise === 0) mrpPaise = Math.max(sellPaise, buyPaise);
-
-          let qty = Number(raw.quantity) || 1;
-          let unit = String(raw.unit || "pcs").trim().toLowerCase();
-          let category = String(raw.category_name || raw.category || "General").trim();
-
-          // Smart non-veg detection across Indian cuisines
-          const lowerName = name.toLowerCase();
-          const lowerCat = category.toLowerCase();
-          const nonVegTerms = [
-            "chicken", "mutton", "fish", "egg", "anda", "murgh", "gosht",
-            "keema", "prawn", "crab", "pork", "beef", "non-veg", "seafood",
-            "kabab", "tikka", "duck", "meat"
-          ];
-          const isExplicitlyNonVeg = nonVegTerms.some(
-            (term) => lowerName.includes(term) || lowerCat.includes(term)
-          );
-
-          let isVeg = raw.is_veg;
-          if (isExplicitlyNonVeg) {
-            isVeg = false;
-          } else if (isVeg === undefined || isVeg === null) {
-            isVeg = true;
-          } else {
-            isVeg = Boolean(isVeg);
-          }
-
-          return {
-            product_name: name,
-            quantity: qty,
-            unit: unit || "pcs",
-            purchase_price_paise: Math.round(buyPaise),
-            mrp_paise: Math.round(mrpPaise),
-            selling_price_paise: Math.round(sellPaise),
-            category_name: category,
-            is_veg: isVeg,
-            barcode: String(raw.barcode || "").trim(),
-            expiry_date: String(raw.expiry_date || "").trim(),
-            batch_number: String(raw.batch_number || "").trim(),
-          };
-        })
-        .filter((i) => i.product_name.length > 0);
+        .map((raw) => normalizeExtractedItem(raw, kind))
+        .filter((i) => i !== null);
 
       // 5. Only a scan that actually produced items costs the merchant one of
       //    their ten. A response that parsed to nothing used to still be
@@ -759,7 +698,7 @@ exports.aiExtract = onRequest(
         await usageRef.set(
           {
             business_id: bizId,
-            month: monthKey,
+            day: dayKey,
             image_scans: FieldValue.increment(1),
             last_scan_at: FieldValue.serverTimestamp(),
           },
@@ -767,16 +706,314 @@ exports.aiExtract = onRequest(
         );
       }
 
-      console.log(`[AI] ${kind} (${merchantVertical}) via ${result.model}: ${cleanItems.length} item(s) for ${bizId}`);
+      console.log(
+        `[AI] ${kind} (${merchantVertical}) via ${result.model}: ` +
+          `${cleanItems.length}/${rawItems.length} item(s) for ${bizId}` +
+          (result.truncated ? " [TRUNCATED — raise MAX_AI_OUTPUT_TOKENS]" : "")
+      );
+
+      // The model answered but nothing survived normalization (every row was a
+      // header, or a menu row had no price). Reporting 200 with an empty list
+      // told the app "success", and it opened an empty review sheet; a 422
+      // lets the app say something true instead.
+      if (cleanItems.length === 0) {
+        res.status(422).json({
+          error:
+            kind === "menu"
+              ? "No dishes with prices could be read from this photo. Try again with the menu filling the frame, in good light."
+              : "No line items could be read from this bill. Try a closer, brighter photo, or use Excel / CSV inward.",
+          detail: `model returned ${rawItems.length} row(s), none usable`,
+          model: result.model,
+        });
+        return;
+      }
+
       res.status(200).json({
         ...result.json,
         items: cleanItems,
         detected_vertical: merchantVertical,
         model: result.model,
+        truncated: Boolean(result.truncated),
+        // So the app can render "N scans left today" without a second call.
+        // usedToday was read before this scan was counted, hence the +1.
+        quota: isImage
+          ? { used: usedToday + 1, limit: dailyLimit, remaining: Math.max(0, dailyLimit - usedToday - 1) }
+          : null,
       });
     } catch (error) {
       console.error("[AI] aiExtract failed:", error);
       res.status(500).json({ error: "AI scan failed. Please try again." });
+    }
+  }
+);
+
+// ============================================================================
+// BARCODE RESOLUTION PROXY  (barcode -> product name / brand / category)
+// ----------------------------------------------------------------------------
+// Resolution ladder, cheapest first:
+//   1. barcode_catalog/{gtin} — the shared catalog every merchant's scans build.
+//   2. Open* Facts family, five hosts in parallel (free, no key).
+//   3. UPCitemdb trial (free, no key, IP rate-limited — hence after Facts).
+//   4. Gemini, text-only, as an explicitly-flagged guess.
+//
+// Tier 1 is the reason this is server-side. Open Facts has roughly 23,000
+// Indian products, so a real barcode often resolves — but only the first
+// merchant to scan it should pay for the lookup. Every hit written here makes
+// the next shop's scan a single indexed read.
+// ============================================================================
+
+/** Shared catalog rows older than this are re-checked against the sources. */
+const BARCODE_CACHE_TTL_DAYS = 120;
+
+/** One lookup must never hold the counter for longer than this. */
+const BARCODE_SOURCE_TIMEOUT_MS = 4000;
+
+const FACTS_HOSTS = [
+  "https://in.openfoodfacts.org",
+  "https://world.openfoodfacts.org",
+  "https://world.openbeautyfacts.org",
+  "https://world.openproductsfacts.org",
+  "https://world.openpetfoodfacts.org",
+];
+
+const FACTS_FIELDS =
+  "product_name,product_name_en,generic_name,generic_name_en,brands,categories,quantity";
+
+async function fetchJsonWithTimeout(url, ms = BARCODE_SOURCE_TIMEOUT_MS) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), ms);
+  try {
+    const res = await fetch(url, {
+      signal: controller.signal,
+      headers: {
+        "User-Agent": "KamaiPlus-POS/4.23 (india-retail-counter)",
+        Accept: "application/json",
+      },
+    });
+    if (!res.ok) return null;
+    return await res.json();
+  } catch (_) {
+    return null;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/** Tier 2 — all five Facts hosts at once; host order is priority order. */
+async function queryFactsFamily(barcode) {
+  const results = await Promise.all(
+    FACTS_HOSTS.map(async (host) => {
+      const json = await fetchJsonWithTimeout(
+        `${host}/api/v2/product/${barcode}.json?fields=${FACTS_FIELDS}`
+      );
+      if (!json || json.status !== 1) return null;
+      const p = json.product;
+      if (!p || typeof p !== "object") return null;
+      const name = p.product_name_en || p.product_name || p.generic_name_en || p.generic_name;
+      if (!name) return null;
+      return { name, brand: p.brands, category: p.categories, pack_size: p.quantity };
+    })
+  );
+  return results.find(Boolean) || null;
+}
+
+/** Tier 3 — general merchandise the Facts family does not index. */
+async function queryUpcItemDb(barcode) {
+  const json = await fetchJsonWithTimeout(
+    `https://api.upcitemdb.com/prod/trial/lookup?upc=${barcode}`
+  );
+  const items = json?.items;
+  if (!Array.isArray(items) || !items.length) return null;
+  const item = items[0];
+  if (!item?.title) return null;
+  return {
+    name: item.title,
+    brand: item.brand || item.manufacturer,
+    category: item.category,
+    pack_size: item.size || item.weight,
+  };
+}
+
+/** Tier 4 — Gemini, text only. Cheap, but a recollection, never a fact. */
+async function queryGeminiForBarcode(apiKey, barcode, models) {
+  const prompt = buildBarcodePrompt(barcode);
+  const list = Array.isArray(models) && models.length ? models : DEFAULT_AI_MODELS;
+
+  for (const model of list) {
+    try {
+      const res = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "x-goog-api-key": apiKey },
+          body: JSON.stringify({
+            contents: [{ parts: [{ text: prompt }] }],
+            generationConfig: {
+              temperature: 0,
+              response_mime_type: "application/json",
+              maxOutputTokens: 512,
+            },
+          }),
+        }
+      );
+      if (!res.ok) continue;
+      const body = await res.json();
+      const text = body?.candidates?.[0]?.content?.parts?.[0]?.text;
+      if (!text) continue;
+
+      const json = parseModelJson(text);
+      if (!json || json.known !== true) return null; // an honest "no" — respect it
+      // A low-confidence recollection is worth less than an empty field.
+      if (json.confidence && String(json.confidence).toLowerCase() === "low") return null;
+      return json;
+    } catch (_) {
+      /* try the next model */
+    }
+  }
+  return null;
+}
+
+exports.resolveBarcode = onRequest(
+  { secrets: [GEMINI_API_KEY], cors: true, region: "us-central1", memory: "256MiB", timeoutSeconds: 30 },
+  async (req, res) => {
+    if (req.method !== "POST") {
+      res.status(405).json({ error: "POST only" });
+      return;
+    }
+
+    try {
+      const header = req.get("Authorization") || "";
+      const idToken = header.startsWith("Bearer ") ? header.slice(7).trim() : "";
+      if (!idToken) {
+        res.status(401).json({ error: "Missing Authorization bearer token" });
+        return;
+      }
+      try {
+        await getAuth().verifyIdToken(idToken);
+      } catch (_) {
+        res.status(401).json({ error: "Invalid or expired ID token" });
+        return;
+      }
+
+      const barcode = normalizeBarcode(req.body?.barcode);
+      if (!barcode) {
+        res.status(400).json({ error: "barcode is required (8-14 digits)" });
+        return;
+      }
+
+      // A wrong check digit means a misread or a shop's own printed label.
+      // No global repository can know it, so answering immediately is both
+      // correct and much faster than four lookups that must all miss.
+      if (!hasValidCheckDigit(barcode)) {
+        res.status(200).json({ found: false, reason: "invalid_check_digit", barcode });
+        return;
+      }
+
+      const db = getFirestore();
+      const cacheRef = db.collection("barcode_catalog").doc(barcode);
+
+      // TIER 1 — the shared catalog.
+      try {
+        const snap = await cacheRef.get();
+        if (snap.exists) {
+          const row = snap.data() || {};
+          const ageMs = row.resolved_at ? Date.now() - Date.parse(row.resolved_at) : 0;
+          const fresh = ageMs < BARCODE_CACHE_TTL_DAYS * 24 * 60 * 60 * 1000;
+          // A cached miss is only honoured for AI-unknown rows; a database
+          // that had no answer in March may well have one now.
+          if (row.found === true && fresh) {
+            await cacheRef.set(
+              { hits: FieldValue.increment(1), last_hit_at: new Date().toISOString() },
+              { merge: true }
+            );
+            res.status(200).json({ found: true, ...row.product, cached: true });
+            return;
+          }
+        }
+      } catch (e) {
+        console.warn("[BARCODE] cache read failed:", e.message);
+      }
+
+      // TIERS 2 & 3 — free public repositories.
+      let hit = null;
+      let source = "";
+
+      const facts = await queryFactsFamily(barcode);
+      if (facts) {
+        hit = facts;
+        source = "Open Facts";
+      }
+      if (!hit) {
+        const upc = await queryUpcItemDb(barcode);
+        if (upc) {
+          hit = upc;
+          source = "UPCitemdb";
+        }
+      }
+
+      let isAiGuess = false;
+
+      // TIER 4 — Gemini, only once the free databases have all missed.
+      if (!hit) {
+        let activeApiKey = GEMINI_API_KEY.value();
+        let aiConfig = null;
+        try {
+          const cfg = await db.collection("platform_settings").doc("ai_config").get();
+          if (cfg.exists) {
+            aiConfig = cfg.data() || null;
+            if (aiConfig?.api_key && String(aiConfig.api_key).trim().length > 10) {
+              activeApiKey = String(aiConfig.api_key).trim();
+            }
+          }
+        } catch (_) {}
+
+        if (activeApiKey && activeApiKey.length > 10) {
+          const guess = await queryGeminiForBarcode(activeApiKey, barcode, resolveModels(aiConfig));
+          if (guess) {
+            hit = guess;
+            source = "AI";
+            isAiGuess = true;
+          }
+        }
+      }
+
+      const product = normalizeBarcodeResult(hit, { source, isAiGuess });
+
+      if (!product) {
+        // Remember the miss so the next scan of this barcode is one read, not
+        // four lookups — but only briefly, since coverage improves over time.
+        try {
+          await cacheRef.set(
+            { found: false, barcode, resolved_at: new Date().toISOString() },
+            { merge: true }
+          );
+        } catch (_) {}
+        console.log(`[BARCODE] ${barcode}: not found in any source`);
+        res.status(200).json({ found: false, barcode });
+        return;
+      }
+
+      // Write through, so the next merchant to scan this gets one indexed read.
+      try {
+        await cacheRef.set(
+          {
+            found: true,
+            barcode,
+            product,
+            resolved_at: new Date().toISOString(),
+            hits: FieldValue.increment(1),
+          },
+          { merge: true }
+        );
+      } catch (e) {
+        console.warn("[BARCODE] cache write failed:", e.message);
+      }
+
+      console.log(`[BARCODE] ${barcode} -> "${product.name}" via ${source}`);
+      res.status(200).json({ found: true, ...product, cached: false });
+    } catch (error) {
+      console.error("[BARCODE] resolveBarcode failed:", error);
+      res.status(500).json({ error: "Barcode lookup failed." });
     }
   }
 );

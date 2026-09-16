@@ -252,12 +252,28 @@ service cloud.firestore {
     }
 
     // =========================================================================
-    // AI USAGE METERING — per business, per month, written by `aiExtract`.
+    // AI USAGE METERING — per business, per DAY, written by `aiExtract`.
     // Admin-readable so the console can see who is consuming AI scans; never
-    // client-writable, or the free-tier limit would be self-service.
+    // client-writable, or the daily limit would be self-service.
     // =========================================================================
     match /ai_usage/{usageId} {
       allow read: if isAdmin();
+      allow write: if false;
+    }
+
+    // =========================================================================
+    // SHARED BARCODE CATALOG — written only by the `resolveBarcode` function,
+    // which resolves a GTIN once and lets every other merchant's scan of the
+    // same product be a single indexed read instead of four network lookups.
+    //
+    // Readable by any signed-in merchant: it is public product reference data
+    // (name, brand, category, pack size) with no prices, no business_id and
+    // nothing traceable to the shop that first scanned it. Never
+    // client-writable — a merchant who could write here would be editing every
+    // other shop's autofill.
+    // =========================================================================
+    match /barcode_catalog/{gtin} {
+      allow read: if isAuthenticated();
       allow write: if false;
     }
 

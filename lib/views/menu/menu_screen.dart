@@ -1154,7 +1154,7 @@ class _MenuScreenState extends State<MenuScreen> {
                 border: Border.all(color: const Color(0xFFCBD5E1)),
               ),
               child: Text(
-                'v4.22.0',
+                'v4.25.0',
                 style: GoogleFonts.inter(
                   fontSize: 10.5,
                   fontWeight: FontWeight.w600,

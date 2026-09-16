@@ -44,6 +44,350 @@ hits (the screen's data-loading call), not just the data shape. See
 `test/vertical_product_leak_test.dart` (added 2026‑09‑11) for the corrected pattern — it
 drives `LocalDatabase` through a real (in-memory FFI) SQLite database and asserts on what
 `getAllProducts`/`getAllCategories` actually return.
+## 2026-09-16 (evening) — Cash tally lost on reopen; sales return ignored the owner's PIN
+
+Two merchant reports, both about state that looked saved and was not.
+
+### 1. Note & Tally counter reverted to zero
+
+**Symptom:** count the drawer, tap *Confirm Count*, leave the screen, come back — all zeros.
+
+**Root cause:** `CashRegisterScreen._denominations` (`cash_register_screen.dart:47`) is a plain
+`setState` field. Nothing wrote it anywhere, so it died with the widget. The *Confirm Count*
+button called `widget.onSaved`, which only copied the map back into that same doomed field —
+the button appeared to save and saved nothing.
+
+Worse at the second entry point: the Home tab's *Tally Counter* card
+(`home_pulse_tab.dart:724`) called `DenominationTallyModal.show` with **neither**
+`initialDenominations` nor `onSaved`. Counting from there was discarded outright, while
+looking identical to counting from the Cash Register screen.
+
+Counting a full drawer — nine denominations, note by note — is the slowest careful thing a
+shopkeeper does all day, and it was the one thing the app threw away.
+
+**Fix:** `lib/services/cash_tally_draft_service.dart`.
+
+- `CashTallyDraft` stores the denominations, the counted total, **the expected drawer figure
+  at the moment of counting**, and a timestamp.
+- Storing the expectation with the count is the load-bearing part. The expected figure moves
+  with every sale, so a variance recomputed an hour later would compare the old count against
+  a new expectation and report a discrepancy that never happened.
+- The modal itself loads and saves the draft, so **every** entry point persists — including
+  the Home tab card that passed no callbacks. That is why the logic lives in the modal rather
+  than in each caller.
+- Scoped to the **IST day**. A cash count is a statement about a moment; yesterday's count
+  shown as today's opening figure is worse than showing nothing, because it looks
+  authoritative. IST rather than UTC so an evening count does not vanish at 5:30 AM while the
+  shop is opening up.
+- Restoring shows a banner — *"Saved count from 8:42 PM restored • was ₹200 short"*. A
+  restored tally that looks identical to a blank one invites counting the same drawer twice.
+- Confirming now reports the match against the drawer directly: *matches exactly* /
+  *₹X MORE than expected* / *₹X SHORT of expected*.
+- Old days' keys are pruned on save, so the preference store does not grow a key per day for
+  the life of the install.
+
+### 2. Sales return accepted `1234` forever, whatever the owner's PIN was
+
+**Symptom:** the PIN behind the eye button and the PIN on product return were different, and
+changing the first did nothing to the second.
+
+**Root cause — and it is a security hole, not a UX wrinkle.** `sale_detail_modal.dart` held
+the check inline at two call sites:
+
+```dart
+if (enteredPin != '1234' && enteredPin != '0000') { ... }   // line 631
+if (enteredPin != '1234' && enteredPin != '0000') { ... }   // line 1099
+```
+
+The owner's real PIN (`owner_cashier_pin`, read by `OwnerPrivacyModal`) was never consulted.
+So on **every install**, including shops that had dutifully set their own PIN, the factory
+default `1234` **and** an undocumented second master `0000` both authorised a refund — on the
+one screen in the app that hands cash back across the counter.
+
+**Fix:** `lib/services/owner_pin_service.dart` — one PIN, one place.
+
+- Keeps the existing `owner_cashier_pin` key, so owners who had already set a PIN keep it. A
+  rename here would silently reset every install to the default.
+- `'0000'` is gone. It was a second publicly-known code authorising cash refunds.
+- `OwnerPrivacyModal` and both return flows now call `OwnerPinService.instance.verify()`, so
+  the two cannot drift apart again without deleting the class.
+- "Default PIN is 1234" is now shown **only** while the shop is actually on the default —
+  telling an owner who changed it that the default is 1234 is useless to them and an
+  advertisement to whoever else is holding the phone.
+
+### 3. Fingerprint on product return
+
+Requested to match the Owner Privacy Lock. Both return flows now show *Use Fingerprint* when
+the handset has an enrolled biometric (resolved **before** the dialog builds, so the option
+never appears where it would fail on tap). A successful scan satisfies the owner check on its
+own — demanding the PIN as well would make the biometric decoration. The audit trail records
+`userPin: 'BIOMETRIC'` so a fingerprint-authorised refund is distinguishable from a
+PIN-authorised one in `logAuditAction`.
+
+Verifying the PIN became async, so both flows gained a `ctx.mounted` / `sheetCtx.mounted`
+guard before `Navigator.pop` — the sheet can be dismissed while the check is in flight.
+
+**Verification:** `flutter test test/cash_tally_and_owner_pin_test.dart` — **16 passing**,
+covering draft round-trip, variance sign, day-rollover isolation, pruning, corrupt-JSON
+recovery, and every PIN case including "1234 stops working once a PIN is set" and
+"'0000' is not a second master PIN". `flutter analyze` clean.
+
+**If this regresses, look for:** a string literal `'1234'` or `'0000'` compared against a
+`TextEditingController` anywhere outside `OwnerPinService`, or a `DenominationTallyModal`
+caller that reads `onSaved` and assumes it is the thing doing the persisting.
+
+---
+
+## 2026-09-16 (later still) — Barcode autofill was wired to fabricated data; daily AI scan quota
+
+Follow-up to the entry below, after the merchant confirmed the menu scan fix works.
+Three requests: barcode scan should fetch product data wherever a barcode is entered,
+AI Bill Parcha OCR should be fully functional, and AI scans need a daily cap.
+
+### 1. Barcode autofill — the resolver was fine, the data was invented
+
+**Symptom:** scanning a barcode in *Add Product* or *Rapid Barcode Inward* usually fell
+through to "New barcode. Please enter name and unit."
+
+**What was actually true:** `CloudBarcodeResolverService` is correctly wired into all four
+scan points (`pos_billing_screen`, `add_product_modal`, `products_screen`,
+`rapid_barcode_inward_screen`) and its six-tier ladder works. Verified live:
+
+```
+8901719134845 -> Parle-G Biscuit      / Parle     / Dry biscuits / 45gm
+8901063139329 -> bourbon              / britannia / Biscuits     / 50g
+8902080000227 -> Sting Energy         / Sting     / Energy drink / 1
+```
+
+**Root cause — the seed data is fabricated.** Running an EAN-13 check-digit validator over
+the app's own tables:
+
+- **22 of the 23** barcodes in `_kFastIndianDict`, the "curated offline Indian retail
+  dictionary", have an **invalid check digit**.
+- **115 of the 368** barcodes in `kMasterCatalogSeed` likewise.
+
+A check digit exists precisely so a scanner can tell a good read from a bad one; no
+physical product can carry a barcode that fails it. So every one of those rows was
+unreachable by construction — scanning the real Dettol bottle could never match the
+dictionary row labelled "Dettol". Tier 2 looked wired and resolved nothing, ever.
+
+The second cause is **coverage**: Open Food Facts indexes about 23,000 Indian products, so
+many genuine 890-prefixed barcodes miss every free database. UPCitemdb's free tier is also
+IP-rate-limited, which is per-device and invisible until it starts failing.
+
+**Fixes:**
+
+- `hasValidCheckDigit` added to both `cloud_barcode_resolver_service.dart` and
+  `functions/barcode_core.js` (EAN-8 / UPC-A / EAN-13 / GTIN-14). A bad check digit now
+  short-circuits *before* four network lookups that must all miss — a misread used to stall
+  the counter for seconds to learn nothing.
+- The 22 fabricated dictionary entries are **deleted, not corrected**. A plausible-looking
+  wrong barcode is worse than no row: it silently autofills the wrong product the day a real
+  barcode collides with it.
+- New Cloud Function **`resolveBarcode`**, tried ahead of the on-device network tiers:
+  1. `barcode_catalog/{gtin}` — a shared catalog every merchant's scans build, so the second
+     shop to scan a product gets one indexed read instead of four lookups.
+  2. Open* Facts family (five hosts in parallel), server-side.
+  3. UPCitemdb.
+  4. **Gemini, text-only**, for barcodes no free database indexes.
+  Whatever resolves is written back to the shared catalog.
+- The AI tier is **explicitly flagged**. `buildBarcodePrompt` makes `{"known": false}` the
+  easy answer and forbids inferring a product from the GS1 manufacturer prefix — knowing
+  8901719 is Parle does not say *which* Parle product, and a confident wrong name silently
+  corrupts a shop's catalog for every future scan of that item. `low` confidence is
+  discarded. The app badges the result ("AI guess — check the name against the pack") and
+  leaves the price blank.
+- No barcode source may ever supply a price. Online repositories carry no Indian MRP, and a
+  price riding along would become a real shelf price the merchant never typed.
+
+**Still open:** the 115 invalid barcodes in `kMasterCatalogSeed`. Those rows are still useful
+as catalog entries (name, category, price); only the barcode field is unreachable.
+`test/barcode_checksum_test.dart` pins the count at ≤115 so it cannot silently grow, and
+asserts no barcode maps to two different products.
+
+### 2. AI Bill Parcha OCR
+
+Entry points verified: *Scan Bill / Parcha Photo* → `AiInwardSheet.showPhotoSourcePickerDirect`
+and *Upload Invoice PDF* → `AiInwardSheet.pickPdfDirect`, both reaching the same
+Gemini-first / ML-Kit-fallback path as the (now merchant-confirmed) menu scan. The bill
+prompt, the zero-margin pricing bug and the WhatsApp share-target path were all fixed in the
+entry below.
+
+### 3. Daily AI scan quota
+
+Was **10 per calendar month** for free users and **unlimited** for Pro. Unlimited is an open
+tab against this project's Gemini billing, and a monthly bucket is the wrong shape anyway —
+it lets someone burn the allowance in five minutes and then sit blocked for four weeks.
+
+- `FREE_DAILY_IMAGE_SCANS = 10`, `PRO_DAILY_IMAGE_SCANS = 100`.
+- A **live trial unlocks the feature but is metered at the free rate** — the trial exists to
+  show the feature works, not to hand out a month of Pro throughput.
+- The day boundary is **IST**, not UTC. Cloud Run runs in UTC, so a plain `toISOString()` day
+  would reset at 5:30 AM IST, in the middle of a dairy or bakery's morning inward. IST has no
+  DST, so the fixed +5:30 offset is exact (`istDayKey`).
+- `ai_usage/{bizId}_{YYYY-MM-DD}` replaces the monthly doc; the 200 response now carries
+  `quota: {used, limit, remaining}` so the app can say "N scans left today" without a second
+  call, and the device mirror is corrected from the server rather than drifting.
+
+**Verification:** `npm --prefix functions test` — **52 tests passing** (33 extraction + 19
+barcode/quota, including the IST-midnight boundary and the fabricated-barcode corpus).
+`flutter test test/barcode_checksum_test.dart` — **9 passing**. `firestore.rules` grants
+`barcode_catalog` read to any signed-in merchant and write to nobody; it holds no prices, no
+`business_id`, and nothing traceable to the shop that first scanned an item.
+
+**If this regresses, look for:** `[BARCODE] <gtin>: not found in any source` in the function
+logs for a barcode that Open Food Facts does have (the tier order or the checksum gate
+broke), or an autofilled product name with no "AI guess" badge and no database source.
+
+---
+
+## 2026-09-16 (later) — The menu scan was never an AI problem: Gemini read all 17 dishes and the app threw them away
+
+**User symptom (unchanged after the entry below):** the merchant re-tested the mutton menu
+card and still got "Review Menu (3)" with `Rate ₹320`, `Mutton Hydrabadi(4pcs) ₹440`,
+`360/-| ₹380`. Their words: *"api key functional hai lekin thik se kaam nahi kar rahi"*.
+
+**What the Cloud Function logs actually showed** (`firebase functions:log --only aiExtract`):
+
+```
+2026-09-16T13:31:12Z  [AI] menu (restaurant) via gemini-3.6-flash: 17 item(s) for biz_ZnqHTPUW…
+2026-09-16T12:28:53Z  [AI] menu (restaurant) via gemini-3.5-flash-lite: 18 item(s)
+2026-09-16T11:48:55Z  [AI] menu via gemini-3.6-flash: 18 item(s)
+```
+
+The menu page has 4 chicken rows + 13 mutton rows = **17 dishes**. Gemini extracted
+**17/17, perfectly**. The entry below fixed the *order* of the two engines, which was a real
+bug, but it was never the reason the merchant saw junk — and because the offline fallback
+still had something to show, the real failure stayed invisible.
+
+**Root causes (file:line):**
+
+1. **`lib/services/gemini_ai_service.dart:~180` — the field-name mismatch. This is the whole
+   bug.** `aiExtract` emitted every item as `{product_name, selling_price_paise,
+   category_name}`. `ExtractedMenuItem.fromJson` read `dish_name`, `price_paise`,
+   `category`. Not one key matched, so all 17 dishes fell through to their defaults:
+   **seventeen rows of `"Menu Item"` at `₹0.00`**. With nothing usable, `menu_scan_sheet`
+   dropped to ML Kit, whose line parser produced the three junk rows in the screenshot.
+   `test/menu_scan_test.dart` existed and passed throughout — it only ever fed the parser
+   the key names the parser already read, never the payload the server really sends.
+2. **`functions/index.js` — one bill-shaped prompt served both document kinds.** It asked a
+   *menu card* for `supplier_name`, `quantity` and `purchase_price_paise`, and its response
+   schema had no `dish_name` field at all, which is why the server emitted bill keys.
+3. **`functions/index.js` — no `maxOutputTokens`.** A dense rate card (50+ dishes) ran past
+   the model default, the JSON was cut off mid-object, `JSON.parse` threw, and the merchant
+   was told "AI could not read this file" for a photo the model had read fine.
+4. **`functions/index.js` — `gemini-2.5-flash-latest` in the fallback list 404s** (logged
+   08:33). Every failed scan paid for a round trip to a model that cannot exist. A single
+   transient 429 on the good model also cascaded straight down to a 502 with no retry.
+5. **`functions/index.js` — `ai_config.active_model` was written by the Admin Console and
+   never read.** The model dropdown changed a Firestore field and nothing else.
+6. **`lib/services/share_target_service.dart:104` — a third AI-inward entry point that never
+   called the AI.** A bill photo shared in from WhatsApp went straight to ML Kit. This is
+   the same inversion the entry below fixed in two files and missed in the third.
+7. **`functions/index.js` — selling price was set to the purchase price on bills.** The old
+   normalizer copied `purchase_price_paise` into `selling_price_paise` when the bill printed
+   no retail price. `ExtractedBillItem.fromJson` only applies the app's default markup when
+   `selling_price_paise` is `0`, so **every AI-inwarded item was stocked at zero margin**.
+8. **`lib/services/mlkit_ocr_service.dart` — the offline parser read reading-order text.**
+   `RecognizedText.text` flattens a two-column menu, interleaving the name and price columns,
+   so pairing a dish with "the next line" is guesswork. It was also Latin-script only: a
+   Hindi or Marathi card produced zero items offline.
+
+**Fixes:**
+
+- **`functions/ai_extract_core.js` (new).** Prompts, model order and the response normalizer,
+  with no Firebase, no network and no secrets, so they can be run without deploying. The
+  normalizer now emits **both** naming conventions on every item (`dish_name`/`price_paise`/
+  `category` *and* `product_name`/`selling_price_paise`/`category_name`) — which is what
+  repairs the phones that already have the old build installed: a function redeploy, not a
+  Play Store rollout. It also drops header rows (`Rate`, `Item`, `Sr. No`) and nameless price
+  cells (`360/-|`) server-side, and keeps bill and menu pricing apart (root cause 7).
+- **Two separate prompts.** `buildMenuPrompt` never mentions suppliers or quantities, names
+  the exact traps from this report (column headers are not dishes, section banners are
+  categories, a number is never a name, 15–60 dishes is normal, do not stop early), and both
+  prompts now instruct the model to read any Indian script and return names **in the script
+  as printed**.
+- **`callGemini`:** `maxOutputTokens: 16384`, 3 attempts with backoff on 429/500/502/503/504
+  for the first-choice model, `finishReason` surfaced instead of "empty response", and a
+  tolerant JSON parser that recovers an object wrapped in prose or a code fence.
+- **`resolveModels(cfg)`** puts the Admin Console's `active_model` first with the built-in
+  list behind it, so a typo in the console degrades to "slower", never "AI is down".
+  `gemini-2.5-flash-latest` removed.
+- **An empty result is now `422` with a specific reason**, not `200` with `items: []` — which
+  the app had been reporting as success and rendering as an empty review sheet.
+- **`lib/services/gemini_ai_service.dart`:** `ExtractedMenuItem.fromJson` reads every
+  spelling of name, price and category; `isRealDishName` / `cleanDishName` are now shared
+  static helpers so the cloud path, the offline path and the UI apply one definition.
+- **`lib/services/mlkit_ocr_service.dart`:** rewritten around `TextLine.boundingBox` — a dish
+  claims the nearest *unused* price cell whose row overlaps its own vertically and that sits
+  to its right, falling back to reading order only when no cell matches. Devanagari
+  recognizer added (with `com.google.mlkit:text-recognition-devanagari` in
+  `android/app/build.gradle.kts`) and Devanagari digits normalized, so "१२०/-" reads as 120.
+- **`lib/services/share_target_service.dart`:** shared images go to Gemini first, ML Kit only
+  as fallback, with the correct MIME type from the file extension.
+- **Capture quality** raised from 1600px/q85 to 2400px/q92 in both scan sheets. At 1600px a
+  9pt dish name is about 11 pixels tall, which is where OCR starts inventing characters.
+- **`MenuItemReviewSheet` shows a standing "Offline scan" banner** when rows came from ML Kit.
+  A toast that had already faded was previously the only thing distinguishing a cloud read
+  from a guess.
+- **Login (`lib/services/auth_service.dart`):** `signOut()` called
+  `GoogleSignIn.instance.disconnect()`, which *revokes* the OAuth grant — on Android
+  Credential Manager an account revoked and immediately re-authenticated is exactly where
+  `authenticate()` starts failing, which is the intermittent "kabhi kabhi login ko issue ata
+  hai". Now calls `signOut()`. `signInSilently` no longer builds a credential from a null ID
+  token. `login_screen.dart` maps failures to actionable messages instead of printing the raw
+  exception.
+
+**Also closed while in here — the Gemini key was still being written to every phone:**
+
+`firestore_sync_service.dart:589` subscribes to `platform_settings/global_config` and was
+copying its `gemini_api_key` field into `SharedPreferences('cached_gemini_api_key')` on every
+merchant's device. That is precisely the exposure the `aiExtract` proxy was built to close in
+commit `1c04a42`; the proxy landed, extraction moved server-side, and this listener was left
+writing the key to plaintext app data where anyone with the handset could lift it and spend
+this project's quota and billing. The only consumer was
+`lib/views/common/gemini_api_key_dialog.dart` — a dialog asking merchants to supply their own
+key, which invariant 48 in `APP_FEATURE_MEMORY.md` explicitly forbids, and which nothing had
+linked to.
+
+- The caching block is gone; the listener keeps `globalConfigNotifier` and nothing else.
+- `gemini_api_key_dialog.dart` deleted, and with it `GeminiAiService.getEffectiveApiKey`,
+  `setCustomApiKey` and `testApiKey` — every remaining path that put a key on the device.
+- `GeminiAiService.purgeAnyCachedApiKey()` runs on startup (`main.dart:98`) and removes both
+  `cached_gemini_api_key` and `custom_gemini_api_key`. Removing the writer does not remove
+  copies already written, and every merchant on 4.22.x has one.
+
+**Still open — needs an owner decision, not a code change:** `firestore.rules:223` grants
+`allow read: if isAuthenticated()` on `platform_settings/{settingId}`, and `global_config`
+still *contains* `gemini_api_key`. Firestore rules cannot hide a single field, so any
+signed-in merchant can still read that key straight out of Firestore with a REST call,
+whatever the app does. `platform_settings/ai_config` — where the Admin Console writes the key
+today — is already correctly admin-only (`firestore.rules:219`). **The remediation is to
+delete the `gemini_api_key` field from `global_config` and rotate the key**, since it has been
+readable by every merchant account for some time. Nothing reads that field any more.
+
+**Verification:**
+- `functions/test/ai_extract_core.test.js` — **33 tests, all passing** (`npm --prefix
+  functions test`). The first block is the server↔app field contract, written down; the next
+  is the three junk rows from the screenshot; then languages, veg/non-veg, and the bill-vs-menu
+  pricing split.
+- `test/menu_scan_test.dart` — **17 tests, all passing**, with a new group that feeds the
+  parser the payload `aiExtract` really sends, plus `isRealDishName` coverage.
+- `flutter analyze` — clean (4 pre-existing `dart:html` infos in `admin_console`).
+- `firebase deploy --only functions:aiExtract` — deployed and serving.
+
+**If this regresses, look for:** a `[AI] … N/M item(s)` log line where N is much smaller than
+M (the normalizer is rejecting good rows), or N==M on the server while the app shows
+"Menu Item ₹0.00" (the field contract broke again — run the functions tests).
+
+**Note for the next session:** `flutter analyze` will report errors in `scratch/` if fragment
+files are left there. Deploying functions from this machine needs
+`FUNCTIONS_DISCOVERY_TIMEOUT=120`; the default 10s is shorter than the cold `require` of
+`firebase-functions` here, and the failure reads as "User code failed to load", which looks
+like a syntax error and is not.
+
+---
+
 ## 2026-09-16 — Primary Cloud Gemini AI Vision Engine with Resilient Offline ML Kit Fallback (Fix for "Review Menu (3)" Inverted Execution Flow)
 
 **User Symptoms & Bug Report:**

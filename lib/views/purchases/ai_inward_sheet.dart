@@ -113,8 +113,13 @@ class AiInwardSheet extends StatelessWidget {
       final picker = ImagePicker();
       final XFile? file = await picker.pickImage(
         source: source,
-        imageQuality: 85,
-        maxWidth: 1600,
+        // A menu card or invoice is dense small text in two columns; 1600px
+        // wide put roughly 11 pixels on a 9pt dish name, which is where OCR
+        // starts inventing characters. 2400px at q92 lands around 1.5-2.5 MB —
+        // well inside the 8 MB the extraction endpoint accepts — and is the
+        // cheapest accuracy we can buy on the client side.
+        imageQuality: 92,
+        maxWidth: 2400,
       );
 
       if (file == null) return;
@@ -303,7 +308,7 @@ class AiInwardSheet extends StatelessWidget {
                   Expanded(
                     child: Text(
                       isQuota
-                          ? 'Monthly Limit Reached'
+                          ? 'Daily Limit Reached'
                           : 'Could not auto-read this clearly',
                       style: GoogleFonts.plusJakartaSans(fontSize: 16, fontWeight: FontWeight.w800),
                     ),

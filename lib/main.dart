@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 import 'services/remote_config_service.dart';
+import 'services/gemini_ai_service.dart';
 import 'core/constants/business_vertical_config.dart';
 import 'core/theme/app_theme.dart';
 import 'core/database/local_database.dart';
@@ -89,6 +90,12 @@ void main() async {
 
   // 5. Initialize GoogleSignIn singleton (Non-blocking) — no unprompted dialog
   AuthService.instance.initGoogleSignIn();
+
+  // 5b. Erase any Gemini API key an older build cached in app storage. Scans go
+  //     through the aiExtract Cloud Function now, so nothing on the device needs
+  //     a key — but the copies already written do not remove themselves.
+  //     Non-blocking: nothing on the startup path depends on it.
+  GeminiAiService.purgeAnyCachedApiKey();
 
   // 6. Initialize Cloud Firestore Realtime Sync Engine if already authenticated
   final bool isLoggedIn = prefs.getBool('is_logged_in') ?? false;

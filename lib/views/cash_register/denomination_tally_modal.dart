@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../core/utils/money_formatter.dart';
 import '../common/in_app_notification.dart';
+import '../../services/cash_tally_draft_service.dart';
 
 class DenominationTallyModal extends StatefulWidget {
   final int expectedCashPaise;
@@ -58,23 +59,45 @@ class _DenominationTallyModalState extends State<DenominationTallyModal> {
 
   late final Map<int, int> _denominations;
 
+  /// Today's previously confirmed count, if there is one. Shown as a banner so
+  /// the merchant can see they are resuming a count rather than starting one.
+  CashTallyDraft? _savedDraft;
+
+  static const Map<int, int> _emptyTally = {
+    500: 0, 200: 0, 100: 0, 50: 0, 20: 0, 10: 0, 5: 0, 2: 0, 1: 0,
+  };
+
   @override
   void initState() {
     super.initState();
     _denominations = widget.initialDenominations != null
         ? Map.from(widget.initialDenominations!)
-        : {
-            500: 0,
-            200: 0,
-            100: 0,
-            50: 0,
-            20: 0,
-            10: 0,
-            5: 0,
-            2: 0,
-            1: 0,
-          };
+        : Map.from(_emptyTally);
     _denominations.remove(2000);
+    _restoreDraft();
+  }
+
+  /// Reloads today's confirmed count.
+  ///
+  /// Every entry point gets this, not just the ones that remembered to pass
+  /// `initialDenominations` — the Home tab's Tally Counter card passed neither
+  /// that nor `onSaved`, so counting from there was discarded entirely while
+  /// looking identical to counting from the Cash Register screen.
+  Future<void> _restoreDraft() async {
+    final draft = await CashTallyDraftService.instance.load();
+    if (draft == null || !mounted) return;
+
+    final allZero = _denominations.values.every((c) => c == 0);
+    setState(() {
+      _savedDraft = draft;
+      // Never overwrite a count the caller explicitly supplied, or one the
+      // merchant has already started typing into this sheet.
+      if (widget.initialDenominations == null && allZero) {
+        for (final entry in draft.denominations.entries) {
+          if (entry.key != 2000) _denominations[entry.key] = entry.value;
+        }
+      }
+    });
   }
 
   int get _countedTotalPaise {
@@ -279,6 +302,40 @@ class _DenominationTallyModalState extends State<DenominationTallyModal> {
               ],
             ),
           ),
+          // Resumed-count banner. The whole point of persisting the draft is
+          // that the merchant can tell they are continuing a count rather than
+          // starting a fresh one — a restored tally that looks identical to a
+          // blank one invites counting the same drawer twice.
+          if (_savedDraft != null) ...[
+            const SizedBox(height: 8),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+              decoration: BoxDecoration(
+                color: const Color(0xFFF0F9FF),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: const Color(0xFFBAE6FD)),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.history_rounded, size: 15, color: Color(0xFF0284C7)),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Saved count from ${DateFormat('hh:mm a').format(_savedDraft!.savedAt)} restored'
+                      '${_savedDraft!.expectedPaise > 0 ? (_savedDraft!.isMatched ? ' • matched the drawer' : ' • was ${MoneyFormatter.formatINR(_savedDraft!.variancePaise.abs())} ${_savedDraft!.variancePaise > 0 ? 'over' : 'short'}') : ''}',
+                      style: GoogleFonts.inter(
+                        fontSize: 10.5,
+                        height: 1.3,
+                        fontWeight: FontWeight.w600,
+                        color: const Color(0xFF075985),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
           const SizedBox(height: 10),
 
           // Note Tally List
@@ -442,8 +499,33 @@ class _DenominationTallyModalState extends State<DenominationTallyModal> {
               const SizedBox(width: 8),
               Expanded(
                 child: ElevatedButton(
-                  onPressed: () {
+                  onPressed: () async {
+                    // Persist before the callback: onSaved only updates the
+                    // calling screen's in-memory state, which is exactly what
+                    // used to evaporate when the merchant navigated away.
+                    await CashTallyDraftService.instance.save(
+                      denominations: _denominations,
+                      countedPaise: countedPaise,
+                      expectedPaise: widget.expectedCashPaise,
+                    );
                     widget.onSaved?.call(_denominations, countedPaise);
+                    if (!context.mounted) return;
+
+                    final diff = countedPaise - widget.expectedCashPaise;
+                    InAppNotification.show(
+                      context: context,
+                      message: widget.expectedCashPaise <= 0
+                          ? 'Count saved: ${MoneyFormatter.formatINR(countedPaise)}'
+                          : diff == 0
+                              ? 'Count saved — matches drawer exactly (${MoneyFormatter.formatINR(countedPaise)})'
+                              : diff > 0
+                                  ? 'Count saved — ${MoneyFormatter.formatINR(diff)} MORE than expected'
+                                  : 'Count saved — ${MoneyFormatter.formatINR(-diff)} SHORT of expected',
+                      type: (widget.expectedCashPaise > 0 && diff != 0)
+                          ? NotificationType.warning
+                          : NotificationType.success,
+                      duration: const Duration(seconds: 4),
+                    );
                     Navigator.pop(context);
                   },
                   style: ElevatedButton.styleFrom(

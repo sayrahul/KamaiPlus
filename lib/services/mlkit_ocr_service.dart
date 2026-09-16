@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:ui' show Rect;
 import 'package:google_mlkit_text_recognition/google_mlkit_text_recognition.dart';
 import 'gemini_ai_service.dart';
 import 'inventory_inward_service.dart';
@@ -19,6 +20,23 @@ class MlKitScanResult {
   });
 }
 
+/// One OCR line plus where it sits on the page.
+///
+/// The geometry is the whole point. `RecognizedText.text` flattens a menu card
+/// into reading order, which on a two-column card interleaves the name column
+/// and the price column unpredictably — that is how a scan of a 17-dish mutton
+/// menu came back as "Rate ₹320", "Mutton Hydrabadi(4pcs) ₹440", "360/- ₹380".
+/// Keeping the bounding box lets a dish be matched to the price on ITS OWN ROW
+/// instead of to whatever line happened to follow it.
+class _OcrLine {
+  final String text;
+  final Rect box;
+
+  _OcrLine(this.text, this.box);
+
+  double get centerY => box.top + box.height / 2;
+}
+
 /// On-Device Free Offline Text Recognition (Google ML Kit)
 /// 100% Free, Zero API Keys, Offline, <200ms Latency
 class MlKitOcrService {
@@ -26,6 +44,14 @@ class MlKitOcrService {
   static final MlKitOcrService instance = MlKitOcrService._();
 
   final TextRecognizer _textRecognizer = TextRecognizer(script: TextRecognitionScript.latin);
+
+  /// Devanagari is a separate on-device model, created lazily because most
+  /// merchants never photograph a Hindi or Marathi card and the model costs
+  /// memory to hold open.
+  TextRecognizer? _devanagariRecognizer;
+
+  TextRecognizer get _devanagari =>
+      _devanagariRecognizer ??= TextRecognizer(script: TextRecognitionScript.devanagiri);
 
   /// Scans a local image file for Wholesale / Mandi / Retail Bills using on-device ML Kit OCR
   Future<MlKitScanResult> scanBillImage(String imagePath) async {
@@ -36,155 +62,309 @@ class MlKitOcrService {
 
     final inputImage = InputImage.fromFilePath(imagePath);
     final RecognizedText recognizedText = await _textRecognizer.processImage(inputImage);
-    final text = recognizedText.text;
+    var text = recognizedText.text;
+    var blocks = recognizedText.blocks;
 
-    return _parseRecognizedText(text, recognizedText.blocks);
+    // A Devanagari parcha comes back all but empty from the Latin model. Retry
+    // with the Devanagari one rather than reporting "nothing on this bill".
+    if (_looksEmpty(text)) {
+      try {
+        final hindi = await _devanagari.processImage(inputImage);
+        if (hindi.text.trim().length > text.trim().length) {
+          text = hindi.text;
+          blocks = hindi.blocks;
+        }
+      } catch (_) {}
+    }
+
+    return _parseRecognizedText(text, blocks);
   }
 
-  /// Scans a local image file for Restaurant Menu Cards using on-device ML Kit OCR (0 latency, 0 API key)
+  static bool _looksEmpty(String text) =>
+      text.trim().length < 20 || !RegExp(r'\p{L}', unicode: true).hasMatch(text);
+
+  /// Scans a local image file for Restaurant Menu Cards using on-device ML Kit
+  /// OCR (0 latency, 0 API key).
+  ///
+  /// This is the fallback for when the cloud scan cannot be reached at all. It
+  /// is deliberately conservative: a merchant reviewing an offline result has
+  /// no way to tell a confident reading from a guess, so a row this parser is
+  /// unsure about is dropped rather than shown.
   Future<List<ExtractedMenuItem>> scanMenuImage(String imagePath) async {
     final file = File(imagePath);
     if (!await file.exists()) return [];
 
     final inputImage = InputImage.fromFilePath(imagePath);
-    final RecognizedText recognizedText = await _textRecognizer.processImage(inputImage);
-    return _parseRecognizedMenu(recognizedText.text);
+
+    List<_OcrLine> lines = [];
+    try {
+      lines = _toLines(await _textRecognizer.processImage(inputImage));
+    } catch (_) {}
+
+    // Devanagari menus read as noise through the Latin model — a handful of
+    // stray Latin-looking fragments. Whichever model found more real text wins.
+    if (lines.length < 4) {
+      try {
+        final hindi = _toLines(await _devanagari.processImage(inputImage));
+        if (hindi.length > lines.length) lines = hindi;
+      } catch (_) {}
+    }
+
+    return _parseMenuLines(lines);
   }
 
-  /// Intelligent restaurant menu card parser (Category detection, Dish name + Price extraction)
-  List<ExtractedMenuItem> _parseRecognizedMenu(String rawText) {
-    final List<ExtractedMenuItem> items = [];
-    final lines = rawText.split('\n').map((l) => l.trim()).where((l) => l.isNotEmpty).toList();
+  static List<_OcrLine> _toLines(RecognizedText recognized) {
+    final out = <_OcrLine>[];
+    for (final block in recognized.blocks) {
+      for (final line in block.lines) {
+        final t = line.text.trim();
+        if (t.isNotEmpty) out.add(_OcrLine(t, line.boundingBox));
+      }
+    }
+    out.sort((a, b) => a.centerY.compareTo(b.centerY));
+    return out;
+  }
 
-    String currentCategory = 'Main Course';
+  // Devanagari digits, so "१२०/-" reads as 120.
+  static const String _devanagariDigits = '०१२३४५६७८९';
 
-    final categoryKeywords = {
-      'starter': 'Starters',
-      'soup': 'Soups',
-      'main course': 'Main Course',
-      'curry': 'Main Course',
-      'paneer': 'Paneer Special',
-      'roti': 'Breads & Roti',
-      'naan': 'Breads & Roti',
-      'bread': 'Breads & Roti',
-      'rice': 'Rice & Biryani',
-      'biryani': 'Rice & Biryani',
-      'dal': 'Dal & Lentils',
-      'chinese': 'Chinese',
-      'noodle': 'Chinese',
-      'south indian': 'South Indian',
-      'dosa': 'South Indian',
-      'beverage': 'Beverages',
-      'drink': 'Beverages',
-      'tea': 'Beverages',
-      'coffee': 'Beverages',
-      'snack': 'Snacks',
-      'chaat': 'Chaat & Snacks',
-      'sweet': 'Desserts',
-      'dessert': 'Desserts',
-      'ice cream': 'Desserts',
-      'thali': 'Thali Special',
-      'chicken': 'Chicken Special',
-      'mutton': 'Mutton Special',
-      'fish': 'Fish & Seafood',
-      'egg': 'Egg Special',
-      'non-veg': 'Non-Veg Special',
-      'non veg': 'Non-Veg Special',
-      'seafood': 'Fish & Seafood',
-      'kabab': 'Starters & Tandoor',
-      'kebab': 'Starters & Tandoor',
-      'tandoor': 'Starters & Tandoor',
-    };
+  static String _normalizeDigits(String s) {
+    final buf = StringBuffer();
+    for (final rune in s.runes) {
+      final ch = String.fromCharCode(rune);
+      final idx = _devanagariDigits.indexOf(ch);
+      buf.write(idx >= 0 ? '$idx' : ch);
+    }
+    return buf.toString();
+  }
 
-    // Supports "320", "320/-", "Rs. 320/-", "320 /-"
-    final priceEndRegex = RegExp(r'(?:₹|Rs\.?|INR)?\s*(\d{2,4})\s*(?:/[-–—]?|/-)?\s*$', caseSensitive: false);
+  /// A cell holding nothing but a price: "320", "320/-", "₹320", "320|-".
+  static final RegExp _standalonePrice = RegExp(
+    r'^(?:₹|rs\.?|inr)?\s*(\d{1,5})(?:[.,]\d{1,2})?\s*(?:/[-–—|]?|[-–—|])?\s*$',
+    caseSensitive: false,
+  );
 
-    for (int i = 0; i < lines.length; i++) {
-      final line = lines[i];
-      final lower = line.toLowerCase();
+  /// A price sitting at the end of a line that also holds the dish name.
+  static final RegExp _trailingPrice = RegExp(
+    r'(?:₹|rs\.?|inr)?\s*(\d{1,5})(?:[.,]\d{1,2})?\s*(?:/[-–—|]?|[-–—|])?\s*$',
+    caseSensitive: false,
+  );
 
-      // Check if line looks like a category header
-      bool isCategory = false;
-      for (final entry in categoryKeywords.entries) {
-        if (lower.contains(entry.key) && line.length < 30 && !priceEndRegex.hasMatch(line)) {
-          currentCategory = entry.value;
-          isCategory = true;
+  static int? _priceOf(String text, RegExp re) {
+    final m = re.firstMatch(_normalizeDigits(text).trim());
+    if (m == null) return null;
+    final rupees = int.tryParse(m.group(1)!.replaceAll(RegExp(r'[^0-9]'), ''));
+    if (rupees == null) return null;
+    // Below ₹5 is almost always a serial number or a stray digit; above ₹20,000
+    // is not a dish on an Indian menu card.
+    if (rupees < 5 || rupees > 20000) return null;
+    return rupees;
+  }
+
+  static const Map<String, String> _categoryKeywords = {
+    'starter': 'Starters',
+    'soup': 'Soups',
+    'main course': 'Main Course',
+    'curry': 'Main Course',
+    'paneer': 'Paneer Special',
+    'roti': 'Breads & Roti',
+    'naan': 'Breads & Roti',
+    'bread': 'Breads & Roti',
+    'rice': 'Rice & Biryani',
+    'biryani': 'Rice & Biryani',
+    'dal': 'Dal & Lentils',
+    'chinese': 'Chinese',
+    'noodle': 'Chinese',
+    'south indian': 'South Indian',
+    'dosa': 'South Indian',
+    'beverage': 'Beverages',
+    'drink': 'Beverages',
+    'tea': 'Beverages',
+    'coffee': 'Beverages',
+    'snack': 'Snacks',
+    'chaat': 'Chaat & Snacks',
+    'sweet': 'Desserts',
+    'dessert': 'Desserts',
+    'ice cream': 'Desserts',
+    'thali': 'Thali Special',
+    'chicken': 'Chicken Special',
+    'mutton': 'Mutton Special',
+    'fish': 'Fish & Seafood',
+    'egg': 'Egg Special',
+    'non-veg': 'Non-Veg Special',
+    'non veg': 'Non-Veg Special',
+    'seafood': 'Fish & Seafood',
+    'kabab': 'Starters & Tandoor',
+    'kebab': 'Starters & Tandoor',
+    'tandoor': 'Starters & Tandoor',
+  };
+
+  /// Lines that are page furniture rather than menu content.
+  static bool _isFooterNoise(String lower) =>
+      lower.contains('gst') ||
+      lower.contains('taxes') ||
+      lower.contains('welcome') ||
+      lower.contains('timing') ||
+      lower.contains('contact') ||
+      lower.contains('thank you') ||
+      lower.contains('address') ||
+      lower.contains('delivery') ||
+      lower.contains('www.') ||
+      lower.contains('@');
+
+  /// Row-aware menu parser.
+  ///
+  /// Walks the page geometrically: every line that is only a price becomes a
+  /// candidate cell, and every name line claims the nearest unused price whose
+  /// vertical span overlaps its own. Only if nothing on the row matches does it
+  /// fall back to "the next line in reading order", which is all the previous
+  /// version ever did.
+  static List<ExtractedMenuItem> _parseMenuLines(List<_OcrLine> lines) {
+    if (lines.isEmpty) return [];
+
+    final priceCells = <int, int>{}; // line index -> rupees
+    final headings = <int, String>{}; // line index -> category
+
+    // Pass 1: which lines are nothing but a price?
+    for (var i = 0; i < lines.length; i++) {
+      final standalone = _priceOf(lines[i].text, _standalonePrice);
+      if (standalone != null) priceCells[i] = standalone;
+    }
+
+    bool hasPriceOnRow(int index) {
+      for (final cellIndex in priceCells.keys) {
+        if (cellIndex == index) continue;
+        if (_rowOverlap(lines[index].box, lines[cellIndex].box) >= 0.35) return true;
+      }
+      return false;
+    }
+
+    // Pass 2: section banners.
+    //
+    // Matching a category keyword is not enough on its own — "MUTTON" the
+    // banner and "Mutton Kasa(4pcs)" the dish both contain "mutton", and
+    // treating the dish as a heading would silently swallow it. A banner is
+    // distinguished by having no price anywhere on its row, and by being either
+    // shouted in capitals or nothing but the category word itself.
+    for (var i = 0; i < lines.length; i++) {
+      if (priceCells.containsKey(i)) continue;
+
+      final raw = lines[i].text;
+      final lower = raw.toLowerCase();
+      if (_isFooterNoise(lower)) continue;
+      if (raw.length >= 30) continue;
+      if (_priceOf(raw, _trailingPrice) != null) continue;
+      if (hasPriceOnRow(i)) continue;
+
+      final letters = raw.replaceAll(RegExp(r'[^\p{L}]', unicode: true), '');
+      final isShouted = letters.length >= 3 && letters == letters.toUpperCase();
+      final bare = lower.replaceAll(RegExp(r'[^a-z ]'), ' ').trim().replaceAll(RegExp(r'\s+'), ' ');
+
+      for (final entry in _categoryKeywords.entries) {
+        if (!lower.contains(entry.key)) continue;
+        if (isShouted || bare == entry.key) {
+          headings[i] = entry.value;
+        }
+        break;
+      }
+    }
+
+    String categoryAt(int index) {
+      var category = 'Main Course';
+      for (final entry in headings.entries) {
+        if (entry.key <= index) {
+          category = entry.value;
+        } else {
           break;
         }
       }
-      if (isCategory) continue;
+      return category;
+    }
 
-      // Ignore common non-dish menu footer lines
-      if (lower.contains('gst') ||
-          lower.contains('taxes') ||
-          lower.contains('welcome') ||
-          lower.contains('timing') ||
-          lower.contains('contact') ||
-          lower.contains('thank you') ||
-          lower.contains('address')) {
+    final used = <int>{};
+    final items = <ExtractedMenuItem>[];
+
+    for (var i = 0; i < lines.length; i++) {
+      if (priceCells.containsKey(i) || headings.containsKey(i)) continue;
+
+      final line = lines[i];
+      if (_isFooterNoise(line.text.toLowerCase())) continue;
+
+      // Case 1: name and price on one line — "Paneer Butter Masala 220".
+      final inline = _priceOf(line.text, _trailingPrice);
+      if (inline != null) {
+        final m = _trailingPrice.firstMatch(_normalizeDigits(line.text).trim())!;
+        final name = _cleanName(line.text.substring(0, m.start));
+        if (ExtractedMenuItem.isRealDishName(name)) {
+          items.add(ExtractedMenuItem(
+            dishName: name,
+            priceInPaise: inline * 100,
+            category: categoryAt(i),
+          ));
+        }
         continue;
       }
 
-      // Check 1: Dish name and price on the same line (e.g. "Paneer Butter Masala 220")
-      final match = priceEndRegex.firstMatch(line);
-      if (match != null) {
-        final priceStr = match.group(1)!;
-        final price = int.tryParse(priceStr) ?? 0;
-        if (price >= 10 && price <= 5000) {
-          String dishName = line.substring(0, match.start).trim();
-          dishName = dishName.replaceFirst(RegExp(r'^\d+[\.\)\-\s]\s*'), '').trim();
-          dishName = dishName.replaceAll(RegExp(r'[\.\-_/:\*#@~]+$'), '').trim();
-          dishName = dishName.replaceAll(RegExp(r'^[\.\-_/:\*#@~]+'), '').trim();
-          if (_isValidDishName(dishName)) {
-            items.add(ExtractedMenuItem(
-              dishName: dishName,
-              priceInPaise: price * 100,
-              category: currentCategory,
-            ));
-            continue;
-          }
+      final name = _cleanName(line.text);
+      if (!ExtractedMenuItem.isRealDishName(name)) continue;
+
+      // Case 2: the price lives in its own column. Find the unused price cell
+      // whose vertical span overlaps this row, preferring one to the right.
+      int? bestIndex;
+      double bestScore = double.infinity;
+      for (final entry in priceCells.entries) {
+        if (used.contains(entry.key)) continue;
+        final cell = lines[entry.key];
+        if (_rowOverlap(line.box, cell.box) < 0.35) continue;
+        // A price printed to the LEFT of the dish name is a different column
+        // of a different table; only consider cells that start at or after the
+        // name's left edge.
+        if (cell.box.left < line.box.left) continue;
+        final score = (cell.centerY - line.centerY).abs();
+        if (score < bestScore) {
+          bestScore = score;
+          bestIndex = entry.key;
         }
       }
 
-      // Check 2: Dish name on line i and standalone price on line i+1 (multi-column)
-      if (i + 1 < lines.length) {
-        final nextLine = lines[i + 1].trim();
-        final standalonePrice = RegExp(r'^(?:₹|Rs\.?|INR)?\s*(\d{2,4})\s*(?:/[-–—]?|/-)?\s*$', caseSensitive: false).firstMatch(nextLine);
-        if (standalonePrice != null && line.length >= 3 && !priceEndRegex.hasMatch(line)) {
-          final price = int.tryParse(standalonePrice.group(1)!) ?? 0;
-          if (price >= 10 && price <= 5000) {
-            String dishName = line.replaceFirst(RegExp(r'^\d+[\.\)\-\s]\s*'), '').trim();
-            dishName = dishName.replaceAll(RegExp(r'[\.\-_/:\*#@~]+$'), '').trim();
-            dishName = dishName.replaceAll(RegExp(r'^[\.\-_/:\*#@~]+'), '').trim();
-            if (_isValidDishName(dishName)) {
-              items.add(ExtractedMenuItem(
-                dishName: dishName,
-                priceInPaise: price * 100,
-                category: currentCategory,
-              ));
-              i++; // skip next line as it was consumed as price
-              continue;
-            }
-          }
-        }
+      // Case 3: single-column card — the very next line is the price.
+      if (bestIndex == null &&
+          i + 1 < lines.length &&
+          priceCells.containsKey(i + 1) &&
+          !used.contains(i + 1)) {
+        bestIndex = i + 1;
       }
+
+      if (bestIndex == null) continue;
+
+      used.add(bestIndex);
+      items.add(ExtractedMenuItem(
+        dishName: name,
+        priceInPaise: priceCells[bestIndex]! * 100,
+        category: categoryAt(i),
+      ));
     }
 
     return items;
   }
 
-  static bool _isValidDishName(String name) {
-    final clean = name.trim().toLowerCase();
-    if (clean.length < 2) return false;
-    // Reject if composed purely of digits, spaces, and punctuation (e.g. "360/-|", "120", "---")
-    if (RegExp(r'^[\d\s\.\-_/:\*#@~|₹,;()]+$').hasMatch(clean)) return false;
-    // Blacklisted column header and metadata words
-    const blacklisted = {
-      'rate', 'item', 'items', 'price', 'rate/-', 'mrp', 'sr', 'no', 'sr.',
-      'dish', 'name', 'menu', 'half', 'full', 'qty', 'amount', 'total', 's.no'
-    };
-    if (blacklisted.contains(clean)) return false;
-    return true;
+  /// How much two rows overlap vertically, as a fraction of the shorter one.
+  static double _rowOverlap(Rect a, Rect b) {
+    final top = a.top > b.top ? a.top : b.top;
+    final bottom = a.bottom < b.bottom ? a.bottom : b.bottom;
+    final overlap = bottom - top;
+    if (overlap <= 0) return 0;
+    final shorter = a.height < b.height ? a.height : b.height;
+    return shorter <= 0 ? 0 : overlap / shorter;
+  }
+
+  /// Strips serial numbers and leading/trailing punctuation an OCR pass leaves
+  /// behind, using the same rules the cloud path applies.
+  static String _cleanName(String raw) {
+    var name = ExtractedMenuItem.cleanDishName(raw);
+    name = name.replaceAll(RegExp(r'[.\-_/:*#~|]+$'), '').trim();
+    name = name.replaceAll(RegExp(r'^[.\-_/:*#~|]+'), '').trim();
+    return name;
   }
 
   /// Intelligent retail invoice line parser
@@ -373,5 +553,7 @@ class MlKitOcrService {
 
   void dispose() {
     _textRecognizer.close();
+    _devanagariRecognizer?.close();
+    _devanagariRecognizer = null;
   }
 }

@@ -4,11 +4,9 @@ import 'dart:io';
 import 'dart:typed_data';
 import 'package:intl/intl.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../core/utils/money_formatter.dart';
 import 'inventory_inward_service.dart';
-import 'remote_config_service.dart';
 
 class ExtractedBillItem {
   String productName;
@@ -168,9 +166,48 @@ class ExtractedMenuItem {
     this.category = 'General',
   });
 
+  /// Header words and stray price cells that an OCR pass turns into "dishes".
+  ///
+  /// The server applies the same guard, and this is the second line: a merchant
+  /// on an older build, or the offline ML Kit fallback, can still hand this
+  /// parser a row named "Rate" or "360/-". Kept in the model rather than the UI
+  /// so every path that builds a dish gets it.
+  static const Set<String> _nonDishWords = {
+    'rate', 'rates', 'item', 'items', 'price', 'prices', 'mrp', 'amount',
+    'qty', 'quantity', 'total', 'subtotal', 'sub total', 'grand total',
+    'sr', 'sr no', 's no', 'sno', 'no', 'serial', 'serial no',
+    'dish', 'dishes', 'name', 'menu', 'veg', 'non veg', 'nonveg',
+    'half', 'full', 'plate', 'new', 'special', 'category', 'description',
+    'particulars', 'hsn', 'gst', 'our menu', 'food menu', 'price list',
+    'rate list', 'rate card',
+  };
+
+  /// True when [name] is a real dish rather than table furniture.
+  ///
+  /// Unicode-aware on purpose: "मटन कसा" and "பன்னீர்" are dishes, and a
+  /// `[a-z]` test would have thrown away every non-Latin menu in the country.
+  static bool isRealDishName(String name) {
+    final trimmed = name.trim();
+    if (trimmed.length < 2) return false;
+    if (!RegExp(r'\p{L}', unicode: true).hasMatch(trimmed)) return false;
+    final key = trimmed
+        .toLowerCase()
+        .replaceAll(RegExp(r'[^\p{L}\p{N}]+', unicode: true), ' ')
+        .trim();
+    return key.isNotEmpty && !_nonDishWords.contains(key);
+  }
+
+  /// Strips the serial number a printed menu puts before each row, so
+  /// "21.Chicken Hydrabadi(5pcs)" becomes "Chicken Hydrabadi(5pcs)".
+  static String cleanDishName(String raw) {
+    var name = raw.trim();
+    name = name.replaceFirst(RegExp(r'^[\d#]+\s*[.)\-:\s]+\s*'), '');
+    name = name.replaceAll(RegExp(r'\s{2,}'), ' ');
+    return name.trim();
+  }
+
   factory ExtractedMenuItem.fromJson(Map<String, dynamic> json) {
-    // A value already denominated in paise (the 'price_paise' field Gemini is
-    // asked to return) — no fractional part is meaningful here.
+    // A value already denominated in paise — no fractional part is meaningful.
     int parseAlreadyPaise(dynamic val) {
       if (val == null) return 0;
       if (val is int) return val;
@@ -182,17 +219,44 @@ class ExtractedMenuItem {
       return 0;
     }
 
+    // Accept BOTH response shapes.
+    //
+    // The server's normalizer emits menu keys (dish_name/price_paise/category)
+    // and bill keys (product_name/selling_price_paise/category_name) on every
+    // item. It did not always: it sent only the bill keys while this parser
+    // read only the menu keys, so a menu Gemini had read perfectly — the
+    // function logged "17 item(s)" — arrived here as seventeen rows of
+    // "Menu Item" at ₹0.00, and the sheet fell back to offline OCR junk.
+    // Reading every spelling means neither side can break the other again.
+    final rawName = (json['dish_name'] ??
+            json['product_name'] ??
+            json['name'] ??
+            json['item_name'] ??
+            json['item'] ??
+            '')
+        .toString();
+
+    final paise = parseAlreadyPaise(json['price_paise']) != 0
+        ? parseAlreadyPaise(json['price_paise'])
+        : parseAlreadyPaise(json['selling_price_paise']) != 0
+            ? parseAlreadyPaise(json['selling_price_paise'])
+            : parseAlreadyPaise(json['mrp_paise']) != 0
+                ? parseAlreadyPaise(json['mrp_paise'])
+                // A bare 'price'/'rate' field is in rupees (e.g. 180.50) — use
+                // the same tested rupee→paise conversion the rest of the app
+                // relies on (money_formatter.dart, covered by
+                // money_math_test.dart) rather than rounding to whole rupees
+                // first, which would silently drop the paise.
+                : MoneyFormatter.parseRupeesToPaise(
+                    (json['price'] ?? json['rate'] ?? '0').toString());
+
+    final cleaned = cleanDishName(rawName);
+
     return ExtractedMenuItem(
-      dishName: (json['dish_name'] ?? json['name'] ?? 'Menu Item').toString(),
-      priceInPaise: json['price_paise'] != null
-          ? parseAlreadyPaise(json['price_paise'])
-          // Fallback 'price' field is in rupees (e.g. 180.50) — use the same
-          // tested rupee→paise conversion the rest of the app relies on
-          // (money_formatter.dart, covered by money_math_test.dart), rather
-          // than rounding the rupee value to a whole number before scaling it
-          // up, which would silently drop the paise.
-          : MoneyFormatter.parseRupeesToPaise(json['price']?.toString() ?? '0'),
-      category: (json['category'] ?? 'General').toString(),
+      dishName: cleaned.isEmpty ? 'Menu Item' : cleaned,
+      priceInPaise: paise,
+      category:
+          (json['category'] ?? json['category_name'] ?? 'General').toString(),
     );
   }
 }
@@ -212,8 +276,11 @@ class MenuScanResult {
 }
 
 class GeminiAiService {
-  static const String _prefKeyCustomApiKey = 'custom_gemini_api_key';
-  static const int freeMonthlyPictureScanLimit = 10;
+  /// Daily allowances, mirroring FREE_DAILY_IMAGE_SCANS / PRO_DAILY_IMAGE_SCANS
+  /// in `functions/ai_extract_core.js`. The server is the authority; these are
+  /// only for wording the UI before a request is made.
+  static const int freeDailyPictureScanLimit = 10;
+  static const int proDailyPictureScanLimit = 100;
 
   /// Whole-request budget for one Gemini call.
   ///
@@ -225,100 +292,83 @@ class GeminiAiService {
   /// a modal with no way out. That is the "gets stuck" failure this bounds.
   static const Duration requestTimeout = Duration(seconds: 45);
 
-  // The model list now lives in `functions/index.js` (AI_MODELS), not here.
-  // Google has already retired models under this app once — 1.5-flash started
-  // returning 404 and every installed copy broke until a Play Store release
-  // reached each merchant. On the server it is a redeploy.
+  // The model list now lives in `functions/ai_extract_core.js` (DEFAULT_AI_MODELS),
+  // not here. Google has already retired models under this app once — 1.5-flash
+  // started returning 404 and every installed copy broke until a Play Store
+  // release reached each merchant. On the server it is a redeploy.
 
-  /// Get effective API key from Firestore global_config, Remote Config, cached key, or environment
-  static Future<String> getEffectiveApiKey() async {
-    final prefs = await SharedPreferences.getInstance();
-
-    // 1. Cached key from Firestore platform_settings/global_config
-    final cached = prefs.getString('cached_gemini_api_key')?.trim() ?? '';
-    if (cached.isNotEmpty) return cached;
-
-    // 2. Custom override / Admin provided
-    final custom = prefs.getString(_prefKeyCustomApiKey)?.trim() ?? '';
-    if (custom.isNotEmpty) return custom;
-
-    // 3. Remote Config Service
-    final remoteKey = RemoteConfigService.instance.geminiApiKey.trim();
-    if (remoteKey.isNotEmpty) return remoteKey;
-
-    // 4. Live fetch from Firestore platform_settings/global_config
+  /// Deletes any Gemini API key an older build left in app storage.
+  ///
+  /// Until this release the app pulled `gemini_api_key` out of Firestore and
+  /// wrote it to SharedPreferences, so the project's key sat in plaintext in
+  /// every merchant's app data and could be lifted off the device to spend this
+  /// project's quota and billing. Extraction moved server-side, but the copies
+  /// already written stayed where they were — nothing removes a preference key
+  /// just because the code that wrote it is gone. Called once on startup.
+  ///
+  /// The key-handling methods that used to live here (getEffectiveApiKey,
+  /// setCustomApiKey, testApiKey) are gone with it; their only caller was a
+  /// dialog asking merchants to supply a key, which the app's own invariants
+  /// forbid, and which nothing had linked to for some time.
+  static Future<void> purgeAnyCachedApiKey() async {
     try {
-      final doc = await FirebaseFirestore.instance.collection('platform_settings').doc('global_config').get();
-      if (doc.exists) {
-        final k = doc.data()?['gemini_api_key']?.toString().trim() ?? '';
-        if (k.isNotEmpty) {
-          await prefs.setString('cached_gemini_api_key', k);
-          return k;
-        }
-      }
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove('cached_gemini_api_key');
+      await prefs.remove('custom_gemini_api_key');
     } catch (_) {}
-
-    const fromEnv = String.fromEnvironment('GEMINI_API_KEY');
-    if (fromEnv.isNotEmpty) return fromEnv;
-
-    return '';
   }
 
-  /// Save custom Google AI Studio API key provided by merchant
-  static Future<void> setCustomApiKey(String key) async {
+  /// Local mirror of the server's daily bucket, for display only.
+  ///
+  /// The server is what enforces the limit (per business, keyed to the IST
+  /// day), so this counter drifting or being cleared changes nothing about
+  /// what a merchant can actually do — it exists so the sheet can say
+  /// "N scans left today" without a round trip before the user has even
+  /// picked a photo.
+  static String _getCurrentDayKey() {
+    return 'ai_picture_scan_count_${DateFormat('yyyy_MM_dd').format(DateTime.now())}';
+  }
+
+  /// Scans used today, as far as this device knows.
+  static Future<int> getTodayScanCount() async {
     final prefs = await SharedPreferences.getInstance();
-    if (key.trim().isEmpty) {
-      await prefs.remove(_prefKeyCustomApiKey);
-    } else {
-      await prefs.setString(_prefKeyCustomApiKey, key.trim());
-    }
+    return prefs.getInt(_getCurrentDayKey()) ?? 0;
   }
 
-  /// Tests if an API key is valid by making a lightweight request to Google AI Studio
-  static Future<bool> testApiKey(String key) async {
-    final trimmed = key.trim();
-    if (trimmed.isEmpty) return false;
-    try {
-      final client = HttpClient();
-      client.connectionTimeout = const Duration(seconds: 8);
-      final isBearer = trimmed.startsWith('AQ.') || trimmed.startsWith('ya29.');
-      final uri = isBearer
-          ? Uri.parse('https://generativelanguage.googleapis.com/v1beta/models')
-          : Uri.parse('https://generativelanguage.googleapis.com/v1beta/models?key=$trimmed');
-      final req = await client.getUrl(uri);
-      if (isBearer) {
-        req.headers.set(HttpHeaders.authorizationHeader, 'Bearer $trimmed');
-      } else {
-        req.headers.set('x-goog-api-key', trimmed);
-      }
-      final res = await req.close().timeout(const Duration(seconds: 10));
-      client.close(force: true);
-      return res.statusCode == 200;
-    } catch (_) {
-      return false;
-    }
-  }
-
-  static String _getCurrentMonthKey() {
-    return 'ai_picture_scan_count_${DateFormat('yyyy_MM').format(DateTime.now())}';
-  }
-
-  static Future<int> getMonthlyScanCount() async {
+  /// Last daily allowance the server reported, so the UI can show the right
+  /// number for a Pro merchant (100) rather than the free one (10).
+  static Future<int> getDailyLimit() async {
     final prefs = await SharedPreferences.getInstance();
-    return prefs.getInt(_getCurrentMonthKey()) ?? 0;
+    final stored = prefs.getInt('ai_daily_scan_limit') ?? 0;
+    return stored > 0 ? stored : freeDailyPictureScanLimit;
   }
 
-  static Future<int> getRemainingFreeScans() async {
-    final count = await getMonthlyScanCount();
-    final remaining = freeMonthlyPictureScanLimit - count;
+  static Future<int> getRemainingScansToday() async {
+    final count = await getTodayScanCount();
+    final limit = await getDailyLimit();
+    final remaining = limit - count;
     return remaining < 0 ? 0 : remaining;
   }
 
   static Future<void> incrementScanCount() async {
     final prefs = await SharedPreferences.getInstance();
-    final key = _getCurrentMonthKey();
+    final key = _getCurrentDayKey();
     final current = prefs.getInt(key) ?? 0;
     await prefs.setInt(key, current + 1);
+  }
+
+  /// Syncs the local mirror to whatever the server just reported, so a merchant
+  /// who scanned on another device — or whose local count drifted — sees the
+  /// truth rather than a stale number.
+  static Future<void> _recordServerQuota(Map<String, dynamic>? quota) async {
+    if (quota == null) return;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final used = (quota['used'] as num?)?.toInt();
+      final limit = (quota['limit'] as num?)?.toInt();
+      if (used != null) await prefs.setInt(_getCurrentDayKey(), used);
+      if (limit != null && limit > 0) await prefs.setInt('ai_daily_scan_limit', limit);
+    } catch (_) {}
   }
 
   /// Extracts structured inward items from bill parcha photo or PDF using Gemini Vision API
@@ -451,6 +501,7 @@ class GeminiAiService {
     if (mimeType.startsWith('image/')) {
       await incrementScanCount();
     }
+    await _recordServerQuota(body['quota'] as Map<String, dynamic>?);
 
     return AiInwardResult(
       success: true,
@@ -506,6 +557,11 @@ class GeminiAiService {
     final items = itemsJson
         .whereType<Map<String, dynamic>>()
         .map(ExtractedMenuItem.fromJson)
+        // A row with no price or a table-header name is not a dish the merchant
+        // can review — showing "Rate ₹0.00" is worse than showing nothing,
+        // because it looks like a real reading of their menu.
+        .where((d) =>
+            d.priceInPaise > 0 && ExtractedMenuItem.isRealDishName(d.dishName))
         .toList();
 
     if (items.isEmpty) {
@@ -519,6 +575,7 @@ class GeminiAiService {
     if (mimeType.startsWith('image/')) {
       await incrementScanCount();
     }
+    await _recordServerQuota(body['quota'] as Map<String, dynamic>?);
 
     return MenuScanResult(success: true, items: items);
   }

@@ -101,25 +101,66 @@ class ShareTargetService {
           }
         }
       } else {
-        final result = await MlKitOcrService.instance.scanBillImage(filePath);
+        // Cloud AI first, on-device OCR only if it cannot answer.
+        //
+        // This branch used to go straight to ML Kit, so a bill photo shared in
+        // from WhatsApp — one of the three ways into AI inward — never touched
+        // the AI at all. The merchant got the line-reader's guesses from a
+        // feature the app calls "AI", with no indication the AI had been
+        // skipped. Same order as AiInwardSheet and MenuScanSheet now use.
+        final bytes = await file.readAsBytes();
+        final ai = await GeminiAiService.extractItemsFromImage(
+          bytes,
+          mimeType: _mimeTypeFor(filePath),
+        );
+
+        var items = ai.items;
+        var supplierName = ai.supplierName;
+        var billNumber = ai.billNumber;
+        var billDate = ai.billDate;
+        var usedOffline = false;
+
+        if (items.isEmpty) {
+          try {
+            final offline = await MlKitOcrService.instance.scanBillImage(filePath);
+            if (offline.items.isNotEmpty) {
+              items = offline.items;
+              supplierName = offline.supplierName;
+              billNumber = offline.billNumber;
+              billDate = offline.billDate;
+              usedOffline = true;
+            }
+          } catch (_) {}
+        }
+
         if (context.mounted) {
           Navigator.of(context, rootNavigator: true).pop(); // dismiss loading
         }
 
         if (context.mounted) {
-          if (result.items.isNotEmpty) {
+          if (items.isNotEmpty) {
+            if (usedOffline) {
+              InAppNotification.show(
+                context: context,
+                message: 'AI unreachable — read ${items.length} items on your phone instead. Please check each line.',
+                type: NotificationType.warning,
+                duration: const Duration(seconds: 5),
+              );
+            }
             BillScanReviewSheet.show(
               context,
-              items: result.items,
-              supplierName: result.supplierName,
-              billNumber: result.billNumber,
-              billDate: result.billDate,
+              items: items,
+              supplierName: supplierName,
+              billNumber: billNumber,
+              billDate: billDate,
             );
           } else {
             InAppNotification.show(
               context: context,
-              message: 'Bill image received, but no product lines could be recognized.',
+              message: ai.errorMessage ??
+                  'Bill image received, but no product lines could be recognized.',
               type: NotificationType.warning,
+              duration: const Duration(seconds: 5),
             );
           }
         }
@@ -130,5 +171,16 @@ class ShareTargetService {
         InAppNotification.error('Failed to parse bill: $e', context: context);
       }
     }
+  }
+
+  /// A shared file arrives as a path, not a picked image, so the MIME type has
+  /// to come from the extension. Sending a PNG labelled image/jpeg is rejected
+  /// by the vision API outright.
+  static String _mimeTypeFor(String path) {
+    final lower = path.toLowerCase();
+    if (lower.endsWith('.png')) return 'image/png';
+    if (lower.endsWith('.webp')) return 'image/webp';
+    if (lower.endsWith('.heic') || lower.endsWith('.heif')) return 'image/heic';
+    return 'image/jpeg';
   }
 }

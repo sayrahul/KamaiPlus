@@ -721,6 +721,12 @@ class _HomePulseTabState extends State<HomePulseTab> with DataBusRefresh<HomePul
             title: 'Tally Counter',
             subtitle: 'Notes & Coins Calc',
             onTap: () {
+              // The modal loads and saves today's draft itself, so counting
+              // from the Home tab now persists exactly like counting from the
+              // Cash Register screen. This entry point used to pass neither an
+              // initial count nor an onSaved callback, so a count started here
+              // was discarded on close while looking identical to one that
+              // would be kept.
               DenominationTallyModal.show(
                 context,
                 expectedCashPaise: _cashInHandPaise,

@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import '../../services/biometric_service.dart';
+import '../../services/owner_pin_service.dart';
 import 'in_app_notification.dart';
 
 class OwnerPrivacyModal extends StatefulWidget {
@@ -29,10 +29,21 @@ class _OwnerPrivacyModalState extends State<OwnerPrivacyModal> {
   bool _isChangingPin = false;
   bool _isBiometricSupported = false;
 
+  /// Whether this shop is still on the factory PIN. Telling an owner who has
+  /// set their own PIN that "the default is 1234" is both useless to them and
+  /// an advertisement to whoever else is holding the phone.
+  bool _isOnDefaultPin = true;
+
   @override
   void initState() {
     super.initState();
     _initBiometric();
+    _checkDefaultPin();
+  }
+
+  Future<void> _checkDefaultPin() async {
+    final onDefault = await OwnerPinService.instance.isUsingDefaultPin();
+    if (mounted) setState(() => _isOnDefaultPin = onDefault);
   }
 
   Future<void> _initBiometric() async {
@@ -67,24 +78,17 @@ class _OwnerPrivacyModalState extends State<OwnerPrivacyModal> {
   String _newPinInput = '';
   String _confirmPinInput = '';
 
-  static const String _defaultPin = '1234';
-  static const String _pinPrefKey = 'owner_cashier_pin';
+  // The PIN itself now lives in OwnerPinService, so this modal and the
+  // sales-return flow cannot drift apart again — they used to, and the return
+  // flow was the one still accepting the factory default.
+  Future<String> _getSavedPin() => OwnerPinService.instance.getPin();
 
-  Future<String> _getSavedPin() async {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getString(_pinPrefKey) ?? _defaultPin;
-  }
-
-  Future<void> _saveNewPin(String pin) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_pinPrefKey, pin);
-  }
+  Future<void> _saveNewPin(String pin) => OwnerPinService.instance.setPin(pin);
 
   Future<void> _verifyPin() async {
     setState(() => _errorMessage = '');
-    final savedPin = await _getSavedPin();
 
-    if (_pin == savedPin) {
+    if (await OwnerPinService.instance.verify(_pin)) {
       if (!mounted) return;
       Navigator.of(context).pop();
       widget.onUnlocked();
@@ -96,7 +100,9 @@ class _OwnerPrivacyModalState extends State<OwnerPrivacyModal> {
       );
     } else {
       setState(() {
-        _errorMessage = 'Incorrect 4-digit PIN. (Default is 1234)';
+        _errorMessage = _isOnDefaultPin
+            ? 'Incorrect PIN. This shop is still on the default: 1234'
+            : 'Incorrect 4-digit PIN.';
         _pin = '';
       });
     }
@@ -353,7 +359,9 @@ class _OwnerPrivacyModalState extends State<OwnerPrivacyModal> {
         ),
         const SizedBox(height: 6),
         Text(
-          'Default PIN is 1234',
+          _isOnDefaultPin
+              ? 'Default PIN is 1234 — change it below'
+              : 'Same PIN is used for sales returns',
           style: GoogleFonts.robotoMono(
             fontSize: 11,
             color: const Color(0xFF94A3B8),

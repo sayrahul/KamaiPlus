@@ -90,4 +90,13 @@ flutter {
 
 dependencies {
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")
+
+    // Offline Devanagari OCR for the AI-scan fallback.
+    //
+    // google_mlkit_text_recognition only pulls in the Latin model, so a menu
+    // card or parcha printed in Hindi or Marathi produced zero items whenever
+    // the cloud scan could not be reached — which is exactly when a merchant
+    // on a weak connection needs the fallback. The cloud path reads every
+    // Indian language already; this is what happens when it cannot be called.
+    implementation("com.google.mlkit:text-recognition-devanagari:16.0.1")
 }

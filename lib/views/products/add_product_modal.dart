@@ -431,7 +431,14 @@ class _AddProductModalState extends State<AddProductModal> {
         businessType: activeType,
       );
       if (cloudItem != null && mounted) {
-        await _applyMasterData(cloudItem, source: 'Indian Barcode Cloud');
+        // An AI-derived name is a recollection, not a database fact. Saying so
+        // is the difference between the merchant glancing at it and the
+        // merchant checking it against the pack in their hand.
+        final isGuess = CloudBarcodeResolverService.instance.wasAiGuess(barcode);
+        await _applyMasterData(
+          cloudItem,
+          source: isGuess ? 'AI Guess' : 'Indian Barcode Cloud',
+        );
         return;
       }
 
@@ -464,11 +471,20 @@ class _AddProductModalState extends State<AddProductModal> {
     });
 
     if (mounted) {
+      final isGuess = source == 'AI Guess';
       InAppNotification.show(
         context: context,
-        message: 'Auto-filled ($source): ${master.name} • Unit: ${_selectedUnit.toUpperCase()}',
-        customIcon: source == 'Master Catalog' ? Icons.bolt_rounded : Icons.cloud_done_rounded,
-        customColor: source == 'Master Catalog' ? Colors.amber : Colors.cyanAccent,
+        message: isGuess
+            ? 'AI guess — please check the name against the pack: ${master.name}'
+            : 'Auto-filled ($source): ${master.name} • Unit: ${_selectedUnit.toUpperCase()}',
+        type: isGuess ? NotificationType.warning : NotificationType.info,
+        duration: Duration(seconds: isGuess ? 6 : 3),
+        customIcon: isGuess
+            ? Icons.auto_awesome_rounded
+            : (source == 'Master Catalog' ? Icons.bolt_rounded : Icons.cloud_done_rounded),
+        customColor: isGuess
+            ? const Color(0xFFD97706)
+            : (source == 'Master Catalog' ? Colors.amber : Colors.cyanAccent),
       );
     }
   }

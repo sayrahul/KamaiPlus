@@ -39,16 +39,27 @@ class MenuItemReviewSheet extends StatefulWidget {
   final List<ExtractedMenuItem> initialItems;
   final VoidCallback? onMenuAddComplete;
 
+  /// True when these rows came from the on-device OCR fallback rather than the
+  /// cloud scan.
+  ///
+  /// The two are not equally trustworthy and the merchant cannot tell them
+  /// apart from the rows alone — an offline read of a two-column card is how
+  /// "Rate ₹320" and "360/- ₹380" reached this screen looking like dishes. A
+  /// toast that had already faded was the only thing distinguishing them.
+  final bool isOfflineScan;
+
   const MenuItemReviewSheet({
     super.key,
     required this.initialItems,
     this.onMenuAddComplete,
+    this.isOfflineScan = false,
   });
 
   static Future<void> show(
     BuildContext context, {
     required List<ExtractedMenuItem> initialItems,
     VoidCallback? onMenuAddComplete,
+    bool isOfflineScan = false,
   }) {
     return showModalBottomSheet(
       context: context,
@@ -57,6 +68,7 @@ class MenuItemReviewSheet extends StatefulWidget {
       builder: (ctx) => MenuItemReviewSheet(
         initialItems: initialItems,
         onMenuAddComplete: onMenuAddComplete,
+        isOfflineScan: isOfflineScan,
       ),
     );
   }
@@ -296,6 +308,36 @@ class _MenuItemReviewSheetState extends State<MenuItemReviewSheet> {
                         'Check names & prices before adding to your menu. Nothing is saved yet.',
                         style: GoogleFonts.inter(fontSize: 11.5, color: const Color(0xFF64748B)),
                       ),
+                      if (widget.isOfflineScan) ...[
+                        const SizedBox(height: 10),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFFFFBEB),
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(color: const Color(0xFFFDE68A)),
+                          ),
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Icon(Icons.wifi_off_rounded, size: 15, color: Color(0xFFD97706)),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  'Offline scan — AI could not be reached, so this was read on your '
+                                  'phone. Please check every name and price carefully.',
+                                  style: GoogleFonts.inter(
+                                    fontSize: 11,
+                                    height: 1.35,
+                                    color: const Color(0xFF92400E),
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
                     ],
                   ),
                 ),

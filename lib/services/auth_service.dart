@@ -100,11 +100,16 @@ class AuthService {
     try {
       await initGoogleSignIn();
       final googleUser = await GoogleSignIn.instance.attemptLightweightAuthentication();
-      if (googleUser != null) {
-        final GoogleSignInAuthentication googleAuth = googleUser.authentication;
-        final credential = GoogleAuthProvider.credential(
-          idToken: googleAuth.idToken,
-        );
+      final idToken = googleUser?.authentication.idToken;
+
+      // A lightweight re-auth can hand back an account with no ID token (a
+      // stale Credential Manager entry, Play Services mid-update). Building a
+      // credential from a null token throws inside signInWithCredential, which
+      // used to surface as a bare "silent sign-in skipped" while the merchant
+      // sat on the splash screen. The existing Firebase session is still good,
+      // so fall through to it.
+      if (idToken != null && idToken.isNotEmpty) {
+        final credential = GoogleAuthProvider.credential(idToken: idToken);
         final userCredential = await _auth.signInWithCredential(credential);
         return userCredential.user;
       }
@@ -118,7 +123,15 @@ class AuthService {
   /// Sign out from Firebase Auth & Google OAuth, clear session and reset database
   Future<void> signOut() async {
     try {
-      await GoogleSignIn.instance.disconnect();
+      // signOut, NOT disconnect.
+      //
+      // disconnect() revokes the app's OAuth grant entirely, so the next login
+      // had to re-run the full consent screen — and on Android Credential
+      // Manager, an account revoked and immediately re-authenticated is exactly
+      // where authenticate() starts failing. That is the intermittent
+      // "sometimes login does not work" after a logout. Revoking access is a
+      // "remove my account" action, not what ordinary sign-out means.
+      await GoogleSignIn.instance.signOut();
     } catch (_) {}
     try {
       await _auth.signOut();

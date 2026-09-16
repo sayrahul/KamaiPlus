@@ -202,8 +202,49 @@ class _LoginScreenState extends State<LoginScreen> {
     } catch (e) {
       if (!mounted) return;
       setState(() => _isLoading = false);
-      InAppNotification.error('Google Sign-In: $e', context: context);
+      InAppNotification.show(
+        context: context,
+        message: _loginErrorMessage(e),
+        type: NotificationType.error,
+        duration: const Duration(seconds: 6),
+      );
     }
+  }
+
+  /// Turns a sign-in failure into something a shop owner can act on.
+  ///
+  /// This used to print the raw exception — "Exception: Google Sign-In error:
+  /// null" — which tells a merchant nothing about whether to check their
+  /// internet, update Play Services, or call support. The underlying causes are
+  /// few and each has a different remedy, so they are worth naming.
+  String _loginErrorMessage(Object e) {
+    final raw = e.toString().toLowerCase();
+
+    if (raw.contains('network') ||
+        raw.contains('socket') ||
+        raw.contains('timeout') ||
+        raw.contains('unreachable') ||
+        raw.contains('host lookup')) {
+      return 'No internet connection. Please check your network and try again.';
+    }
+    if (raw.contains('no id token') || raw.contains('play services')) {
+      return 'Google Play Services needs an update on this phone. Update it from the Play Store, then sign in again.';
+    }
+    if (raw.contains('canceled') || raw.contains('cancelled')) {
+      return 'Sign-in was cancelled. Tap "Continue with Google" to try again.';
+    }
+    if (raw.contains('no_credential') ||
+        raw.contains('no credential') ||
+        raw.contains('credential manager')) {
+      return 'No Google account found on this phone. Add your Google account in Settings, then sign in again.';
+    }
+    if (raw.contains('account-exists') || raw.contains('credential-already-in-use')) {
+      return 'This email is already linked to another sign-in method. Please contact support.';
+    }
+    if (raw.contains('too-many-requests')) {
+      return 'Too many attempts. Please wait a minute and try again.';
+    }
+    return 'Could not sign in with Google. Please check your internet and try again. If it keeps failing, contact support.';
   }
 
 

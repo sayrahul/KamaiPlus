@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../common/in_app_notification.dart';
+import '../../services/cash_tally_draft_service.dart';
 import 'package:uuid/uuid.dart';
 import '../../core/database/local_database.dart';
 import '../../core/state/app_data_bus.dart';
@@ -60,6 +61,25 @@ class _CashRegisterScreenState extends State<CashRegisterScreen> with DataBusRef
   void initState() {
     super.initState();
     _loadPersistedSettingsAndData();
+    _restoreCashTallyDraft();
+  }
+
+  /// Brings back today's confirmed denomination count.
+  ///
+  /// `_denominations` is plain in-memory state, so a count the merchant had
+  /// carefully confirmed reverted to all-zero the moment this screen was
+  /// disposed — and counting a full drawer is the slowest careful thing they
+  /// do all day.
+  Future<void> _restoreCashTallyDraft() async {
+    final draft = await CashTallyDraftService.instance.load();
+    if (draft == null || !mounted) return;
+    setState(() {
+      for (final entry in draft.denominations.entries) {
+        if (_denominations.containsKey(entry.key)) {
+          _denominations[entry.key] = entry.value;
+        }
+      }
+    });
   }
 
   Future<void> _loadPersistedSettingsAndData() async {
@@ -551,6 +571,8 @@ class _CashRegisterScreenState extends State<CashRegisterScreen> with DataBusRef
       expectedCashPaise: _expectedCashPaise,
       initialDenominations: _denominations,
       onSaved: (denoms, totalPaise) {
+        // The modal has already persisted this; the setState only refreshes
+        // what is on screen right now.
         setState(() {
           _denominations.clear();
           _denominations.addAll(denoms);

@@ -10,6 +10,8 @@ import '../../models/models.dart';
 import '../../services/invoice_pdf_service.dart';
 import '../../services/native_notification_service.dart';
 import '../../services/app_printer_service.dart';
+import '../../services/owner_pin_service.dart';
+import '../../services/biometric_service.dart';
 import '../common/store_logo_avatar.dart';
 import '../common/pro_upgrade_modal.dart';
 import '../common/in_app_notification.dart';
@@ -411,6 +413,11 @@ class SaleDetailModal extends StatelessWidget {
     String selectedRefundMethod = isUdhar ? 'credit' : 'cash';
     final pinController = TextEditingController();
     String? pinError;
+    // Resolved before the dialog is built: the fingerprint button only appears
+    // on a handset that actually has an enrolled biometric, rather than
+    // offering an option that fails when tapped.
+    final bool biometricAvailable = await BiometricService.instance.isBiometricAvailable();
+    bool verifiedByBiometric = false;
 
     if (!context.mounted) return;
     showDialog(
@@ -609,9 +616,49 @@ class SaleDetailModal extends StatelessWidget {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  '🔒 Default PIN: 1234 • Action will be logged to Audit Trail',
-                  style: GoogleFonts.inter(fontSize: 10.5, color: const Color(0xFF64748B)),
+                  verifiedByBiometric
+                      ? '✅ Fingerprint verified • Action will be logged to Audit Trail'
+                      : '🔒 Owner PIN (same as the one behind the eye button) • Action will be logged to Audit Trail',
+                  style: GoogleFonts.inter(
+                    fontSize: 10.5,
+                    color: verifiedByBiometric ? const Color(0xFF16A34A) : const Color(0xFF64748B),
+                    fontWeight: verifiedByBiometric ? FontWeight.w700 : FontWeight.w400,
+                  ),
                 ),
+                if (biometricAvailable && !verifiedByBiometric) ...[
+                  const SizedBox(height: 10),
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton.icon(
+                      onPressed: () async {
+                        final ok = await BiometricService.instance.authenticateOwner(
+                          reason: 'Confirm this return with your fingerprint',
+                        );
+                        if (ok) {
+                          HapticFeedback.mediumImpact();
+                          setDialogState(() {
+                            verifiedByBiometric = true;
+                            pinError = null;
+                          });
+                        }
+                      },
+                      icon: const Icon(Icons.fingerprint_rounded, size: 20, color: Color(0xFF0F172A)),
+                      label: Text(
+                        'Use Fingerprint Instead',
+                        style: GoogleFonts.plusJakartaSans(
+                          fontSize: 12.5,
+                          fontWeight: FontWeight.w800,
+                          color: const Color(0xFF0F172A),
+                        ),
+                      ),
+                      style: OutlinedButton.styleFrom(
+                        side: const BorderSide(color: Color(0xFFCBD5E1)),
+                        padding: const EdgeInsets.symmetric(vertical: 11),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      ),
+                    ),
+                  ),
+                ],
               ],
             ),
           ),
@@ -623,15 +670,22 @@ class SaleDetailModal extends StatelessWidget {
             ElevatedButton.icon(
               onPressed: () async {
                 final enteredPin = pinController.text.trim();
-                if (enteredPin.length < 4) {
-                  setDialogState(() => pinError = 'Enter 4-digit PIN (Default: 1234)');
-                  HapticFeedback.heavyImpact();
-                  return;
-                }
-                if (enteredPin != '1234' && enteredPin != '0000') {
-                  setDialogState(() => pinError = 'Wrong PIN! Default Master PIN is 1234');
-                  HapticFeedback.heavyImpact();
-                  return;
+                // A fingerprint IS the owner check — do not then demand the PIN
+                // as well. Otherwise the biometric option is decoration.
+                if (!verifiedByBiometric) {
+                  if (enteredPin.length < 4) {
+                    setDialogState(() => pinError = 'Enter your 4-digit owner PIN');
+                    HapticFeedback.heavyImpact();
+                    return;
+                  }
+                  // The owner's real PIN, not a hardcoded '1234'/'0000' pair.
+                  // Those literals meant an owner who changed their PIN still
+                  // had two publicly-known codes authorising a cash refund.
+                  if (!await OwnerPinService.instance.verify(enteredPin)) {
+                    setDialogState(() => pinError = 'Wrong PIN. Use your owner PIN (the one set on the eye button).');
+                    HapticFeedback.heavyImpact();
+                    return;
+                  }
                 }
                 if (selectedRefundMethod == 'credit_note' && linkedCustomer == null) {
                   setDialogState(() => pinError = 'Please link a customer for Store Credit');
@@ -639,6 +693,9 @@ class SaleDetailModal extends StatelessWidget {
                   return;
                 }
 
+                // Verifying the PIN is now async, so the dialog could have been
+                // dismissed while we were waiting on it.
+                if (!ctx.mounted) return;
                 Navigator.pop(ctx);
                 HapticFeedback.heavyImpact();
 
@@ -648,7 +705,7 @@ class SaleDetailModal extends StatelessWidget {
                     action: 'SALES_RETURN_REFUND',
                     details: 'Invoice #${sale.invoiceNumber} returned (${sale.items.length} items). Method: $selectedRefundMethod.',
                     amountPaise: sale.totalAmountPaise,
-                    userPin: enteredPin,
+                    userPin: verifiedByBiometric ? 'BIOMETRIC' : enteredPin,
                   );
 
                   // 2. Process Sales Return
@@ -727,6 +784,8 @@ class SaleDetailModal extends StatelessWidget {
     final reasonController = TextEditingController(text: 'Customer Return');
     final pinController = TextEditingController();
     String? pinError;
+    final bool biometricAvailable = await BiometricService.instance.isBiometricAvailable();
+    bool verifiedByBiometric = false;
 
     if (!context.mounted) return;
     showModalBottomSheet(
@@ -1050,10 +1109,49 @@ class SaleDetailModal extends StatelessWidget {
                   ),
                   const SizedBox(height: 14),
                   Text(
-                    'SECURITY PIN (DEFAULT: 1234) *',
-                    style: GoogleFonts.inter(fontSize: 10.5, fontWeight: FontWeight.w800, color: const Color(0xFF475569), letterSpacing: 0.5),
+                    verifiedByBiometric ? 'OWNER VERIFIED BY FINGERPRINT' : 'OWNER PIN *',
+                    style: GoogleFonts.inter(
+                      fontSize: 10.5,
+                      fontWeight: FontWeight.w800,
+                      color: verifiedByBiometric ? const Color(0xFF16A34A) : const Color(0xFF475569),
+                      letterSpacing: 0.5,
+                    ),
                   ),
                   const SizedBox(height: 6),
+                  if (biometricAvailable && !verifiedByBiometric) ...[
+                    SizedBox(
+                      width: double.infinity,
+                      child: OutlinedButton.icon(
+                        onPressed: () async {
+                          final ok = await BiometricService.instance.authenticateOwner(
+                            reason: 'Confirm this return with your fingerprint',
+                          );
+                          if (ok) {
+                            HapticFeedback.mediumImpact();
+                            setSheetState(() {
+                              verifiedByBiometric = true;
+                              pinError = null;
+                            });
+                          }
+                        },
+                        icon: const Icon(Icons.fingerprint_rounded, size: 20, color: Color(0xFF0F172A)),
+                        label: Text(
+                          'Use Fingerprint',
+                          style: GoogleFonts.plusJakartaSans(
+                            fontSize: 12.5,
+                            fontWeight: FontWeight.w800,
+                            color: const Color(0xFF0F172A),
+                          ),
+                        ),
+                        style: OutlinedButton.styleFrom(
+                          side: const BorderSide(color: Color(0xFFCBD5E1)),
+                          padding: const EdgeInsets.symmetric(vertical: 11),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                  ],
                   TextField(
                     controller: pinController,
                     keyboardType: TextInputType.number,
@@ -1096,8 +1194,12 @@ class SaleDetailModal extends StatelessWidget {
                               ? null
                               : () async {
                                   final enteredPin = pinController.text.trim();
-                                  if (enteredPin != '1234' && enteredPin != '0000') {
-                                    setSheetState(() => pinError = 'Enter Master PIN: 1234');
+                                  // Same single owner PIN as the eye button, or
+                                  // a fingerprint in its place.
+                                  if (!verifiedByBiometric &&
+                                      !await OwnerPinService.instance.verify(enteredPin)) {
+                                    setSheetState(() => pinError =
+                                        'Wrong PIN. Use your owner PIN (the one set on the eye button).');
                                     HapticFeedback.heavyImpact();
                                     return;
                                   }
@@ -1107,6 +1209,9 @@ class SaleDetailModal extends StatelessWidget {
                                     return;
                                   }
 
+                                  // Verifying the PIN is now async, so the
+                                  // sheet could have been dismissed meanwhile.
+                                  if (!sheetCtx.mounted) return;
                                   Navigator.pop(sheetCtx);
                                   HapticFeedback.heavyImpact();
 
@@ -1142,7 +1247,7 @@ class SaleDetailModal extends StatelessWidget {
                                       returnItems: itemsToReturn,
                                       refundMethod: selectedRefundMethod,
                                       reason: reasonController.text.trim(),
-                                      userPin: enteredPin,
+                                      userPin: verifiedByBiometric ? 'BIOMETRIC' : enteredPin,
                                       customerId: linkedCustomer?.id,
                                     );
 

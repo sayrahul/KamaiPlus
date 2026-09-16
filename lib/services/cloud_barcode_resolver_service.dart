@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'package:firebase_auth/firebase_auth.dart';
 import '../core/database/local_database.dart';
 import '../models/models.dart';
 
@@ -38,12 +39,29 @@ class CloudBarcodeResolverService {
   static final CloudBarcodeResolverService instance = CloudBarcodeResolverService._();
 
   static const Duration _timeout = Duration(milliseconds: 2800);
+
+  /// The server fans out to four sources of its own, so it gets a longer
+  /// budget than a single direct lookup — but still short enough that a
+  /// cashier is never left staring at a frozen counter.
+  static const Duration _serverTimeout = Duration(seconds: 9);
   static const Duration _negativeCacheTtl = Duration(hours: 6);
 
   /// Session caches. Positive hits are also persisted to SQLite; this map
   /// just avoids even that 2ms round-trip during rapid-fire gun scanning.
   final Map<String, MasterProductModel> _memoryCache = {};
   final Map<String, DateTime> _notFoundAt = {};
+
+  /// Barcodes whose product name came from the AI tier rather than a real
+  /// product database. The UI badges these and leaves the price blank — a
+  /// database hit is a fact, this is a recollection, and a merchant who saves
+  /// a wrong name silently corrupts their own catalog for every future scan.
+  final Set<String> _aiGuessed = {};
+
+  /// Whether the last resolution for [barcode] was an AI guess.
+  bool wasAiGuess(String barcode) {
+    final clean = normalizeBarcode(barcode);
+    return clean != null && _aiGuessed.contains(clean);
+  }
 
   /// Open* Facts family — identical API shape, so one parser handles all.
   static const List<String> _factsHosts = [
@@ -102,15 +120,31 @@ class CloudBarcodeResolverService {
       return null;
     }
 
+    // A wrong check digit means a misread or a shop's own printed label.
+    // Neither is in any global repository, so the four network tiers below
+    // would all miss — after stalling the counter for several seconds.
+    if (!hasValidCheckDigit(cleanBarcode)) {
+      _notFoundAt[cleanBarcode] = DateTime.now();
+      return null;
+    }
+
     _ResolvedOnlineProduct? online;
     try {
-      // 3. Open* Facts family, all five in parallel.
-      online = await _queryFactsFamily(cleanBarcode);
+      // 3. The shared server catalog, which also fronts Open Facts, UPCitemdb
+      //    and an AI fallback. Tried before this device queries anything
+      //    itself: a barcode another merchant already resolved comes back as
+      //    one indexed read, and the AI tier reaches products no free
+      //    database indexes at all.
+      online = await _queryServerResolver(cleanBarcode, businessType: targetVertical);
 
-      // 4. UPCitemdb — general merchandise the Facts family does not index.
+      // 4. Open* Facts family, all five in parallel. Still here as a direct
+      //    fallback for when the server cannot be reached.
+      online ??= await _queryFactsFamily(cleanBarcode);
+
+      // 5. UPCitemdb — general merchandise the Facts family does not index.
       online ??= await _queryUpcItemDb(cleanBarcode);
 
-      // 5. Google Books for ISBN-13 (book & stationery counters).
+      // 6. Google Books for ISBN-13 (book & stationery counters).
       if (online == null && (cleanBarcode.startsWith('978') || cleanBarcode.startsWith('979'))) {
         online = await _queryGoogleBooks(cleanBarcode);
       }
@@ -129,7 +163,13 @@ class CloudBarcodeResolverService {
       targetVertical: targetVertical,
     );
 
-    // 6. Cache into Local SQLite Master Catalog for future instant scans (<2ms)
+    if (online.isAiGuess) {
+      _aiGuessed.add(cleanBarcode);
+    } else {
+      _aiGuessed.remove(cleanBarcode);
+    }
+
+    // 7. Cache into Local SQLite Master Catalog for future instant scans (<2ms)
     await LocalDatabase.instance.insertMasterProduct(resolved);
     _memoryCache[cleanBarcode] = resolved;
     return resolved;
@@ -146,8 +186,96 @@ class CloudBarcodeResolverService {
     return digits;
   }
 
+  /// Whether [code] carries a valid GTIN check digit.
+  ///
+  /// Every real product barcode does, by construction — the check digit exists
+  /// precisely so a scanner can tell a good read from a bad one. So a failure
+  /// here means one of two things, and neither is worth a network round-trip:
+  /// the scanner misread a digit, or this is a shop's own printed label.
+  ///
+  /// It is also how the fabrication in this file's own seed dictionary was
+  /// found: 22 of its 23 entries fail this check, as do 115 of the 368
+  /// barcodes in the master catalog seed. Those rows can never match a real
+  /// scan, which is why the "curated offline dictionary" tier resolved nothing
+  /// in practice while appearing to be wired correctly.
+  static bool hasValidCheckDigit(String code) {
+    if (code.isEmpty || !RegExp(r'^\d+$').hasMatch(code)) return false;
+    if (![8, 12, 13, 14].contains(code.length)) return false;
+
+    // EAN-13 weights its first digit 1 and alternates; EAN-8, UPC-A and
+    // GTIN-14 start at 3. A GTIN-14 computes its own check digit over all 13
+    // leading digits rather than inheriting the inner EAN-13's.
+    final startsWithOne = code.length == 13;
+    var sum = 0;
+    for (var i = 0; i < code.length - 1; i++) {
+      final weight = ((i % 2 == 0) == startsWithOne) ? 1 : 3;
+      sum += int.parse(code[i]) * weight;
+    }
+    return (10 - (sum % 10)) % 10 == int.parse(code[code.length - 1]);
+  }
+
   // ===========================================================================
-  // TIER 3 — Open* Facts family
+  // TIER 3 — Shared server catalog (`resolveBarcode` Cloud Function)
+  // ===========================================================================
+
+  static const String _serverEndpoint =
+      'https://us-central1-kamaiplus.cloudfunctions.net/resolveBarcode';
+
+  /// Asks the server, which checks the catalog every merchant's scans build,
+  /// then Open Facts, then UPCitemdb, then an AI fallback.
+  ///
+  /// Worth a round trip before this device queries anything itself: Open Facts
+  /// indexes only about 23,000 Indian products, so most 890-prefixed barcodes
+  /// miss every free database. The AI tier reaches some of those, and whatever
+  /// any tier resolves is written back so the next shop to scan the same
+  /// product gets it instantly.
+  ///
+  /// Returns null on any failure — the on-device tiers below still run, so a
+  /// merchant with no signal is no worse off than before this existed.
+  Future<_ResolvedOnlineProduct?> _queryServerResolver(
+    String barcode, {
+    String? businessType,
+  }) async {
+    HttpClient? client;
+    try {
+      final idToken = await FirebaseAuth.instance.currentUser?.getIdToken();
+      if (idToken == null || idToken.isEmpty) return null;
+
+      client = HttpClient();
+      client.connectionTimeout = _timeout;
+
+      final req = await client.postUrl(Uri.parse(_serverEndpoint)).timeout(_timeout);
+      req.headers.set(HttpHeaders.contentTypeHeader, 'application/json');
+      req.headers.set(HttpHeaders.authorizationHeader, 'Bearer $idToken');
+      req.write(jsonEncode({'barcode': barcode, 'business_type': businessType ?? ''}));
+
+      final res = await req.close().timeout(_serverTimeout);
+      if (res.statusCode != 200) return null;
+
+      final raw = await res.transform(utf8.decoder).join().timeout(_serverTimeout);
+      final body = jsonDecode(raw);
+      if (body is! Map<String, dynamic> || body['found'] != true) return null;
+
+      final name = body['name']?.toString().trim() ?? '';
+      if (name.isEmpty) return null;
+
+      return _ResolvedOnlineProduct(
+        name: name,
+        brand: (body['brand']?.toString().trim().isEmpty ?? true) ? null : body['brand'].toString().trim(),
+        rawCategory: body['category']?.toString() ?? '',
+        packSize: (body['pack_size']?.toString().trim().isEmpty ?? true) ? null : body['pack_size'].toString().trim(),
+        source: body['source']?.toString() ?? 'Shared Catalog',
+        isAiGuess: body['is_ai_guess'] == true,
+      );
+    } catch (_) {
+      return null;
+    } finally {
+      client?.close(force: true);
+    }
+  }
+
+  // ===========================================================================
+  // TIER 4 — Open* Facts family
   // ===========================================================================
 
   Future<_ResolvedOnlineProduct?> _queryFactsFamily(String barcode) async {
@@ -192,7 +320,7 @@ class CloudBarcodeResolverService {
   }
 
   // ===========================================================================
-  // TIER 4 — UPCitemdb (general merchandise)
+  // TIER 5 — UPCitemdb (general merchandise)
   // ===========================================================================
 
   Future<_ResolvedOnlineProduct?> _queryUpcItemDb(String barcode) async {
@@ -216,7 +344,7 @@ class CloudBarcodeResolverService {
   }
 
   // ===========================================================================
-  // TIER 5 — Google Books (ISBN-13)
+  // TIER 6 — Google Books (ISBN-13)
   // ===========================================================================
 
   Future<_ResolvedOnlineProduct?> _queryGoogleBooks(String isbn) async {
@@ -437,30 +565,22 @@ class CloudBarcodeResolverService {
   // CURATED OFFLINE DICTIONARY (unchanged seed data — strict vertical filter)
   // ===========================================================================
 
+  /// Curated offline barcodes, for instant resolution with no network.
+  ///
+  /// This table used to hold 23 entries and resolved almost nothing, because
+  /// 22 of them had an invalid EAN-13 check digit — they were invented rather
+  /// than transcribed from real packs. A barcode with a bad check digit cannot
+  /// exist on a physical product, so scanning the real Dettol bottle could
+  /// never match the row labelled "Dettol"; the tier looked wired and was
+  /// dead. The invalid rows are removed rather than corrected, because a
+  /// plausible-looking wrong barcode is worse than no row at all: it silently
+  /// autofills the wrong product the day someone else's barcode collides.
+  ///
+  /// Adding entries here is welcome, but every barcode must be read off a real
+  /// pack and must satisfy [hasValidCheckDigit] — `barcode_core.test.js`
+  /// enforces that for the server's copy of this data.
   static const Map<String, Map<String, dynamic>> _kFastIndianDict = {
-    '8901030383701': {'name': 'Aashirvaad Shudh Chakki Atta 5kg', 'cat': 'Atta, Rice & Dal', 'unit': 'packet', 'mrp': 26000, 'sell': 24500, 'type': 'grocery'},
     '8901262010054': {'name': 'Amul Butter Pasteurised 500g', 'cat': 'Dairy, Bread & Eggs', 'unit': 'packet', 'mrp': 28500, 'sell': 27500, 'type': 'grocery'},
-    '8904043901007': {'name': 'Tata Salt Vacuum Evaporated 1kg', 'cat': 'Spices & Cooking Oil', 'unit': 'packet', 'mrp': 3000, 'sell': 2800, 'type': 'grocery'},
-    '8901058852854': {'name': 'Maggi 2-Minute Masala Noodles 70g', 'cat': 'Biscuits & Snacks', 'unit': 'packet', 'mrp': 1400, 'sell': 1400, 'type': 'grocery'},
-    '8901030383702': {'name': 'Dolo 650mg Paracetamol Tablets (15 Tabs)', 'cat': 'Tablets & Capsules', 'unit': 'strip', 'mrp': 3500, 'sell': 3200, 'type': 'pharmacy'},
-    '8901117001019': {'name': 'Crocin Advance 500mg Fast Relief (15 Tabs)', 'cat': 'Tablets & Capsules', 'unit': 'strip', 'mrp': 2500, 'sell': 2300, 'type': 'pharmacy'},
-    '8901117001026': {'name': 'Calpol 650 Paracetamol Tablets (15 Tabs)', 'cat': 'Tablets & Capsules', 'unit': 'strip', 'mrp': 3400, 'sell': 3000, 'type': 'pharmacy'},
-    '8901117001033': {'name': 'Combiflam Pain Relief Tablets (20 Tabs)', 'cat': 'Tablets & Capsules', 'unit': 'strip', 'mrp': 4800, 'sell': 4400, 'type': 'pharmacy'},
-    '8901117001040': {'name': 'Cetirizine 10mg Anti-Allergy (10 Tabs)', 'cat': 'Tablets & Capsules', 'unit': 'strip', 'mrp': 2200, 'sell': 2000, 'type': 'pharmacy'},
-    '8901117001057': {'name': 'Pantocid 40mg Acidity Tablets (15 Tabs)', 'cat': 'Tablets & Capsules', 'unit': 'strip', 'mrp': 16500, 'sell': 15000, 'type': 'pharmacy'},
-    '8901117001064': {'name': 'Azithromycin 500mg Tablets (3 Tabs)', 'cat': 'Tablets & Capsules', 'unit': 'strip', 'mrp': 7500, 'sell': 7000, 'type': 'pharmacy'},
-    '8901117001071': {'name': 'Digene Acidity & Gas Relief Tablets (15 Tabs)', 'cat': 'Tablets & Capsules', 'unit': 'strip', 'mrp': 3200, 'sell': 3000, 'type': 'pharmacy'},
-    '8901117001088': {'name': 'Eno Fruit Salt Regular Sachet 5g', 'cat': 'Generic Medicines', 'unit': 'packet', 'mrp': 1000, 'sell': 1000, 'type': 'pharmacy'},
-    '8901117001095': {'name': 'Vicks VapoRub Balm 25ml', 'cat': 'Ointments & Creams', 'unit': 'box', 'mrp': 8000, 'sell': 7500, 'type': 'pharmacy'},
-    '8901117001101': {'name': 'Betadine 10% Antiseptic Ointment 20g', 'cat': 'Ointments & Creams', 'unit': 'piece', 'mrp': 7500, 'sell': 7000, 'type': 'pharmacy'},
-    '8901117001118': {'name': 'Volini Pain Relief Gel 30g', 'cat': 'Ointments & Creams', 'unit': 'piece', 'mrp': 9500, 'sell': 9000, 'type': 'pharmacy'},
-    '8901117001125': {'name': 'Moov Fast Pain Relief Ointment 25g', 'cat': 'Ointments & Creams', 'unit': 'piece', 'mrp': 8500, 'sell': 8000, 'type': 'pharmacy'},
-    '8901117001132': {'name': 'Boroline Antiseptic Ayurvedic Cream 20g', 'cat': 'Ointments & Creams', 'unit': 'piece', 'mrp': 4500, 'sell': 4200, 'type': 'pharmacy'},
-    '8901117001149': {'name': 'Band-Aid Washproof Medicated Strips (Box 100)', 'cat': 'First Aid & Bandages', 'unit': 'box', 'mrp': 25000, 'sell': 23000, 'type': 'pharmacy'},
-    '8901117001156': {'name': 'Savlon Antiseptic Liquid 200ml', 'cat': 'First Aid & Bandages', 'unit': 'btl', 'mrp': 8500, 'sell': 8000, 'type': 'both'},
-    '8901117001163': {'name': 'Dettol Antiseptic Liquid 250ml', 'cat': 'First Aid & Bandages', 'unit': 'btl', 'mrp': 14000, 'sell': 13000, 'type': 'both'},
-    '8901117001170': {'name': 'Cough Syrup Benadryl DR 100ml', 'cat': 'Syrups & Suspensions', 'unit': 'btl', 'mrp': 11500, 'sell': 10500, 'type': 'pharmacy'},
-    '8901117001187': {'name': 'Ascoril LS Expectorant Cough Syrup 100ml', 'cat': 'Syrups & Suspensions', 'unit': 'btl', 'mrp': 11800, 'sell': 11000, 'type': 'pharmacy'},
   };
 
   MasterProductModel? _lookupFastOfflineDictionary(String barcode, {String? targetVertical}) {
@@ -528,11 +648,15 @@ class _ResolvedOnlineProduct {
   final String? packSize;
   final String source;
 
+  /// True when the name came from the AI tier rather than a product database.
+  final bool isAiGuess;
+
   _ResolvedOnlineProduct({
     required this.name,
     required this.brand,
     required this.rawCategory,
     required this.packSize,
     required this.source,
+    this.isAiGuess = false,
   });
 }

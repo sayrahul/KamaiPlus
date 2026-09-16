@@ -89,8 +89,13 @@ class MenuScanSheet extends StatelessWidget {
       final picker = ImagePicker();
       final XFile? file = await picker.pickImage(
         source: source,
-        imageQuality: 85,
-        maxWidth: 1600,
+        // A menu card or invoice is dense small text in two columns; 1600px
+        // wide put roughly 11 pixels on a 9pt dish name, which is where OCR
+        // starts inventing characters. 2400px at q92 lands around 1.5-2.5 MB —
+        // well inside the 8 MB the extraction endpoint accepts — and is the
+        // cheapest accuracy we can buy on the client side.
+        imageQuality: 92,
+        maxWidth: 2400,
       );
 
       if (file == null) return;
@@ -227,7 +232,12 @@ class MenuScanSheet extends StatelessWidget {
               return;
             }
 
-            // 2. Offline Fallback: ML Kit OCR
+            // 2. Offline fallback: on-device ML Kit OCR.
+            //
+            // Only reached when the cloud scan could not answer at all. Its
+            // output is worth far less than Gemini's — it is a line reader, not
+            // a menu reader — so the review sheet is told where the rows came
+            // from and shows a standing warning instead of a toast that fades.
             List<ExtractedMenuItem> offlineItems = [];
             try {
               offlineItems = await MlKitOcrService.instance.scanMenuImage(filePath);
@@ -238,25 +248,30 @@ class MenuScanSheet extends StatelessWidget {
             if (offlineItems.isNotEmpty) {
               InAppNotification.show(
                 context: context,
-                message: 'Loaded ${offlineItems.length} dishes using offline OCR scanner.',
+                message: 'AI unreachable — read ${offlineItems.length} dishes on your phone instead. Please check each one.',
                 type: NotificationType.warning,
+                duration: const Duration(seconds: 5),
               );
               Navigator.pop(context); // close menu scan sheet
               MenuItemReviewSheet.show(
                 context,
                 initialItems: offlineItems,
                 onMenuAddComplete: onMenuAddSuccess,
+                isOfflineScan: true,
               );
               return;
             }
 
-            // 3. Both Gemini and offline OCR failed
+            // 3. Both the cloud scan and offline OCR failed. Say why — the
+            //    server sends a specific reason (quota, unreadable photo,
+            //    unconfigured key) and swallowing it for a generic line is what
+            //    made this feature impossible to debug from a merchant report.
             InAppNotification.show(
               context: context,
               message: result?.errorMessage ??
                   'Could not auto-read this menu clearly. Please review or enter the dishes manually.',
               type: NotificationType.error,
-              duration: const Duration(seconds: 5),
+              duration: const Duration(seconds: 6),
             );
             Navigator.pop(context); // close menu scan sheet
             MenuItemReviewSheet.show(
