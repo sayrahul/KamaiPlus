@@ -10,6 +10,15 @@
 // original plain format (V1) still readable forever — every backup a merchant
 // already holds is V1, and a "security improvement" that stranded those would
 // be a far worse bug than the one it fixed.
+//
+// Raised timeout, deliberately: the key derivation is 150k PBKDF2 iterations —
+// being slow is the security property under test, not an accident. Each test
+// runs several derivations, and `flutter test` runs the whole suite's files
+// concurrently, so on a loaded machine these comfortably exceed the 30s
+// default. Do NOT "fix" a timeout here by weakening _kdfIterations.
+@Timeout(Duration(minutes: 5))
+library;
+
 import 'dart:io';
 
 import 'package:flutter/services.dart';

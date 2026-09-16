@@ -2512,3 +2512,13 @@ SharedPreferences auth bypass in `splash_screen.dart` / `MainActivity.java`; no
 - `flutter test test/sales_return_flow_test.dart`: **All 6 tests passed (100%)**.
 - `flutter test` (entire suite): **179/179 tests passed (100%)**.
 
+
+### Addendum — why `backup_encryption_test.dart` carries a 5-minute timeout
+
+It passed 9/9 alone and 41/41 alongside four other files, then failed 8 of 9 in the full
+suite. Not a logic bug: `flutter test` runs the suite's files concurrently, and PBKDF2 at
+150k iterations is *deliberately* slow — being expensive is the security property under
+test. Per-test time went from ~5s alone to ~13s under five-way contention, and past the
+30s default under the full suite. Raised the file's timeout rather than weakening
+`_kdfIterations`, and said so in the file so the next person does not "fix" it the wrong
+way round.
