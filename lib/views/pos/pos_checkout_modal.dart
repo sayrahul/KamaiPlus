@@ -5,7 +5,6 @@ import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:url_launcher/url_launcher.dart';
 import 'package:uuid/uuid.dart';
 import '../../models/models.dart';
 import '../../core/database/local_database.dart';
@@ -19,6 +18,7 @@ import '../../core/constants/business_vertical_config.dart';
 import 'pos_item_edit_modal.dart';
 import 'sale_completed_modal.dart';
 import '../common/in_app_notification.dart';
+import '../common/dynamic_upi_qr_sheet.dart';
 import '../../services/upi_payment_detector_service.dart';
 import '../settings/store_profile_screen.dart';
 
@@ -3369,390 +3369,34 @@ class _PosCheckoutModalState extends State<PosCheckoutModal> {
     );
   }
 
-  /// How long a generated QR is offered before the sheet asks the cashier to
-  /// regenerate it. Not a bank-enforced expiry — a UPI intent URI does not
-  /// have one — but the counter convention the "Valid: mm:ss" readout implies,
-  /// and the point at which a fresh transaction reference is worth issuing.
-  static const Duration _qrValidity = Duration(minutes: 5);
-
   /// Full-screen dynamic UPI QR.
   ///
+  /// Thin wrapper over the shared [DynamicUpiQrSheet] so the counter, the split
+  /// card and the Khata settlement flow all show the identical sheet. This was
+  /// ~300 lines inlined here as a private method, which is precisely why the
+  /// Khata flow could not reuse it and grew its own inert QR instead.
+  ///
   /// [amountPaise] defaults to the whole bill; the split-payment card passes
-  /// just its UPI portion, which is why this is a parameter rather than
-  /// reading `grandTotalPaise` directly as it used to — opening this sheet
-  /// from a split would otherwise have shown a QR for the FULL bill and taken
-  /// more money than the cashier intended.
+  /// just its UPI portion — opening this from a split while it read
+  /// `grandTotalPaise` directly would have shown a QR for the FULL bill.
   void _showEnlargedUpiQrModal(
     BuildContext context, {
     int? amountPaise,
     String title = 'Dynamic Bill UPI QR',
     String note = 'POS Bill',
   }) {
-    final int qrAmountPaise = amountPaise ?? grandTotalPaise;
-
-    // Countdown state lives here, outside the builder, so a rebuild (switching
-    // UPI account, say) does not restart the clock.
-    Timer? ticker;
-    var remaining = _qrValidity;
-    // Freshened on every regenerate so each QR shown is distinguishable in the
-    // merchant's UPI statement rather than every scan of every bill looking
-    // identical.
-    var txnRef = DateTime.now().millisecondsSinceEpoch.toString();
-
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (ctx) {
-        return StatefulBuilder(
-          builder: (ctx, setModalState) {
-            // One ticker per sheet. Started on the first build and guarded so
-            // a rebuild does not stack a second one.
-            ticker ??= Timer.periodic(const Duration(seconds: 1), (t) {
-              if (remaining.inSeconds <= 0) {
-                t.cancel();
-                return;
-              }
-              remaining -= const Duration(seconds: 1);
-              setModalState(() {});
-            });
-
-            final bool qrExpired = remaining.inSeconds <= 0;
-            final String mmss =
-                '${remaining.inMinutes.toString().padLeft(2, '0')}:'
-                '${(remaining.inSeconds % 60).toString().padLeft(2, '0')}';
-
-            void regenerateQr() {
-              HapticFeedback.mediumImpact();
-              ticker?.cancel();
-              ticker = null;
-              txnRef = DateTime.now().millisecondsSinceEpoch.toString();
-              remaining = _qrValidity;
-              setModalState(() {});
-            }
-            return Container(
-              decoration: const BoxDecoration(
-                color: Color(0xFF0F172A),
-                borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-              ),
-              padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
-              child: SafeArea(
-                top: false,
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    // Handle
-                    Center(
-                      child: Container(
-                        width: 36,
-                        height: 4,
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF334155),
-                          borderRadius: BorderRadius.circular(2),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    // Header
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Row(
-                          children: [
-                            const Icon(Icons.qr_code_scanner_rounded, color: Color(0xFF34D399), size: 20),
-                            const SizedBox(width: 8),
-                            Text(
-                              title,
-                              style: GoogleFonts.outfit(
-                                fontSize: 16,
-                                fontWeight: FontWeight.w800,
-                                color: Colors.white,
-                              ),
-                            ),
-                          ],
-                        ),
-                        IconButton(
-                          onPressed: () => Navigator.pop(ctx),
-                          icon: const Icon(Icons.close_rounded, color: Color(0xFF94A3B8)),
-                          padding: EdgeInsets.zero,
-                          constraints: const BoxConstraints(),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 12),
-                    // Multi-account switcher chips if > 1
-                    if (_upiAccounts.length > 1) ...[
-                      SingleChildScrollView(
-                        scrollDirection: Axis.horizontal,
-                        physics: const BouncingScrollPhysics(),
-                        child: Row(
-                          children: _upiAccounts.map((acc) {
-                            final isSel = acc.id == _selectedUpiAccountId;
-                            return Padding(
-                              padding: const EdgeInsets.only(right: 6, bottom: 10),
-                              child: InkWell(
-                                onTap: () {
-                                  HapticFeedback.selectionClick();
-                                  setState(() => _selectedUpiAccountId = acc.id);
-                                  setModalState(() {});
-                                },
-                                borderRadius: BorderRadius.circular(8),
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                                  decoration: BoxDecoration(
-                                    color: isSel ? const Color(0xFF10B981) : const Color(0xFF1E293B),
-                                    borderRadius: BorderRadius.circular(8),
-                                    border: Border.all(
-                                      color: isSel ? const Color(0xFF34D399) : const Color(0xFF334155),
-                                      width: isSel ? 1.4 : 1,
-                                    ),
-                                  ),
-                                  child: Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      Icon(
-                                        Icons.account_balance_wallet_rounded,
-                                        size: 12,
-                                        color: isSel ? Colors.white : const Color(0xFF94A3B8),
-                                      ),
-                                      const SizedBox(width: 5),
-                                      Text(
-                                        acc.label,
-                                        style: GoogleFonts.inter(
-                                          fontSize: 11,
-                                          fontWeight: isSel ? FontWeight.w800 : FontWeight.w600,
-                                          color: isSel ? Colors.white : const Color(0xFFCBD5E1),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                            );
-                          }).toList(),
-                        ),
-                      ),
-                      const SizedBox(height: 6),
-                    ],
-                    // Large QR Canvas
-                    Container(
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(20),
-                        boxShadow: const [
-                          BoxShadow(
-                            color: Color(0x33000000),
-                            blurRadius: 16,
-                            offset: Offset(0, 6),
-                          ),
-                        ],
-                      ),
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          // Once the validity window lapses the QR is covered
-                          // rather than removed, so the cashier sees exactly
-                          // why nothing is scanning and can reissue in one tap.
-                          Stack(
-                            alignment: Alignment.center,
-                            children: [
-                              Opacity(
-                                opacity: qrExpired ? 0.12 : 1,
-                                child: QrImageView(
-                                  data: 'upi://pay?pa=$_activeUpiVpa'
-                                      '&pn=${Uri.encodeComponent(_activeStoreName)}'
-                                      '&am=${(qrAmountPaise / 100.0).toStringAsFixed(2)}'
-                                      '&cu=INR'
-                                      '&tn=${Uri.encodeComponent(note)}'
-                                      '&tr=$txnRef',
-                                  version: QrVersions.auto,
-                                  size: 230,
-                                ),
-                              ),
-                              if (qrExpired)
-                                Column(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    const Icon(Icons.timer_off_rounded,
-                                        size: 34, color: Color(0xFFDC2626)),
-                                    const SizedBox(height: 8),
-                                    Text(
-                                      'QR Expired',
-                                      style: GoogleFonts.outfit(
-                                        fontSize: 15,
-                                        fontWeight: FontWeight.w900,
-                                        color: const Color(0xFF991B1B),
-                                      ),
-                                    ),
-                                    const SizedBox(height: 10),
-                                    ElevatedButton.icon(
-                                      onPressed: regenerateQr,
-                                      icon: const Icon(Icons.refresh_rounded, size: 16),
-                                      label: Text('Generate New QR',
-                                          style: GoogleFonts.outfit(
-                                              fontWeight: FontWeight.w800, fontSize: 12.5)),
-                                      style: ElevatedButton.styleFrom(
-                                        backgroundColor: const Color(0xFF059669),
-                                        foregroundColor: Colors.white,
-                                        elevation: 0,
-                                        shape: RoundedRectangleBorder(
-                                            borderRadius: BorderRadius.circular(10)),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                            ],
-                          ),
-                          const SizedBox(height: 8),
-                          Text(
-                            'Scan to Pay Exact ₹${(qrAmountPaise / 100.0).toStringAsFixed(2)}',
-                            style: GoogleFonts.outfit(
-                              fontSize: 16,
-                              fontWeight: FontWeight.w900,
-                              color: const Color(0xFF0F172A),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 14),
-                    // Copyable UPI ID Chip
-                    InkWell(
-                      onTap: () {
-                        Clipboard.setData(ClipboardData(text: _activeUpiVpa));
-                        HapticFeedback.selectionClick();
-                        InAppNotification.success('UPI ID copied: $_activeUpiVpa', context: context);
-                      },
-                      borderRadius: BorderRadius.circular(20),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF1E293B),
-                          borderRadius: BorderRadius.circular(20),
-                          border: Border.all(color: const Color(0xFF334155)),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            const Icon(Icons.copy_rounded, size: 13, color: Color(0xFF34D399)),
-                            const SizedBox(width: 6),
-                            Text(
-                              'UPI: $_activeUpiVpa',
-                              style: GoogleFonts.jetBrainsMono(
-                                fontSize: 11.5,
-                                fontWeight: FontWeight.w700,
-                                color: const Color(0xFFE2E8F0),
-                              ),
-                            ),
-                            const SizedBox(width: 6),
-                            Text(
-                              '• Tap to copy',
-                              style: GoogleFonts.inter(fontSize: 10, color: const Color(0xFF94A3B8)),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    // Accepted UPI Apps & Timer
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(
-                          'PhonePe • GPay • Paytm • BHIM',
-                          style: GoogleFonts.inter(
-                            fontSize: 10.5,
-                            fontWeight: FontWeight.w600,
-                            color: const Color(0xFF94A3B8),
-                          ),
-                        ),
-                        // Live countdown. This was the literal string
-                        // 'Valid: 05:00' with no timer behind it — it read as
-                        // a working clock while never moving, whatever the
-                        // cashier did.
-                        InkWell(
-                          onTap: qrExpired ? regenerateQr : null,
-                          borderRadius: BorderRadius.circular(6),
-                          child: Row(
-                            children: [
-                              Icon(
-                                qrExpired ? Icons.refresh_rounded : Icons.timer_outlined,
-                                size: 13,
-                                color: qrExpired ? const Color(0xFFF87171) : const Color(0xFFFBBF24),
-                              ),
-                              const SizedBox(width: 4),
-                              Text(
-                                qrExpired ? 'Expired · Tap to refresh' : 'Valid: $mmss',
-                                style: GoogleFonts.robotoMono(
-                                  fontSize: 10.5,
-                                  fontWeight: FontWeight.w700,
-                                  color: qrExpired ? const Color(0xFFF87171) : const Color(0xFFFBBF24),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                    if (_currentCustomer != null && _currentCustomer!.phone.isNotEmpty) ...[
-                      const SizedBox(height: 12),
-                      InkWell(
-                        onTap: () async {
-                          final phone = _currentCustomer!.phone.replaceAll(RegExp(r'\D'), '');
-                          final cleanPhone = phone.length == 10 ? '91$phone' : phone;
-                          final amountRupees = (grandTotalPaise / 100.0).toStringAsFixed(2);
-                          final upiInfo = _activeUpiVpa.isNotEmpty ? '📌 UPI ID: $_activeUpiVpa\n' : '';
-                          final text = Uri.encodeComponent(
-                            'Dear ${_currentCustomer!.name},\n\n'
-                            'Your $_activeStoreName invoice total: ₹$amountRupees\n'
-                            '$upiInfo\n'
-                            'Counter bill is ready. Thank you!'
-                          );
-                          final url = Uri.parse('https://wa.me/$cleanPhone?text=$text');
-                          if (await canLaunchUrl(url)) {
-                            await launchUrl(url, mode: LaunchMode.externalApplication);
-                          }
-                        },
-                        borderRadius: BorderRadius.circular(10),
-                        child: Container(
-                          width: double.infinity,
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFF25D366).withValues(alpha: 0.15),
-                            borderRadius: BorderRadius.circular(10),
-                            border: Border.all(color: const Color(0xFF25D366), width: 1.2),
-                          ),
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              const Icon(Icons.send_rounded, size: 14, color: Color(0xFF25D366)),
-                              const SizedBox(width: 6),
-                              Flexible(
-                                child: Text(
-                                  'Send Bill Summary to ${_currentCustomer!.name}',
-                                  style: GoogleFonts.plusJakartaSans(
-                                    fontSize: 11.5,
-                                    fontWeight: FontWeight.w700,
-                                    color: const Color(0xFF25D366),
-                                  ),
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ],
-                  ],
-                ),
-              ),
-            );
-          },
-        );
-      },
-      // Stop the ticker whichever way the sheet closes — swipe down, system
-      // back, or the X — so it cannot keep firing setState on a dead element.
-    ).whenComplete(() => ticker?.cancel());
+    DynamicUpiQrSheet.show(
+      context,
+      upiVpa: _activeUpiVpa,
+      storeName: _activeStoreName,
+      amountPaise: amountPaise ?? grandTotalPaise,
+      title: title,
+      note: note,
+      accounts: _upiAccounts,
+      selectedAccountId: _selectedUpiAccountId,
+      onAccountChanged: (acc) => setState(() => _selectedUpiAccountId = acc.id),
+      customerName: _currentCustomer?.name,
+      customerPhone: _currentCustomer?.phone,
+    );
   }
 }

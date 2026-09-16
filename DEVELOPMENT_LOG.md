@@ -2759,3 +2759,55 @@ Rebuilt locally (`flutter build web --release`). **Needs deploying:**
 - `node --check functions/index.js` -> OK.
 - **Not verified live:** the console UI itself (no browser here) and the revoke round trip,
   which needs a real merchant document and a deploy.
+
+---
+
+## 2026-09-16 — One shared UPI QR sheet everywhere (Khata settlement included)
+
+**User:** "settle bill wala QR aapne change nahi kiya… wahan par hi tap karne se neeche se
+UPI modal aana chahiye, counter and all, taaki consistency bani rahe."
+
+Correct, and I had flagged that QR in the audit and then not fixed it. The reason it was
+skipped is the reason it was broken: the enlarged QR sheet was a ~300-line **private method
+of `_PosCheckoutModalState`**, so nothing outside the POS checkout could reach it. The Khata
+"Settle Credit Bills" flow had therefore grown its own QR — a flat 160px image with no
+enlarge, no countdown, no copyable UPI id and no regenerate. A cashier taking an udhar
+payment got a visibly worse screen than one taking the identical amount at the counter.
+
+**Extracted to `lib/views/common/dynamic_upi_qr_sheet.dart`** and now used by all four QR
+call sites:
+
+| Where | Amount shown |
+|---|---|
+| POS checkout, UPI mode | whole bill |
+| POS checkout, split card | the UPI portion only |
+| Khata settle, UPI mode | the settlement total |
+| Khata settle, split mode | the UPI half |
+
+`pos_checkout_modal.dart` drops ~300 lines to a thin wrapper that passes its own UPI
+accounts, selected account and customer through. Everything the sheet gained earlier
+(live `mm:ss` countdown, expiry overlay with one-tap regenerate, fresh `tr=` reference per
+generation, copyable UPI id, WhatsApp hand-off) now applies in Khata too, for free.
+
+Two real bugs fixed in passing at the Khata split QR: it built its amount with
+`int.tryParse(splitUpiCtrl.text)` + a literal `.00`, so any paise the merchant typed were
+silently dropped (`₹450.50` became `am=450.00`); it now goes through
+`MoneyFormatter.parseRupeesToPaise`, the same path the settlement itself uses.
+
+**Test:** `test/upi_qr_payload_test.dart` — 8 tests on the string a customer's UPI app
+actually parses: raw `upi://` scheme (never the https wrapper, which would break scanning),
+amount in RUPEES with two decimals (handing it paise would ask for 100x the bill),
+URL-encoded payee/note (an unencoded `&` truncates every parameter after it), a distinct
+`tr` per generation, and that a split builds a smaller QR than the full bill.
+
+### Also found: `lib/views/pos/payment_modal.dart` is dead code
+319 lines, `PaymentModal` referenced from nowhere in `lib/` or `test/` — an orphaned older
+checkout modal carrying its own UPI QR. Left in place rather than deleted unasked, but it is
+a live trap: someone fixing a payment bug there would watch nothing change. Recorded for a
+decision.
+
+### Verification
+- `flutter analyze lib` -> 0 issues.
+- `flutter test` -> 222/222 passed.
+- **Not verified on a device:** the sheet is UI timing — the countdown tick, the expiry
+  overlay and the Khata entry points need a real screen.

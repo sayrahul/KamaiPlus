@@ -20,6 +20,7 @@ import 'package:qr_flutter/qr_flutter.dart';
 import '../transactions/sale_detail_modal.dart';
 import '../common/empty_state_card.dart';
 import '../common/in_app_notification.dart';
+import '../common/dynamic_upi_qr_sheet.dart';
 import '../settings/store_profile_screen.dart';
 
 class KhataScreen extends StatefulWidget {
@@ -3274,15 +3275,38 @@ class _KhataScreenState extends State<KhataScreen> with DataBusRefresh<KhataScre
                                     ),
                                   ],
                                 ),
-                                child: QrImageView(
-                                  data: upiPayUrl,
-                                  version: QrVersions.auto,
-                                  size: 160.0,
+                                // Tap opens the same countdown sheet the POS
+                                // counter uses. This settlement flow used to
+                                // render its own inert QR — no enlarge, no
+                                // timer, no regenerate — so a cashier taking
+                                // an udhar payment got a visibly worse screen
+                                // than one taking the identical amount at the
+                                // counter.
+                                child: InkWell(
+                                  onTap: () {
+                                    HapticFeedback.mediumImpact();
+                                    DynamicUpiQrSheet.show(
+                                      modalCtx,
+                                      upiVpa: upiId,
+                                      storeName: storeName,
+                                      amountPaise: totalPaise,
+                                      title: 'Khata Settlement QR',
+                                      note: 'Settle ${bills.length} Bill(s)',
+                                      customerName: customer.name,
+                                      customerPhone: customer.phone,
+                                    );
+                                  },
+                                  borderRadius: BorderRadius.circular(8),
+                                  child: QrImageView(
+                                    data: upiPayUrl,
+                                    version: QrVersions.auto,
+                                    size: 160.0,
+                                  ),
                                 ),
                               ),
                               const SizedBox(height: 8),
                               Text(
-                                'Scan with any UPI App (GPay, PhonePe, Paytm)',
+                                'Tap QR to enlarge • Scan with any UPI App',
                                 style: GoogleFonts.inter(fontSize: 11.5, fontWeight: FontWeight.w600, color: const Color(0xFF475569)),
                               ),
                               const SizedBox(height: 4),
@@ -3389,10 +3413,30 @@ class _KhataScreenState extends State<KhataScreen> with DataBusRefresh<KhataScre
                                   borderRadius: BorderRadius.circular(8),
                                   border: Border.all(color: const Color(0xFF86EFAC)),
                                 ),
-                                child: QrImageView(
-                                  data: 'upi://pay?pa=$upiId&pn=${Uri.encodeComponent(storeName)}&am=${(int.tryParse(splitUpiCtrl.text) ?? 0)}.00&cu=INR&tn=Khata+Split+Settle',
-                                  version: QrVersions.auto,
-                                  size: 80,
+                                // Same sheet again, for the UPI half of a split
+                                // settlement — so every QR in the app behaves
+                                // identically wherever the cashier meets one.
+                                child: InkWell(
+                                  onTap: () {
+                                    HapticFeedback.mediumImpact();
+                                    DynamicUpiQrSheet.show(
+                                      modalCtx,
+                                      upiVpa: upiId,
+                                      storeName: storeName,
+                                      amountPaise:
+                                          MoneyFormatter.parseRupeesToPaise(splitUpiCtrl.text),
+                                      title: 'Split Settlement QR',
+                                      note: 'Khata Split Settle',
+                                      customerName: customer.name,
+                                      customerPhone: customer.phone,
+                                    );
+                                  },
+                                  borderRadius: BorderRadius.circular(8),
+                                  child: QrImageView(
+                                    data: 'upi://pay?pa=$upiId&pn=${Uri.encodeComponent(storeName)}&am=${(MoneyFormatter.parseRupeesToPaise(splitUpiCtrl.text) / 100.0).toStringAsFixed(2)}&cu=INR&tn=Khata+Split+Settle',
+                                    version: QrVersions.auto,
+                                    size: 80,
+                                  ),
                                 ),
                               ),
                               const SizedBox(width: 10),
