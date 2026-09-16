@@ -1,381 +1,309 @@
+// GENERATED FILE - DO NOT EDIT BY HAND.
+//
+// Source:    tool/i18n_data.py
+// Regenerate: python tool/gen_i18n.py
+//
+// 137 keys x 9 languages = 1233 strings.
+//
+// Editing this file directly means the next regeneration silently discards
+// your change. Add the string to tool/i18n_data.py instead, with all
+// 9 languages on one line, and run the generator.
+
 class AppLanguage {
   final String code;
   final String name;
   final String nativeName;
   final String flag;
 
+  /// True for a language nobody on the team reads.
+  ///
+  /// The translations are careful, but careful is not the same as reviewed
+  /// by a speaker, and the picker says so rather than presenting every
+  /// language as equally trustworthy.
+  final bool isBeta;
+
+  /// Locale handed to the platform text-to-speech engine, so the soundbox
+  /// announces takings in the language the merchant chose.
+  final String ttsLocale;
+
   const AppLanguage({
     required this.code,
     required this.name,
     required this.nativeName,
     required this.flag,
+    this.isBeta = false,
+    this.ttsLocale = 'en-IN',
   });
 }
 
 class AppStrings {
   static const List<AppLanguage> supportedLanguages = [
-    AppLanguage(code: 'en', name: 'English', nativeName: 'English', flag: '🇬🇧'),
-    AppLanguage(code: 'hi', name: 'Hindi', nativeName: 'हिंदी', flag: '🇮🇳'),
-    AppLanguage(code: 'mr', name: 'Marathi', nativeName: 'मराठी', flag: '🇮🇳'),
-    AppLanguage(code: 'gu', name: 'Gujarati', nativeName: 'ગુજરાતી', flag: '🇮🇳'),
+    AppLanguage(
+      code: 'en',
+      name: 'English',
+      nativeName: 'English',
+      flag: '🇬🇧',
+      isBeta: false,
+      ttsLocale: 'en-IN',
+    ),
+    AppLanguage(
+      code: 'hi',
+      name: 'Hindi',
+      nativeName: 'हिंदी',
+      flag: '🇮🇳',
+      isBeta: false,
+      ttsLocale: 'hi-IN',
+    ),
+    AppLanguage(
+      code: 'mr',
+      name: 'Marathi',
+      nativeName: 'मराठी',
+      flag: '🇮🇳',
+      isBeta: false,
+      ttsLocale: 'mr-IN',
+    ),
+    AppLanguage(
+      code: 'gu',
+      name: 'Gujarati',
+      nativeName: 'ગુજરાતી',
+      flag: '🇮🇳',
+      isBeta: true,
+      ttsLocale: 'gu-IN',
+    ),
+    AppLanguage(
+      code: 'ta',
+      name: 'Tamil',
+      nativeName: 'தமிழ்',
+      flag: '🇮🇳',
+      isBeta: true,
+      ttsLocale: 'ta-IN',
+    ),
+    AppLanguage(
+      code: 'te',
+      name: 'Telugu',
+      nativeName: 'తెలుగు',
+      flag: '🇮🇳',
+      isBeta: true,
+      ttsLocale: 'te-IN',
+    ),
+    AppLanguage(
+      code: 'kn',
+      name: 'Kannada',
+      nativeName: 'ಕನ್ನಡ',
+      flag: '🇮🇳',
+      isBeta: true,
+      ttsLocale: 'kn-IN',
+    ),
+    AppLanguage(
+      code: 'bn',
+      name: 'Bengali',
+      nativeName: 'বাংলা',
+      flag: '🇮🇳',
+      isBeta: true,
+      ttsLocale: 'bn-IN',
+    ),
+    AppLanguage(
+      code: 'pa',
+      name: 'Punjabi',
+      nativeName: 'ਪੰਜਾਬੀ',
+      flag: '🇮🇳',
+      isBeta: true,
+      ttsLocale: 'pa-IN',
+    ),
   ];
 
-  static const Map<String, Map<String, String>> _translations = {
-    // English
-    'en': {
-      // Navigation
-      'nav_home': 'Home',
-      'nav_products': 'Products',
-      'nav_billing': 'Billing',
-      'nav_khata': 'Khata',
-      'nav_menu': 'Menu',
-
-      // POS / Billing
-      'pos_billing_title': 'Fast Billing Counter',
-      'search_items_placeholder': 'Search items, barcode or SKU...',
-      'cart_empty_title': 'Cart is Empty',
-      'cart_empty_subtitle': 'Tap products from the catalog or scan barcodes',
-      'total': 'Total',
-      'subtotal': 'Subtotal',
-      'tax': 'Tax',
-      'discount': 'Discount',
-      'round_off': 'Round Off',
-      'pay_now': 'Charge',
-      'checkout': 'Checkout',
-      'clear_cart': 'Clear',
-      'hold_cart': 'Hold',
-      'recall_cart': 'Recall',
-      'item': 'Item',
-      'items': 'Items',
-      'qty': 'Qty',
-      'price': 'Price',
-      'stock': 'Stock',
-      'cash': 'Cash',
-      'online_upi': 'UPI / Online',
-      'udhar_credit': 'Udhar (Credit)',
-      'split_payment': 'Split Payment',
-      'tendered': 'Tendered',
-      'change': 'Change Return',
-      'customer_optional': 'Customer (Optional)',
-
-      // Products / Inventory
-      'products_title': 'Products & Inventory',
-      'add_product': 'Add Product',
-      'inward_ai': 'Inward with AI',
-      'rapid_scan': 'Rapid Scan',
-      'cost_price': 'Purchase Price',
-      'selling_price': 'Selling Price',
-      'mrp': 'MRP',
-      'variants': 'Variants',
-      'select_variant': 'Select Variant',
-      'low_stock_warning': 'Low Stock Alert',
-      'unlimited_stock': 'Unlimited Stock',
-      'category': 'Category',
-      'unit': 'Unit',
-
-      // Returns / Refund
-      'sales_return': 'Sales Return',
-      'partial_return': 'Partial Return',
-      'return_items': 'Return Items',
-      'full_void': 'Full Void',
-      'refund_amount': 'Refund Amount',
-      'refund_mode': 'Refund Mode',
-      'return_reason': 'Reason for Return',
-      'restock_items': 'Restock in Inventory',
-      'credit_note': 'Credit Note',
-
-      // Khata / Customers
-      'khata_title': 'Customer Khata (Ledger)',
-      'customer_name': 'Customer Name',
-      'customer_phone': 'Phone Number',
-      'current_balance': 'Current Balance',
-      'give_credit': 'Give Credit (Udhar)',
-      'receive_payment': 'Receive Payment (Jama)',
-      'send_reminder': 'Send Reminder',
-
-      // Menu & Settings
-      'settings': 'Settings',
-      'store_profile': 'Store Profile & Tax Setup',
-      'business_vertical': 'Business Vertical',
-      'whatsapp_support': 'WhatsApp Support',
-      'app_version': 'App Version',
-      'language': 'Language / भाषा',
-      'select_language': 'Select Language',
-      'save': 'Save',
-      'cancel': 'Cancel',
-      'confirm': 'Confirm',
-      'delete': 'Delete',
-      'edit': 'Edit',
-      'close': 'Close',
-    },
-
-    // Hindi (हिंदी)
-    'hi': {
-      // Navigation
-      'nav_home': 'होम',
-      'nav_products': 'सामान',
-      'nav_billing': 'बिलिंग',
-      'nav_khata': 'खाता',
-      'nav_menu': 'मेनू',
-
-      // POS / Billing
-      'pos_billing_title': 'तेज़ बिलिंग काउंटर',
-      'search_items_placeholder': 'सामान खोजें या बारकोड स्कैन करें...',
-      'cart_empty_title': 'कार्ट खाली है',
-      'cart_empty_subtitle': 'सूची से सामान चुनें या बारकोड स्कैन करें',
-      'total': 'कुल योग',
-      'subtotal': 'उप-योग',
-      'tax': 'जीएसटी / टैक्स',
-      'discount': 'छूट / डिस्काउंट',
-      'round_off': 'राउंड ऑफ',
-      'pay_now': 'बिल बनाएं',
-      'checkout': 'चेकआउट',
-      'clear_cart': 'खाली करें',
-      'hold_cart': 'होल्ड',
-      'recall_cart': 'वापस लाएं',
-      'item': 'सामान',
-      'items': 'सामान',
-      'qty': 'मात्रा',
-      'price': 'कीमत',
-      'stock': 'स्टॉक',
-      'cash': 'नकद (Cash)',
-      'online_upi': 'ऑनलाइन / UPI',
-      'udhar_credit': 'उधार (Khata)',
-      'split_payment': 'स्प्लिट भुगतान',
-      'tendered': 'ग्राहक ने दिया',
-      'change': 'वापस देना है',
-      'customer_optional': 'ग्राहक (वैकल्पिक)',
-
-      // Products / Inventory
-      'products_title': 'उत्पाद और स्टॉक',
-      'add_product': '+ नया सामान जोड़ें',
-      'inward_ai': 'AI से बिल चढ़ाएं',
-      'rapid_scan': 'रैपिड स्कैन',
-      'cost_price': 'खरीद भाव (Cost)',
-      'selling_price': 'बिक्री मूल्य (Sale)',
-      'mrp': 'एमआरपी',
-      'variants': 'साइज / कलर',
-      'select_variant': 'साइज / कलर चुनें',
-      'low_stock_warning': 'कम स्टॉक अलर्ट',
-      'unlimited_stock': 'असीमित स्टॉक',
-      'category': 'कैटेगरी',
-      'unit': 'इकाई (Unit)',
-
-      // Returns / Refund
-      'sales_return': 'बिक्री वापसी',
-      'partial_return': 'टुकड़ों में वापसी',
-      'return_items': 'सामान वापस लें',
-      'full_void': 'पूरा बिल रद्द',
-      'refund_amount': 'वापसी राशि',
-      'refund_mode': 'वापसी माध्यम',
-      'return_reason': 'वापसी का कारण',
-      'restock_items': 'स्टॉक में वापस जोड़ें',
-      'credit_note': 'क्रेडिट नोट',
-
-      // Khata / Customers
-      'khata_title': 'ग्राहक खाता (उधार बही)',
-      'customer_name': 'ग्राहक का नाम',
-      'customer_phone': 'मोबाइल नंबर',
-      'current_balance': 'बकाया राशि',
-      'give_credit': 'उधार दिया',
-      'receive_payment': 'जमा लिया',
-      'send_reminder': 'व्हाट्सएप तकादा भेजें',
-
-      // Menu & Settings
-      'settings': 'सेटिंग्स',
-      'store_profile': 'दुकान प्रोफाइल व जीएसटी',
-      'business_vertical': 'दुकान का प्रकार (Vertical)',
-      'whatsapp_support': 'व्हाट्सएप सपोर्ट',
-      'app_version': 'ऐप वर्शन',
-      'language': 'भाषा (Language)',
-      'select_language': 'अपनी भाषा चुनें',
-      'save': 'सुरक्षित करें',
-      'cancel': 'रद्द करें',
-      'confirm': 'पुष्टि करें',
-      'delete': 'हटाएं',
-      'edit': 'बदलें',
-      'close': 'बंद करें',
-    },
-
-    // Marathi (मराठी)
-    'mr': {
-      // Navigation
-      'nav_home': 'मुख्य',
-      'nav_products': 'वस्तू',
-      'nav_billing': 'बिलिंग',
-      'nav_khata': 'खाते',
-      'nav_menu': 'मेनू',
-
-      // POS / Billing
-      'pos_billing_title': 'जलद बिलिंग काउंटर',
-      'search_items_placeholder': 'वस्तू शोधा किंवा बारकोड स्कॅन करा...',
-      'cart_empty_title': 'कार्ट रिकामी आहे',
-      'cart_empty_subtitle': 'यादीतून वस्तू निवडा किंवा बारकोड स्कॅन करा',
-      'total': 'एकूण',
-      'subtotal': 'उप-एकूण',
-      'tax': 'जीएसटी / कर',
-      'discount': 'सूट / डिस्काउंट',
-      'round_off': 'राउंड ऑफ',
-      'pay_now': 'बिल बनवा',
-      'checkout': 'चेकआउट',
-      'clear_cart': 'रिकामा करा',
-      'hold_cart': 'होल्ड',
-      'recall_cart': 'परत आणा',
-      'item': 'वस्तू',
-      'items': 'वस्तू',
-      'qty': 'नग / प्रमाण',
-      'price': 'दर',
-      'stock': 'शिल्लक',
-      'cash': 'रोख (Cash)',
-      'online_upi': 'ऑनलाइन / UPI',
-      'udhar_credit': 'उधारी (Khata)',
-      'split_payment': 'विभागून पेमेंट',
-      'tendered': 'ग्राहकाने दिले',
-      'change': 'परत देणे',
-      'customer_optional': 'ग्राहक (ऐच्छिक)',
-
-      // Products / Inventory
-      'products_title': 'उत्पादने व साठा',
-      'add_product': '+ नवीन वस्तू जोडा',
-      'inward_ai': 'AI द्वारे आवक नोंदवा',
-      'rapid_scan': 'रॅपिड स्कॅन',
-      'cost_price': 'खरेदी दर',
-      'selling_price': 'विक्री दर',
-      'mrp': 'एमआरपी',
-      'variants': 'व्हेरिएंट्स (आकार/रंग)',
-      'select_variant': 'व्हेरिएंट निवडा',
-      'low_stock_warning': 'कमी साठा इशारा',
-      'unlimited_stock': 'अमर्याद साठा',
-      'category': 'वर्गवारी (Category)',
-      'unit': 'एकक (Unit)',
-
-      // Returns / Refund
-      'sales_return': 'विक्री परत',
-      'partial_return': 'काही वस्तू परत (टुकड्यांत)',
-      'return_items': 'वस्तू परत घ्या',
-      'full_void': 'पूर्ण बिल रद्द',
-      'refund_amount': 'परतावा रक्कम',
-      'refund_mode': 'परतावा पद्धत',
-      'return_reason': 'परतीचे कारण',
-      'restock_items': 'साठ्यात पुन्हा जमा करा',
-      'credit_note': 'क्रेडिट नोट',
-
-      // Khata / Customers
-      'khata_title': 'ग्राहक खातेवही (उधारी)',
-      'customer_name': 'ग्राहकाचे नाव',
-      'customer_phone': 'मोबाईल नंबर',
-      'current_balance': 'शिल्लक बाकी',
-      'give_credit': 'उधार दिले',
-      'receive_payment': 'जमा केले',
-      'send_reminder': 'व्हॉट्सअॅप आठवण पाठवा',
-
-      // Menu & Settings
-      'settings': 'सेटिंग्ज',
-      'store_profile': 'दुकान प्रोफाईल व कर',
-      'business_vertical': 'व्यवसाय प्रकार',
-      'whatsapp_support': 'व्हॉट्सअॅप मदत',
-      'app_version': 'अ‍ॅप आवृत्ती',
-      'language': 'भाषा (Language)',
-      'select_language': 'आपली भाषा निवडा',
-      'save': 'जतन करा',
-      'cancel': 'रद्द करा',
-      'confirm': 'खात्री करा',
-      'delete': 'हटवा',
-      'edit': 'बदला',
-      'close': 'बंद करा',
-    },
-
-    // Gujarati (ગુજરાતી)
-    'gu': {
-      // Navigation
-      'nav_home': 'હોમ',
-      'nav_products': 'વસ્તુઓ',
-      'nav_billing': 'બિલિંગ',
-      'nav_khata': 'ખાતાવહી',
-      'nav_menu': 'મેનુ',
-
-      // POS / Billing
-      'pos_billing_title': 'ઝડપી બિલિંગ કાઉન્ટર',
-      'search_items_placeholder': 'વસ્તુ શોધો અથવા બારકોડ સ્કેન કરો...',
-      'cart_empty_title': 'કાર્ટ ખાલી છે',
-      'cart_empty_subtitle': 'યાદીમાંથી વસ્તુ પસંદ કરો અથવા સ્કેન કરો',
-      'total': 'કુલ રકમ',
-      'subtotal': 'પેટા રકમ',
-      'tax': 'જીએસટી / ટેક્સ',
-      'discount': 'ડિસ્કાઉન્ટ / છૂટ',
-      'round_off': 'રાઉન્ડ ઓફ',
-      'pay_now': 'બિલ બનાવો',
-      'checkout': 'ચેકઆઉટ',
-      'clear_cart': 'ખાલી કરો',
-      'hold_cart': 'હોલ્ડ',
-      'recall_cart': 'પાછું લાવો',
-      'item': 'વસ્તુ',
-      'items': 'વસ્તુઓ',
-      'qty': 'જથ્થો (Qty)',
-      'price': 'ભાવ',
-      'stock': 'સ્ટોક',
-      'cash': 'રોકડ (Cash)',
-      'online_upi': 'ઓનલાઇન / UPI',
-      'udhar_credit': 'ઉધાર (ખાતું)',
-      'split_payment': 'ભાગલા પેમેન્ટ',
-      'tendered': 'ગ્રાહકે આપ્યા',
-      'change': 'પાછા આપવાના',
-      'customer_optional': 'ગ્રાહક (વૈકલ્પિક)',
-
-      // Products / Inventory
-      'products_title': 'વસ્તુઓ અને સ્ટોક',
-      'add_product': '+ નવી વસ્તુ ઉમેરો',
-      'inward_ai': 'AI થી બિલ ચડાવો',
-      'rapid_scan': 'રેપિડ સ્કેન',
-      'cost_price': 'ખરીદી કિંમત',
-      'selling_price': 'વેચાણ કિંમત',
-      'mrp': 'એમઆરપી',
-      'variants': 'સાઇઝ / કલર',
-      'select_variant': 'વેરિઅન્ટ પસંદ કરો',
-      'low_stock_warning': 'ઓછા સ્ટોકની ચેતવણી',
-      'unlimited_stock': 'અમર્યાદિત સ્ટોક',
-      'category': 'કેટેગરી',
-      'unit': 'એકમ (Unit)',
-
-      // Returns / Refund
-      'sales_return': 'વેચાણ પરત',
-      'partial_return': 'ટુકડાઓમાં વાપસી',
-      'return_items': 'વસ્તુઓ પાછી લો',
-      'full_void': 'આખું બિલ રદ',
-      'refund_amount': 'પરત રકમ',
-      'refund_mode': 'પરત પદ્ધતિ',
-      'return_reason': 'વાપસીનું કારણ',
-      'restock_items': 'સ્ટોકમાં પાછું ઉમેરો',
-      'credit_note': 'ક્રેડિટ નોટ',
-
-      // Khata / Customers
-      'khata_title': 'ગ્રાહક ખાતાવહી (ઉધાર)',
-      'customer_name': 'ગ્રાહકનું નામ',
-      'customer_phone': 'મોબાઇલ નંબર',
-      'current_balance': 'બાકી રકમ',
-      'give_credit': 'ઉધાર આપ્યું',
-      'receive_payment': 'જમા લીધું',
-      'send_reminder': 'વોટ્સએપ યાદી મોકલો',
-
-      // Menu & Settings
-      'settings': 'સેટિંગ્સ',
-      'store_profile': 'દુકાન પ્રોફાઇલ અને જીએસટી',
-      'business_vertical': 'વેપાર પ્રકાર',
-      'whatsapp_support': 'વોટ્સએપ સપોર્ટ',
-      'app_version': 'એપ વર્ઝન',
-      'language': 'ભાષા (Language)',
-      'select_language': 'તમારી ભાષા પસંદ કરો',
-      'save': 'સાચવો',
-      'cancel': 'રદ કરો',
-      'confirm': 'ખાતરી કરો',
-      'delete': 'કાઢી નાખો',
-      'edit': 'ફેરફાર કરો',
-      'close': 'બંધ કરો',
-    },
+  /// Position of each language inside every row of [_t].
+  static const Map<String, int> _langIndex = {
+    'en': 0,
+    'hi': 1,
+    'mr': 2,
+    'gu': 3,
+    'ta': 4,
+    'te': 5,
+    'kn': 6,
+    'bn': 7,
+    'pa': 8,
   };
 
+  /// key -> [en, hi, mr, gu, ta, te, kn, bn, pa]
+  ///
+  /// One row per string with every language on it, so a missing
+  /// translation is a short row the test catches, not a key quietly
+  /// absent from one of nine separate maps.
+  static const Map<String, List<String>> _t = {
+    // ---- Navigation ----
+    'nav_home': ['Home', 'होम', 'होम', 'હોમ', 'முகப்பு', 'హోమ్', 'ಮುಖಪುಟ', 'হোম', 'ਹੋਮ'],
+    'nav_products': ['Products', 'प्रोडक्ट', 'प्रॉडक्ट', 'પ્રોડક્ટ', 'பொருட்கள்', 'ఉత్పత్తులు', 'ಉತ್ಪನ್ನಗಳು', 'পণ্য', 'ਉਤਪਾਦ'],
+    'nav_billing': ['Billing', 'बिलिंग', 'बिलिंग', 'બિલિંગ', 'பில்லிங்', 'బిల్లింగ్', 'ಬಿಲ್ಲಿಂಗ್', 'বিলিং', 'ਬਿਲਿੰਗ'],
+    'nav_khata': ['Khata', 'खाता', 'खाते', 'ખાતું', 'கணக்கு', 'ఖాతా', 'ಖಾತೆ', 'খাতা', 'ਖਾਤਾ'],
+    'nav_menu': ['Menu', 'मेन्यू', 'मेनू', 'મેનુ', 'மெனு', 'మెనూ', 'ಮೆನು', 'মেনু', 'ਮੀਨੂ'],
+    'nav_reports': ['Reports', 'रिपोर्ट', 'अहवाल', 'રિપોર્ટ', 'அறிக்கை', 'నివేదికలు', 'ವರದಿಗಳು', 'রিপোর্ট', 'ਰਿਪੋਰਟ'],
+    'nav_settings': ['Settings', 'सेटिंग', 'सेटिंग', 'સેટિંગ', 'அமைப்புகள்', 'సెట్టింగ్‌లు', 'ಸೆಟ್ಟಿಂಗ್‌ಗಳು', 'সেটিংস', 'ਸੈਟਿੰਗਾਂ'],
+    'nav_inventory': ['Inventory', 'स्टॉक', 'स्टॉक', 'સ્ટોક', 'சரக்கு', 'నిల్వ', 'ದಾಸ್ತಾನು', 'স্টক', 'ਸਟਾਕ'],
+    // ---- Common actions ----
+    'save': ['Save', 'सेव करें', 'जतन करा', 'સેવ કરો', 'சேமி', 'సేవ్ చేయి', 'ಉಳಿಸಿ', 'সেভ করুন', 'ਸੇਵ ਕਰੋ'],
+    'cancel': ['Cancel', 'रद्द करें', 'रद्द करा', 'રદ કરો', 'ரத்து', 'రద్దు', 'ರದ್ದು', 'বাতিল', 'ਰੱਦ ਕਰੋ'],
+    'delete': ['Delete', 'हटाएं', 'हटवा', 'કાઢી નાખો', 'நீக்கு', 'తొలగించు', 'ಅಳಿಸಿ', 'মুছুন', 'ਮਿਟਾਓ'],
+    'edit': ['Edit', 'बदलें', 'बदला', 'સંપાદિત કરો', 'திருத்து', 'సవరించు', 'ಸಂಪಾದಿಸಿ', 'সম্পাদনা', 'ਸੋਧੋ'],
+    'add': ['Add', 'जोड़ें', 'जोडा', 'ઉમેરો', 'சேர்', 'జోడించు', 'ಸೇರಿಸಿ', 'যোগ করুন', 'ਜੋੜੋ'],
+    'search': ['Search', 'खोजें', 'शोधा', 'શોધો', 'தேடு', 'వెతుకు', 'ಹುಡುಕಿ', 'খুঁজুন', 'ਖੋਜੋ'],
+    'share': ['Share', 'शेयर करें', 'शेअर करा', 'શેર કરો', 'பகிர்', 'పంచు', 'ಹಂಚಿಕೊಳ್ಳಿ', 'শেয়ার', 'ਸਾਂਝਾ ਕਰੋ'],
+    'print': ['Print', 'प्रिंट', 'प्रिंट', 'પ્રિન્ટ', 'அச்சிடு', 'ప్రింట్', 'ಮುದ್ರಿಸಿ', 'প্রিন্ট', 'ਪ੍ਰਿੰਟ'],
+    'close': ['Close', 'बंद करें', 'बंद करा', 'બંધ કરો', 'மூடு', 'మూసివేయి', 'ಮುಚ್ಚಿ', 'বন্ধ', 'ਬੰਦ ਕਰੋ'],
+    'back': ['Back', 'पीछे', 'मागे', 'પાછળ', 'பின்', 'వెనుకకు', 'ಹಿಂದೆ', 'পিছনে', 'ਪਿੱਛੇ'],
+    'next': ['Next', 'आगे', 'पुढे', 'આગળ', 'அடுத்து', 'తదుపరి', 'ಮುಂದೆ', 'পরবর্তী', 'ਅੱਗੇ'],
+    'done': ['Done', 'हो गया', 'झाले', 'થઈ ગયું', 'முடிந்தது', 'పూర్తయింది', 'ಮುಗಿದಿದೆ', 'সম্পন্ন', 'ਹੋ ਗਿਆ'],
+    'yes': ['Yes', 'हाँ', 'होय', 'હા', 'ஆம்', 'అవును', 'ಹೌದು', 'হ্যাঁ', 'ਹਾਂ'],
+    'no': ['No', 'नहीं', 'नाही', 'ના', 'இல்லை', 'కాదు', 'ಇಲ್ಲ', 'না', 'ਨਹੀਂ'],
+    'ok': ['OK', 'ठीक है', 'ठीक आहे', 'બરાબર', 'சரி', 'సరే', 'ಸರಿ', 'ঠিক আছে', 'ਠੀਕ ਹੈ'],
+    'confirm': ['Confirm', 'पक्का करें', 'निश्चित करा', 'પુષ્ટિ કરો', 'உறுதிப்படுத்து', 'నిర్ధారించు', 'ದೃಢೀಕರಿಸಿ', 'নিশ্চিত করুন', 'ਪੁਸ਼ਟੀ ਕਰੋ'],
+    'retry': ['Try Again', 'फिर कोशिश करें', 'पुन्हा प्रयत्न करा', 'ફરી પ્રયાસ કરો', 'மீண்டும் முயற்சி', 'మళ్ళీ ప్రయత్నించు', 'ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ', 'আবার চেষ্টা করুন', 'ਦੁਬਾਰਾ ਕੋਸ਼ਿਸ਼ ਕਰੋ'],
+    'loading': ['Loading...', 'लोड हो रहा है...', 'लोड होत आहे...', 'લોડ થઈ રહ્યું છે...', 'ஏற்றுகிறது...', 'లోడ్ అవుతోంది...', 'ಲೋಡ್ ಆಗುತ್ತಿದೆ...', 'লোড হচ্ছে...', 'ਲੋਡ ਹੋ ਰਿਹਾ ਹੈ...'],
+    'error': ['Error', 'गड़बड़', 'चूक', 'ભૂલ', 'பிழை', 'లోపం', 'ದೋಷ', 'ত্রুটি', 'ਗਲਤੀ'],
+    'success': ['Success', 'हो गया', 'यशस्वी', 'સફળ', 'வெற்றி', 'విజయవంతం', 'ಯಶಸ್ವಿ', 'সফল', 'ਸਫਲ'],
+    'select': ['Select', 'चुनें', 'निवडा', 'પસંદ કરો', 'தேர்ந்தெடு', 'ఎంచుకో', 'ಆಯ್ಕೆಮಾಡಿ', 'নির্বাচন করুন', 'ਚੁਣੋ'],
+    'clear': ['Clear', 'खाली करें', 'रिकामे करा', 'સાફ કરો', 'அழி', 'క్లియర్', 'ತೆರವುಗೊಳಿಸಿ', 'পরিষ্কার', 'ਸਾਫ਼ ਕਰੋ'],
+    'apply': ['Apply', 'लागू करें', 'लागू करा', 'લાગુ કરો', 'பயன்படுத்து', 'వర్తించు', 'ಅನ್ವಯಿಸಿ', 'প্রয়োগ', 'ਲਾਗੂ ਕਰੋ'],
+    'remove': ['Remove', 'निकालें', 'काढा', 'દૂર કરો', 'அகற்று', 'తీసివేయి', 'ತೆಗೆದುಹಾಕಿ', 'সরান', 'ਹਟਾਓ'],
+    'update': ['Update', 'अपडेट', 'अपडेट', 'અપડેટ', 'புதுப்பி', 'నవీకరించు', 'ನವೀಕರಿಸಿ', 'আপডেট', 'ਅੱਪਡੇਟ'],
+    'view_all': ['View All', 'सब देखें', 'सर्व पहा', 'બધું જુઓ', 'அனைத்தும் பார்', 'అన్నీ చూడు', 'ಎಲ್ಲಾ ನೋಡಿ', 'সব দেখুন', 'ਸਭ ਵੇਖੋ'],
+    'today': ['Today', 'आज', 'आज', 'આજે', 'இன்று', 'ఈరోజు', 'ಇಂದು', 'আজ', 'ਅੱਜ'],
+    'yesterday': ['Yesterday', 'कल', 'काल', 'ગઈકાલે', 'நேற்று', 'నిన్న', 'ನಿನ್ನೆ', 'গতকাল', 'ਕੱਲ੍ਹ'],
+    'total': ['Total', 'कुल', 'एकूण', 'કુલ', 'மொத்தம்', 'మొత్తం', 'ಒಟ್ಟು', 'মোট', 'ਕੁੱਲ'],
+    'optional': ['Optional', 'वैकल्पिक', 'ऐच्छिक', 'વૈકલ્પિક', 'விருப்பம்', 'ఐచ్ఛికం', 'ಐಚ್ಛಿಕ', 'ঐচ্ছিক', 'ਵਿਕਲਪਿਕ'],
+    'required': ['Required', 'जरूरी', 'आवश्यक', 'જરૂરી', 'தேவை', 'అవసరం', 'ಅಗತ್ಯ', 'প্রয়োজনীয়', 'ਲੋੜੀਂਦਾ'],
+    // ---- POS / Billing ----
+    'pos_billing_title': ['Fast Billing Counter', 'तेज़ बिलिंग काउंटर', 'जलद बिलिंग काउंटर', 'ઝડપી બિલિંગ કાઉન્ટર', 'விரைவு பில்லிங்', 'వేగవంతమైన బిల్లింగ్', 'ವೇಗದ ಬಿಲ್ಲಿಂಗ್', 'দ্রুত বিলিং', 'ਤੇਜ਼ ਬਿਲਿੰਗ ਕਾਊਂਟਰ'],
+    'search_items_placeholder': ['Search items, barcode or SKU...', 'आइटम, बारकोड या SKU खोजें...', 'आयटम, बारकोड किंवा SKU शोधा...', 'આઇટમ, બારકોડ શોધો...', 'பொருள், பார்கோடு தேடு...', 'వస్తువు, బార్‌కోడ్ వెతుకు...', 'ವಸ್ತು, ಬಾರ್‌ಕೋಡ್ ಹುಡುಕಿ...', 'আইটেম, বারকোড খুঁজুন...', 'ਆਈਟਮ, ਬਾਰਕੋਡ ਖੋਜੋ...'],
+    'cart_empty_title': ['Cart is Empty', 'कार्ट खाली है', 'कार्ट रिकामी आहे', 'કાર્ટ ખાલી છે', 'கூடை காலி', 'బండి ఖాళీ', 'ಬುಟ್ಟಿ ಖಾಲಿ', 'কার্ট খালি', 'ਕਾਰਟ ਖਾਲੀ ਹੈ'],
+    'cart_empty_subtitle': ['Tap a product or scan a barcode to start', 'प्रोडक्ट दबाएं या बारकोड स्कैन करें', 'प्रॉडक्ट दाबा किंवा बारकोड स्कॅन करा', 'પ્રોડક્ટ દબાવો અથવા બારકોડ સ્કેન કરો', 'பொருளைத் தொடவும் அல்லது ஸ்கேன் செய்யவும்', 'ఉత్పత్తిని నొక్కండి లేదా స్కాన్ చేయండి', 'ಉತ್ಪನ್ನ ಒತ್ತಿ ಅಥವಾ ಸ್ಕ್ಯಾನ್ ಮಾಡಿ', 'পণ্য চাপুন বা স্ক্যান করুন', 'ਉਤਪਾਦ ਦਬਾਓ ਜਾਂ ਸਕੈਨ ਕਰੋ'],
+    'subtotal': ['Subtotal', 'सब-टोटल', 'उप-एकूण', 'પેટા કુલ', 'கூட்டுத்தொகை', 'ఉప మొత్తం', 'ಉಪಮೊತ್ತ', 'উপমোট', 'ਉਪ-ਕੁੱਲ'],
+    'tax': ['Tax', 'टैक्स', 'कर', 'ટેક્સ', 'வரி', 'పన్ను', 'ತೆರಿಗೆ', 'কর', 'ਟੈਕਸ'],
+    'discount': ['Discount', 'छूट', 'सूट', 'ડિસ્કાઉન્ટ', 'தள்ளுபடி', 'తగ్గింపు', 'ರಿಯಾಯಿತಿ', 'ছাড়', 'ਛੋਟ'],
+    'round_off': ['Round Off', 'राउंड ऑफ', 'राऊंड ऑफ', 'રાઉન્ડ ઓફ', 'முழுமையாக்கு', 'రౌండ్ ఆఫ్', 'ರೌಂಡ್ ಆಫ್', 'রাউন্ড অফ', 'ਰਾਊਂਡ ਆਫ'],
+    'pay_now': ['Charge', 'पैसे लें', 'पैसे घ्या', 'ચાર્જ કરો', 'கட்டணம்', 'వసూలు', 'ಶುಲ್ಕ', 'চার্জ', 'ਚਾਰਜ ਕਰੋ'],
+    'checkout': ['Checkout', 'बिल बनाएं', 'बिल बनवा', 'ચેકઆઉટ', 'பில் போடு', 'చెక్అవుట్', 'ಚೆಕ್‌ಔಟ್', 'চেকআউট', 'ਚੈੱਕਆਊਟ'],
+    'clear_cart': ['Clear', 'खाली करें', 'रिकामे करा', 'સાફ કરો', 'அழி', 'క్లియర్', 'ತೆರವು', 'পরিষ্কার', 'ਸਾਫ਼ ਕਰੋ'],
+    'hold_cart': ['Hold', 'रोकें', 'थांबवा', 'હોલ્ડ', 'நிறுத்து', 'నిలిపివేయి', 'ತಡೆಹಿಡಿ', 'হোল্ড', 'ਰੋਕੋ'],
+    'recall_cart': ['Recall', 'वापस लाएं', 'परत आणा', 'પાછું લાવો', 'மீட்டெடு', 'తిరిగి తీసుకో', 'ಮರಳಿ ಪಡೆ', 'ফিরিয়ে আনুন', 'ਵਾਪਸ ਲਿਆਓ'],
+    'item': ['Item', 'आइटम', 'आयटम', 'આઇટમ', 'பொருள்', 'వస్తువు', 'ವಸ್ತು', 'আইটেম', 'ਆਈਟਮ'],
+    'items': ['Items', 'आइटम', 'आयटम', 'આઇટમ', 'பொருட்கள்', 'వస్తువులు', 'ವಸ್ತುಗಳು', 'আইটেম', 'ਆਈਟਮਾਂ'],
+    'qty': ['Qty', 'मात्रा', 'संख्या', 'જથ્થો', 'அளவு', 'పరిమాణం', 'ಪ್ರಮಾಣ', 'পরিমাণ', 'ਮਾਤਰਾ'],
+    'rate': ['Rate', 'रेट', 'दर', 'દર', 'விலை', 'రేటు', 'ದರ', 'দর', 'ਰੇਟ'],
+    'amount': ['Amount', 'रकम', 'रक्कम', 'રકમ', 'தொகை', 'మొత్తం', 'ಮೊತ್ತ', 'পরিমাণ', 'ਰਕਮ'],
+    'cash': ['Cash', 'नकद', 'रोख', 'રોકડ', 'பணம்', 'నగదు', 'ನಗದು', 'নগদ', 'ਨਕਦ'],
+    'upi': ['UPI', 'UPI', 'UPI', 'UPI', 'UPI', 'UPI', 'UPI', 'UPI', 'UPI'],
+    'card': ['Card', 'कार्ड', 'कार्ड', 'કાર્ડ', 'அட்டை', 'కార్డు', 'ಕಾರ್ಡ್', 'কার্ড', 'ਕਾਰਡ'],
+    'credit_udhar': ['Udhar', 'उधार', 'उधार', 'ઉધાર', 'கடன்', 'అప్పు', 'ಸಾಲ', 'বাকি', 'ਉਧਾਰ'],
+    'payment_method': ['Payment Method', 'पैसे कैसे लिए', 'पैसे कसे घेतले', 'ચુકવણી રીત', 'பணம் செலுத்தும் முறை', 'చెల్లింపు విధానం', 'ಪಾವತಿ ವಿಧಾನ', 'পেমেন্ট পদ্ধতি', 'ਭੁਗਤਾਨ ਤਰੀਕਾ'],
+    'customer': ['Customer', 'ग्राहक', 'ग्राहक', 'ગ્રાહક', 'வாடிக்கையாளர்', 'కస్టమర్', 'ಗ್ರಾಹಕ', 'গ্রাহক', 'ਗਾਹਕ'],
+    'add_customer': ['Add Customer', 'ग्राहक जोड़ें', 'ग्राहक जोडा', 'ગ્રાહક ઉમેરો', 'வாடிக்கையாளர் சேர்', 'కస్టమర్ జోడించు', 'ಗ್ರಾಹಕ ಸೇರಿಸಿ', 'গ্রাহক যোগ করুন', 'ਗਾਹਕ ਜੋੜੋ'],
+    'bill_saved': ['Bill Saved', 'बिल सेव हो गया', 'बिल जतन झाले', 'બિલ સેવ થયું', 'பில் சேமிக்கப்பட்டது', 'బిల్లు సేవ్ అయింది', 'ಬಿಲ್ ಉಳಿಸಲಾಗಿದೆ', 'বিল সেভ হয়েছে', 'ਬਿੱਲ ਸੇਵ ਹੋ ਗਿਆ'],
+    'scan_barcode': ['Scan Barcode', 'बारकोड स्कैन करें', 'बारकोड स्कॅन करा', 'બારકોડ સ્કેન કરો', 'பார்கோடு ஸ்கேன்', 'బార్‌కోడ్ స్కాన్', 'ಬಾರ್‌ಕೋಡ್ ಸ್ಕ್ಯಾನ್', 'বারকোড স্ক্যান', 'ਬਾਰਕੋਡ ਸਕੈਨ ਕਰੋ'],
+    'new_bill': ['New Bill', 'नया बिल', 'नवीन बिल', 'નવું બિલ', 'புதிய பில்', 'కొత్త బిల్లు', 'ಹೊಸ ಬಿಲ್', 'নতুন বিল', 'ਨਵਾਂ ਬਿੱਲ'],
+    // ---- Products ----
+    'add_product': ['Add Product', 'प्रोडक्ट जोड़ें', 'प्रॉडक्ट जोडा', 'પ્રોડક્ટ ઉમેરો', 'பொருள் சேர்', 'ఉత్పత్తి జోడించు', 'ಉತ್ಪನ್ನ ಸೇರಿಸಿ', 'পণ্য যোগ করুন', 'ਉਤਪਾਦ ਜੋੜੋ'],
+    'product_name': ['Product Name', 'प्रोडक्ट का नाम', 'प्रॉडक्टचे नाव', 'પ્રોડક્ટનું નામ', 'பொருள் பெயர்', 'ఉత్పత్తి పేరు', 'ಉತ್ಪನ್ನದ ಹೆಸರು', 'পণ্যের নাম', 'ਉਤਪਾਦ ਦਾ ਨਾਮ'],
+    'category': ['Category', 'कैटेगरी', 'श्रेणी', 'શ્રેણી', 'வகை', 'వర్గం', 'ವರ್ಗ', 'বিভাগ', 'ਸ਼੍ਰੇਣੀ'],
+    'selling_price': ['Selling Price', 'बेचने का दाम', 'विक्री किंमत', 'વેચાણ કિંમત', 'விற்பனை விலை', 'అమ్మకపు ధర', 'ಮಾರಾಟ ಬೆಲೆ', 'বিক্রয় মূল্য', 'ਵਿਕਰੀ ਕੀਮਤ'],
+    'cost_price': ['Cost Price', 'खरीद का दाम', 'खरेदी किंमत', 'ખરીદ કિંમત', 'கொள்முதல் விலை', 'కొనుగోలు ధర', 'ಖರೀದಿ ಬೆಲೆ', 'ক্রয় মূল্য', 'ਖਰੀਦ ਕੀਮਤ'],
+    'mrp': ['MRP', 'MRP', 'MRP', 'MRP', 'MRP', 'MRP', 'MRP', 'MRP', 'MRP'],
+    'stock': ['Stock', 'स्टॉक', 'स्टॉक', 'સ્ટોક', 'இருப்பு', 'నిల్వ', 'ದಾಸ್ತಾನು', 'স্টক', 'ਸਟਾਕ'],
+    'in_stock': ['In Stock', 'स्टॉक में है', 'स्टॉकमध्ये आहे', 'સ્ટોકમાં છે', 'இருப்பில் உள்ளது', 'నిల్వలో ఉంది', 'ದಾಸ್ತಾನಿನಲ್ಲಿದೆ', 'স্টকে আছে', 'ਸਟਾਕ ਵਿੱਚ'],
+    'out_of_stock': ['Out of Stock', 'स्टॉक खत्म', 'स्टॉक संपला', 'સ્ટોક ખતમ', 'இருப்பு இல்லை', 'నిల్వ లేదు', 'ದಾಸ್ತಾನು ಇಲ್ಲ', 'স্টক শেষ', 'ਸਟਾਕ ਖਤਮ'],
+    'low_stock': ['Low Stock', 'स्टॉक कम है', 'स्टॉक कमी आहे', 'સ્ટોક ઓછો', 'இருப்பு குறைவு', 'నిల్వ తక్కువ', 'ದಾಸ್ತಾನು ಕಡಿಮೆ', 'স্টক কম', 'ਸਟਾਕ ਘੱਟ'],
+    'barcode': ['Barcode', 'बारकोड', 'बारकोड', 'બારકોડ', 'பார்கோடு', 'బార్‌కోడ్', 'ಬಾರ್‌ಕೋಡ್', 'বারকোড', 'ਬਾਰਕੋਡ'],
+    'unit': ['Unit', 'यूनिट', 'युनिट', 'એકમ', 'அலகு', 'యూనిట్', 'ಘಟಕ', 'একক', 'ਇਕਾਈ'],
+    'no_products': ['No products yet', 'अभी कोई प्रोडक्ट नहीं', 'अजून प्रॉडक्ट नाही', 'હજી કોઈ પ્રોડક્ટ નથી', 'இன்னும் பொருட்கள் இல்லை', 'ఇంకా ఉత్పత్తులు లేవు', 'ಇನ್ನೂ ಉತ್ಪನ್ನಗಳಿಲ್ಲ', 'এখনো পণ্য নেই', 'ਅਜੇ ਕੋਈ ਉਤਪਾਦ ਨਹੀਂ'],
+    'stock_inward': ['Stock Inward', 'स्टॉक भरें', 'स्टॉक भरा', 'સ્ટોક ભરો', 'சரக்கு சேர்', 'నిల్వ చేర్చు', 'ದಾಸ್ತಾನು ಸೇರಿಸಿ', 'স্টক যোগ', 'ਸਟਾਕ ਭਰੋ'],
+    'expiry_date': ['Expiry Date', 'एक्सपायरी तारीख', 'एक्सपायरी तारीख', 'એક્સપાયરી તારીખ', 'காலாவधि தேதி', 'గడువు తేదీ', 'ಅವಧಿ ಮುಗಿಯುವ ದಿನಾಂಕ', 'মেয়াদ শেষের তারিখ', 'ਮਿਆਦ ਦੀ ਤਾਰੀਖ'],
+    // ---- Khata / Customers ----
+    'khata_title': ['Customer Khata', 'ग्राहक खाता', 'ग्राहक खाते', 'ગ્રાહક ખાતું', 'வாடிக்கையாளர் கணக்கு', 'కస్టమర్ ఖాతా', 'ಗ್ರಾಹಕ ಖಾತೆ', 'গ্রাহক খাতা', 'ਗਾਹਕ ਖਾਤਾ'],
+    'you_will_get': ['You will get', 'आपको मिलेंगे', 'तुम्हाला मिळतील', 'તમને મળશે', 'உங்களுக்கு வரவேண்டியது', 'మీకు రావాలి', 'ನಿಮಗೆ ಬರಬೇಕು', 'আপনি পাবেন', 'ਤੁਹਾਨੂੰ ਮਿਲਣਗੇ'],
+    'you_will_give': ['You will give', 'आपको देने हैं', 'तुम्हाला द्यायचे', 'તમારે આપવાના', 'நீங்கள் தரவேண்டியது', 'మీరు ఇవ్వాలి', 'ನೀವು ಕೊಡಬೇಕು', 'আপনি দেবেন', 'ਤੁਸੀਂ ਦੇਣੇ ਹਨ'],
+    'pending_ledger': ['Pending Ledger', 'बाकी हिसाब', 'शिल्लक हिशोब', 'બાકી હિસાબ', 'நிலுவை கணக்கு', 'పెండింగ్ ఖాతా', 'ಬಾಕಿ ಲೆಕ್ಕ', 'বকেয়া হিসাব', 'ਬਕਾਇਆ ਹਿਸਾਬ'],
+    'settle_up': ['Settle Up', 'हिसाब चुकाएं', 'हिशोब मिटवा', 'હિસાબ ચૂકવો', 'கணக்கு தீர்', 'లెక్క తీర్చు', 'ಲೆಕ್ಕ ತೀರಿಸಿ', 'হিসাব মেটান', 'ਹਿਸਾਬ ਚੁਕਾਓ'],
+    'no_customers': ['No customers yet', 'अभी कोई ग्राहक नहीं', 'अजून ग्राहक नाही', 'હજી કોઈ ગ્રાહક નથી', 'இன்னும் வாடிக்கையாளர் இல்லை', 'ఇంకా కస్టమర్లు లేరు', 'ಇನ್ನೂ ಗ್ರಾಹಕರಿಲ್ಲ', 'এখনো গ্রাহক নেই', 'ਅਜੇ ਕੋਈ ਗਾਹਕ ਨਹੀਂ'],
+    'phone_number': ['Phone Number', 'फोन नंबर', 'फोन नंबर', 'ફોન નંબર', 'தொலைபேசி எண்', 'ఫోన్ నంబర్', 'ಫೋನ್ ಸಂಖ್ಯೆ', 'ফোন নম্বর', 'ਫੋਨ ਨੰਬਰ'],
+    'send_reminder': ['Send Reminder', 'याद दिलाएं', 'आठवण करून द्या', 'રિમાઇન્ડર મોકલો', 'நினைவூட்டல் அனுப்பு', 'గుర్తు చేయి', 'ನೆನಪಿಸಿ', 'মনে করিয়ে দিন', 'ਯਾਦ ਕਰਾਓ'],
+    'total_debtors': ['Total Debtors', 'कुल उधार वाले', 'एकूण उधारदार', 'કુલ દેવાદાર', 'மொத்த கடனாளிகள்', 'మొత్తం అప్పుదారులు', 'ಒಟ್ಟು ಸಾಲಗಾರರು', 'মোট দেনাদার', 'ਕੁੱਲ ਉਧਾਰ ਵਾਲੇ'],
+    // ---- Dashboard ----
+    'todays_business': ['Today\'s Business', 'आज का धंधा', 'आजचा धंदा', 'આજનો ધંધો', 'இன்றைய வியாபாரம்', 'ఈరోజు వ్యాపారం', 'ಇಂದಿನ ವ್ಯಾಪಾರ', 'আজকের ব্যবসা', 'ਅੱਜ ਦਾ ਕਾਰੋਬਾਰ'],
+    'todays_sales': ['Today\'s Sales', 'आज की बिक्री', 'आजची विक्री', 'આજનું વેચાણ', 'இன்றைய விற்பனை', 'ఈరోజు అమ్మకాలు', 'ಇಂದಿನ ಮಾರಾಟ', 'আজকের বিক্রি', 'ਅੱਜ ਦੀ ਵਿਕਰੀ'],
+    'total_revenue': ['Total Revenue', 'कुल कमाई', 'एकूण कमाई', 'કુલ આવક', 'மொத்த வருவாய்', 'మొత్తం ఆదాయం', 'ಒಟ್ಟು ಆದಾಯ', 'মোট আয়', 'ਕੁੱਲ ਆਮਦਨ'],
+    'est_profit': ['Est. Profit', 'अनुमानित मुनाफा', 'अंदाजे नफा', 'અંદાજિત નફો', 'மதிப்பிட்ட லாபம்', 'అంచనా లాభం', 'ಅಂದಾಜು ಲಾಭ', 'আনুমানিক লাভ', 'ਅਨੁਮਾਨਿਤ ਮੁਨਾਫ਼ਾ'],
+    'total_bills': ['Total Bills', 'कुल बिल', 'एकूण बिल', 'કુલ બિલ', 'மொத்த பில்', 'మొత్తం బిల్లులు', 'ಒಟ್ಟು ಬಿಲ್', 'মোট বিল', 'ਕੁੱਲ ਬਿੱਲ'],
+    'quick_actions': ['Quick Actions', 'फटाफट काम', 'झटपट कामे', 'ઝડપી કામ', 'விரைவு செயல்கள்', 'త్వరిత చర్యలు', 'ತ್ವರಿತ ಕ್ರಿಯೆಗಳು', 'দ্রুত কাজ', 'ਤੇਜ਼ ਕੰਮ'],
+    'day_summary': ['Day Summary', 'दिन का हिसाब', 'दिवसाचा हिशोब', 'દિવસનો સારાંશ', 'நாள் சுருக்கம்', 'రోజు సారాంశం', 'ದಿನದ ಸಾರಾಂಶ', 'দিনের সারাংশ', 'ਦਿਨ ਦਾ ਸਾਰ'],
+    'cash_register': ['Cash Register', 'कैश काउंटर', 'रोख काउंटर', 'રોકડ કાઉન્ટર', 'பணப்பெட்டி', 'నగదు రిజిస్టర్', 'ನಗದು ಪೆಟ್ಟಿಗೆ', 'ক্যাশ রেজিস্টার', 'ਕੈਸ਼ ਕਾਊਂਟਰ'],
+    'transactions': ['Transactions', 'लेन-देन', 'व्यवहार', 'વ્યવહાર', 'பரிவர்த்தனைகள்', 'లావాదేవీలు', 'ವಹಿವಾಟುಗಳು', 'লেনদেন', 'ਲੈਣ-ਦੇਣ'],
+    // ---- Cash Register ----
+    'opening_float': ['Opening Cash', 'शुरू का कैश', 'सुरुवातीची रोख', 'શરૂઆતની રોકડ', 'தொடக்க பணம்', 'ప్రారంభ నగదు', 'ಆರಂಭಿಕ ನಗದು', 'শুরুর নগদ', 'ਸ਼ੁਰੂਆਤੀ ਨਕਦ'],
+    'cash_in_hand': ['Cash in Hand', 'हाथ में कैश', 'हातातील रोख', 'હાથમાં રોકડ', 'கையிருப்பு பணம்', 'చేతిలో నగదు', 'ಕೈಯಲ್ಲಿರುವ ನಗದು', 'হাতে নগদ', 'ਹੱਥ ਵਿੱਚ ਨਕਦ'],
+    'expected_in_drawer': ['Expected in Drawer', 'गल्ले में होना चाहिए', 'गल्ल्यात असावे', 'ડ્રોઅરમાં હોવું જોઈએ', 'பெட்டியில் இருக்க வேண்டியது', 'డ్రాయర్‌లో ఉండాలి', 'ಡ್ರಾಯರ್‌ನಲ್ಲಿ ಇರಬೇಕು', 'ড্রয়ারে থাকার কথা', 'ਗੱਲੇ ਵਿੱਚ ਹੋਣਾ ਚਾਹੀਦਾ'],
+    'counted_total': ['Counted Total', 'गिना हुआ कुल', 'मोजलेली एकूण', 'ગણેલી કુલ', 'எண்ணிய மொத்தம்', 'లెక్కించిన మొత్తం', 'ಎಣಿಸಿದ ಒಟ್ಟು', 'গোনা মোট', 'ਗਿਣਿਆ ਕੁੱਲ'],
+    'tally_counter': ['Tally Counter', 'नोट गिनती', 'नोट मोजणी', 'નોટ ગણતરી', 'நோட்டு எண்ணிக்கை', 'నోట్ల లెక్క', 'ನೋಟು ಎಣಿಕೆ', 'নোট গণনা', 'ਨੋਟ ਗਿਣਤੀ'],
+    'confirm_count': ['Confirm Count', 'गिनती पक्की करें', 'मोजणी निश्चित करा', 'ગણતરી પુષ્ટિ કરો', 'எண்ணிக்கையை உறுதி செய்', 'లెక్క నిర్ధారించు', 'ಎಣಿಕೆ ದೃಢೀಕರಿಸಿ', 'গণনা নিশ্চিত করুন', 'ਗਿਣਤੀ ਪੱਕੀ ਕਰੋ'],
+    'matched_exactly': ['Matches exactly', 'बिल्कुल सही', 'अगदी बरोबर', 'બરાબર મેળ', 'சரியாக பொருந்துகிறது', 'సరిగ్గా సరిపోలింది', 'ನಿಖರವಾಗಿ ಹೊಂದುತ್ತದೆ', 'হুবহু মিলেছে', 'ਬਿਲਕੁਲ ਸਹੀ'],
+    'short_by': ['Short by', 'कम है', 'कमी आहे', 'ઓછું છે', 'குறைவு', 'తక్కువ', 'ಕಡಿಮೆ', 'কম আছে', 'ਘੱਟ ਹੈ'],
+    'excess_by': ['Extra by', 'ज्यादा है', 'जास्त आहे', 'વધારે છે', 'அதிகம்', 'ఎక్కువ', 'ಹೆಚ್ಚು', 'বেশি আছে', 'ਵੱਧ ਹੈ'],
+    // ---- Settings ----
+    'language': ['Language', 'भाषा', 'भाषा', 'ભાષા', 'மொழி', 'భాష', 'ಭಾಷೆ', 'ভাষা', 'ਭਾਸ਼ਾ'],
+    'select_language': ['Select Language', 'भाषा चुनें', 'भाषा निवडा', 'ભાષા પસંદ કરો', 'மொழியைத் தேர்ந்தெடு', 'భాష ఎంచుకో', 'ಭಾಷೆ ಆಯ್ಕೆಮಾಡಿ', 'ভাষা নির্বাচন করুন', 'ਭਾਸ਼ਾ ਚੁਣੋ'],
+    'store_profile': ['Store Profile', 'दुकान की जानकारी', 'दुकानाची माहिती', 'દુકાનની માહિતી', 'கடை விவரம்', 'దుకాణ వివరాలు', 'ಅಂಗಡಿ ವಿವರ', 'দোকানের তথ্য', 'ਦੁਕਾਨ ਦੀ ਜਾਣਕਾਰੀ'],
+    'store_name': ['Store Name', 'दुकान का नाम', 'दुकानाचे नाव', 'દુકાનનું નામ', 'கடை பெயர்', 'దుకాణం పేరు', 'ಅಂಗಡಿ ಹೆಸರು', 'দোকানের নাম', 'ਦੁਕਾਨ ਦਾ ਨਾਮ'],
+    'owner_name': ['Owner Name', 'मालिक का नाम', 'मालकाचे नाव', 'માલિકનું નામ', 'உரிமையாளர் பெயர்', 'యజమాని పేరు', 'ಮಾಲೀಕರ ಹೆಸರು', 'মালিকের নাম', 'ਮਾਲਕ ਦਾ ਨਾਮ'],
+    'backup_restore': ['Backup & Restore', 'बैकअप और वापसी', 'बॅकअप आणि पुनर्संचयित', 'બેકઅપ અને પુનઃસ્થાપન', 'காப்பு மற்றும் மீட்பு', 'బ్యాకప్ & పునరుద్ధరణ', 'ಬ್ಯಾಕಪ್ ಮತ್ತು ಮರುಸ್ಥಾಪನೆ', 'ব্যাকআপ ও পুনরুদ্ধার', 'ਬੈਕਅੱਪ ਤੇ ਰੀਸਟੋਰ'],
+    'printer_setup': ['Printer Setup', 'प्रिंटर सेटअप', 'प्रिंटर सेटअप', 'પ્રિન્ટર સેટઅપ', 'அச்சுப்பொறி அமைப்பு', 'ప్రింటర్ సెటప్', 'ಪ್ರಿಂಟರ್ ಸೆಟಪ್', 'প্রিন্টার সেটআপ', 'ਪ੍ਰਿੰਟਰ ਸੈੱਟਅੱਪ'],
+    'sound_alerts': ['Sound Alerts', 'आवाज़ अलर्ट', 'आवाज सूचना', 'અવાજ ચેતવણી', 'ஒலி எச்சரிக்கை', 'ధ్వని హెచ్చరిక', 'ಧ್ವನಿ ಎಚ್ಚರಿಕೆ', 'শব্দ সতর্কতা', 'ਆਵਾਜ਼ ਚੇਤਾਵਨੀ'],
+    'logout': ['Logout', 'लॉगआउट', 'लॉगआउट', 'લોગઆઉટ', 'வெளியேறு', 'లాగ్అవుట్', 'ಲಾಗ್ಔಟ್', 'লগআউট', 'ਲਾਗਆਊਟ'],
+    'language_changed': ['Language changed', 'भाषा बदल गई', 'भाषा बदलली', 'ભાષા બદલાઈ', 'மொழி மாற்றப்பட்டது', 'భాష మార్చబడింది', 'ಭಾಷೆ ಬದಲಾಗಿದೆ', 'ভাষা পরিবর্তিত', 'ਭਾਸ਼ਾ ਬਦਲ ਗਈ'],
+    // ---- Invoice ----
+    'invoice': ['Invoice', 'बिल', 'बिल', 'બિલ', 'விலைப்பட்டியல்', 'ఇన్వాయిస్', 'ಸರಕುಪಟ್ಟಿ', 'চালান', 'ਬਿੱਲ'],
+    'invoice_no': ['Invoice No', 'बिल नंबर', 'बिल क्रमांक', 'બિલ નંબર', 'பில் எண்', 'బిల్లు నంబర్', 'ಬಿಲ್ ಸಂಖ್ಯೆ', 'বিল নম্বর', 'ਬਿੱਲ ਨੰਬਰ'],
+    'date': ['Date', 'तारीख', 'दिनांक', 'તારીખ', 'தேதி', 'తేదీ', 'ದಿನಾಂಕ', 'তারিখ', 'ਤਾਰੀਖ'],
+    'bill_to': ['Bill To', 'ग्राहक', 'ग्राहक', 'ગ્રાહક', 'வாடிக்கையாளர்', 'కస్టమర్', 'ಗ್ರಾಹಕ', 'গ্রাহক', 'ਗਾਹਕ'],
+    'grand_total': ['Grand Total', 'कुल रकम', 'एकूण रक्कम', 'કુલ રકમ', 'மொத்தத் தொகை', 'మొత్తం', 'ಒಟ್ಟು ಮೊತ್ತ', 'সর্বমোট', 'ਕੁੱਲ ਰਕਮ'],
+    'paid': ['Paid', 'चुकाया', 'दिले', 'ચૂકવ્યું', 'செலுத்தப்பட்டது', 'చెల్లించారు', 'ಪಾವತಿಸಲಾಗಿದೆ', 'পরিশোধিত', 'ਅਦਾ ਕੀਤਾ'],
+    'balance_due': ['Balance Due', 'बाकी रकम', 'शिल्लक रक्कम', 'બાકી રકમ', 'நிலுவைத் தொகை', 'బకాయి మొత్తం', 'ಬಾಕಿ ಮೊತ್ತ', 'বকেয়া', 'ਬਕਾਇਆ ਰਕਮ'],
+    'thank_you': ['Thank you! Visit again', 'धन्यवाद! फिर आइए', 'धन्यवाद! पुन्हा या', 'આભાર! ફરી આવજો', 'நன்றி! மீண்டும் வாருங்கள்', 'ధన్యవాదాలు! మళ్ళీ రండి', 'ಧನ್ಯವಾದ! ಮತ್ತೆ ಬನ್ನಿ', 'ধন্যবাদ! আবার আসবেন', 'ਧੰਨਵਾਦ! ਫਿਰ ਆਇਓ'],
+    'savings': ['You Saved', 'आपने बचाए', 'तुम्ही वाचवले', 'તમે બચાવ્યા', 'நீங்கள் சேமித்தது', 'మీరు ఆదా చేశారు', 'ನೀವು ಉಳಿಸಿದ್ದೀರಿ', 'আপনি সাশ্রয় করেছেন', 'ਤੁਸੀਂ ਬਚਾਏ'],
+    // ---- Messages ----
+    'no_internet': ['No internet connection', 'इंटरनेट नहीं है', 'इंटरनेट नाही', 'ઇન્ટરનેટ નથી', 'இணையம் இல்லை', 'ఇంటర్నెట్ లేదు', 'ಇಂಟರ್ನೆಟ್ ಇಲ್ಲ', 'ইন্টারনেট নেই', 'ਇੰਟਰਨੈੱਟ ਨਹੀਂ ਹੈ'],
+    'saved_successfully': ['Saved successfully', 'सेव हो गया', 'जतन झाले', 'સેવ થઈ ગયું', 'வெற்றிகரமாக சேமிக்கப்பட்டது', 'విజయవంతంగా సేవ్ అయింది', 'ಯಶಸ್ವಿಯಾಗಿ ಉಳಿಸಲಾಗಿದೆ', 'সফলভাবে সেভ হয়েছে', 'ਸਫਲਤਾਪੂਰਵਕ ਸੇਵ ਹੋਇਆ'],
+    'something_went_wrong': ['Something went wrong', 'कुछ गड़बड़ हो गई', 'काहीतरी चूक झाली', 'કંઈક ખોટું થયું', 'ஏதோ தவறு நடந்தது', 'ఏదో తప్పు జరిగింది', 'ಏನೋ ತಪ್ಪಾಗಿದೆ', 'কিছু ভুল হয়েছে', 'ਕੁਝ ਗਲਤ ਹੋ ਗਿਆ'],
+    'are_you_sure': ['Are you sure?', 'पक्का?', 'नक्की?', 'ચોક્કસ?', 'நிச்சயமா?', 'ఖచ్చితంగా?', 'ಖಚಿತವೇ?', 'আপনি কি নিশ্চিত?', 'ਪੱਕਾ?'],
+    'cannot_be_undone': ['This cannot be undone', 'ये वापस नहीं होगा', 'हे परत होणार नाही', 'આ પાછું નહીં થાય', 'இதை மாற்ற முடியாது', 'దీన్ని రద్దు చేయలేరు', 'ಇದನ್ನು ರದ್ದುಗೊಳಿಸಲಾಗದು', 'এটি ফেরানো যাবে না', 'ਇਹ ਵਾਪਸ ਨਹੀਂ ਹੋਵੇਗਾ'],
+    'enter_amount': ['Enter amount', 'रकम डालें', 'रक्कम टाका', 'રકમ દાખલ કરો', 'தொகையை உள்ளிடு', 'మొత్తం నమోదు చేయి', 'ಮೊತ್ತ ನಮೂದಿಸಿ', 'পরিমাণ লিখুন', 'ਰਕਮ ਪਾਓ'],
+    'field_required': ['This field is required', 'ये भरना जरूरी है', 'हे भरणे आवश्यक', 'આ ભરવું જરૂરી છે', 'இது தேவை', 'ఇది అవసరం', 'ಇದು ಅಗತ್ಯ', 'এটি প্রয়োজনীয়', 'ਇਹ ਭਰਨਾ ਜ਼ਰੂਰੀ ਹੈ'],
+    // ---- Voice ----
+    'voice_received': ['Received', 'मिले', 'मिळाले', 'મળ્યા', 'பெறப்பட்டது', 'వచ్చింది', 'ಸ್ವೀಕರಿಸಲಾಗಿದೆ', 'পাওয়া গেছে', 'ਮਿਲੇ'],
+    'voice_rupees': ['rupees', 'रुपये', 'रुपये', 'રૂપિયા', 'ரூபாய்', 'రూపాయలు', 'ರೂಪಾಯಿ', 'টাকা', 'ਰੁਪਏ'],
+  };
+
+  /// Every key this app knows about. Used by the localization test.
+  static Iterable<String> get allKeys => _t.keys;
+
+  /// Looks up [key] in [lang], falling back to English.
+  ///
+  /// A const map lookup, so switching language is a rebuild and nothing
+  /// more — no file IO, no async, no network. That is what keeps the
+  /// switch instant.
   static String get(String key, {String lang = 'en'}) {
-    final langMap = _translations[lang] ?? _translations['en']!;
-    return langMap[key] ?? _translations['en']?[key] ?? key;
+    final row = _t[key];
+    // An unknown key returns itself rather than blank: a screen showing
+    // 'checkout_v2' is a bug report, a screen showing nothing is a mystery.
+    if (row == null) return key;
+    final index = _langIndex[lang] ?? 0;
+    if (index >= row.length) return row[0];
+    final value = row[index];
+    return value.isEmpty ? row[0] : value;
+  }
+
+  static AppLanguage languageFor(String code) {
+    for (final l in supportedLanguages) {
+      if (l.code == code) return l;
+    }
+    return supportedLanguages.first;
   }
 }

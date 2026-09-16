@@ -21,6 +21,7 @@ import '../common/in_app_notification.dart';
 import '../common/dynamic_upi_qr_sheet.dart';
 import '../../services/upi_payment_detector_service.dart';
 import '../settings/store_profile_screen.dart';
+import '../../core/localization/app_language_service.dart';
 
 class PosCheckoutModal extends StatefulWidget {
   final List<CartItemModel> cartItems;
@@ -2741,7 +2742,7 @@ class _PosCheckoutModalState extends State<PosCheckoutModal> {
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       Text(
-                        'Subtotal',
+                        'subtotal'.tr,
                         style: GoogleFonts.plusJakartaSans(
                           fontSize: 12,
                           color: const Color(0xFF64748B),

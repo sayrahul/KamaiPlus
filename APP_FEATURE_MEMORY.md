@@ -78,6 +78,16 @@ The Bottom Navigation Bar has 5 items. The navigation contract is strictly defin
 
 22. **A fingerprint satisfies the owner check on its own:** where biometrics are offered (Owner Privacy Lock, both sales-return flows), a successful scan must NOT then also demand the PIN, or the option is decoration. Availability is resolved before the dialog builds so the button never appears where it would fail on tap, and the audit trail records `userPin: 'BIOMETRIC'` so a fingerprint-authorised refund stays distinguishable from a PIN-authorised one.
 
+23. **FCM is the ONLY path to the notification tray; the broadcast doc is the in-app banner and nothing else:** `platform_settings/broadcast` drives `broadcastNotifier` and the Home-screen banner — it must never call `showLocalNotification`. It used to, and combined with the admin console mirroring every push into that same document, one admin "Send" reached the merchant as three notifications (two tray + one banner). `AdminFirestoreService.sendPushNotification` now takes explicit `sendPhoneAlert` / `showInAppBanner` flags and writes nothing the admin did not ask for. Keeping tray alerts to the single FCM path is what makes a third duplicate structurally impossible rather than merely fixed.
+
+24. **Notification channels are named for what the MERCHANT sees, not the transport:** "Phone notification" (tray, works with the app closed) and "Banner inside the app" (Home-screen strip, stays until turned off). An admin should not need to know what FCM is to message merchants. The nav item is "Notifications", not "Push Alerts (FCM)".
+
+25. **`lib/core/localization/app_strings.dart` is GENERATED — never hand-edit it:** the source is `tool/i18n_data.py` (every string with all 9 languages on ONE line) and `python tool/gen_i18n.py` emits the Dart. A hand edit is silently discarded by the next regeneration. The old shape was a map per language, so adding a string meant editing nine places and a miss was invisible — which is how `supportedLanguages` came to list Gujarati with no Gujarati map at all, silently serving English to merchants who had selected their own language and seen a tick next to it. Adding a key with fewer than 9 values fails both the generator and `test/localization_test.dart`.
+
+26. **A language nobody on the team reads is marked `isBeta` and badged in the picker:** English, Hindi and Marathi are reviewable and carry no caveat; Gujarati, Tamil, Telugu, Kannada, Bengali and Punjabi are flagged. Careful translation is not the same as review by a speaker, and presenting all nine as equally checked misleads the shopkeeper who has to trust them.
+
+27. **Voice follows the chosen language, via `AppLanguage.ttsLocale`:** `SoundboxService` must never hardcode a language. It used to speak `'hi'`, so Tamil and Bengali shops heard their takings announced in Hindi — and the soundbox is the one part of this app a busy shopkeeper listens to instead of reading, so getting it wrong matters more than an untranslated label. Announcement text comes from the same catalog, so a new language gets a voice at the same time it gets words.
+
 
 
 ### 1. 🏠 Home Screen (`lib/views/dashboard/home_pulse_tab.dart`)

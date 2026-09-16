@@ -665,7 +665,10 @@ class _PermanentDeleteDialogState extends State<_PermanentDeleteDialog> {
         ],
       ),
       content: SizedBox(
-        width: 420,
+        // Clamped so the confirm/cancel buttons stay reachable on a phone.
+        width: MediaQuery.of(context).size.width < 460
+            ? MediaQuery.of(context).size.width - 80
+            : 420,
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,

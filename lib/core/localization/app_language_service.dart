@@ -33,6 +33,19 @@ class AppLanguageService {
   String t(String key) {
     return AppStrings.get(key, lang: currentLanguageNotifier.value);
   }
+
+  /// The active language's full metadata (native name, beta flag, TTS locale).
+  AppLanguage get current => AppStrings.languageFor(currentLanguageNotifier.value);
+
+  /// Locale for the platform text-to-speech engine.
+  ///
+  /// The soundbox used to hardcode 'hi' and 'en', so a Tamil or Bengali shop
+  /// heard its takings announced in Hindi — the one part of the app a busy
+  /// shopkeeper listens to rather than reads.
+  String get ttsLocale => current.ttsLocale;
+
+  /// True when the active language has not been reviewed by a speaker.
+  bool get isBetaLanguage => current.isBeta;
 }
 
 extension AppLocalizationsExtension on String {

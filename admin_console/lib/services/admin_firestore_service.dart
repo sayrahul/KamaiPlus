@@ -320,21 +320,43 @@ class AdminFirestoreService {
     });
   }
 
-  Future<void> sendPushNotification(AdminPushNotification notification) async {
-    final docRef = _db.collection('admin_push_notifications').doc();
-    final data = notification.toMap()
-      ..['sent_at'] = FieldValue.serverTimestamp()
-      ..['id'] = docRef.id;
-    await docRef.set(data);
+  /// Sends an admin notification over the channel(s) the admin actually chose.
+  ///
+  /// This used to do BOTH unconditionally, which is why one "Send" produced
+  /// three notifications on the merchant's phone:
+  ///
+  ///   1. the `admin_push_notifications` write fired `onAdminPushCreated`,
+  ///      which pushed over FCM                                  → tray alert
+  ///   2. the mirrored `platform_settings/broadcast` write fired the app's
+  ///      broadcast listener, which raised a SECOND local alert   → tray alert
+  ///   3. the same listener set `broadcastNotifier`               → in-app banner
+  ///
+  /// They are two genuinely different products — a phone alert reaches a
+  /// merchant whose app is closed, an in-app banner is a strip inside the app —
+  /// so the admin picks. Nothing is mirrored behind their back.
+  Future<void> sendPushNotification(
+    AdminPushNotification notification, {
+    bool sendPhoneAlert = true,
+    bool showInAppBanner = false,
+  }) async {
+    if (sendPhoneAlert) {
+      final docRef = _db.collection('admin_push_notifications').doc();
+      final data = notification.toMap()
+        ..['sent_at'] = FieldValue.serverTimestamp()
+        ..['id'] = docRef.id
+        ..['channel_in_app_banner'] = showInAppBanner;
+      await docRef.set(data);
+    }
 
-    // Also mirror to platform_settings/broadcast so all active apps display banner immediately
-    await setBroadcast(
-      title: notification.title,
-      message: notification.body,
-      active: true,
-      type: notification.targetAudience == 'pro' ? 'festive' : 'info',
-      actionUrl: notification.actionUrl,
-    );
+    if (showInAppBanner) {
+      await setBroadcast(
+        title: notification.title,
+        message: notification.body,
+        active: true,
+        type: notification.targetAudience == 'pro' ? 'festive' : 'info',
+        actionUrl: notification.actionUrl,
+      );
+    }
   }
 
   /// Settings and automated push trigger preferences

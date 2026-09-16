@@ -92,9 +92,12 @@ class _AdminShellState extends State<AdminShell> {
     _NavItem(
       icon: Icons.notifications_active_outlined,
       selectedIcon: Icons.notifications_active_rounded,
-      label: 'Push Alerts (FCM)',
+      // "Push Alerts (FCM)" named the transport, not the job. An admin wanting
+      // to message merchants should not have to know what FCM is, and the name
+      // gave no hint that this is also where the in-app banner is sent from.
+      label: 'Notifications',
       category: 'ENGAGEMENT',
-      badge: 'DISPATCH',
+      badge: 'SEND',
       build: () => const PushNotificationsScreen(),
     ),
     _NavItem(

@@ -24,6 +24,7 @@ import '../../core/constants/business_vertical_config.dart';
 import '../../core/state/app_data_bus.dart';
 import '../../core/state/data_bus_refresh.dart';
 import '../../services/firestore_sync_service.dart';
+import '../../core/localization/app_language_service.dart';
 
 class HomePulseTab extends StatefulWidget {
   final VoidCallback onNavigateToPos;
@@ -339,7 +340,7 @@ class _HomePulseTabState extends State<HomePulseTab> with DataBusRefresh<HomePul
                 badgeColor: const Color(0xFF059669),
                 amount: _formatDisplayPaise(_todaySalesPaise),
                 amountColor: const Color(0xFF0F172A),
-                footerLabel: 'Total Revenue',
+                footerLabel: 'total_revenue'.tr,
                 actionLabel: 'Bills →',
                 actionColor: const Color(0xFF059669),
                 borderColor: const Color(0xFFA7F3D0),
@@ -353,7 +354,7 @@ class _HomePulseTabState extends State<HomePulseTab> with DataBusRefresh<HomePul
             // Card 2: Estimated Net Profit
             Expanded(
               child: _buildMetricCard(
-                title: 'EST. PROFIT',
+                title: 'est_profit'.tr,
                 titleColor: const Color(0xFF0284C7),
                 titleIcon: Icons.currency_rupee_rounded,
                 badgeText: _uncostedLineCount > 0 ? 'Partial' : 'Live Margin',
@@ -387,7 +388,7 @@ class _HomePulseTabState extends State<HomePulseTab> with DataBusRefresh<HomePul
             // Card 3: Total Orders
             Expanded(
               child: _buildMetricCard(
-                title: 'TOTAL BILLS',
+                title: 'total_bills'.tr,
                 titleColor: const Color(0xFF7C3AED),
                 titleIcon: Icons.receipt_long_rounded,
                 badgeText: 'Counter POS',
@@ -417,7 +418,7 @@ class _HomePulseTabState extends State<HomePulseTab> with DataBusRefresh<HomePul
                 badgeColor: const Color(0xFFE11D48),
                 amount: _formatDisplayPaise(_marketUdharPaise),
                 amountColor: const Color(0xFFE11D48),
-                footerLabel: 'Pending Ledger',
+                footerLabel: 'pending_ledger'.tr,
                 actionLabel: 'Khata →',
                 actionColor: const Color(0xFFE11D48),
                 borderColor: const Color(0xFFFECACA),
@@ -586,7 +587,7 @@ class _HomePulseTabState extends State<HomePulseTab> with DataBusRefresh<HomePul
         const Icon(Icons.bolt_rounded, size: 15, color: Color(0xFFF59E0B)),
         const SizedBox(width: 3),
         Text(
-          '1-TAP QUICK ACTIONS',
+          'quick_actions'.tr,
           style: GoogleFonts.outfit(
             fontSize: 12,
             fontWeight: FontWeight.w800,
@@ -672,7 +673,7 @@ class _HomePulseTabState extends State<HomePulseTab> with DataBusRefresh<HomePul
             icon: Icons.menu_book_rounded,
             iconColor: const Color(0xFF7C3AED),
             iconBg: const Color(0xFFF5F3FF),
-            title: 'Digital Khata',
+            title: 'khata_title'.tr,
             subtitle: 'Customer Udhar',
             onTap: widget.onNavigateToKhata,
           ),
@@ -683,7 +684,7 @@ class _HomePulseTabState extends State<HomePulseTab> with DataBusRefresh<HomePul
             icon: Icons.inventory_2_rounded,
             iconColor: const Color(0xFF0284C7),
             iconBg: const Color(0xFFF0F9FF),
-            title: 'Stock Inward',
+            title: 'stock_inward'.tr,
             subtitle: 'Bills & Restock',
             onTap: () {
               showModalBottomSheet(
@@ -707,7 +708,7 @@ class _HomePulseTabState extends State<HomePulseTab> with DataBusRefresh<HomePul
             icon: Icons.chat_bubble_outline_rounded,
             iconColor: const Color(0xFF10B981),
             iconBg: const Color(0xFFECFDF5),
-            title: 'Day Summary',
+            title: 'day_summary'.tr,
             subtitle: 'WhatsApp Z-Report',
             onTap: _showDaySummaryModal,
           ),
@@ -718,7 +719,7 @@ class _HomePulseTabState extends State<HomePulseTab> with DataBusRefresh<HomePul
             icon: Icons.calculate_rounded,
             iconColor: const Color(0xFFD97706),
             iconBg: const Color(0xFFFEF3C7),
-            title: 'Tally Counter',
+            title: 'tally_counter'.tr,
             subtitle: 'Notes & Coins Calc',
             onTap: () {
               // The modal loads and saves today's draft itself, so counting
@@ -970,7 +971,7 @@ class _HomePulseTabState extends State<HomePulseTab> with DataBusRefresh<HomePul
             icon: Icons.point_of_sale_rounded,
             iconColor: const Color(0xFFF59E0B),
             iconBg: const Color(0xFFFFFBEB),
-            title: 'Cash Register',
+            title: 'cash_register'.tr,
             subtitle: 'Shift & Z-Report',
             onTap: () => Navigator.push(
               context,
@@ -984,7 +985,7 @@ class _HomePulseTabState extends State<HomePulseTab> with DataBusRefresh<HomePul
             icon: Icons.shield_outlined,
             iconColor: const Color(0xFF0D9488),
             iconBg: const Color(0xFFF0FDFA),
-            title: 'Transactions',
+            title: 'transactions'.tr,
             subtitle: 'History & Invoices',
             onTap: () => Navigator.push(
               context,

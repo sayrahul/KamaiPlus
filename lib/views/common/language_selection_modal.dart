@@ -56,7 +56,7 @@ class LanguageSelectionModal extends StatelessWidget {
                       ),
                     ),
                     Text(
-                      'Regional languages for faster billing',
+                      'App, bills and voice all switch instantly',
                       style: GoogleFonts.inter(fontSize: 11.5, color: const Color(0xFF64748B)),
                     ),
                   ],
@@ -117,13 +117,44 @@ class LanguageSelectionModal extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    lang.nativeName,
-                    style: GoogleFonts.outfit(
-                      fontSize: 15,
-                      fontWeight: FontWeight.w800,
-                      color: isSelected ? const Color(0xFF1D4ED8) : const Color(0xFF0F172A),
-                    ),
+                  Row(
+                    children: [
+                      Flexible(
+                        child: Text(
+                          lang.nativeName,
+                          style: GoogleFonts.outfit(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w800,
+                            color: isSelected ? const Color(0xFF1D4ED8) : const Color(0xFF0F172A),
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      // Marks a language nobody on the team reads. The wording
+                      // is careful, but careful is not reviewed by a speaker,
+                      // and a shopkeeper should know which one they are getting
+                      // rather than every language looking equally checked.
+                      if (lang.isBeta) ...[
+                        const SizedBox(width: 7),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFFEF3C7),
+                            borderRadius: BorderRadius.circular(5),
+                            border: Border.all(color: const Color(0xFFFDE68A)),
+                          ),
+                          child: Text(
+                            'BETA',
+                            style: GoogleFonts.inter(
+                              fontSize: 8.5,
+                              fontWeight: FontWeight.w900,
+                              letterSpacing: 0.4,
+                              color: const Color(0xFFB45309),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ],
                   ),
                   Text(
                     lang.name,

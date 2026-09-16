@@ -326,7 +326,7 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
                     border: Border.all(color: const Color(0xFF334155)),
                   ),
                   child: Text(
-                    'v4.25.0 • Pro Enterprise Edition',
+                    'v4.27.0 • Pro Enterprise Edition',
                     style: GoogleFonts.inter(
                       fontSize: 11,
                       fontWeight: FontWeight.w600,

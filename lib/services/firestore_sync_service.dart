@@ -8,7 +8,6 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../models/models.dart';
 import '../core/database/local_database.dart';
 import '../core/constants/business_vertical_config.dart';
-import 'notification_service.dart';
 
 enum SyncState { synced, syncing, offline, error }
 
@@ -552,22 +551,20 @@ class FirestoreSyncService {
         final isExpired = expiresAt != null && DateTime.now().isAfter(expiresAt);
 
         if (enabled && !isExpired && (data['message']?.toString().isNotEmpty ?? false)) {
-          final newMsg = data['message']?.toString() ?? '';
           broadcastNotifier.value = data;
 
-          final broadcastId = data['id']?.toString() ?? '${data['title']}_${data['message']}_${data['updated_at']}';
-          SharedPreferences.getInstance().then((prefs) {
-            final lastNotifiedId = prefs.getString('last_notified_broadcast_id');
-            if (lastNotifiedId != broadcastId && newMsg.isNotEmpty) {
-              prefs.setString('last_notified_broadcast_id', broadcastId);
-              final title = data['title']?.toString() ?? 'KamaiPlus Announcement';
-              NotificationService.instance.showLocalNotification(
-                id: 9901,
-                title: title,
-                body: newMsg,
-              );
-            }
-          });
+          // Deliberately NO local tray notification here.
+          //
+          // This listener used to raise one, and that is two thirds of why a
+          // single admin "Send" arrived as three notifications: the admin
+          // console wrote both admin_push_notifications (→ FCM tray alert) and
+          // platform_settings/broadcast, and this listener then added a second
+          // tray alert of its own plus the banner below.
+          //
+          // The banner IS this channel. A phone alert is the FCM channel, and
+          // the admin now picks between them explicitly. Anything that wants a
+          // tray alert must go through FCM, so there is exactly one code path
+          // that can put a notification in the merchant's tray.
         } else {
           broadcastNotifier.value = null;
         }

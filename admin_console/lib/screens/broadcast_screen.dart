@@ -439,7 +439,14 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
             Expanded(child: Text(title, style: AdminTheme.heading(16))),
           ],
         ),
-        content: SizedBox(width: 420, child: content),
+        // Clamped, not fixed: a 420px dialog on a 360px phone overflows and
+        // clips its own buttons.
+        content: SizedBox(
+          width: MediaQuery.of(ctx).size.width < 460
+              ? MediaQuery.of(ctx).size.width - 80
+              : 420,
+          child: content,
+        ),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
           ElevatedButton(
@@ -825,7 +832,7 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
               children: [
                 const Icon(Icons.campaign_rounded, color: AdminColors.amber, size: 20),
                 const SizedBox(width: 10),
-                Text('In-App Broadcast Banner', style: AdminTheme.heading(16)),
+                Text('In-App Banner (live right now)', style: AdminTheme.heading(16)),
                 const Spacer(),
                 _statusBadge(active: _broadcastActive),
               ],
@@ -834,6 +841,24 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
             Text(
               _broadcastUpdatedAt != null ? 'Last published ${_dateFmt.format(_broadcastUpdatedAt!)}' : 'Never published yet',
               style: const TextStyle(color: AdminColors.inkFaint, fontSize: 12),
+            ),
+            const SizedBox(height: 8),
+            // Says plainly how this relates to the Notifications screen, which
+            // can also publish a banner. Two screens writing the same document
+            // with no explanation is what made this section feel duplicated.
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+              decoration: BoxDecoration(
+                color: Colors.blue.withValues(alpha: 0.07),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.blue.withValues(alpha: 0.25)),
+              ),
+              child: const Text(
+                'This is the banner merchants see on their Home screen. It stays up until you turn it '
+                'off here. Sending a new one from Notifications replaces it. It is NOT a phone '
+                'notification — nothing appears in the notification tray from this section.',
+                style: TextStyle(fontSize: 11.5, height: 1.4, color: AdminColors.inkFaint),
+              ),
             ),
             const SizedBox(height: 18),
             const Text('Banner Theme / Urgency Level', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: AdminColors.ink)),

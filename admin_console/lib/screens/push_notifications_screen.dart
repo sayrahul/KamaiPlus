@@ -24,6 +24,12 @@ class _PushNotificationsScreenState extends State<PushNotificationsScreen> {
   String _actionRoute = 'home'; // 'home', 'billing', 'products', 'pro_upgrade', 'external'
   bool _sending = false;
 
+  // Which channel(s) this message goes out on. Both used to fire on every
+  // send, silently, which is why one "Send" landed as three notifications on
+  // the merchant's phone — two in the tray and one banner inside the app.
+  bool _sendPhoneAlert = true;
+  bool _showInAppBanner = false;
+
   // FCM Settings State
   final _channelNameCtrl = TextEditingController(text: 'KamaiPlus POS Alerts & Invoices');
   final _defaultTopicCtrl = TextEditingController(text: 'all_merchants');
@@ -131,11 +137,17 @@ class _PushNotificationsScreenState extends State<PushNotificationsScreen> {
         actionRoute: 'home',
         sentAt: DateTime.now(),
       );
-      await AdminFirestoreService.instance.sendPushNotification(notif);
+      await AdminFirestoreService.instance.sendPushNotification(
+        notif,
+        sendPhoneAlert: true,
+        // A connectivity test must never leave a standing banner in every
+        // merchant's app.
+        showInAppBanner: false,
+      );
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('⚡ Test push alert dispatched to topic "all_merchants"! Check your phone notification tray.'),
+            content: Text('Test alert sent to all phones. Check your notification tray.'),
             backgroundColor: AdminColors.accent,
           ),
         );
@@ -281,16 +293,24 @@ class _PushNotificationsScreenState extends State<PushNotificationsScreen> {
         sentAt: DateTime.now(),
       );
 
-      await AdminFirestoreService.instance.sendPushNotification(notif);
+      await AdminFirestoreService.instance.sendPushNotification(
+        notif,
+        sendPhoneAlert: _sendPhoneAlert,
+        showInAppBanner: _showInAppBanner,
+      );
 
       _titleCtrl.clear();
       _bodyCtrl.clear();
       _urlCtrl.clear();
 
       if (mounted) {
+        final sentVia = [
+          if (_sendPhoneAlert) 'phone notification',
+          if (_showInAppBanner) 'in-app banner',
+        ].join(' + ');
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('🎉 Push notification dispatched successfully to FCM!'),
+          SnackBar(
+            content: Text('Sent as $sentVia.'),
             backgroundColor: AdminColors.accent,
           ),
         );
@@ -327,7 +347,7 @@ class _PushNotificationsScreenState extends State<PushNotificationsScreen> {
       backgroundColor: AdminColors.surfaceSunken,
       body: SafeArea(
         child: SingleChildScrollView(
-          padding: const EdgeInsets.all(24),
+          padding: EdgeInsets.all(MediaQuery.of(context).size.width < 600 ? 14 : 24),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -377,22 +397,28 @@ class _PushNotificationsScreenState extends State<PushNotificationsScreen> {
               const SizedBox(height: 20),
 
               // Segmented Tabs Switcher
-              Container(
-                padding: const EdgeInsets.all(4),
-                decoration: BoxDecoration(
-                  color: AdminColors.bgCard,
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: AdminColors.borderDark),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    _buildTabPill(0, '🚀 Campaign Dispatch', Icons.send_rounded),
-                    const SizedBox(width: 4),
-                    _buildTabPill(1, '⚙️ FCM & Engine Settings', Icons.settings_suggest_rounded),
-                    const SizedBox(width: 4),
-                    _buildTabPill(2, '📋 Dispatch History', Icons.history_rounded),
-                  ],
+              // Three pills in a fixed Row overflowed the screen on a phone,
+              // which is most of what made this page feel broken on mobile.
+              // Horizontal scroll keeps every tab reachable at any width.
+              SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Container(
+                  padding: const EdgeInsets.all(4),
+                  decoration: BoxDecoration(
+                    color: AdminColors.bgCard,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: AdminColors.borderDark),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      _buildTabPill(0, 'Send', Icons.send_rounded),
+                      const SizedBox(width: 4),
+                      _buildTabPill(1, 'Settings', Icons.settings_suggest_rounded),
+                      const SizedBox(width: 4),
+                      _buildTabPill(2, 'History', Icons.history_rounded),
+                    ],
+                  ),
                 ),
               ),
               const SizedBox(height: 24),
@@ -577,7 +603,7 @@ class _PushNotificationsScreenState extends State<PushNotificationsScreen> {
 
   Widget _buildDeliverySettingsCard() {
     return Container(
-      padding: const EdgeInsets.all(24),
+      padding: EdgeInsets.all(MediaQuery.of(context).size.width < 600 ? 14 : 24),
       decoration: BoxDecoration(
         color: AdminColors.bgCard,
         borderRadius: BorderRadius.circular(18),
@@ -802,7 +828,7 @@ class _PushNotificationsScreenState extends State<PushNotificationsScreen> {
     ];
 
     return Container(
-      padding: const EdgeInsets.all(24),
+      padding: EdgeInsets.all(MediaQuery.of(context).size.width < 600 ? 14 : 24),
       decoration: BoxDecoration(
         color: AdminColors.bgCard,
         borderRadius: BorderRadius.circular(18),
@@ -917,9 +943,131 @@ class _PushNotificationsScreenState extends State<PushNotificationsScreen> {
   // =========================================================================
   // Campaign Composer & Preview
   // =========================================================================
+
+  /// Where the message goes. Two channels, named for what the merchant sees.
+  ///
+  /// Both used to fire on every send with no way to choose, so one "Send"
+  /// arrived as three notifications: an FCM tray alert, a second tray alert
+  /// raised by the app's broadcast listener, and the in-app banner. Naming the
+  /// channels after the merchant's experience — "phone notification" vs "banner
+  /// inside the app" — is what makes the difference obvious without knowing
+  /// what FCM is.
+  Widget _buildChannelPicker() {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: AdminColors.bgSidebar,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AdminColors.borderDark),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Where should this go?',
+            style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13, color: AdminColors.textWhite),
+          ),
+          const SizedBox(height: 10),
+          _buildChannelTile(
+            value: _sendPhoneAlert,
+            onChanged: (v) => setState(() => _sendPhoneAlert = v),
+            icon: Icons.notifications_active_rounded,
+            title: 'Phone notification',
+            subtitle: 'Appears in the notification tray, even when the app is closed.',
+          ),
+          const SizedBox(height: 8),
+          _buildChannelTile(
+            value: _showInAppBanner,
+            onChanged: (v) => setState(() => _showInAppBanner = v),
+            icon: Icons.campaign_rounded,
+            title: 'Banner inside the app',
+            subtitle: 'A coloured strip on the Home screen. Stays until you turn it off.',
+          ),
+          if (!_sendPhoneAlert && !_showInAppBanner) ...[
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                const Icon(Icons.error_outline_rounded, size: 15, color: AdminColors.red),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    'Pick at least one — nothing will be sent.',
+                    style: TextStyle(fontSize: 11.5, color: AdminColors.red, fontWeight: FontWeight.w600),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildChannelTile({
+    required bool value,
+    required ValueChanged<bool> onChanged,
+    required IconData icon,
+    required String title,
+    required String subtitle,
+  }) {
+    return InkWell(
+      onTap: () => onChanged(!value),
+      borderRadius: BorderRadius.circular(10),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
+        decoration: BoxDecoration(
+          color: value ? AdminColors.accent.withValues(alpha: 0.10) : Colors.transparent,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(
+            color: value ? AdminColors.accent.withValues(alpha: 0.55) : AdminColors.borderDark,
+          ),
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            SizedBox(
+              width: 22,
+              height: 22,
+              child: Checkbox(
+                value: value,
+                onChanged: (v) => onChanged(v ?? false),
+                activeColor: AdminColors.accent,
+                materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                visualDensity: VisualDensity.compact,
+              ),
+            ),
+            const SizedBox(width: 10),
+            Icon(icon, size: 17, color: value ? AdminColors.accent : AdminColors.textMuted),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: TextStyle(
+                      fontWeight: FontWeight.w700,
+                      fontSize: 12.5,
+                      color: value ? AdminColors.textWhite : AdminColors.textMuted,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    subtitle,
+                    style: const TextStyle(fontSize: 11, height: 1.35, color: AdminColors.textMuted),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _buildComposerCard() {
     return Container(
-      padding: const EdgeInsets.all(24),
+      padding: EdgeInsets.all(MediaQuery.of(context).size.width < 600 ? 14 : 24),
       decoration: BoxDecoration(
         color: AdminColors.bgCard,
         borderRadius: BorderRadius.circular(18),
@@ -975,6 +1123,9 @@ class _PushNotificationsScreenState extends State<PushNotificationsScreen> {
                 ),
             ],
           ),
+          const SizedBox(height: 18),
+
+          _buildChannelPicker(),
           const SizedBox(height: 18),
 
           // Body
@@ -1309,7 +1460,7 @@ class _PushNotificationsScreenState extends State<PushNotificationsScreen> {
 
   Widget _buildHistorySection() {
     return Container(
-      padding: const EdgeInsets.all(24),
+      padding: EdgeInsets.all(MediaQuery.of(context).size.width < 600 ? 14 : 24),
       decoration: BoxDecoration(
         color: AdminColors.bgCard,
         borderRadius: BorderRadius.circular(18),

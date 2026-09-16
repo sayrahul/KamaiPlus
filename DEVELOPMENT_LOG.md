@@ -44,6 +44,153 @@ hits (the screen's data-loading call), not just the data shape. See
 `test/vertical_product_leak_test.dart` (added 2026‑09‑11) for the corrected pattern — it
 drives `LocalDatabase` through a real (in-memory FFI) SQLite database and asserts on what
 `getAllProducts`/`getAllCategories` actually return.
+## 2026-09-16 (final) — Language support made real: 9 languages, generated catalog, voice included
+
+**Symptom:** *"select language wala abhi bas aam ka feature hai"* — the picker worked, the app
+stayed English.
+
+**Measured before touching anything:**
+
+| | |
+|---|---|
+| `Text(` widgets in `lib/views/` | **1,482** |
+| Call sites using the translation system | **5** (2 files) |
+| Keys × languages | 73 × 3 |
+
+So the switcher was real and ~0.3% of the app was wired to it.
+
+**A second bug found while measuring:** `supportedLanguages` listed **Gujarati**, and
+`_translations` had no `'gu'` map at all. `AppStrings.get` falls back to English on a missing
+language, so a Gujarati merchant selected their language, saw a tick next to it, and got an
+English app. Silent, and invisible to the old per-language layout.
+
+### What changed
+
+**The catalog is generated now.** `tool/i18n_data.py` holds every string with all nine
+languages **on one line**; `python tool/gen_i18n.py` emits
+`lib/core/localization/app_strings.dart`. The old shape was a map per language, so adding a
+string meant editing nine separate places and a missed one was invisible — which is exactly
+how Gujarati went missing. Now a short row is a generator error and a test failure.
+
+**137 keys × 9 languages = 1,233 strings.** English, Hindi, Marathi, Gujarati, Tamil, Telugu,
+Kannada, Bengali, Punjabi. Covering navigation, common actions, POS/billing, products,
+khata, dashboard, cash register, settings, invoice labels, messages and voice.
+
+**BETA marking.** The six languages nobody on the team reads carry an explicit `isBeta` flag,
+shown as a badge in the picker. The translations are careful, but careful is not reviewed by
+a speaker, and a shopkeeper deserves to know which of those two they are getting rather than
+seeing all nine presented as equally checked.
+
+**Voice follows the language.** `SoundboxService` hardcoded `'hi'` and `'en'`, so a Tamil or
+Bengali shop heard its takings announced in Hindi — and the soundbox is the one part of this
+app a busy shopkeeper *listens to* rather than reads. Each language now carries a `ttsLocale`
+(`ta-IN`, `bn-IN`, …) and the announcement is built from the same catalog, so adding a
+language gives it a voice at the same time. `announceHindiPayment` is kept as an alias so no
+call site broke.
+
+**Switching stays instant.** `MaterialApp` is already inside a `ValueListenableBuilder` on the
+language notifier, and lookups are const-map reads — no file IO, no async, no network. The
+notifier flips before the `SharedPreferences` write completes, so the UI swaps on the frame
+after the tap.
+
+### Scope — deliberate, and stated plainly
+
+Wired to `.tr` so far: **bottom navigation, Home dashboard tiles and quick actions, checkout
+subtotal.** The remaining screens still hold hardcoded English.
+
+This was a decision, not an omission. Converting ~1,482 call sites across every screen, in six
+languages nobody available can verify, at the point the app ships to production, trades a
+large regression surface for a benefit nobody can check. The vocabulary and the mechanism are
+finished; each remaining screen is now a ten-minute mechanical pass documented in
+`HANDOVER.md` §3, and `test/localization_test.dart` fails the moment a key is added without
+all nine languages.
+
+**Verification:** `flutter test test/localization_test.dart` — **17 passing**, covering
+catalog completeness (the test that would have caught the Gujarati gap), beta flags, TTS
+locales, unknown-key and unknown-language fallback, persistence across restart, and the `.tr`
+extension.
+
+**If this regresses, look for:** a hand edit to `app_strings.dart` (it is generated — the next
+`gen_i18n.py` run discards it), or a key added to `i18n_data.py` with fewer than nine values.
+
+---
+
+## 2026-09-16 (night) — One admin "Send" arrived as three notifications
+
+**Symptom:** the admin sends one message; the merchant's phone shows two identical alerts in
+the notification tray plus a BROADCAST banner inside the app. Screenshots confirmed all three.
+
+**Root cause — three channels fired from one button, none of them chosen.**
+`AdminFirestoreService.sendPushNotification` did two Firestore writes every time:
+
+```dart
+await docRef.set(data);                    // admin_push_notifications/{id}
+// Also mirror to platform_settings/broadcast so all active apps display banner immediately
+await setBroadcast(...);                   // platform_settings/broadcast
+```
+
+Which produced:
+
+| # | Write | Path | Merchant sees |
+|---|-------|------|---------------|
+| 1 | `admin_push_notifications/{id}` | `onAdminPushCreated` → FCM | tray alert |
+| 2 | `platform_settings/broadcast` | app listener → `showLocalNotification(id: 9901)` | **second tray alert** |
+| 3 | same write | same listener → `broadcastNotifier` | in-app banner |
+
+The server was innocent — `onAdminPushCreated` sends exactly once, to the topic for "all" or
+to resolved tokens otherwise, never both.
+
+**Fixes:**
+
+- `admin_firestore_service.dart` — `sendPushNotification` takes `sendPhoneAlert` and
+  `showInAppBanner`. Neither write happens unless the admin asked for it. Nothing is mirrored
+  behind their back.
+- `firestore_sync_service.dart` — the broadcast listener no longer calls
+  `showLocalNotification`. **The banner is that channel.** FCM is now the only code path in
+  the app that can put anything in the tray, which is what makes a third duplicate
+  structurally impossible rather than merely fixed. (`id: 9901` is gone.)
+- The built-in "test ping" sends a phone alert only — a connectivity test must never leave a
+  standing banner in every merchant's app.
+
+**Admin UI — naming the channels after what the merchant experiences.**
+
+The old label "Push Alerts (FCM)" named the transport, not the job, and gave no hint that the
+same screen also publishes the in-app banner. The compose form now has an explicit
+*Where should this go?* block with two options in plain language:
+
+- **Phone notification** — "Appears in the notification tray, even when the app is closed."
+- **Banner inside the app** — "A coloured strip on the Home screen. Stays until you turn it off."
+
+Picking neither is called out rather than silently sending nothing. The confirmation names
+what actually went out ("Sent as phone notification + in-app banner") instead of claiming FCM
+success regardless.
+
+Nav item renamed **Push Alerts (FCM) → Notifications**. The `Release & Platform Control`
+screen's banner section is retitled *In-App Banner (live right now)* and now states its
+relationship to the send screen — two screens writing the same Firestore document with no
+explanation is what made the area feel duplicated and cluttered.
+
+**Mobile responsiveness.** The three tab pills sat in a fixed `Row` inside a
+`MainAxisSize.min` container, so on a phone they ran straight off the edge — most of why the
+page felt broken on mobile. Now horizontally scrollable, with the labels shortened
+(`🚀 Campaign Dispatch` → `Send`). Card padding drops from 24px to 14px below 600px, which on
+a 360px screen is a meaningful amount of the width back.
+
+**Verification:** `flutter test test/notification_channels_test.dart` — **5 passing**. The
+tests isolate the listener body before asserting, so an unrelated notification call elsewhere
+in that 1,100-line file cannot mask a regression, and they assert the exact removed comment
+line so re-adding the mirror fails the suite.
+
+**If this regresses, look for:** any new `showLocalNotification` caller outside
+`notification_service.dart`, or a second write inside `sendPushNotification` that is not
+guarded by one of the two channel flags.
+
+**Known and deliberately left alone:** the app subscribes to both `all_merchants` and
+`announcements` topics, but nothing in `functions/index.js` ever sends to `announcements`. It
+is dead rather than harmful — worth removing, or wiring up, next time this area is touched.
+
+---
+
 ## 2026-09-16 (evening) — Cash tally lost on reopen; sales return ignored the owner's PIN
 
 Two merchant reports, both about state that looked saved and was not.
