@@ -187,13 +187,9 @@ exports.onAdminPushCreated = onDocumentCreated(
 // ============================================================================
 
 const { onRequest } = require("firebase-functions/v2/https");
-const { defineSecret, defineString } = require("firebase-functions/params");
 const { getAuth } = require("firebase-admin/auth");
 
-const RAZORPAY_KEY_SECRET = defineSecret("RAZORPAY_KEY_SECRET");
-const RAZORPAY_KEY_ID = defineString("RAZORPAY_KEY_ID", {
-  default: "rzp_live_TZyyw8Rfxy6y7A",
-});
+const RAZORPAY_KEY_ID = process.env.RAZORPAY_KEY_ID || "rzp_live_TcXNjRb5XAUYqR";
 
 /**
  * What each plan legitimately costs, in integer paise. A payment is only
@@ -224,7 +220,7 @@ async function fetchRazorpayPayment(paymentId, keyId, keySecret) {
 }
 
 exports.verifyRazorpayPayment = onRequest(
-  { secrets: [RAZORPAY_KEY_SECRET], cors: true, region: "us-central1" },
+  { secrets: ["RAZORPAY_KEY_SECRET"], cors: true, region: "us-central1" },
   async (req, res) => {
     if (req.method !== "POST") {
       res.status(405).json({ error: "POST only" });
@@ -269,10 +265,11 @@ exports.verifyRazorpayPayment = onRequest(
 
       // 3. Ask Razorpay what actually happened. This is the whole point — the
       //    device's word is not evidence of anything.
+      const secret = process.env.RAZORPAY_KEY_SECRET;
       const payment = await fetchRazorpayPayment(
         paymentId,
-        RAZORPAY_KEY_ID.value(),
-        RAZORPAY_KEY_SECRET.value()
+        RAZORPAY_KEY_ID,
+        secret
       );
 
       if (payment.status !== "captured") {
