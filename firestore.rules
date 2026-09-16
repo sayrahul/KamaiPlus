@@ -229,6 +229,33 @@ service cloud.firestore {
     }
 
     // =========================================================================
+    // VERIFIED SUBSCRIPTION PAYMENTS — the Admin Console's revenue ledger.
+    //
+    // Written ONLY by the `verifyRazorpayPayment` Cloud Function via the Admin
+    // SDK, after Razorpay itself confirmed the payment was captured. That is
+    // what makes it trustworthy as a revenue figure: nothing a device claims
+    // can ever land here.
+    //
+    // Admin read is granted so the console can show real income. Deliberately
+    // NO client write of any kind — a merchant must not be able to forge,
+    // edit or delete a receipt for their own subscription.
+    // =========================================================================
+    match /razorpay_payments/{paymentId} {
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+
+    // =========================================================================
+    // AI USAGE METERING — per business, per month, written by `aiExtract`.
+    // Admin-readable so the console can see who is consuming AI scans; never
+    // client-writable, or the free-tier limit would be self-service.
+    // =========================================================================
+    match /ai_usage/{usageId} {
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+
+    // =========================================================================
     // ADMIN PUSH NOTIFICATIONS & CAMPAIGN DISPATCH (Admin Console only)
     // =========================================================================
     match /admin_push_notifications/{notificationId} {

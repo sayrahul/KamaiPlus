@@ -2937,3 +2937,67 @@ that collection is currently under default-deny); the hardcoded `currentVersionC
 in `home_dashboard_screen.dart` that must be hand-edited every release or the force-update
 gate silently misfires; and `maintenance_mode` / `maintenance_message`, which the console
 writes and **nothing in the app reads**.
+
+---
+
+## 2026-09-16 — Admin console: real income, version auto-detect, maintenance mode wired
+
+Three items left over from the console audit, all of the same kind: a control that looked
+wired up and was not.
+
+### 1. The console never showed KamaiPlus's own income
+
+"Lifetime revenue" on the dashboard sums `businesses.total_revenue_paise` — the
+**MERCHANTS' shop takings**. That is a measure of how big the platform is; read as income
+it is wrong by orders of magnitude. There was no view of actual subscription revenue at all.
+
+New **Revenue** screen, sourced from `razorpay_payments` — written only by the
+`verifyRazorpayPayment` Cloud Function through the Admin SDK, and only after Razorpay's own
+API confirmed the payment was `captured`. Nothing a device claims can land there. Shows
+this month vs last, paying merchants (counting only payments whose subscription is still in
+date — lapsed ones are not MRR), lifetime income, and the per-payment ledger with plan,
+amount, coupon and payment id.
+
+It also surfaces a **mismatch radar**: devices reporting Pro with no verified payment and no
+live trial behind them. That is usually a purchase whose server-side verification never
+completed — i.e. someone who paid and may not have what they paid for.
+
+`firestore.rules`: `razorpay_payments` and `ai_usage` are admin-read, **never** client-write.
+A merchant must not be able to forge or delete their own receipt, and the AI free-tier
+counter must not be self-service.
+
+### 2. `currentVersionCode` was a hand-edited constant
+
+`home_dashboard_screen.dart` compared the remote `min_version_code` against
+`const currentVersionCode = 42201` — a number someone had to remember to bump on every
+release. Forget it once and the gate compares the wrong value: either it never fires (a
+broken build stays in the field) or it fires forever (every merchant nagged to update to the
+version they already have). Now read from the installed package via `package_info_plus`,
+with an unreadable-package fallback that fails SAFE (a very high number → no prompt), since
+the alternative is a force-update dialog nobody can satisfy.
+
+Also dropped the `?? 42201` default on `min_version_code`: a missing remote value now means
+0 (no policy), not "everyone below 4.21 must update".
+
+### 3. Maintenance mode did nothing
+
+The Release & Control screen has written `maintenance_mode` / `maintenance_message` since it
+was built, and **nothing in the app read either**. The admin flipped the toggle and every
+merchant carried on unaware. Now shown as an in-app notice on the dashboard, once per app
+session (not on every config push, since the admin may edit other fields while it stays on),
+with copy that makes the important part clear: billing keeps working offline, only cloud
+sync is affected.
+
+### Verification
+- `flutter analyze lib` (app) -> 0 issues; admin console -> 4 pre-existing `dart:html`
+  infos, 0 errors.
+- `flutter test` -> **239/239 passed**.
+- Admin console web rebuilt.
+- **Note on a false alarm:** an earlier full-suite run reported 2 failures in
+  `inventory_inward_service_test` / `mistagged_product_repair_test`. Both pass in isolation;
+  the run had been started while `flutter build web` was compiling the admin console on the
+  same machine. Same CPU-contention timeout pattern as the backup-encryption tests — not a
+  regression. Do not "fix" these by loosening their assertions.
+
+⚠ **Deploy needed:** `firebase deploy --only firestore:rules` (for the Revenue screen to
+read anything) and `firebase deploy --only hosting:admin`.

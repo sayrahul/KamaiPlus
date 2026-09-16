@@ -27,6 +27,11 @@ dependencies:
   # Reads .xlsx on-device so a distributor's Excel file imports offline, with
   # no API and no conversion step (see csv_inward_service.dart).
   excel: ^4.0.6
+  # Reads the REAL installed versionCode at runtime. It used to be a
+  # hardcoded constant in home_dashboard_screen.dart that had to be
+  # hand-edited every release, or the force-update gate compared the wrong
+  # number and silently misfired.
+  package_info_plus: ^10.2.1
   mobile_scanner: ^7.4.0
   firebase_core: ^4.14.0
   cloud_firestore: ^6.9.0

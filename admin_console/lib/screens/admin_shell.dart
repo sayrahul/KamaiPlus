@@ -5,6 +5,7 @@ import '../services/admin_auth_service.dart';
 import '../theme/admin_theme.dart';
 import 'dashboard_screen.dart';
 import 'merchants_screen.dart';
+import 'revenue_screen.dart';
 import 'inactive_radar_screen.dart';
 import 'vertical_analytics_screen.dart';
 import 'push_notifications_screen.dart';
@@ -59,6 +60,17 @@ class _AdminShellState extends State<AdminShell> {
       label: 'Merchants',
       category: 'OPERATIONS',
       build: () => const MerchantsScreen(),
+    ),
+    // KamaiPlus's OWN income, kept deliberately separate from the Dashboard's
+    // "Lifetime revenue" tile — that one sums the MERCHANTS' shop takings, and
+    // reading it as income would be wrong by orders of magnitude.
+    _NavItem(
+      icon: Icons.payments_outlined,
+      selectedIcon: Icons.payments_rounded,
+      label: 'Revenue',
+      category: 'OPERATIONS',
+      badge: 'LIVE',
+      build: () => const RevenueScreen(),
     ),
     _NavItem(
       icon: Icons.radar_outlined,

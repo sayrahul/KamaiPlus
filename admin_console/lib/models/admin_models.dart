@@ -478,3 +478,61 @@ class AdminAppVersionConfig {
       };
 }
 
+
+/// One VERIFIED subscription payment — a row of `razorpay_payments`.
+///
+/// This collection is the only trustworthy revenue ledger in the project.
+/// It is written exclusively by the `verifyRazorpayPayment` Cloud Function,
+/// through the Admin SDK, and only after Razorpay's own API confirmed the
+/// payment was `captured`. Nothing a device claims can land here, and
+/// firestore.rules forbids every client write.
+///
+/// Deliberately separate from the merchant aggregates on `businesses`
+/// (`total_revenue_paise`): those count the MERCHANT'S shop sales, which is
+/// how big the platform is, not what KamaiPlus earned.
+class AdminPayment {
+  final String paymentId;
+  final String businessId;
+  final String uid;
+
+  /// 'monthly' | 'annual'
+  final String plan;
+
+  /// What was actually captured, in integer paise — after any coupon.
+  final int amountPaise;
+
+  final DateTime? verifiedAt;
+  final DateTime? proExpiry;
+  final String? couponCode;
+  final String razorpayStatus;
+
+  const AdminPayment({
+    required this.paymentId,
+    required this.businessId,
+    required this.uid,
+    required this.plan,
+    required this.amountPaise,
+    required this.verifiedAt,
+    required this.proExpiry,
+    required this.couponCode,
+    required this.razorpayStatus,
+  });
+
+  factory AdminPayment.fromMap(String id, Map<String, dynamic> m) => AdminPayment(
+        paymentId: id,
+        businessId: _asString(m['business_id']),
+        uid: _asString(m['uid']),
+        plan: _asString(m['plan'], 'annual'),
+        amountPaise: _asInt(m['amount_paise']),
+        verifiedAt: _asDate(m['verified_at']),
+        proExpiry: _asDate(m['pro_expiry']),
+        couponCode: (m['coupon_code'] as String?)?.trim().isEmpty ?? true
+            ? null
+            : m['coupon_code'] as String?,
+        razorpayStatus: _asString(m['razorpay_status'], 'captured'),
+      );
+
+  /// True while the subscription this payment bought is still in date.
+  bool get isStillActive =>
+      proExpiry != null && DateTime.now().isBefore(proExpiry!);
+}

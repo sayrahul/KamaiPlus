@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 
 import 'home_pulse_tab.dart';
 import '../pos/pos_billing_screen.dart';
@@ -12,6 +13,7 @@ import '../../services/app_control_service.dart';
 import '../../services/daily_summary_service.dart';
 import '../../services/firestore_sync_service.dart';
 import '../common/kamai_bottom_nav.dart';
+import '../common/in_app_notification.dart';
 
 class HomeDashboardScreen extends StatefulWidget {
   final int initialIndex;
@@ -81,6 +83,9 @@ class HomeDashboardScreenState extends State<HomeDashboardScreen> {
   late final PageController _pageController;
   late final List<Widget> _screens;
   bool _forceUpdatePromptShown = false;
+  /// Maintenance banner is shown once per app session, not on every config
+  /// push — the admin may toggle other fields while it stays on.
+  bool _maintenanceNoticeShown = false;
 
   @override
   void initState() {
@@ -132,23 +137,70 @@ class HomeDashboardScreenState extends State<HomeDashboardScreen> {
     super.dispose();
   }
 
-  void _checkVersionPolicy() {
+  /// The versionCode this build actually has, read from the installed package.
+  ///
+  /// This used to be `const currentVersionCode = 42201` — a constant someone
+  /// had to remember to hand-edit on every release. Forget it once and the
+  /// force-update gate compares the WRONG number: either it never fires (a
+  /// broken build stays in the field) or it fires forever (every merchant is
+  /// nagged to update to the version they already have). Reading the real one
+  /// removes the release-day footgun entirely.
+  int? _installedVersionCode;
+
+  Future<int> _currentVersionCode() async {
+    final cached = _installedVersionCode;
+    if (cached != null) return cached;
+    try {
+      final info = await PackageInfo.fromPlatform();
+      final parsed = int.tryParse(info.buildNumber);
+      if (parsed != null && parsed > 0) {
+        _installedVersionCode = parsed;
+        return parsed;
+      }
+    } catch (_) {}
+    // Unreadable package info must not look like an ancient build, or every
+    // merchant gets a force-update dialog they cannot satisfy. A very high
+    // number fails safe: no prompt.
+    _installedVersionCode = 1 << 30;
+    return _installedVersionCode!;
+  }
+
+  Future<void> _checkVersionPolicy() async {
     final config = FirestoreSyncService.instance.globalConfigNotifier.value;
     if (config == null || !mounted) return;
 
-    final minVersionCode = (config['min_version_code'] as num?)?.toInt() ?? 42201;
+    // 1. Maintenance mode. Written by the Admin Console's Release & Control
+    //    screen since it was built, and read by NOTHING until now — the admin
+    //    flipped the toggle and every merchant carried on unaware.
+    final maintenanceOn = config['maintenance_mode'] == true;
+    if (maintenanceOn && !_maintenanceNoticeShown) {
+      _maintenanceNoticeShown = true;
+      final msg = config['maintenance_message']?.toString().trim();
+      InAppNotification.show(
+        context: context,
+        message: (msg == null || msg.isEmpty)
+            ? 'KamaiPlus is undergoing scheduled maintenance. Billing keeps working offline; cloud sync may be delayed.'
+            : msg,
+        customIcon: Icons.cloud_off_rounded,
+        customColor: const Color(0xFFF59E0B),
+        duration: const Duration(seconds: 8),
+      );
+    }
+
+    // 2. Version policy.
+    final minVersionCode = (config['min_version_code'] as num?)?.toInt() ?? 0;
     final forceUpdate = config['force_update'] == true;
-    final latestName = config['latest_version_name']?.toString() ?? '4.21.0';
+    final latestName = config['latest_version_name']?.toString() ?? '';
     final playStoreUrl = config['play_store_url']?.toString() ??
         'https://play.google.com/store/apps/details?id=com.kamaiplus.pos';
 
-    // Current installed release version code (v4.21.0 = 42201)
-    const currentVersionCode = 42201;
+    final currentVersionCode = await _currentVersionCode();
+    if (!mounted) return;
 
     if (currentVersionCode < minVersionCode && !_forceUpdatePromptShown) {
       _forceUpdatePromptShown = true;
       _showUpdateDialog(
-        latestVersionName: latestName,
+        latestVersionName: latestName.isEmpty ? 'the latest version' : latestName,
         forceUpdate: forceUpdate,
         playStoreUrl: playStoreUrl,
       );

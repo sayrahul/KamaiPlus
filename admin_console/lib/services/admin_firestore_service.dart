@@ -48,6 +48,24 @@ class AdminFirestoreService {
         );
   }
 
+  /// Every VERIFIED subscription payment, newest first.
+  ///
+  /// `razorpay_payments` is written only by the `verifyRazorpayPayment` Cloud
+  /// Function, via the Admin SDK, and only after Razorpay's own API confirmed
+  /// the payment was captured — so this is the one revenue figure in the
+  /// project that cannot be inflated by anything a device claims.
+  ///
+  /// Not to be confused with `AdminBusiness.totalRevenuePaise`, which is the
+  /// MERCHANT'S shop takings (how big the platform is), not KamaiPlus income.
+  Stream<List<AdminPayment>> watchPayments() {
+    return _db
+        .collection('razorpay_payments')
+        .snapshots()
+        .map((snap) => snap.docs.map((d) => AdminPayment.fromMap(d.id, d.data())).toList()
+          ..sort((a, b) =>
+              (b.verifiedAt ?? DateTime(2000)).compareTo(a.verifiedAt ?? DateTime(2000))));
+  }
+
   Future<AdminBusiness?> getBusiness(String businessId) async {
     final doc = await _db.collection('businesses').doc(businessId).get();
     if (!doc.exists) return null;
