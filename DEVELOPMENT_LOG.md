@@ -2043,6 +2043,13 @@ isolation. `flutter analyze` clean, full `flutter test` suite passes (28 tests t
   it was deliberately left alone. **User action needed**: once `kamaiplus-admin.web.app` (the
   new console) is confirmed working end-to-end, either decommission the Vercel project
   directly, or ask for the authorized-domain revoke specifically.
+  **CLOSED 2026-09-16 — owner's decision: keep it live.** Not an oversight and not a
+  pending task; do not re-raise it in future audits. Note the security consequence so it
+  stays a conscious choice: it remains a Firebase Auth authorized domain, so an admin
+  session can still be established from it, and it is not built from this repo — meaning it
+  does NOT carry the entitlement fixes made on 2026-09-16 (trial visibility, and the Pro
+  revoke that actually revokes). Treat `kamaiplus-admin.web.app` as the only console whose
+  behaviour this repo can vouch for.
 - `splash_screen.dart` / `MainActivity.java` — a `test_screen` SharedPreferences key
   bypasses the login/session check and deep-links directly into any screen. It is now
   load-bearing for the home-screen widgets and launcher shortcuts (`QuickPosWidgetProvider`,
@@ -2811,3 +2818,38 @@ decision.
 - `flutter test` -> 222/222 passed.
 - **Not verified on a device:** the sheet is UI timing — the countdown tick, the expiry
   overlay and the Khata entry points need a real screen.
+
+---
+
+## 2026-09-16 — Release checkpoint v4.21.0
+
+Owner confirmed done on their side: admin console deployed to
+`kamaiplus-admin.web.app`; the new APK installed and the three device checks run; the stale
+`RAZORPAY_KEY_ID` in `env.local` corrected.
+
+**Owner decision recorded:** `kamaiplus.proventure.in` (the old Vercel console) **stays
+live**. Closed in Known open issues above rather than left dangling — with the consequence
+noted there, since it is not built from this repo and therefore does not carry the
+2026-09-16 entitlement fixes.
+
+**Shipped APK — `export/KamaiPlus-Universal-v4.21.0-Release.apk`**, 64.3 MB, release-signed,
+universal (arm64-v8a + armeabi-v7a + x86_64). Verified by unpacking `libapp.so` rather than
+trusting timestamps: it carries `rzp_live_TcXNjRb5XAUYqR`, the
+`us-central1-kamaiplus.cloudfunctions.net/verifyRazorpayPayment` endpoint, and strings
+unique to the final commit (`Khata Settlement QR`, `Split Settlement QR`) — so it is built
+from HEAD (`4868f7d`), not an earlier tree.
+
+**No rebuild was issued for this checkpoint, on purpose.** The working tree is clean and
+HEAD is the commit the existing APK was built from, so a rebuild would emit functionally
+identical bits. Worth stating plainly for the next session: the `env.local` key fix does
+**not** change the APK at all — that file is backend/Next.js configuration and is never
+compiled into the Flutter app, which carries its Razorpay key id in
+`razorpay_service.dart`.
+
+### State at this checkpoint
+- `flutter analyze lib` -> 0 issues; `flutter test` -> 222/222.
+- Deployed: Cloud Functions (`verifyRazorpayPayment`, `onAdminPushCreated`), Firestore rules
+  (verified byte-identical to the repo), admin console.
+- Still open: dead `lib/views/pos/payment_modal.dart` (319 lines, unreferenced); admin
+  console lifetime revenue is gross of returns; pre-fix partial returns recorded at ₹0 have
+  no repair path; the `test_screen` auth bypass.
