@@ -22,8 +22,23 @@ const MULTICAST_CHUNK = 500;
  * Returns `null` for the "all" audience, meaning "use the broadcast topic",
  * which stays the cheapest path for the common case.
  */
+/** The only audiences this function knows how to resolve. */
+const KNOWN_AUDIENCES = ["all", "pro", "free", "inactive"];
+
 async function resolveAudienceTokens(targetAudience) {
   const audience = String(targetAudience || "all").toLowerCase();
+
+  // Fail CLOSED on anything unrecognised. The filter below only ever removes
+  // tokens, so an unknown value used to fall through every branch and return
+  // the complete token list — i.e. a typo, or a future audience added in the
+  // console before it was added here, would silently blast every merchant on
+  // the platform. Refusing to send is the recoverable direction.
+  if (!KNOWN_AUDIENCES.includes(audience)) {
+    throw new Error(
+      `Unknown target_audience "${targetAudience}" — refusing to send rather than broadcasting to everyone`
+    );
+  }
+
   if (audience === "all") return null;
 
   const db = getFirestore();

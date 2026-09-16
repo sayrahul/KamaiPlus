@@ -102,6 +102,24 @@ class AdminFirestoreService {
       data['subscription_expires_at'] = exp.toIso8601String();
       data['subscription_valid_until'] = exp.toIso8601String();
       data['razorpay_payment_id'] = 'admin_granted';
+    } else {
+      // Revoking must clear the WHOLE subscription, not just flip one flag.
+      //
+      // This used to write `{is_pro: false}` alone and leave
+      // `subscription_tier: 'annual'` sitting on the document. The mobile
+      // app's live listener treats `subscription_tier` of pro/annual/monthly
+      // as Pro in its own right (firestore_sync_service.dart), so it saw
+      // is_pro false, subscription_tier annual, an unexpired pro_expiry —
+      // and promptly re-activated Pro. A revoke from this console simply did
+      // not take, which matters most in exactly the case it is used for:
+      // pulling a refunded or fraudulent subscription.
+      data['pro_plan'] = 'free';
+      data['subscription_tier'] = 'free';
+      data['pro_expiry'] = '';
+      data['subscription_expires_at'] = '';
+      data['subscription_valid_until'] = '';
+      data['razorpay_payment_id'] = '';
+      data['pro_granted_by'] = 'admin_revoked';
     }
     await _db.collection('businesses').doc(businessId).set(data, SetOptions(merge: true));
   }

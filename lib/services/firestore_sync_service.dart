@@ -80,11 +80,15 @@ class FirestoreSyncService {
         if (cloudDoc.exists) {
           final cd = cloudDoc.data();
           if (cd != null) {
-            final isProCloud = (cd['is_pro'] == true ||
-                cd['is_pro'] == 1 ||
-                cd['subscription_tier'] == 'pro' ||
-                cd['subscription_tier'] == 'annual' ||
-                cd['subscription_tier'] == 'monthly');
+            // An explicit `is_pro: false` is a revoke and wins outright — see
+            // the same guard on the live listener below for why a stale
+            // `subscription_tier` must not resurrect a pulled subscription.
+            final isProCloud = !(cd['is_pro'] == false || cd['is_pro'] == 0) &&
+                (cd['is_pro'] == true ||
+                    cd['is_pro'] == 1 ||
+                    cd['subscription_tier'] == 'pro' ||
+                    cd['subscription_tier'] == 'annual' ||
+                    cd['subscription_tier'] == 'monthly');
             final rawExp = cd['pro_expiry']?.toString();
             final rawSubExp = cd['subscription_expires_at']?.toString();
             final rawValid = cd['subscription_valid_until']?.toString();
@@ -473,11 +477,22 @@ class FirestoreSyncService {
         if (d != null) {
           accountDisabledNotifier.value = d['account_disabled'] == true;
 
-          final isProCloud = (d['is_pro'] == true ||
-              d['is_pro'] == 1 ||
-              d['subscription_tier'] == 'pro' ||
-              d['subscription_tier'] == 'annual' ||
-              d['subscription_tier'] == 'monthly');
+          // An EXPLICIT `is_pro: false` is a revoke and wins outright.
+          //
+          // Without this, the OR below re-granted Pro from a stale
+          // `subscription_tier` that a revoke had left behind — so pulling a
+          // refunded or fraudulent subscription from the Admin Console simply
+          // did not take on the device. The console now clears those fields
+          // too, but documents already in the wild still carry them, so the
+          // client refuses to out-think an explicit false.
+          final explicitlyRevoked = d['is_pro'] == false || d['is_pro'] == 0;
+
+          final isProCloud = !explicitlyRevoked &&
+              (d['is_pro'] == true ||
+                  d['is_pro'] == 1 ||
+                  d['subscription_tier'] == 'pro' ||
+                  d['subscription_tier'] == 'annual' ||
+                  d['subscription_tier'] == 'monthly');
 
           final prefs = await SharedPreferences.getInstance();
           final currentIsPro = prefs.getBool('is_pro') ?? false;
@@ -612,11 +627,14 @@ class FirestoreSyncService {
         if (bizDoc.exists) {
           final d = bizDoc.data();
           if (d != null) {
-            final isProCloud = (d['is_pro'] == true ||
-                d['is_pro'] == 1 ||
-                d['subscription_tier'] == 'pro' ||
-                d['subscription_tier'] == 'annual' ||
-                d['subscription_tier'] == 'monthly');
+            // Explicit revoke wins over a stale subscription_tier — same guard
+            // as the other two copies of this check in this file.
+            final isProCloud = !(d['is_pro'] == false || d['is_pro'] == 0) &&
+                (d['is_pro'] == true ||
+                    d['is_pro'] == 1 ||
+                    d['subscription_tier'] == 'pro' ||
+                    d['subscription_tier'] == 'annual' ||
+                    d['subscription_tier'] == 'monthly');
             final prefs = await SharedPreferences.getInstance();
 
             final plan = d['pro_plan']?.toString() ?? d['subscription_tier']?.toString() ?? 'annual';

@@ -156,7 +156,7 @@ class _MerchantsScreenState extends State<MerchantsScreen> {
           b.phone,
           b.email,
           b.businessType,
-          b.isProEffective ? 'Pro' : (b.isPro ? 'Expired' : 'Free'),
+          b.accessLabel,
           b.proPlan,
           b.proExpiry != null ? dateFmt.format(b.proExpiry!) : '',
           b.totalSalesCount,
@@ -730,6 +730,14 @@ class _ProBadge extends StatelessWidget {
       fg = AdminColors.accent;
       bg = AdminColors.accentSoft;
       label = 'PRO';
+    } else if (business.isTrialActive) {
+      // Distinct from both PRO and FREE: this merchant is inside their free
+      // week and has not converted. Lumping them in with FREE (which is what
+      // happened once the app stopped writing is_pro to the cloud) hides the
+      // entire conversion funnel from this console.
+      fg = AdminColors.violet;
+      bg = AdminColors.violetSoft;
+      label = 'TRIAL ${business.trialDaysLeft}d';
     } else if (business.isPro) {
       fg = AdminColors.amber;
       bg = AdminColors.amberSoft;

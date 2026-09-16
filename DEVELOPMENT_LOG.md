@@ -2671,3 +2671,91 @@ crossing 300 bills lost its own earliest bills from the drawer total.
 - Full suite green (see the run recorded with this entry).
 - **Not verified on a device:** the QR countdown and the split sheet are UI timing — they
   need a real screen to confirm the tick and the expiry overlay look right.
+
+---
+
+## 2026-09-16 — Admin Console audit: trial merchants invisible, Pro revoke did nothing
+
+Asked to check whether https://kamaiplus-admin.web.app is functional and fix what isn't.
+It compiles clean (4 pre-existing `dart:html` infos, no errors) and every screen is really
+wired to Firestore. Three real problems, one of which I had introduced myself earlier the
+same day.
+
+### 1. Every trial merchant showed as "Free" — caused by this session's own change
+
+The entitlement hardening stopped the app writing `is_pro` to the cloud at all (paid Pro is
+now granted only by `verifyRazorpayPayment` or this console). The console reads `is_pro` /
+`subscription_tier` — so a merchant inside their 7-day free week had none of those fields
+and rendered as plain **Free**. On a console whose whole job is watching conversion, the
+trial pipeline had gone invisible.
+
+The data was there all along: the app writes `trial_started_at` and `device_reported_pro`.
+`AdminBusiness` now reads both, with `isTrialActive` / `trialDaysLeft` / `accessLabel`
+('Pro' | 'Trial' | 'Expired' | 'Free') and a `hasProMismatch` flag for the support case
+where a device claims Pro the server never granted. Merchant list shows a `TRIAL 5d` badge,
+the dashboard badge takes a label rather than a bool (as a bool a trial collapsed into
+FREE), the Pro tile breaks out "N on Trial • N on Free", and the CSV export uses the same
+label. Trials are deliberately NOT counted into `proCount` — a merchant in their free week
+has not converted, and counting them would overstate the paying base.
+
+### 2. Admin "revoke Pro" did not revoke — pre-existing, and the worst of the three
+
+`setProStatus(isPro: false)` wrote `{is_pro: false}` and nothing else, leaving
+`subscription_tier: 'annual'` and an unexpired `pro_expiry` on the document. All three
+copies of the cloud-Pro check in `firestore_sync_service.dart` treat a `subscription_tier`
+of pro/annual/monthly as Pro **in its own right**, so the device read
+`is_pro: false, subscription_tier: 'annual', pro_expiry: <future>` and re-activated Pro.
+
+A revoke simply did not take — in exactly the situation it exists for: pulling a refunded
+or fraudulent subscription. The console's own merchant list had the same blind spot and
+kept showing PRO after the admin had revoked.
+
+Fixed on both sides, because neither alone is enough:
+* the console now clears the whole subscription (`pro_plan`, `subscription_tier`,
+  all three expiry fields, `razorpay_payment_id`) and stamps
+  `pro_granted_by: 'admin_revoked'`;
+* all three client checks — plus `AdminBusiness.fromMap` — now treat an explicit
+  `is_pro: false` (or `0`) as winning outright, since documents already revoked before this
+  fix still carry the stale fields and would otherwise stay Pro forever.
+
+**Regression test:** `test/admin_pro_revoke_test.dart` (9 tests) pins the rule, including
+the exact document that used to resurrect Pro, and — in the other direction — that legacy
+docs carrying only `subscription_tier` still grant Pro, so the fix cannot downgrade a real
+paying merchant.
+
+### 3. Push targeting failed OPEN — also caused by this session
+
+`resolveAudienceTokens` filtered tokens down for 'pro' / 'free' / 'inactive' and returned
+the full list for 'all'. Anything else fell through every branch and returned **every token
+on the platform**. The console only offers the four known values today, so nothing has
+misfired — but a typo, or a fifth audience added to the console before the function knew
+about it, would have blasted every merchant. Unknown audiences now throw and the
+notification is marked failed; refusing to send is the recoverable direction.
+
+### Verified working, left alone
+Firestore reads/writes on every screen; admin auth (`admins/{uid}` allow-list, with a
+distinct "signed in but not an admin" state); the audience values the console sends match
+the function exactly; merchant aggregates (`total_sales_count`, `total_revenue_paise`,
+`last_sale_at`) are genuinely incremented per sale by the app; the kill-switch
+(`account_disabled`) writes a field the app live-listens on, and firestore.rules now blocks
+the client from clearing it.
+
+### Known gap, not fixed
+`total_revenue_paise` / `total_sales_count` are incremented per sale and **never decremented
+on a refund or return**, so the console's "Lifetime revenue" is gross of returns. Arguably
+correct for a lifetime-gross metric, but it does not agree with the app's own net revenue
+after the partial-return fix. Wiring it properly needs a cloud hook on the return path —
+out of scope here, recorded so it is not mistaken for a rounding difference later.
+
+### ⚠ The live site is stale
+`admin_console/build/web` was last built **15 Sep 10:27**, before every change above.
+Rebuilt locally (`flutter build web --release`). **Needs deploying:**
+`firebase deploy --only hosting:admin`.
+
+### Verification
+- `flutter analyze lib` (admin_console) -> 4 pre-existing infos, 0 errors.
+- `flutter analyze lib` (app) -> 0 issues.
+- `flutter test` -> 214/214 passed.
+- `node --check functions/index.js` -> OK.
+- **Not verified live:** the console UI itself (no browser here) and the revoke round trip,
+  which needs a real merchant document and a deploy.

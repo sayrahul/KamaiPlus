@@ -66,7 +66,13 @@ class _DashboardContent extends StatelessWidget {
   Widget build(BuildContext context) {
     final total = businesses.length;
     final proCount = businesses.where((b) => b.isProEffective).length;
-    final freeCount = total - proCount;
+    // Trials are counted separately, not as "free". They are the conversion
+    // pipeline — a merchant in their free week is a different thing from one
+    // who has lapsed or never started, and folding them together made the
+    // free bucket look identical whether nobody had signed up this week or
+    // everybody had.
+    final trialCount = businesses.where((b) => b.isTrialActive).length;
+    final freeCount = total - proCount - trialCount;
     final totalRevenuePaise = businesses.fold<int>(0, (sum, b) => sum + b.totalRevenuePaise);
     final totalBills = businesses.fold<int>(0, (sum, b) => sum + b.totalSalesCount);
 
@@ -134,7 +140,7 @@ class _DashboardContent extends StatelessWidget {
                     bg: AdminColors.violetSoft,
                     value: _decimal.format(proCount),
                     label: 'Pro merchants',
-                    sublabel: '${_decimal.format(freeCount)} on Free',
+                    sublabel: '${_decimal.format(trialCount)} on Trial • ${_decimal.format(freeCount)} on Free',
                   ),
                   _StatCard(
                     icon: Icons.payments_rounded,
@@ -353,7 +359,7 @@ class _RecentlyActiveRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isPro = business.isProEffective;
+    final accessLabel = business.accessLabel;
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 11),
       child: Row(
@@ -382,7 +388,7 @@ class _RecentlyActiveRow extends StatelessWidget {
           Column(
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
-              _ProBadge(isPro: isPro),
+              _ProBadge(label: accessLabel),
               const SizedBox(height: 4),
               Text(_relativeTime(business.lastSaleAt), style: const TextStyle(color: AdminColors.inkFaint, fontSize: 11)),
             ],
@@ -567,21 +573,41 @@ class _StatCard extends StatelessWidget {
 }
 
 class _ProBadge extends StatelessWidget {
-  final bool isPro;
-  const _ProBadge({required this.isPro});
+  /// 'Pro' | 'Trial' | 'Expired' | 'Free' — from `AdminBusiness.accessLabel`.
+  /// Takes the label rather than a bool so a trial reads as its own state; as
+  /// a bool it collapsed into FREE, which is the one thing a conversion
+  /// dashboard must not do.
+  final String label;
+  const _ProBadge({required this.label});
 
   @override
   Widget build(BuildContext context) {
+    final Color fg;
+    final Color bg;
+    switch (label) {
+      case 'Pro':
+        fg = AdminColors.violet;
+        bg = AdminColors.violetSoft;
+      case 'Trial':
+        fg = AdminColors.accent;
+        bg = AdminColors.accentSoft;
+      case 'Expired':
+        fg = AdminColors.amber;
+        bg = AdminColors.amberSoft;
+      default:
+        fg = AdminColors.inkMuted;
+        bg = AdminColors.surfaceSunken;
+    }
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
       decoration: BoxDecoration(
-        color: isPro ? AdminColors.violetSoft : AdminColors.surfaceSunken,
+        color: bg,
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: isPro ? AdminColors.violet.withValues(alpha: 0.35) : AdminColors.border),
+        border: Border.all(color: fg.withValues(alpha: 0.35)),
       ),
       child: Text(
-        isPro ? 'PRO' : 'FREE',
-        style: TextStyle(fontSize: 9.5, fontWeight: FontWeight.w800, letterSpacing: 0.4, color: isPro ? AdminColors.violet : AdminColors.inkMuted),
+        label.toUpperCase(),
+        style: TextStyle(fontSize: 9.5, fontWeight: FontWeight.w800, letterSpacing: 0.4, color: fg),
       ),
     );
   }

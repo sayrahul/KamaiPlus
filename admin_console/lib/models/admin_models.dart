@@ -73,6 +73,24 @@ class AdminBusiness {
   final DateTime? createdAt;
   final bool isDisabled;
 
+  /// When the merchant's 7-day free trial began, as the mobile app recorded it.
+  ///
+  /// Needed because the app no longer writes `is_pro` to the cloud at all —
+  /// paid entitlement is now granted exclusively by the `verifyRazorpayPayment`
+  /// Cloud Function (after checking with Razorpay) or by this console, and
+  /// firestore.rules blocks the device from touching those fields. Without
+  /// reading the trial separately, every merchant inside their free week would
+  /// show up here as plain "Free", which is the opposite of useful when the
+  /// whole point of the console is watching conversion.
+  final DateTime? trialStartedAt;
+
+  /// What the merchant's DEVICE believes about its own Pro state.
+  ///
+  /// Support signal only — deliberately never treated as an entitlement. It is
+  /// how a device can be caught disagreeing with the server (a purchase whose
+  /// verification never landed, say), which is exactly the case worth seeing.
+  final bool deviceReportedPro;
+
   const AdminBusiness({
     required this.id,
     required this.name,
@@ -95,13 +113,21 @@ class AdminBusiness {
     this.fcmToken,
     this.createdAt,
     this.isDisabled = false,
+    this.trialStartedAt,
+    this.deviceReportedPro = false,
   });
 
   factory AdminBusiness.fromMap(String id, Map<String, dynamic> m) {
-    final isProCloud = _asBool(m['is_pro']) ||
-        m['subscription_tier'] == 'pro' ||
-        m['subscription_tier'] == 'annual' ||
-        m['subscription_tier'] == 'monthly';
+    // An explicit `is_pro: false` is a revoke and wins outright. Without this
+    // the OR below kept showing a merchant as Pro in this console from a
+    // stale `subscription_tier` that an earlier revoke had left behind — so
+    // the admin pulled a subscription and the list still said PRO.
+    final explicitlyRevoked = m['is_pro'] == false || m['is_pro'] == 0;
+    final isProCloud = !explicitlyRevoked &&
+        (_asBool(m['is_pro']) ||
+            m['subscription_tier'] == 'pro' ||
+            m['subscription_tier'] == 'annual' ||
+            m['subscription_tier'] == 'monthly');
     final expiryStr = m['pro_expiry'] ?? m['subscription_expires_at'] ?? m['subscription_valid_until'];
     return AdminBusiness(
       id: id,
@@ -125,11 +151,47 @@ class AdminBusiness {
       fcmToken: m['fcm_token'] as String?,
       createdAt: _asDate(m['created_at'] ?? m['createdAt'] ?? m['registered_at']),
       isDisabled: _asBool(m['account_disabled']),
+      trialStartedAt: _asDate(m['trial_started_at']),
+      deviceReportedPro: _asBool(m['device_reported_pro']),
     );
   }
 
   bool get isProExpired => proExpiry != null && DateTime.now().isAfter(proExpiry!);
+
+  /// Paid (or admin-granted) Pro that is still in date. Trials are NOT counted
+  /// here — a merchant in their free week has not converted, and treating them
+  /// as Pro would overstate the paying base on every dashboard tile.
   bool get isProEffective => isPro && !isProExpired;
+
+  /// Inside the 7-day free trial window.
+  bool get isTrialActive {
+    final start = trialStartedAt;
+    if (start == null) return false;
+    if (isProEffective) return false; // Already converted to a paid plan.
+    return DateTime.now().isBefore(start.add(const Duration(days: 7)));
+  }
+
+  /// Days left in the trial, 0 once it has lapsed.
+  int get trialDaysLeft {
+    final start = trialStartedAt;
+    if (start == null) return 0;
+    final left = start.add(const Duration(days: 7)).difference(DateTime.now()).inHours;
+    return left <= 0 ? 0 : (left / 24).ceil();
+  }
+
+  /// True when the device claims Pro but the server has granted none — a
+  /// purchase whose server-side verification never completed, or a stale
+  /// install. Worth surfacing: it is a paying customer who may not have what
+  /// they paid for.
+  bool get hasProMismatch => deviceReportedPro && !isProEffective && !isTrialActive;
+
+  /// One label for the merchant's access, for list rows and badges.
+  String get accessLabel {
+    if (isProEffective) return 'Pro';
+    if (isTrialActive) return 'Trial';
+    if (isPro) return 'Expired';
+    return 'Free';
+  }
 
   int get daysSinceLastActive {
     final ref = lastSaleAt ?? createdAt;

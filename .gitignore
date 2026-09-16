@@ -68,3 +68,10 @@ scratch/
 node_modules/
 **/node_modules/
 
+
+# JVM crash artefacts. Gradle drops these next to the project on an OOM
+# (one 851 MB heap dump already got committed and bounced off GitHub's
+# 100 MB limit). They are pure build debris and never belong in history.
+*.hprof
+hs_err_pid*.log
+replay_pid*.log
