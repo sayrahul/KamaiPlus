@@ -97,6 +97,29 @@ void main() async {
     FirestoreSyncService.instance.initialize(businessId: savedBizId);
   }
 
+  // 6a. Reconcile the 7-day free trial on every launch.
+  //
+  // Signup already starts the trial correctly (see signup_store_screen.dart),
+  // but nothing ever ENDED it: `ensureFreeTrialGranted` — the only code that
+  // deactivates an expired trial and clears the cached `is_pro` flag — was
+  // reached solely by opening the Pro upgrade modal. A merchant who never
+  // opened that screen kept a stale `is_pro: true` in SharedPreferences long
+  // after day 7, so anything reading that cached flag (invoice_pdf_service)
+  // still treated them as Pro.
+  //
+  // Safe to run unconditionally on a signed-in device: the method is
+  // idempotent, refuses to restart a consumed trial, and leaves a paid plan
+  // untouched. Gated on being logged in so a fresh install that is merely
+  // opened — and not yet signed up — does not silently burn the trial before
+  // the merchant has a store.
+  if (isLoggedIn) {
+    try {
+      await LocalDatabase.instance.ensureFreeTrialGranted();
+    } catch (e) {
+      debugPrint('Trial reconciliation notice: $e');
+    }
+  }
+
   // 6b. Admin kill-switch: if an admin ever flips `account_disabled` on this
   // business's Firestore doc, FirestoreSyncService's live listener (already
   // running for Pro status) flips this notifier — react by signing out and

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -3150,17 +3151,33 @@ class _PosCheckoutModalState extends State<PosCheckoutModal> {
               ),
               child: Row(
                 children: [
-                  Container(
-                    padding: const EdgeInsets.all(6),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: const Color(0xFF86EFAC)),
-                    ),
-                    child: QrImageView(
-                      data: 'upi://pay?pa=$_activeUpiVpa&pn=${Uri.encodeComponent(_activeStoreName)}&am=${(splitUpiPaise / 100.0).toStringAsFixed(2)}&cu=INR&tn=Split+Bill',
-                      version: QrVersions.auto,
-                      size: 90,
+                  // Tappable, like the UPI-mode QR on the payment screen —
+                  // this thumbnail used to be inert, so a customer standing at
+                  // the counter had to scan a 90px code. Opens the same
+                  // countdown sheet, but for the SPLIT portion only.
+                  InkWell(
+                    onTap: () {
+                      HapticFeedback.mediumImpact();
+                      _showEnlargedUpiQrModal(
+                        context,
+                        amountPaise: splitUpiPaise,
+                        title: 'Split UPI QR',
+                        note: 'Split Bill',
+                      );
+                    },
+                    borderRadius: BorderRadius.circular(8),
+                    child: Container(
+                      padding: const EdgeInsets.all(6),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: const Color(0xFF86EFAC)),
+                      ),
+                      child: QrImageView(
+                        data: 'upi://pay?pa=$_activeUpiVpa&pn=${Uri.encodeComponent(_activeStoreName)}&am=${(splitUpiPaise / 100.0).toStringAsFixed(2)}&cu=INR&tn=Split+Bill',
+                        version: QrVersions.auto,
+                        size: 90,
+                      ),
                     ),
                   ),
                   const SizedBox(width: 12),
@@ -3352,7 +3369,36 @@ class _PosCheckoutModalState extends State<PosCheckoutModal> {
     );
   }
 
-  void _showEnlargedUpiQrModal(BuildContext context) {
+  /// How long a generated QR is offered before the sheet asks the cashier to
+  /// regenerate it. Not a bank-enforced expiry — a UPI intent URI does not
+  /// have one — but the counter convention the "Valid: mm:ss" readout implies,
+  /// and the point at which a fresh transaction reference is worth issuing.
+  static const Duration _qrValidity = Duration(minutes: 5);
+
+  /// Full-screen dynamic UPI QR.
+  ///
+  /// [amountPaise] defaults to the whole bill; the split-payment card passes
+  /// just its UPI portion, which is why this is a parameter rather than
+  /// reading `grandTotalPaise` directly as it used to — opening this sheet
+  /// from a split would otherwise have shown a QR for the FULL bill and taken
+  /// more money than the cashier intended.
+  void _showEnlargedUpiQrModal(
+    BuildContext context, {
+    int? amountPaise,
+    String title = 'Dynamic Bill UPI QR',
+    String note = 'POS Bill',
+  }) {
+    final int qrAmountPaise = amountPaise ?? grandTotalPaise;
+
+    // Countdown state lives here, outside the builder, so a rebuild (switching
+    // UPI account, say) does not restart the clock.
+    Timer? ticker;
+    var remaining = _qrValidity;
+    // Freshened on every regenerate so each QR shown is distinguishable in the
+    // merchant's UPI statement rather than every scan of every bill looking
+    // identical.
+    var txnRef = DateTime.now().millisecondsSinceEpoch.toString();
+
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -3360,6 +3406,30 @@ class _PosCheckoutModalState extends State<PosCheckoutModal> {
       builder: (ctx) {
         return StatefulBuilder(
           builder: (ctx, setModalState) {
+            // One ticker per sheet. Started on the first build and guarded so
+            // a rebuild does not stack a second one.
+            ticker ??= Timer.periodic(const Duration(seconds: 1), (t) {
+              if (remaining.inSeconds <= 0) {
+                t.cancel();
+                return;
+              }
+              remaining -= const Duration(seconds: 1);
+              setModalState(() {});
+            });
+
+            final bool qrExpired = remaining.inSeconds <= 0;
+            final String mmss =
+                '${remaining.inMinutes.toString().padLeft(2, '0')}:'
+                '${(remaining.inSeconds % 60).toString().padLeft(2, '0')}';
+
+            void regenerateQr() {
+              HapticFeedback.mediumImpact();
+              ticker?.cancel();
+              ticker = null;
+              txnRef = DateTime.now().millisecondsSinceEpoch.toString();
+              remaining = _qrValidity;
+              setModalState(() {});
+            }
             return Container(
               decoration: const BoxDecoration(
                 color: Color(0xFF0F172A),
@@ -3392,7 +3462,7 @@ class _PosCheckoutModalState extends State<PosCheckoutModal> {
                             const Icon(Icons.qr_code_scanner_rounded, color: Color(0xFF34D399), size: 20),
                             const SizedBox(width: 8),
                             Text(
-                              'Dynamic Bill UPI QR',
+                              title,
                               style: GoogleFonts.outfit(
                                 fontSize: 16,
                                 fontWeight: FontWeight.w800,
@@ -3481,14 +3551,62 @@ class _PosCheckoutModalState extends State<PosCheckoutModal> {
                       child: Column(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          QrImageView(
-                            data: 'upi://pay?pa=$_activeUpiVpa&pn=${Uri.encodeComponent(_activeStoreName)}&am=${(grandTotalPaise / 100.0).toStringAsFixed(2)}&cu=INR&tn=POS+Bill',
-                            version: QrVersions.auto,
-                            size: 230,
+                          // Once the validity window lapses the QR is covered
+                          // rather than removed, so the cashier sees exactly
+                          // why nothing is scanning and can reissue in one tap.
+                          Stack(
+                            alignment: Alignment.center,
+                            children: [
+                              Opacity(
+                                opacity: qrExpired ? 0.12 : 1,
+                                child: QrImageView(
+                                  data: 'upi://pay?pa=$_activeUpiVpa'
+                                      '&pn=${Uri.encodeComponent(_activeStoreName)}'
+                                      '&am=${(qrAmountPaise / 100.0).toStringAsFixed(2)}'
+                                      '&cu=INR'
+                                      '&tn=${Uri.encodeComponent(note)}'
+                                      '&tr=$txnRef',
+                                  version: QrVersions.auto,
+                                  size: 230,
+                                ),
+                              ),
+                              if (qrExpired)
+                                Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    const Icon(Icons.timer_off_rounded,
+                                        size: 34, color: Color(0xFFDC2626)),
+                                    const SizedBox(height: 8),
+                                    Text(
+                                      'QR Expired',
+                                      style: GoogleFonts.outfit(
+                                        fontSize: 15,
+                                        fontWeight: FontWeight.w900,
+                                        color: const Color(0xFF991B1B),
+                                      ),
+                                    ),
+                                    const SizedBox(height: 10),
+                                    ElevatedButton.icon(
+                                      onPressed: regenerateQr,
+                                      icon: const Icon(Icons.refresh_rounded, size: 16),
+                                      label: Text('Generate New QR',
+                                          style: GoogleFonts.outfit(
+                                              fontWeight: FontWeight.w800, fontSize: 12.5)),
+                                      style: ElevatedButton.styleFrom(
+                                        backgroundColor: const Color(0xFF059669),
+                                        foregroundColor: Colors.white,
+                                        elevation: 0,
+                                        shape: RoundedRectangleBorder(
+                                            borderRadius: BorderRadius.circular(10)),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                            ],
                           ),
                           const SizedBox(height: 8),
                           Text(
-                            'Scan to Pay Exact ₹${(grandTotalPaise / 100.0).toStringAsFixed(2)}',
+                            'Scan to Pay Exact ₹${(qrAmountPaise / 100.0).toStringAsFixed(2)}',
                             style: GoogleFonts.outfit(
                               fontSize: 16,
                               fontWeight: FontWeight.w900,
@@ -3549,19 +3667,31 @@ class _PosCheckoutModalState extends State<PosCheckoutModal> {
                             color: const Color(0xFF94A3B8),
                           ),
                         ),
-                        Row(
-                          children: [
-                            const Icon(Icons.timer_outlined, size: 13, color: Color(0xFFFBBF24)),
-                            const SizedBox(width: 4),
-                            Text(
-                              'Valid: 05:00',
-                              style: GoogleFonts.robotoMono(
-                                fontSize: 10.5,
-                                fontWeight: FontWeight.w700,
-                                color: const Color(0xFFFBBF24),
+                        // Live countdown. This was the literal string
+                        // 'Valid: 05:00' with no timer behind it — it read as
+                        // a working clock while never moving, whatever the
+                        // cashier did.
+                        InkWell(
+                          onTap: qrExpired ? regenerateQr : null,
+                          borderRadius: BorderRadius.circular(6),
+                          child: Row(
+                            children: [
+                              Icon(
+                                qrExpired ? Icons.refresh_rounded : Icons.timer_outlined,
+                                size: 13,
+                                color: qrExpired ? const Color(0xFFF87171) : const Color(0xFFFBBF24),
                               ),
-                            ),
-                          ],
+                              const SizedBox(width: 4),
+                              Text(
+                                qrExpired ? 'Expired · Tap to refresh' : 'Valid: $mmss',
+                                style: GoogleFonts.robotoMono(
+                                  fontSize: 10.5,
+                                  fontWeight: FontWeight.w700,
+                                  color: qrExpired ? const Color(0xFFF87171) : const Color(0xFFFBBF24),
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
                       ],
                     ),
@@ -3621,6 +3751,8 @@ class _PosCheckoutModalState extends State<PosCheckoutModal> {
           },
         );
       },
-    );
+      // Stop the ticker whichever way the sheet closes — swipe down, system
+      // back, or the X — so it cannot keep firing setState on a dead element.
+    ).whenComplete(() => ticker?.cancel());
   }
 }
