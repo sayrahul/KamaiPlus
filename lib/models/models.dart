@@ -903,6 +903,13 @@ class LedgerTransactionModel {
   final DateTime createdAt;
   final String syncStatus;
 
+  /// Of [amountPaise], how much arrived as physical CASH. Lets the Cash
+  /// Register count a khata settlement paid in cash as money that actually
+  /// entered the drawer — it previously counted sales only, so clearing an
+  /// old udhar in cash left the drawer reconciliation short by that amount
+  /// every single day. 0 for a UPI settlement; the cash half of a split.
+  final int cashAmountPaise;
+
   LedgerTransactionModel({
     required this.id,
     required this.businessId,
@@ -914,6 +921,7 @@ class LedgerTransactionModel {
     this.referenceId,
     required this.createdAt,
     this.syncStatus = 'pending',
+    this.cashAmountPaise = 0,
   });
 
   Map<String, dynamic> toMap() => {
@@ -927,6 +935,7 @@ class LedgerTransactionModel {
     'reference_id': referenceId,
     'created_at': createdAt.toIso8601String(),
     'sync_status': syncStatus,
+    'cash_amount_paise': cashAmountPaise,
   };
 
   factory LedgerTransactionModel.fromMap(Map<String, dynamic> map) => LedgerTransactionModel(
@@ -940,6 +949,9 @@ class LedgerTransactionModel {
     referenceId: map['reference_id'],
     createdAt: DateTime.tryParse(map['created_at'] ?? '') ?? DateTime.now(),
     syncStatus: map['sync_status'] ?? 'pending',
+    // Absent on every row written before this column existed — 0 is the
+    // honest answer there, not a guess at what was cash.
+    cashAmountPaise: (map['cash_amount_paise'] as num?)?.toInt() ?? 0,
   );
 }
 

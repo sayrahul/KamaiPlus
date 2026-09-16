@@ -2581,3 +2581,93 @@ and then the three destinations end to end (cash → drawer expense, credit → 
 credit_note → negative balance = jama), plus restocking, the cumulative clamp, no ₹0 ledger
 noise, and revenue dropping in reports. The pre-existing `sales_return_flow_test.dart`
 still passes unchanged — its legacy `price_paise` fixtures are handled by the fallback.
+
+---
+
+## 2026-09-16 — Trial expiry, dynamic UPI QR countdown, split QR, settlement cash
+
+Four things the user asked to cross-verify. Two were already correct, two were not,
+and verifying them turned up a third bug neither of us was looking for.
+
+### 1. 7-day Pro trial — starts fine, never ENDED
+
+**Verified working:** signup does grant it. `signup_store_screen.dart` writes
+`proPlan: 'trial'`, `proExpiry: now + 7d` and `trialStartedAt`, and locks
+`pro_trial_already_consumed` so it cannot be farmed.
+
+**Broken:** nothing ever ran the expiry path. `ensureFreeTrialGranted` — the only code
+that deactivates a lapsed trial and clears the cached `is_pro` flag — was reached *solely*
+by opening the Pro upgrade modal (`pro_upgrade_modal.dart:65`). A merchant who never opened
+that screen kept `is_pro: true` in SharedPreferences indefinitely.
+
+**And the expiry branch was dead code anyway.** It was guarded on
+`if (current.isPro && ...)`, which can never be true there: `StoreProfileModel.fromMap`
+already collapses `is_pro` against `pro_expiry`, so an expired trial always arrives with
+`isPro == false`. The guard now tests what the plan *was* (`trial` / `referral_trial` /
+`free_trial_7d` / `ref_*`), and returns the re-read profile rather than the stale one.
+
+**Fix:** reconcile on every launch from `main.dart`, gated on `is_logged_in` so a fresh
+install that is merely opened — not yet signed up — does not burn the trial before the
+merchant has a store. The method is idempotent and refuses to restart a consumed trial.
+
+Pro *gating* itself was never affected: screens read `profile.isProEffective`, which
+correctly expires. What leaked was the cached flag, read by `invoice_pdf_service`.
+
+### 2. Dynamic UPI QR — the timer was a string
+
+`pos_checkout_modal.dart:3557` rendered the literal `'Valid: 05:00'`. There was no timer
+anywhere in the file. It read as a working countdown while never moving, whatever the
+cashier did — exactly as reported.
+
+Now a real `Timer.periodic` with `mm:ss`, started once per sheet (`ticker ??=`) so
+switching UPI account does not restart the clock, and cancelled via `whenComplete` so it
+cannot fire `setState` on a dead element however the sheet is dismissed. On expiry the QR
+is *covered* rather than removed — "QR Expired" + a one-tap **Generate New QR** — so the
+cashier sees why nothing is scanning. Each generation issues a fresh `tr=` transaction
+reference, which also makes individual QRs distinguishable in the merchant's UPI statement.
+
+**Deliberately not claimed as a security expiry.** A UPI intent URI has no bank-enforced
+validity; this is the counter convention the readout already implied, made real.
+
+### 3. Split payment QR — inert thumbnail, and would have shown the wrong amount
+
+The split card's QR (`splitUpiPaise > 0` branch) had no `InkWell` at all, so tapping it did
+nothing — a customer had to scan a 90px code. Wrapped it to open the same countdown sheet.
+
+That exposed a second problem: `_showEnlargedUpiQrModal` read `grandTotalPaise` directly,
+so opening it from a split would have shown a QR for the **whole bill** and collected more
+than the cashier intended. It now takes `amountPaise` / `title` / `note`, and the split
+card passes `splitUpiPaise`.
+
+### 4. Settle Credit Bills — functional, but the cash never reached the drawer
+
+**Verified working:** the modal does have cash / UPI / split modes, and
+`settleMultipleCustomerSaleBills` correctly reduces the balance, marks the bills settled and
+writes a ledger entry. That part was fine.
+
+**Found while checking it:** the Cash Register computes expected cash as
+`opening float + cash SALES − expenses`. A khata settlement is none of those, so a customer
+clearing ₹5,000 of old udhar **in cash** left the physical count ₹5,000 over "expected" —
+every day, silently, and the more udhar a shop recovered the wider the gap.
+
+**Fix:** new `cash_amount_paise` column on `ledger_transactions` (via the idempotent
+`_ensureExtraTables` ALTER, so no schema bump), set from an explicit `cashReceivedPaise`
+argument — full amount for cash, 0 for UPI, the cash half of a split, clamped to the amount
+settled so change handed back is never counted as drawer money. New
+`getSettlementCashBetween(start, end)`, added to the register's cash-in. Legacy ledger rows
+have no such column and read as 0 — guessing an old entry was cash would invent drawer money
+that was never counted.
+
+Also replaced that screen's `getAllSales(limit: 300)`-then-filter-to-today with a
+date-ranged query, the same cap class as the Home Pulse bug fixed earlier: a counter
+crossing 300 bills lost its own earliest bills from the drawer total.
+
+### Verification
+- `flutter analyze lib` -> 0 issues.
+- `test/trial_and_settlement_cash_test.dart` — 12 tests: trial active on day 6, locked on
+  day 8 with the cached flag cleared, never restarted, a paid plan never downgraded,
+  repeated runs never extending expiry; and settlement cash for cash / UPI / split, the
+  clamp, date scoping, and legacy rows reading as zero.
+- Full suite green (see the run recorded with this entry).
+- **Not verified on a device:** the QR countdown and the split sheet are UI timing — they
+  need a real screen to confirm the tick and the expiry overlay look right.

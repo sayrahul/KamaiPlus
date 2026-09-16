@@ -3450,11 +3450,24 @@ class _KhataScreenState extends State<KhataScreen> with DataBusRefresh<KhataScre
                               ? 'Cash Settle'
                               : (selectedMode == 'upi' ? 'UPI Settle' : 'Split Settle');
 
+                          // How much of this settlement is physical cash, so
+                          // the Cash Register counts it as drawer money. Cash
+                          // mode settles the whole amount in cash regardless of
+                          // what was tendered — the change handed back is not
+                          // part of the settlement.
+                          final int settledCashPaise = selectedMode == 'cash'
+                              ? totalPaise
+                              : (selectedMode == 'split'
+                                  ? MoneyFormatter.parseRupeesToPaise(splitCashCtrl.text)
+                                      .clamp(0, totalPaise)
+                                  : 0);
+
                           await LocalDatabase.instance.settleMultipleCustomerSaleBills(
                             saleIds: bills.map((b) => b.id).toList(),
                             customer: customer,
                             totalAmountPaise: totalPaise,
                             paymentMode: paymentModeStr,
+                            cashReceivedPaise: settledCashPaise,
                           );
 
                           if (!modalCtx.mounted) return;

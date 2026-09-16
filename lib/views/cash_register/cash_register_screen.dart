@@ -82,18 +82,27 @@ class _CashRegisterScreenState extends State<CashRegisterScreen> with DataBusRef
   Future<void> _loadRegisterData() async {
     try {
       final now = DateTime.now();
-      final allSales = await LocalDatabase.instance.getAllSales(limit: 300);
-      final todaySales = allSales.where((s) =>
-          (s.paymentMethod == 'cash' || (s.paymentMethod == 'split' && s.splitCashPaise > 0)) &&
-          s.createdAt.year == now.year &&
-          s.createdAt.month == now.month &&
-          s.createdAt.day == now.day);
-      final cashIn = todaySales.fold(0, (sum, s) {
+      final dayStart = DateTime(now.year, now.month, now.day);
+      final dayEnd = dayStart.add(const Duration(days: 1));
+
+      // Date-ranged, not "the last 300 sales filtered down to today" — a busy
+      // counter crossing that cap silently lost its own earliest bills from
+      // the drawer total, and the busier the shop the bigger the shortfall.
+      final todaySales = (await LocalDatabase.instance.getSalesBetween(dayStart, dayEnd))
+          .where((s) =>
+              s.paymentMethod == 'cash' ||
+              (s.paymentMethod == 'split' && s.splitCashPaise > 0));
+      var cashIn = todaySales.fold(0, (sum, s) {
         if (s.paymentMethod == 'split') {
           return sum + s.splitCashPaise;
         }
         return sum + s.totalAmountPaise;
       });
+
+      // Khata settlements paid in cash are drawer money too. They are not
+      // sales, so nothing here counted them before and the physical count came
+      // out over "expected" by exactly that amount every day.
+      cashIn += await LocalDatabase.instance.getSettlementCashBetween(dayStart, dayEnd);
 
       final expenses = await LocalDatabase.instance.getAllExpenses();
       final todayExpenses = expenses.where((e) =>

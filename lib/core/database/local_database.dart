@@ -514,6 +514,11 @@ class LocalDatabase {
       await db.execute('ALTER TABLE customers ADD COLUMN is_vip INTEGER DEFAULT 0');
     } catch (_) {}
     try {
+      // How much of a ledger entry arrived as physical cash, so the Cash
+      // Register can count a khata settlement paid in cash as drawer money.
+      await db.execute('ALTER TABLE ledger_transactions ADD COLUMN cash_amount_paise INTEGER DEFAULT 0');
+    } catch (_) {}
+    try {
       // Customer birthday as 'MM-DD' — day and month only, deliberately no
       // year. A shopkeeper knows "Ramesh ka birthday 14 August hai"; they do
       // not know, and have no business storing, the year. Added because the
@@ -2618,6 +2623,22 @@ class LocalDatabase {
     return result.map((json) => SaleModel.fromMap(json)).toList();
   }
 
+  /// Cash that came into the drawer from khata settlements in a date range.
+  ///
+  /// The Cash Register's "expected cash" is opening float + cash sales −
+  /// expenses. A customer clearing old udhar in cash is none of those, so
+  /// without this the drawer reconciliation was short by every settlement
+  /// taken that day.
+  Future<int> getSettlementCashBetween(DateTime start, DateTime end) async {
+    final db = await instance.database;
+    final rows = await db.rawQuery('''
+      SELECT SUM(cash_amount_paise) AS total
+      FROM ledger_transactions
+      WHERE created_at >= ? AND created_at < ?
+    ''', [start.toIso8601String(), end.toIso8601String()]);
+    return (rows.first['total'] as num?)?.toInt() ?? 0;
+  }
+
   /// Every sale in a half-open date range, with NO row cap.
   ///
   /// Added because "today's" figures were being derived by pulling the last
@@ -2872,11 +2893,20 @@ class LocalDatabase {
     AppDataBus.instance.bumpCash();
   }
 
+  /// Clears selected credit bills and records how the customer paid.
+  ///
+  /// [cashReceivedPaise] is how much of [totalAmountPaise] came in as physical
+  /// cash — the whole amount for a cash settlement, 0 for UPI, the cash half of
+  /// a split. It is stored on the ledger row so the Cash Register can count it
+  /// as drawer money: settlements were previously invisible to the register,
+  /// which only ever summed SALES, so a customer clearing ₹5,000 of old udhar
+  /// in cash left the physical count ₹5,000 over "expected" at every day close.
   Future<void> settleMultipleCustomerSaleBills({
     required List<String> saleIds,
     required CustomerModel customer,
     required int totalAmountPaise,
     required String paymentMode,
+    int cashReceivedPaise = 0,
   }) async {
     final db = await instance.database;
 
@@ -2919,6 +2949,7 @@ class LocalDatabase {
         referenceId: saleIds.join(','),
         createdAt: DateTime.now(),
         syncStatus: 'pending',
+        cashAmountPaise: cashReceivedPaise.clamp(0, totalAmountPaise),
       );
       await txn.insert('ledger_transactions', ledgerEntry.toMap());
     });
@@ -3132,11 +3163,24 @@ class LocalDatabase {
           return current;
         } else {
           // Trial has strictly expired! Do not renew!
-          if (current.isPro && (current.proPlan == 'trial' || current.razorpayPaymentId == 'free_trial_7d')) {
+          //
+          // Guarded on what the plan WAS, not on `current.isPro`. That used to
+          // read `if (current.isPro && ...)`, which could never be true here:
+          // `StoreProfileModel.fromMap` already collapses `is_pro` against
+          // `pro_expiry`, so an expired trial always arrives with isPro false
+          // and this whole branch was dead code. The cached `is_pro` flag in
+          // SharedPreferences therefore stayed `true` forever, and anything
+          // reading it (invoice_pdf_service) kept treating a lapsed merchant
+          // as Pro.
+          final wasTrial = current.proPlan == 'trial' ||
+              current.proPlan == 'referral_trial' ||
+              current.razorpayPaymentId == 'free_trial_7d' ||
+              current.razorpayPaymentId.startsWith('ref_');
+          if (wasTrial) {
             await deactivateProMembership();
             await prefs.setBool('is_pro', false);
           }
-          return current;
+          return await getStoreProfile();
         }
       }
     }
