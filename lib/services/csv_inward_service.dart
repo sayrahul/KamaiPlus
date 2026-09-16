@@ -1,7 +1,12 @@
 import 'dart:convert';
+import 'dart:typed_data';
+
+import 'package:excel/excel.dart';
 import 'package:file_picker/file_picker.dart';
+
 import '../core/utils/money_formatter.dart';
 import 'gemini_ai_service.dart';
+import 'inventory_inward_service.dart';
 
 class CsvInwardResult {
   final bool success;
@@ -23,7 +28,11 @@ class CsvInwardService {
     try {
       final files = await FilePicker.pickFiles(
         type: FileType.custom,
-        allowedExtensions: ['csv', 'txt', 'tsv'],
+        // .xlsx is what a distributor actually sends, and what every button in
+        // this app has always called "Upload Excel / CSV". It was not in this
+        // list, so an Excel file could not even be SELECTED in the picker —
+        // the label promised something the code refused.
+        allowedExtensions: ['xlsx', 'xls', 'csv', 'txt', 'tsv'],
       );
 
       if (files.isEmpty) {
@@ -32,19 +41,27 @@ class CsvInwardService {
 
       final file = files.first;
       final bytes = await file.readAsBytes();
-      String content;
+      final lowerName = file.name.toLowerCase();
 
-      try {
-        content = utf8.decode(bytes);
-      } catch (_) {
-        content = latin1.decode(bytes);
+      final List<ExtractedBillItem> items;
+      if (lowerName.endsWith('.xlsx') || lowerName.endsWith('.xls')) {
+        items = parseExcelBytes(bytes);
+      } else {
+        String content;
+        try {
+          content = utf8.decode(bytes);
+        } catch (_) {
+          content = latin1.decode(bytes);
+        }
+        items = parseCsvContent(content);
       }
 
-      final items = parseCsvContent(content);
       if (items.isEmpty) {
         return CsvInwardResult(
           success: false,
-          errorMessage: 'No valid inventory rows found in "${file.name}". Please ensure headers like "Item Name", "Quantity", and "Price" exist.',
+          errorMessage: lowerName.endsWith('.xls') && !lowerName.endsWith('.xlsx')
+              ? 'Could not read "${file.name}". The old .xls format is not supported — open it in Excel and "Save As" .xlsx or .csv.'
+              : 'No valid inventory rows found in "${file.name}". Please ensure the first row has headers like "Item Name", "Quantity", "Purchase Price".',
           fileName: file.name,
         );
       }
@@ -57,6 +74,244 @@ class CsvInwardService {
     } catch (e) {
       return CsvInwardResult(success: false, errorMessage: 'Failed to process file: $e');
     }
+  }
+
+  /// Reads a `.xlsx` workbook into inventory rows, entirely on-device.
+  ///
+  /// Excel support exists because "Upload Excel / CSV" is what every inward
+  /// button in this app has always been labelled, while the picker accepted
+  /// only `.csv` — and a distributor's stock list arrives as `.xlsx`. Asking a
+  /// shopkeeper to open Excel and re-save as CSV before they can load 1000 SKUs
+  /// is exactly the friction that makes someone give up on the app on day one.
+  ///
+  /// Takes the FIRST sheet with a usable header row. Column meaning is resolved
+  /// by [mapColumns], the same logic the CSV path uses, so a file behaves
+  /// identically whichever format it arrives in.
+  static List<ExtractedBillItem> parseExcelBytes(Uint8List bytes) {
+    late final Excel book;
+    try {
+      book = Excel.decodeBytes(bytes);
+    } catch (_) {
+      return [];
+    }
+
+    for (final sheetName in book.tables.keys) {
+      final sheet = book.tables[sheetName];
+      if (sheet == null || sheet.rows.length < 2) continue;
+
+      String cellText(dynamic cell) {
+        final v = cell?.value;
+        if (v == null) return '';
+        // The `excel` package wraps values in typed CellValue objects; their
+        // toString() is the displayed text for every type this cares about.
+        return v.toString().trim();
+      }
+
+      final headerRow = sheet.rows.first.map(cellText).toList();
+      final cols = mapColumns(headerRow);
+      // A sheet whose first row is not headers (a title banner, say) will map
+      // nothing useful — skip to the next sheet rather than importing garbage.
+      if (cols.name < 0) continue;
+
+      final items = <ExtractedBillItem>[];
+      for (int r = 1; r < sheet.rows.length; r++) {
+        final row = sheet.rows[r].map(cellText).toList();
+        final item = _rowToItem(row, cols);
+        if (item != null) items.add(item);
+      }
+      if (items.isNotEmpty) return items;
+    }
+    return [];
+  }
+
+  /// Builds one inventory row from already-split cells. Shared by the Excel and
+  /// CSV paths so the two can never drift apart on pricing or barcodes.
+  static ExtractedBillItem? _rowToItem(
+    List<String> cells,
+    ({
+      int name,
+      int qty,
+      int unit,
+      int purchase,
+      int mrp,
+      int selling,
+      int category,
+      int barcode,
+      int expiry,
+    }) cols,
+  ) {
+    String at(int i) => (i >= 0 && i < cells.length) ? cells[i] : '';
+
+    final name = at(cols.name).trim();
+    if (name.isEmpty) return null;
+
+    double qty = 1.0;
+    final rawQty = at(cols.qty).replaceAll(RegExp(r'[^0-9.]'), '');
+    if (rawQty.isNotEmpty) {
+      qty = double.tryParse(rawQty) ?? 1.0;
+      if (qty <= 0) qty = 1.0;
+    }
+
+    final unitRaw = at(cols.unit).trim();
+    final unit = unitRaw.isEmpty ? 'pcs' : unitRaw.toLowerCase();
+
+    final purchasePaise = MoneyFormatter.parseRupeesToPaise(at(cols.purchase));
+    var mrpPaise = MoneyFormatter.parseRupeesToPaise(at(cols.mrp));
+    var sellingPaise = MoneyFormatter.parseRupeesToPaise(at(cols.selling));
+
+    if (mrpPaise == 0 && purchasePaise > 0) {
+      mrpPaise = InventoryInwardService.defaultMrpPaise(purchasePaise);
+    }
+    if (sellingPaise == 0 && purchasePaise > 0) {
+      sellingPaise = InventoryInwardService.defaultSellingPricePaise(purchasePaise);
+    }
+
+    final catRaw = at(cols.category).trim();
+
+    String? barcode;
+    final digits = at(cols.barcode).replaceAll(RegExp(r'[^0-9]'), '');
+    if (digits.length >= 8 && digits.length <= 14) barcode = digits;
+
+    return ExtractedBillItem(
+      productName: name,
+      quantity: qty,
+      unit: unit,
+      purchasePricePaise: purchasePaise,
+      mrpPaise: mrpPaise,
+      sellingPricePaise: sellingPaise,
+      categoryName: catRaw.isEmpty ? 'General' : catRaw,
+      barcode: barcode,
+      expiryDate: normalizeExpiry(at(cols.expiry)),
+    );
+  }
+
+  /// Which spreadsheet column holds what. -1 means "not present".
+  static ({
+    int name,
+    int qty,
+    int unit,
+    int purchase,
+    int mrp,
+    int selling,
+    int category,
+    int barcode,
+    int expiry,
+  }) mapColumns(List<String> rawHeaders) {
+    final headers = rawHeaders.map((h) => h.toLowerCase().trim()).toList();
+
+    int find(bool Function(String h) match, {Set<int> taken = const {}}) {
+      for (int i = 0; i < headers.length; i++) {
+        if (taken.contains(i)) continue;
+        if (match(headers[i])) return i;
+      }
+      return -1;
+    }
+
+    // Order matters, and it is deliberately most-specific-first. The previous
+    // implementation walked the headers ONCE with an if/else-if chain, so the
+    // first rule that matched a column won it — and the purchase rule
+    // (which includes 'rate') ran before the selling rule. A sheet with a
+    // "Sale Rate" column had its SELLING price silently read as the cost.
+    final barcode = find((h) =>
+        h.contains('barcode') || h == 'ean' || h == 'upc' || h.contains('bar code'));
+    final expiry = find((h) => h.contains('expiry') || h.contains('exp date') || h == 'exp');
+    final mrp = find((h) => h.contains('mrp') || h.contains('maximum retail'));
+
+    final taken = <int>{if (barcode >= 0) barcode, if (expiry >= 0) expiry, if (mrp >= 0) mrp};
+
+    final selling = find(
+        (h) => h.contains('sell') || h.contains('sale') || h.contains('retail') || h == 'sp',
+        taken: taken);
+    if (selling >= 0) taken.add(selling);
+
+    final purchase = find(
+        (h) =>
+            h.contains('purchase') ||
+            h.contains('cost') ||
+            h.contains('buy') ||
+            h == 'rate' ||
+            h == 'price' ||
+            h.contains('pur rate'),
+        taken: taken);
+    if (purchase >= 0) taken.add(purchase);
+
+    final qty = find(
+        (h) => h == 'qty' || h.contains('quantity') || h.contains('count') || h == 'nos',
+        taken: taken);
+    if (qty >= 0) taken.add(qty);
+
+    final unit = find((h) => h == 'unit' || h == 'uom' || h == 'uqc' || h.contains('measure'),
+        taken: taken);
+    if (unit >= 0) taken.add(unit);
+
+    final category =
+        find((h) => h.contains('category') || h.contains('group') || h.contains('dept'), taken: taken);
+    if (category >= 0) taken.add(category);
+
+    var name = find(
+        (h) =>
+            h.contains('item') ||
+            h.contains('product') ||
+            h.contains('name') ||
+            h.contains('description') ||
+            h.contains('title') ||
+            h.contains('particular'),
+        taken: taken);
+    // Nothing recognisable: the first column of a stock sheet is the item.
+    if (name == -1 && headers.isNotEmpty) name = 0;
+
+    return (
+      name: name,
+      qty: qty,
+      unit: unit,
+      purchase: purchase,
+      mrp: mrp,
+      selling: selling,
+      category: category,
+      barcode: barcode,
+      expiry: expiry,
+    );
+  }
+
+  /// Normalises the many date spellings a supplier sheet uses into `YYYY-MM-DD`.
+  /// Returns null for anything it cannot read confidently — a wrong expiry on a
+  /// medicine is worse than no expiry.
+  static String? normalizeExpiry(String raw) {
+    final s = raw.trim();
+    if (s.isEmpty) return null;
+
+    // Already ISO.
+    final iso = RegExp(r'^(\d{4})-(\d{1,2})-(\d{1,2})$').firstMatch(s);
+    if (iso != null) {
+      final y = iso.group(1)!;
+      final m = iso.group(2)!.padLeft(2, '0');
+      final d = iso.group(3)!.padLeft(2, '0');
+      return '$y-$m-$d';
+    }
+
+    // dd/MM/yyyy or dd-MM-yyyy (Indian sheets are day-first, not month-first).
+    final dmy = RegExp(r'^(\d{1,2})[/\-.](\d{1,2})[/\-.](\d{2,4})$').firstMatch(s);
+    if (dmy != null) {
+      final d = int.parse(dmy.group(1)!);
+      final m = int.parse(dmy.group(2)!);
+      var y = int.parse(dmy.group(3)!);
+      if (y < 100) y += 2000;
+      if (m < 1 || m > 12 || d < 1 || d > 31) return null;
+      return '$y-${m.toString().padLeft(2, '0')}-${d.toString().padLeft(2, '0')}';
+    }
+
+    // MM/yyyy or MM-yy — the usual pharmacy strip format. Treated as the LAST
+    // day is unknown, so the 1st is used; callers only compare month-level.
+    final my = RegExp(r'^(\d{1,2})[/\-.](\d{2,4})$').firstMatch(s);
+    if (my != null) {
+      final m = int.parse(my.group(1)!);
+      var y = int.parse(my.group(2)!);
+      if (y < 100) y += 2000;
+      if (m < 1 || m > 12) return null;
+      return '$y-${m.toString().padLeft(2, '0')}-01';
+    }
+
+    return null;
   }
 
   /// Parses raw CSV/TSV text content into [ExtractedBillItem] list
@@ -95,37 +350,16 @@ class CsvInwardService {
     }
 
     final headers = splitRow(lines.first).map((h) => h.toLowerCase()).toList();
-
-    // Map column indices
-    int nameCol = -1;
-    int qtyCol = -1;
-    int unitCol = -1;
-    int purchaseCol = -1;
-    int mrpCol = -1;
-    int sellingCol = -1;
-    int catCol = -1;
-
-    for (int i = 0; i < headers.length; i++) {
-      final h = headers[i];
-      if (nameCol == -1 && (h.contains('item') || h.contains('product') || h.contains('name') || h.contains('description') || h.contains('title') || h.contains('particular'))) {
-        nameCol = i;
-      } else if (qtyCol == -1 && (h == 'qty' || h.contains('quantity') || h.contains('count') || h.contains('pcs') || h.contains('nos'))) {
-        qtyCol = i;
-      } else if (unitCol == -1 && (h == 'unit' || h == 'uom' || h == 'uqc' || h.contains('measure'))) {
-        unitCol = i;
-      } else if (purchaseCol == -1 && (h.contains('purchase') || h.contains('cost') || h.contains('buy') || h.contains('rate') || h == 'price' || h.contains('pur rate'))) {
-        purchaseCol = i;
-      } else if (mrpCol == -1 && (h.contains('mrp') || h.contains('maximum retail'))) {
-        mrpCol = i;
-      } else if (sellingCol == -1 && (h.contains('sell') || h.contains('sale') || h.contains('retail') || h.contains('sp'))) {
-        sellingCol = i;
-      } else if (catCol == -1 && (h.contains('category') || h.contains('group') || h.contains('dept'))) {
-        catCol = i;
-      }
-    }
-
-    // If name column not detected, assume first column
-    if (nameCol == -1 && headers.isNotEmpty) nameCol = 0;
+    final cols = mapColumns(headers);
+    final nameCol = cols.name;
+    final qtyCol = cols.qty;
+    final unitCol = cols.unit;
+    final purchaseCol = cols.purchase;
+    final mrpCol = cols.mrp;
+    final sellingCol = cols.selling;
+    final catCol = cols.category;
+    final barcodeCol = cols.barcode;
+    final expiryCol = cols.expiry;
 
     final List<ExtractedBillItem> items = [];
 
@@ -161,23 +395,43 @@ class CsvInwardService {
       if (mrpCol != -1 && mrpCol < cells.length) {
         mrpPaise = MoneyFormatter.parseRupeesToPaise(cells[mrpCol]);
       }
-      if (mrpPaise == 0 && purchasePaise > 0) {
-        mrpPaise = (purchasePaise * 1.2).round();
-      }
-
       // Selling price paise
       int sellingPaise = 0;
       if (sellingCol != -1 && sellingCol < cells.length) {
         sellingPaise = MoneyFormatter.parseRupeesToPaise(cells[sellingCol]);
       }
+
+      // Missing prices fall back to the SHARED markup helpers rather than the
+      // inline 1.2 / 1.15 that used to live here. Same numbers, but one
+      // definition — an item imported from a sheet cannot now be priced
+      // differently from the identical item inwarded by hand or by AI scan.
+      if (mrpPaise == 0 && purchasePaise > 0) {
+        mrpPaise = InventoryInwardService.defaultMrpPaise(purchasePaise);
+      }
       if (sellingPaise == 0 && purchasePaise > 0) {
-        sellingPaise = (purchasePaise * 1.15).round();
+        sellingPaise = InventoryInwardService.defaultSellingPricePaise(purchasePaise);
       }
 
       // Category
       String category = 'General';
       if (catCol != -1 && catCol < cells.length && cells[catCol].isNotEmpty) {
         category = cells[catCol];
+      }
+
+      // Barcode — digits only. The app's own sample template has always had
+      // this column and the parser ignored it completely, so every bulk import
+      // produced products that could never be scanned at the counter.
+      String? barcode;
+      if (barcodeCol != -1 && barcodeCol < cells.length) {
+        final digits = cells[barcodeCol].replaceAll(RegExp(r'[^0-9]'), '');
+        if (digits.length >= 8 && digits.length <= 14) barcode = digits;
+      }
+
+      // Expiry — same story as barcode, and it is what drives the pharmacy
+      // FEFO batch rows and the Near Expiry radar.
+      String? expiry;
+      if (expiryCol != -1 && expiryCol < cells.length) {
+        expiry = normalizeExpiry(cells[expiryCol]);
       }
 
       items.add(ExtractedBillItem(
@@ -188,6 +442,8 @@ class CsvInwardService {
         mrpPaise: mrpPaise,
         sellingPricePaise: sellingPaise,
         categoryName: category,
+        barcode: barcode,
+        expiryDate: expiry,
       ));
     }
 

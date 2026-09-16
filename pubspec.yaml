@@ -24,6 +24,9 @@ dependencies:
   # Pure-Dart AES-GCM + PBKDF2 for optional password-protected .kmb backups
   # (see backup_restore_service.dart). No native code, so no platform build risk.
   pointycastle: ^3.9.1
+  # Reads .xlsx on-device so a distributor's Excel file imports offline, with
+  # no API and no conversion step (see csv_inward_service.dart).
+  excel: ^4.0.6
   mobile_scanner: ^7.4.0
   firebase_core: ^4.14.0
   cloud_firestore: ^6.9.0

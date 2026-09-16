@@ -33,6 +33,16 @@ class InwardLine {
   final String? batchNumber;
   final String? expiryDate;
 
+  /// Barcode supplied by the SOURCE (a distributor's Excel/CSV column, or one
+  /// read off a scanned invoice) rather than resolved from the master catalog.
+  ///
+  /// Kept separate from [matchedMasterProduct] because bulk import is the case
+  /// the master catalog cannot serve: a merchant loading 1000 SKUs from their
+  /// own supplier sheet has barcodes for items the catalog has never heard of,
+  /// and without carrying them through, none of those products can be scanned
+  /// at the counter afterwards — which is the entire reason to bulk import.
+  final String? barcode;
+
   const InwardLine({
     required this.name,
     required this.quantity,
@@ -45,6 +55,7 @@ class InwardLine {
     this.matchedMasterProduct,
     this.batchNumber,
     this.expiryDate,
+    this.barcode,
   });
 }
 
@@ -182,7 +193,12 @@ class InventoryInwardService {
             id: newId,
             businessId: businessId,
             name: name,
-            barcode: master?.barcode,
+            // The source's own barcode wins over the master catalog's: it came
+            // off this merchant's actual supplier sheet or invoice, so it is
+            // the pack they will physically scan.
+            barcode: (line.barcode?.trim().isNotEmpty ?? false)
+                ? line.barcode!.trim()
+                : master?.barcode,
             categoryId: (master != null && master.category.isNotEmpty)
                 ? master.category
                 : line.categoryName,

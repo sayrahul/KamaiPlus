@@ -203,6 +203,7 @@ exports.onAdminPushCreated = onDocumentCreated(
 
 const { onRequest } = require("firebase-functions/v2/https");
 const { getAuth } = require("firebase-admin/auth");
+const { defineSecret } = require("firebase-functions/params");
 
 const RAZORPAY_KEY_ID = process.env.RAZORPAY_KEY_ID || "rzp_live_TcXNjRb5XAUYqR";
 
@@ -372,6 +373,264 @@ exports.verifyRazorpayPayment = onRequest(
     } catch (error) {
       console.error("[PRO] verifyRazorpayPayment failed:", error);
       res.status(500).json({ error: "Verification failed. Please contact support." });
+    }
+  }
+);
+
+// ============================================================================
+// AI EXTRACTION PROXY  (bill / menu / PDF invoice -> structured JSON)
+// ----------------------------------------------------------------------------
+// Why this exists — three problems it closes at once:
+//
+// 1. THE KEY WAS ON EVERY PHONE. The app fetched `gemini_api_key` from
+//    Firestore and cached it in SharedPreferences, then called Google
+//    directly. Any merchant could pull that key off their own device and spend
+//    the project's quota and billing. A key handed to every device is not a
+//    secret. It now never leaves this function.
+//
+// 2. THE FREE-SCAN LIMIT WAS ONLY ON THE PHONE. `getMonthlyScanCount()` read
+//    SharedPreferences, so clearing app data reset the 10-scan free quota.
+//    Counting server-side per business makes the limit real.
+//
+// 3. SWITCHING PROVIDER MEANT AN APP RELEASE. Model names live here now, so a
+//    deprecated model (which has already happened once — see the 2026-09-15
+//    entry about 1.5-flash returning 404) is a redeploy, not a Play Store
+//    rollout waiting on every merchant to update.
+//
+// Deploy:  firebase deploy --only functions:aiExtract
+// Config:  firebase functions:secrets:set GEMINI_API_KEY
+// ============================================================================
+
+const GEMINI_API_KEY = defineSecret("GEMINI_API_KEY");
+
+/** Tried in order; the first that answers wins. */
+const AI_MODELS = [
+  "gemini-2.5-flash",
+  "gemini-3.5-flash-lite",
+  "gemini-3.6-flash",
+  "gemini-3.7-flash",
+  "gemini-2.5-flash-latest",
+];
+
+/** Free plan allowance per calendar month, per business. Pro is unlimited. */
+const FREE_MONTHLY_IMAGE_SCANS = 10;
+
+/** Hard ceiling on an upload. Keeps one bad request from burning the budget. */
+const MAX_UPLOAD_BYTES = 8 * 1024 * 1024;
+
+const BILL_PROMPT =
+  "You are an expert Indian retail inventory AI. Extract all inventory purchase items, supplier details, and bill metadata from this supplier bill / mandi parcha slip / invoice.\n" +
+  "Format response strictly as JSON with this schema:\n" +
+  "{\n" +
+  '  "supplier_name": "string (Wholesale / Mandi vendor name or empty)",\n' +
+  '  "bill_number": "string (Invoice / memo number or empty)",\n' +
+  '  "bill_date": "YYYY-MM-DD or empty",\n' +
+  '  "items": [\n' +
+  "    {\n" +
+  '      "product_name": "string (brand + item + weight/size)",\n' +
+  '      "quantity": number,\n' +
+  '      "unit": "pcs|kg|gram|litre|strip|box|packet",\n' +
+  '      "purchase_price_paise": number (cost price in paise, e.g. Rs 120 = 12000),\n' +
+  '      "mrp_paise": number (MRP in paise),\n' +
+  '      "selling_price_paise": number (store selling price in paise),\n' +
+  '      "barcode": "string (EAN/UPC digits if printed, else empty)",\n' +
+  '      "expiry_date": "YYYY-MM-DD or empty",\n' +
+  '      "category_name": "string"\n' +
+  "    }\n" +
+  "  ]\n" +
+  "}\n" +
+  "Do not output any markdown ticks, preamble, or comments. Output ONLY valid JSON.";
+
+const MENU_PROMPT =
+  "You are an expert Indian restaurant menu AI. Extract every dish and drink from this menu card photo.\n" +
+  "Format response strictly as JSON with this schema:\n" +
+  "{\n" +
+  '  "items": [\n' +
+  "    {\n" +
+  '      "product_name": "string (dish name as printed)",\n' +
+  '      "selling_price_paise": number (price in paise, e.g. Rs 120 = 12000),\n' +
+  '      "category_name": "string (menu section, e.g. Starters, Main Course, Beverages)",\n' +
+  '      "is_veg": boolean\n' +
+  "    }\n" +
+  "  ]\n" +
+  "}\n" +
+  "Do not output any markdown ticks, preamble, or comments. Output ONLY valid JSON.";
+
+/** Calls Gemini, walking the model list until one answers. */
+async function callGemini(apiKey, prompt, mimeType, base64Data) {
+  let lastError = "No model responded";
+
+  for (const model of AI_MODELS) {
+    try {
+      const res = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "x-goog-api-key": apiKey,
+          },
+          body: JSON.stringify({
+            contents: [
+              {
+                parts: [
+                  { text: prompt },
+                  { inline_data: { mime_type: mimeType, data: base64Data } },
+                ],
+              },
+            ],
+            generationConfig: {
+              temperature: 0.1,
+              response_mime_type: "application/json",
+            },
+          }),
+        }
+      );
+
+      if (!res.ok) {
+        lastError = `${model}: HTTP ${res.status}`;
+        // 404 = model retired, 429 = quota. Both are worth trying the next
+        // model for; anything else usually is not, but the loop is cheap.
+        continue;
+      }
+
+      const body = await res.json();
+      const text = body?.candidates?.[0]?.content?.parts?.[0]?.text;
+      if (!text) {
+        lastError = `${model}: empty response`;
+        continue;
+      }
+
+      const cleaned = text.replace(/```json/g, "").replace(/```/g, "").trim();
+      return { ok: true, json: JSON.parse(cleaned), model };
+    } catch (e) {
+      lastError = `${model}: ${e.message}`;
+    }
+  }
+  return { ok: false, error: lastError };
+}
+
+exports.aiExtract = onRequest(
+  { secrets: [GEMINI_API_KEY], cors: true, region: "us-central1", memory: "512MiB", timeoutSeconds: 120 },
+  async (req, res) => {
+    if (req.method !== "POST") {
+      res.status(405).json({ error: "POST only" });
+      return;
+    }
+
+    try {
+      // 1. Who is asking — verified server-side, never trusted from the body.
+      const header = req.get("Authorization") || "";
+      const idToken = header.startsWith("Bearer ") ? header.slice(7).trim() : "";
+      if (!idToken) {
+        res.status(401).json({ error: "Missing Authorization bearer token" });
+        return;
+      }
+
+      let decoded;
+      try {
+        decoded = await getAuth().verifyIdToken(idToken);
+      } catch (e) {
+        res.status(401).json({ error: "Invalid or expired ID token" });
+        return;
+      }
+      const bizId = `biz_${decoded.uid}`;
+
+      // 2. What are they sending?
+      const body = req.body || {};
+      const kind = String(body.kind || "bill").toLowerCase();
+      const mimeType = String(body.mime_type || "image/jpeg");
+      const dataB64 = String(body.data_base64 || "");
+
+      if (!dataB64) {
+        res.status(400).json({ error: "data_base64 is required" });
+        return;
+      }
+      // base64 is ~4/3 of the raw size.
+      if (dataB64.length * 0.75 > MAX_UPLOAD_BYTES) {
+        res.status(413).json({ error: "File too large. Please use a smaller photo or a CSV/Excel file." });
+        return;
+      }
+      if (kind !== "bill" && kind !== "menu") {
+        res.status(400).json({ error: `Unknown kind "${kind}"` });
+        return;
+      }
+
+      const db = getFirestore();
+      const isImage = mimeType.startsWith("image/");
+
+      // 3. Quota — server-side, so clearing app data no longer resets it.
+      //    PDFs stay free and unlimited, matching the app's own copy.
+      const monthKey = new Date().toISOString().slice(0, 7); // YYYY-MM
+      const usageRef = db.collection("ai_usage").doc(`${bizId}_${monthKey}`);
+
+      if (isImage) {
+        const bizSnap = await db.collection("businesses").doc(bizId).get();
+        const b = bizSnap.exists ? bizSnap.data() : {};
+        const proExpiry = b?.pro_expiry ? Date.parse(b.pro_expiry) : 0;
+        const isPro =
+          !(b?.is_pro === false || b?.is_pro === 0) &&
+          (b?.is_pro === true || b?.subscription_tier === "annual" || b?.subscription_tier === "monthly") &&
+          (!proExpiry || proExpiry > Date.now());
+
+        // A live trial counts as Pro for AI, same as everywhere else in the app.
+        const trialStart = b?.trial_started_at ? Date.parse(b.trial_started_at) : 0;
+        const inTrial = trialStart > 0 && Date.now() < trialStart + 7 * 24 * 60 * 60 * 1000;
+
+        if (!isPro && !inTrial) {
+          const usage = await usageRef.get();
+          const used = usage.exists ? usage.data()?.image_scans || 0 : 0;
+          if (used >= FREE_MONTHLY_IMAGE_SCANS) {
+            res.status(429).json({
+              error: `Free plan includes ${FREE_MONTHLY_IMAGE_SCANS} AI picture scans per month. Upgrade to Pro for unlimited scans, or use Excel / CSV inward (unlimited free).`,
+              quota_exceeded: true,
+              used,
+              limit: FREE_MONTHLY_IMAGE_SCANS,
+            });
+            return;
+          }
+        }
+      }
+
+      // 4. Extract.
+      const result = await callGemini(
+        GEMINI_API_KEY.value(),
+        kind === "menu" ? MENU_PROMPT : BILL_PROMPT,
+        mimeType,
+        dataB64
+      );
+
+      if (!result.ok) {
+        console.error("[AI] extraction failed:", result.error);
+        res.status(502).json({
+          error: "AI could not read this file right now. Try the offline scan, or upload Excel / CSV.",
+          detail: result.error,
+        });
+        return;
+      }
+
+      const items = Array.isArray(result.json?.items) ? result.json.items : [];
+
+      // 5. Only a scan that actually produced items costs the merchant one of
+      //    their ten. A response that parsed to nothing used to still be
+      //    counted on the device.
+      if (isImage && items.length > 0) {
+        await usageRef.set(
+          {
+            business_id: bizId,
+            month: monthKey,
+            image_scans: FieldValue.increment(1),
+            last_scan_at: FieldValue.serverTimestamp(),
+          },
+          { merge: true }
+        );
+      }
+
+      console.log(`[AI] ${kind} via ${result.model}: ${items.length} item(s) for ${bizId}`);
+      res.status(200).json({ ...result.json, items, model: result.model });
+    } catch (error) {
+      console.error("[AI] aiExtract failed:", error);
+      res.status(500).json({ error: "AI scan failed. Please try again." });
     }
   }
 );

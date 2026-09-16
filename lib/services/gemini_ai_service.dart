@@ -1,10 +1,11 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 import 'package:intl/intl.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import '../core/database/local_database.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import '../core/utils/money_formatter.dart';
 import 'inventory_inward_service.dart';
 import 'remote_config_service.dart';
@@ -18,6 +19,19 @@ class ExtractedBillItem {
   int sellingPricePaise;
   String categoryName;
 
+  /// EAN/UPC printed on the pack, when the source supplied one.
+  ///
+  /// Carried end-to-end because it is the whole point of a bulk import: a
+  /// merchant loading 1000 SKUs from a distributor sheet expects to scan them
+  /// at the counter afterwards. The CSV template the app itself generates has
+  /// always had a Barcode column, and the parser used to ignore it entirely —
+  /// so every bulk-imported product arrived unscannable.
+  String? barcode;
+
+  /// `YYYY-MM-DD`, for verticals that track it (pharmacy). Same story as
+  /// [barcode]: in the template, ignored by the parser.
+  String? expiryDate;
+
   ExtractedBillItem({
     required this.productName,
     required this.quantity,
@@ -26,6 +40,8 @@ class ExtractedBillItem {
     required this.mrpPaise,
     required this.sellingPricePaise,
     this.categoryName = 'General',
+    this.barcode,
+    this.expiryDate,
   });
 
   ExtractedBillItem copyWith({
@@ -36,6 +52,8 @@ class ExtractedBillItem {
     int? mrpPaise,
     int? sellingPricePaise,
     String? categoryName,
+    String? barcode,
+    String? expiryDate,
   }) {
     return ExtractedBillItem(
       productName: productName ?? this.productName,
@@ -45,6 +63,8 @@ class ExtractedBillItem {
       mrpPaise: mrpPaise ?? this.mrpPaise,
       sellingPricePaise: sellingPricePaise ?? this.sellingPricePaise,
       categoryName: categoryName ?? this.categoryName,
+      barcode: barcode ?? this.barcode,
+      expiryDate: expiryDate ?? this.expiryDate,
     );
   }
 
@@ -95,6 +115,17 @@ class ExtractedBillItem {
               ? InventoryInwardService.defaultSellingPricePaise(purchasePaise)
               : 9500),
       categoryName: json['category_name'] ?? json['category'] ?? 'General',
+      // Digits only — a scanner never produces anything else, and a stray
+      // space or dash from an OCR read would make the barcode unmatchable.
+      barcode: () {
+        final raw = (json['barcode'] ?? json['ean'] ?? json['upc'])?.toString() ?? '';
+        final digits = raw.replaceAll(RegExp(r'[^0-9]'), '');
+        return digits.length >= 8 && digits.length <= 14 ? digits : null;
+      }(),
+      expiryDate: () {
+        final raw = (json['expiry_date'] ?? json['expiry'])?.toString().trim() ?? '';
+        return raw.isEmpty ? null : raw;
+      }(),
     );
   }
 }
@@ -194,13 +225,10 @@ class GeminiAiService {
   /// a modal with no way out. That is the "gets stuck" failure this bounds.
   static const Duration requestTimeout = Duration(seconds: 45);
 
-  static const List<String> _modelsToTry = [
-    'gemini-2.5-flash',
-    'gemini-3.5-flash-lite',
-    'gemini-3.6-flash',
-    'gemini-3.7-flash',
-    'gemini-2.5-flash-latest',
-  ];
+  // The model list now lives in `functions/index.js` (AI_MODELS), not here.
+  // Google has already retired models under this app once — 1.5-flash started
+  // returning 404 and every installed copy broke until a Play Store release
+  // reached each merchant. On the server it is a redeploy.
 
   /// Get effective API key from Firestore global_config, Remote Config, cached key, or environment
   static Future<String> getEffectiveApiKey() async {
@@ -294,380 +322,200 @@ class GeminiAiService {
   }
 
   /// Extracts structured inward items from bill parcha photo or PDF using Gemini Vision API
+  /// Backend AI extraction endpoint (`aiExtract` in `functions/index.js`).
+  ///
+  /// The app used to call Google directly with a key fetched from Firestore
+  /// and cached in SharedPreferences — which means the key sat on every
+  /// merchant's phone and could be pulled off it to spend this project's quota
+  /// and billing. A key handed to every device is not a secret. It now never
+  /// leaves the server.
+  ///
+  /// Three more things moved server-side with it: the free-scan quota (which
+  /// was SharedPreferences-based, so clearing app data reset it), the model
+  /// list (a retired model is now a redeploy, not a Play Store rollout), and
+  /// PDF parsing, which has no offline fallback and so depended entirely on
+  /// that key working.
+  static const String _aiEndpoint =
+      'https://us-central1-kamaiplus.cloudfunctions.net/aiExtract';
+
+  /// One call to the proxy. Returns the decoded JSON body plus the HTTP status
+  /// so callers can distinguish "quota exhausted" from "AI could not read it".
+  static Future<({int status, Map<String, dynamic>? body, String? error})> _callProxy({
+    required String kind,
+    required Uint8List fileBytes,
+    required String mimeType,
+  }) async {
+    HttpClient? client;
+    try {
+      final idToken = await FirebaseAuth.instance.currentUser?.getIdToken();
+      if (idToken == null || idToken.isEmpty) {
+        return (status: 401, body: null, error: 'Please sign in to use AI scan.');
+      }
+
+      client = HttpClient();
+      client.connectionTimeout = const Duration(seconds: 30);
+
+      final req = await client.postUrl(Uri.parse(_aiEndpoint));
+      req.headers.set(HttpHeaders.contentTypeHeader, 'application/json');
+      req.headers.set(HttpHeaders.authorizationHeader, 'Bearer $idToken');
+      req.write(jsonEncode({
+        'kind': kind,
+        'mime_type': mimeType,
+        'data_base64': base64Encode(fileBytes),
+      }));
+
+      final res = await req.close().timeout(requestTimeout);
+      final raw = await res.transform(utf8.decoder).join().timeout(requestTimeout);
+      final decoded = jsonDecode(raw);
+      return (
+        status: res.statusCode,
+        body: decoded is Map<String, dynamic> ? decoded : null,
+        error: null,
+      );
+    } on TimeoutException {
+      return (
+        status: 408,
+        body: null,
+        error: 'AI scan timed out. Check your connection, or use Offline Scan / Excel-CSV inward.'
+      );
+    } catch (e) {
+      return (
+        status: 0,
+        body: null,
+        error: 'Could not reach AI service. Use Offline Scan or Excel / CSV inward. ($e)'
+      );
+    } finally {
+      client?.close(force: true);
+    }
+  }
+
+  /// Extracts purchase items, supplier and bill metadata from a supplier bill,
+  /// mandi parcha photo, or PDF invoice.
+  ///
+  /// [customApiKey] is accepted and ignored — kept so existing call sites
+  /// compile unchanged. Keys are a server concern now; nothing the device
+  /// supplies could be trusted anyway.
   static Future<AiInwardResult> extractItemsFromImage(
     Uint8List fileBytes, {
     String mimeType = 'image/jpeg',
     String? customApiKey,
   }) async {
-    try {
-      // 1. Check Free Plan Quota for images (PDFs remain free unlimited)
-      final isImage = mimeType.startsWith('image/');
-      if (isImage) {
-        final profile = await LocalDatabase.instance.getStoreProfile();
-        if (!profile.isPro) {
-          final currentScans = await getMonthlyScanCount();
-          if (currentScans >= freeMonthlyPictureScanLimit) {
-            return AiInwardResult(
-              success: false,
-              isQuotaExceeded: true,
-              errorMessage:
-                  'Free plan includes $freeMonthlyPictureScanLimit AI picture scans per month. Upgrade to KamaiPlus Pro for Unlimited AI Inward scans, or use Excel / CSV Inward (Unlimited Free).',
-            );
-          }
-        }
-      }
+    final res = await _callProxy(
+      kind: 'bill',
+      fileBytes: fileBytes,
+      mimeType: mimeType,
+    );
 
-      // 2. Resolve API Key
-      String apiKey = customApiKey?.trim() ?? '';
-      if (apiKey.isEmpty) {
-        apiKey = await getEffectiveApiKey();
-      }
+    if (res.error != null) {
+      return AiInwardResult(success: false, errorMessage: res.error);
+    }
+    final body = res.body;
 
-      if (apiKey.isEmpty) {
-        return AiInwardResult(
-          success: false,
-          errorMessage:
-              'Cloud AI scan is not enabled in Admin Console. Please use Offline ML Kit Scan, Excel / CSV inward, or configure Gemini API key in admin panel.',
-        );
-      }
-
-      final base64Content = base64Encode(fileBytes);
-      final promptText =
-          'You are an expert Indian retail inventory AI. Extract all inventory purchase items, supplier details, and bill metadata from this supplier bill / mandi parcha slip / invoice.\n'
-          'Format response strictly as JSON with this schema:\n'
-          '{\n'
-          '  "supplier_name": "string (Wholesale / Mandi vendor name or empty)",\n'
-          '  "bill_number": "string (Invoice / memo number or empty)",\n'
-          '  "bill_date": "YYYY-MM-DD or empty",\n'
-          '  "items": [\n'
-          '    {\n'
-          '      "product_name": "string (brand + item + weight/size)",\n'
-          '      "quantity": number,\n'
-          '      "unit": "pcs|kg|gram|litre|strip|box|packet",\n'
-          '      "purchase_price_paise": number (cost price in paise, e.g. Rs 120 = 12000),\n'
-          '      "mrp_paise": number (MRP in paise),\n'
-          '      "selling_price_paise": number (store selling price in paise),\n'
-          '      "category_name": "string"\n'
-          '    }\n'
-          '  ]\n'
-          '}\n'
-          'Do not output any markdown ticks, preamble, or comments. Output ONLY valid JSON.';
-
-      String? lastErrorMessage;
-
-      final isBearer = apiKey.startsWith('AQ.') || apiKey.startsWith('ya29.');
-
-      // Try multiple models in sequence for high availability
-      for (final model in _modelsToTry) {
-        try {
-          final uri = isBearer
-              ? Uri.parse(
-                  'https://generativelanguage.googleapis.com/v1beta/models/$model:generateContent',
-                )
-              : Uri.parse(
-                  'https://generativelanguage.googleapis.com/v1beta/models/$model:generateContent?key=$apiKey',
-                );
-
-          final requestPayload = {
-            'contents': [
-              {
-                'parts': [
-                  {'text': promptText},
-                  {
-                    'inline_data': {
-                      'mime_type': mimeType,
-                      'data': base64Content,
-                    }
-                  }
-                ]
-              }
-            ],
-            'generationConfig': {
-              'temperature': 0.1,
-              'response_mime_type': 'application/json',
-            }
-          };
-
-          final client = HttpClient();
-          client.connectionTimeout = const Duration(seconds: 30);
-
-          final req = await client.postUrl(uri);
-          req.headers.set(HttpHeaders.contentTypeHeader, 'application/json');
-          if (isBearer) {
-            req.headers.set(HttpHeaders.authorizationHeader, 'Bearer $apiKey');
-          } else {
-            req.headers.set('x-goog-api-key', apiKey);
-          }
-          req.write(jsonEncode(requestPayload));
-
-          final res = await req.close().timeout(requestTimeout);
-          final responseBody = await res
-              .transform(utf8.decoder)
-              .join()
-              .timeout(requestTimeout);
-          client.close(force: true);
-
-          if (res.statusCode == 200) {
-            final parsed = jsonDecode(responseBody);
-            final candidates = parsed['candidates'] as List?;
-            if (candidates != null && candidates.isNotEmpty) {
-              final content = candidates[0]['content'];
-              final parts = content['parts'] as List?;
-              if (parts != null && parts.isNotEmpty) {
-                String text = parts[0]['text'] ?? '';
-                text = text.replaceAll('```json', '').replaceAll('```', '').trim();
-
-                final jsonMap = jsonDecode(text);
-                final itemsJson = jsonMap['items'] as List? ?? [];
-
-                final List<ExtractedBillItem> items = itemsJson
-                    .map((e) => ExtractedBillItem.fromJson(e as Map<String, dynamic>))
-                    .toList();
-
-                if (items.isEmpty) {
-                  return AiInwardResult(
-                    success: false,
-                    errorMessage: 'No items could be recognized on this bill. Please ensure the photo is clear, well-lit, and shows item names and rates.',
-                    rawResponse: text,
-                  );
-                }
-
-                // Counted only now that the scan actually produced items. It
-                // used to be counted the moment the HTTP call returned 200, so
-                // a response that parsed to nothing still spent one of the ten
-                // free monthly picture scans.
-                if (isImage) {
-                  await incrementScanCount();
-                }
-
-                return AiInwardResult(
-                  success: true,
-                  items: items,
-                  supplierName: jsonMap['supplier_name']?.toString(),
-                  billNumber: jsonMap['bill_number']?.toString(),
-                  billDate: jsonMap['bill_date']?.toString(),
-                  rawResponse: text,
-                );
-              }
-            }
-          } else if (res.statusCode == 401 || res.statusCode == 403) {
-            final parsedErr = jsonDecode(responseBody);
-            final msg = parsedErr['error']?['message'] ?? 'Authentication failed';
-            return AiInwardResult(
-              success: false,
-              errorMessage: 'Gemini API Key Authentication Failed ($msg). Please update your API key in Settings.',
-            );
-          } else if (res.statusCode == 429) {
-            return AiInwardResult(
-              success: false,
-              errorMessage: 'Gemini API Rate Limit reached. Please wait a moment and try again.',
-            );
-          } else {
-            lastErrorMessage = 'Model $model responded with HTTP ${res.statusCode}: $responseBody';
-          }
-        } catch (modelErr) {
-          lastErrorMessage = modelErr.toString();
-        }
-      }
-
+    if (res.status == 429) {
       return AiInwardResult(
         success: false,
-        errorMessage: lastErrorMessage ?? 'Could not parse document. Please check connection and try again.',
-      );
-    } catch (e) {
-      return AiInwardResult(
-        success: false,
-        errorMessage: 'OCR Scan Error: $e',
+        isQuotaExceeded: true,
+        errorMessage: body?['error']?.toString() ??
+            'Free plan AI scan limit reached. Upgrade to Pro, or use Excel / CSV inward (unlimited free).',
       );
     }
+    if (res.status != 200 || body == null) {
+      return AiInwardResult(
+        success: false,
+        errorMessage: body?['error']?.toString() ??
+            'AI could not read this file. Try the offline scan, or upload Excel / CSV.',
+      );
+    }
+
+    final itemsJson = body['items'] as List? ?? [];
+    final items = itemsJson
+        .whereType<Map<String, dynamic>>()
+        .map(ExtractedBillItem.fromJson)
+        .toList();
+
+    if (items.isEmpty) {
+      return AiInwardResult(
+        success: false,
+        errorMessage:
+            'No items could be recognized on this bill. Please ensure the photo is clear, well-lit, and shows item names and rates.',
+      );
+    }
+
+    // The server counts the scan (only when it produced items), so the local
+    // counter is kept purely to render "N free scans left" without a round
+    // trip. It is no longer what enforces the limit.
+    if (mimeType.startsWith('image/')) {
+      await incrementScanCount();
+    }
+
+    return AiInwardResult(
+      success: true,
+      items: items,
+      supplierName: body['supplier_name']?.toString(),
+      billNumber: body['bill_number']?.toString(),
+      billDate: body['bill_date']?.toString(),
+    );
   }
 
   /// Extracts dish names, prices, and categories from a restaurant menu card
-  /// photo using Gemini Vision. Deliberately a separate method (and prompt) from
-  /// [extractItemsFromImage]: a menu has no supplier, no bill number, no cost
-  /// price, and no quantity received — asking the same "purchase bill" prompt to
-  /// parse a menu photo would misread the selling price as a wholesale cost and
-  /// try to mark it up, which is wrong for a dish that's already priced to sell.
+  /// photo. Deliberately a separate prompt from the bill one — a menu has no
+  /// supplier, no cost price and no quantity received, and asking the purchase
+  /// prompt to read one would treat the menu price as a wholesale cost and mark
+  /// it up. Shares the same free-tier monthly scan allowance.
   ///
-  /// Shares [extractItemsFromImage]'s quota tracking, API key resolution, and
-  /// multi-model fallback — it draws on the same free-tier monthly scan
-  /// allowance, which is the correct behaviour (one shared "AI picture scan"
-  /// budget, not a separate one per feature).
+  /// [customApiKey] / [knownCategories] are accepted and ignored — kept so
+  /// existing call sites compile unchanged.
   static Future<MenuScanResult> extractMenuItemsFromImage(
     Uint8List fileBytes, {
     String mimeType = 'image/jpeg',
     String? customApiKey,
     List<String> knownCategories = const [],
   }) async {
-    try {
-      final isImage = mimeType.startsWith('image/');
-      if (isImage) {
-        final profile = await LocalDatabase.instance.getStoreProfile();
-        if (!profile.isPro) {
-          final currentScans = await getMonthlyScanCount();
-          if (currentScans >= freeMonthlyPictureScanLimit) {
-            return MenuScanResult(
-              success: false,
-              isQuotaExceeded: true,
-              errorMessage:
-                  'Free plan includes $freeMonthlyPictureScanLimit AI picture scans per month. Upgrade to KamaiPlus Pro for Unlimited AI Menu scans, or add dishes manually.',
-            );
-          }
-        }
-      }
+    final res = await _callProxy(
+      kind: 'menu',
+      fileBytes: fileBytes,
+      mimeType: mimeType,
+    );
 
-      String apiKey = customApiKey?.trim() ?? '';
-      if (apiKey.isEmpty) {
-        apiKey = await getEffectiveApiKey();
-      }
+    if (res.error != null) {
+      return MenuScanResult(success: false, errorMessage: res.error);
+    }
+    final body = res.body;
 
-      if (apiKey.isEmpty) {
-        return MenuScanResult(
-          success: false,
-          errorMessage:
-              'Cloud AI scan is not enabled in Admin Console. Please use Offline Menu Scan, add dishes manually, or configure Gemini API key in admin panel.',
-        );
-      }
-
-      final base64Content = base64Encode(fileBytes);
-      final categoryHint = knownCategories.isNotEmpty
-          ? 'Prefer these existing category names when a dish clearly fits one: ${knownCategories.join(', ')}. Only invent a new category name if none of these fit.'
-          : '';
-      final promptText =
-          'You are an expert Indian restaurant menu-card reader. This photo is a MENU, not a '
-          'purchase/supplier bill: there is no supplier, no bill number, no cost price, and no '
-          'quantity received. Extract every dish and its selling price.\n'
-          'If a dish lists multiple sizes or portions (e.g. Half / Full, Small / Large, Regular / '
-          'Large), output one separate item per variant, with the variant name appended to the '
-          'dish name in parentheses, e.g. "Paneer Butter Masala (Full)" and '
-          '"Paneer Butter Masala (Half)".\n'
-          '$categoryHint\n'
-          'Format response strictly as JSON with this schema:\n'
-          '{\n'
-          '  "items": [\n'
-          '    {\n'
-          '      "dish_name": "string",\n'
-          '      "price_paise": number (menu price in paise, e.g. Rs 220 = 22000),\n'
-          '      "category": "string"\n'
-          '    }\n'
-          '  ]\n'
-          '}\n'
-          'Do not output any markdown ticks, preamble, or comments. Output ONLY valid JSON.';
-
-      final isBearer = apiKey.startsWith('AQ.') || apiKey.startsWith('ya29.');
-
-      String? lastErrorMessage;
-
-      for (final model in _modelsToTry) {
-        try {
-          final uri = isBearer
-              ? Uri.parse(
-                  'https://generativelanguage.googleapis.com/v1beta/models/$model:generateContent',
-                )
-              : Uri.parse(
-                  'https://generativelanguage.googleapis.com/v1beta/models/$model:generateContent?key=$apiKey',
-                );
-
-          final requestPayload = {
-            'contents': [
-              {
-                'parts': [
-                  {'text': promptText},
-                  {
-                    'inline_data': {
-                      'mime_type': mimeType,
-                      'data': base64Content,
-                    }
-                  }
-                ]
-              }
-            ],
-            'generationConfig': {
-              'temperature': 0.1,
-              'response_mime_type': 'application/json',
-            }
-          };
-
-          final client = HttpClient();
-          client.connectionTimeout = const Duration(seconds: 30);
-
-          final req = await client.postUrl(uri);
-          req.headers.set(HttpHeaders.contentTypeHeader, 'application/json');
-          if (isBearer) {
-            req.headers.set(HttpHeaders.authorizationHeader, 'Bearer $apiKey');
-          } else {
-            req.headers.set('x-goog-api-key', apiKey);
-          }
-          req.write(jsonEncode(requestPayload));
-
-          final res = await req.close().timeout(requestTimeout);
-          final responseBody = await res
-              .transform(utf8.decoder)
-              .join()
-              .timeout(requestTimeout);
-          client.close(force: true);
-
-          if (res.statusCode == 200) {
-            if (isImage) {
-              await incrementScanCount();
-            }
-
-            final parsed = jsonDecode(responseBody);
-            final candidates = parsed['candidates'] as List?;
-            if (candidates != null && candidates.isNotEmpty) {
-              final content = candidates[0]['content'];
-              final parts = content['parts'] as List?;
-              if (parts != null && parts.isNotEmpty) {
-                String text = parts[0]['text'] ?? '';
-                text = text.replaceAll('```json', '').replaceAll('```', '').trim();
-
-                final jsonMap = jsonDecode(text);
-                final itemsJson = jsonMap['items'] as List? ?? [];
-
-                final List<ExtractedMenuItem> items = itemsJson
-                    .map((e) => ExtractedMenuItem.fromJson(e as Map<String, dynamic>))
-                    .where((it) => it.priceInPaise > 0 && it.dishName.trim().isNotEmpty)
-                    .toList();
-
-                if (items.isEmpty) {
-                  return MenuScanResult(
-                    success: false,
-                    errorMessage: 'No dishes could be recognized on this menu. Please ensure the photo is clear, well-lit, and shows dish names with prices.',
-                  );
-                }
-
-                return MenuScanResult(success: true, items: items);
-              }
-            }
-          } else if (res.statusCode == 401 || res.statusCode == 403) {
-            final parsedErr = jsonDecode(responseBody);
-            final msg = parsedErr['error']?['message'] ?? 'Authentication failed';
-            return MenuScanResult(
-              success: false,
-              errorMessage: 'Gemini API Key Authentication Failed ($msg). Please update your API key in Settings.',
-            );
-          } else if (res.statusCode == 429) {
-            return MenuScanResult(
-              success: false,
-              errorMessage: 'Gemini API Rate Limit reached. Please wait a moment and try again.',
-            );
-          } else {
-            lastErrorMessage = 'Model $model responded with HTTP ${res.statusCode}: $responseBody';
-          }
-        } catch (modelErr) {
-          lastErrorMessage = modelErr.toString();
-        }
-      }
-
+    if (res.status == 429) {
       return MenuScanResult(
         success: false,
-        errorMessage: lastErrorMessage ?? 'Could not parse menu. Please check connection and try again.',
-      );
-    } catch (e) {
-      return MenuScanResult(
-        success: false,
-        errorMessage: 'Menu Scan Error: $e',
+        isQuotaExceeded: true,
+        errorMessage: body?['error']?.toString() ??
+            'Free plan AI scan limit reached. Upgrade to Pro, or add dishes manually.',
       );
     }
+    if (res.status != 200 || body == null) {
+      return MenuScanResult(
+        success: false,
+        errorMessage: body?['error']?.toString() ??
+            'AI could not read this menu. Try the offline scan, or add dishes manually.',
+      );
+    }
+
+    final itemsJson = body['items'] as List? ?? [];
+    final items = itemsJson
+        .whereType<Map<String, dynamic>>()
+        .map(ExtractedMenuItem.fromJson)
+        .toList();
+
+    if (items.isEmpty) {
+      return MenuScanResult(
+        success: false,
+        errorMessage:
+            'No dishes could be recognized. Please ensure the menu photo is clear and shows dish names with prices.',
+      );
+    }
+
+    if (mimeType.startsWith('image/')) {
+      await incrementScanCount();
+    }
+
+    return MenuScanResult(success: true, items: items);
   }
 }

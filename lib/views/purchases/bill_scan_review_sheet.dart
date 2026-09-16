@@ -60,6 +60,13 @@ class _ReviewItemState {
   String category;
   ProductModel? matchedProduct;
   MasterProductModel? matchedMasterProduct;
+  /// Carried straight through from the source file/scan so a bulk import
+  /// actually produces scannable, expiry-tracked products. Not editable in
+  /// this sheet — the merchant is reviewing names and prices here, and a
+  /// 13-digit barcode is not something to retype.
+  final String? barcode;
+  final String? expiryDate;
+
 
   _ReviewItemState({
     required this.nameCtrl,
@@ -71,6 +78,8 @@ class _ReviewItemState {
     required this.category,
     this.matchedProduct,
     this.matchedMasterProduct,
+    this.barcode,
+    this.expiryDate,
   });
 
   void dispose() {
@@ -151,6 +160,8 @@ class _BillScanReviewSheetState extends State<BillScanReviewSheet> {
         category: effectiveCategory,
         matchedProduct: matched,
         matchedMasterProduct: masterMatched,
+        barcode: it.barcode,
+        expiryDate: it.expiryDate,
       );
 
       _items.add(itemState);
@@ -285,6 +296,11 @@ class _BillScanReviewSheetState extends State<BillScanReviewSheet> {
               categoryName: it.category,
               matchedProduct: it.matchedProduct ?? _findMatch(it.nameCtrl.text.trim()),
               matchedMasterProduct: it.matchedMasterProduct,
+              // Without these two the whole point of a bulk import was lost:
+              // 1000 SKUs would land with no barcode (unscannable) and no
+              // expiry (invisible to the pharmacy FEFO radar).
+              barcode: it.barcode,
+              expiryDate: it.expiryDate,
             ),
         ],
       );

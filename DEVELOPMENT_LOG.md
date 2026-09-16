@@ -2853,3 +2853,87 @@ compiled into the Flutter app, which carries its Razorpay key id in
 - Still open: dead `lib/views/pos/payment_modal.dart` (319 lines, unreferenced); admin
   console lifetime revenue is gross of returns; pre-fix partial returns recorded at ₹0 have
   no repair path; the `test_screen` auth bypass.
+
+---
+
+## 2026-09-16 — AI moved behind a server proxy; bulk import made real (Excel + barcodes)
+
+**User:** "sabse important ye check karo apna Inward with AI functional hai ya nahi… Google API
+kaafi dikkat de raha hai… jab user app install karega to sabse pehle product hi add karne
+rahenge, agar 500-1000+ ho to one by one kaise karega… upload PDF invoice, Excel and CSV bhi
+poori tarah functional chahiye."
+
+Owner chose: **all import formats**, and **proxy the AI through a server**.
+
+### The AI key was on every merchant's phone
+
+`getEffectiveApiKey()` fetched `gemini_api_key` from Firestore and cached it in
+SharedPreferences, then the app called Google directly with it. **A key handed to every
+device is not a secret** — any merchant could pull it off their own phone and spend this
+project's quota and billing. Two more things were wrong with the same design:
+
+* the free-scan quota (`getMonthlyScanCount`) lived in SharedPreferences, so clearing app
+  data reset the 10-scan limit;
+* the model list was compiled into the app. Google has already retired a model under this
+  app once (1.5-flash → 404, 2026-09-15 entry) and every installed copy broke until a Play
+  Store release reached each merchant.
+
+**New `aiExtract` Cloud Function** holds the key, the model list and the quota. The app
+sends its Firebase ID token plus the file; the server verifies the caller, checks the
+per-business monthly allowance in Firestore (`ai_usage/{biz}_{YYYY-MM}`, with Pro and live
+trials exempt), calls Gemini, and returns the same JSON shape the app already parsed.
+`GeminiAiService` is now a thin client — `customApiKey` parameters are accepted and ignored
+so no call site changed. **PDF invoice parsing, which has no offline fallback, was entirely
+dependent on that key working; it now depends on a server the owner controls.**
+
+⚠ **Deploy required:** `firebase functions:secrets:set GEMINI_API_KEY` then
+`firebase deploy --only functions:aiExtract`.
+
+### Bulk import: the actual first-impression path
+
+Three things made it quietly fail for the 500-1000 SKU case:
+
+1. **The "Upload Excel / CSV File" button could not open Excel.** Every inward screen uses
+   that label; the picker allowed `csv, txt, tsv` only, so a distributor's `.xlsx` could not
+   even be selected. Added real on-device `.xlsx` parsing (`excel` package — pure Dart, no
+   native code) via `parseExcelBytes`, sharing `mapColumns` with the CSV path so a file
+   behaves identically whichever format it arrives in. `.xls` (the pre-2007 binary format)
+   is still unsupported and now says so explicitly instead of failing silently.
+2. **Barcodes and expiry dates were thrown away.** The app's OWN generated template has
+   `Barcode` and `Expiry Date` columns and the parser read neither — so a merchant importing
+   1000 SKUs got 1000 products that **could never be scanned at the counter**, which is the
+   entire reason to bulk import, and (for pharmacy) nothing for the FEFO/Near-Expiry radar
+   to see. Carried end to end now: `ExtractedBillItem.barcode/expiryDate` →
+   `_ReviewItemState` → `InwardLine.barcode` → the created `ProductModel`. The source's own
+   barcode beats the master catalog's, because it came off this merchant's actual supplier
+   sheet. Barcodes are validated as 8-14 digits; anything else is dropped rather than stored.
+   `normalizeExpiry` accepts ISO, `dd/MM/yyyy` (Indian sheets are day-first) and the
+   `MM/yyyy` pharmacy strip stamp, and returns null for anything ambiguous — a wrong expiry
+   on a medicine is worse than no expiry.
+3. **"Sale Rate" was read as a cost.** Column detection walked the headers ONCE with an
+   if/else-if chain, and the purchase rule (which matches `rate`) ran before the selling
+   rule. Rewritten as most-specific-first with claimed columns excluded, so one column can
+   never be assigned two roles.
+
+Also replaced the CSV path's inline `× 1.2` / `× 1.15` price fallbacks with the shared
+`InventoryInwardService.defaultMrpPaise` / `defaultSellingPricePaise`, so an item imported
+from a sheet cannot be priced differently from the identical item inwarded by hand or by AI.
+
+### Verification
+- `flutter analyze lib` -> 0 issues.
+- `flutter test` -> **239/239 passed**, including new `test/bulk_import_test.dart` (17 tests):
+  column mapping incl. the "Sale Rate" regression, expiry normalisation and its refusals,
+  barcode/expiry round-trip, shared-markup fallback, junk-barcode rejection, TSV/semicolon
+  exports, quoted names with commas, and — guarding the original drift — that every
+  vertical's own generated template parses back with barcodes intact.
+- `node --check functions/index.js` -> OK.
+- **Not verified live:** the `aiExtract` round trip needs the function deployed with its
+  secret; `.xlsx` parsing is covered by code review and the shared-column tests, not by a
+  real workbook fixture.
+
+### Still to do (next)
+Admin console: real subscription revenue from `razorpay_payments` (needs an admin read rule —
+that collection is currently under default-deny); the hardcoded `currentVersionCode = 42201`
+in `home_dashboard_screen.dart` that must be hand-edited every release or the force-update
+gate silently misfires; and `maintenance_mode` / `maintenance_message`, which the console
+writes and **nothing in the app reads**.
