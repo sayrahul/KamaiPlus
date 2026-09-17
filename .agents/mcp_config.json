@@ -21,6 +21,14 @@
         "chrome-devtools-mcp@latest",
         "--no-usage-statistics"
       ]
+    },
+    "sqlite": {
+      "command": "uvx",
+      "args": [
+        "mcp-server-sqlite",
+        "--db-path",
+        "d:\\My Web Sites\\KamaiPlus Android\\kamaiplus_local.db"
+      ]
     }
   }
 }
