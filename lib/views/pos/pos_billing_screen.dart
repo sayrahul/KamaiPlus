@@ -1631,7 +1631,7 @@ class _PosBillingScreenState extends State<PosBillingScreen>
         crossAxisCount: 2,
         crossAxisSpacing: 8,
         mainAxisSpacing: 8,
-        childAspectRatio: 1.72,
+        childAspectRatio: 1.55,
       ),
       itemCount: prods.length,
       itemBuilder: (context, index) {
@@ -2389,12 +2389,12 @@ class _PosBillingScreenState extends State<PosBillingScreen>
 
           // Right: View Cart & Pay Button
           InkWell(
-            onTap: hasItems ? _openCheckoutModal : null,
+            onTap: _openCheckoutModal,
             borderRadius: BorderRadius.circular(12),
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
               decoration: BoxDecoration(
-                color: hasItems ? const Color(0xFFFBBF24) : const Color(0xFFFDE68A),
+                color: const Color(0xFFFBBF24),
                 borderRadius: BorderRadius.circular(14),
               ),
               child: Row(
@@ -2404,14 +2404,14 @@ class _PosBillingScreenState extends State<PosBillingScreen>
                     style: GoogleFonts.plusJakartaSans(
                       fontSize: 13,
                       fontWeight: FontWeight.w800,
-                      color: hasItems ? const Color(0xFF0F172A) : const Color(0xFF92400E),
+                      color: const Color(0xFF0F172A),
                     ),
                   ),
                   const SizedBox(width: 6),
-                  Icon(
+                  const Icon(
                     Icons.arrow_forward_rounded,
                     size: 16,
-                    color: hasItems ? const Color(0xFF0F172A) : const Color(0xFF92400E),
+                    color: Color(0xFF0F172A),
                   ),
                 ],
               ),
@@ -2473,7 +2473,7 @@ class _PosProductGridItemState extends State<_PosProductGridItem> {
         duration: const Duration(milliseconds: 100),
         curve: Curves.easeOutCubic,
         child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+          padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 7),
           decoration: BoxDecoration(
             color: isStockDepleted ? const Color(0xFFFFF1F2) : Colors.white,
             borderRadius: BorderRadius.circular(10),
@@ -2515,9 +2515,9 @@ class _PosProductGridItemState extends State<_PosProductGridItem> {
                             child: Text(
                               widget.categoryDisplay,
                               style: GoogleFonts.plusJakartaSans(
-                                fontSize: 8.5,
+                                fontSize: 9.0,
                                 fontWeight: FontWeight.w700,
-                                letterSpacing: 0.2,
+                                letterSpacing: 0.3,
                                 color: widget.product.isFavorite ? const Color(0xFFD97706) : const Color(0xFF94A3B8),
                               ),
                               maxLines: 1,
@@ -2628,9 +2628,9 @@ class _PosProductGridItemState extends State<_PosProductGridItem> {
                     fontSize: 12,
                     fontWeight: FontWeight.w700,
                     color: isStockDepleted ? const Color(0xFF475569) : const Color(0xFF0F172A),
-                    height: 1.15,
+                    height: 1.2,
                   ),
-                  maxLines: 1,
+                  maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                 ),
                 // Bottom Row: Price / unit and Stock left

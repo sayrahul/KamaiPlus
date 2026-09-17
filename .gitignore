@@ -75,3 +75,9 @@ node_modules/
 *.hprof
 hs_err_pid*.log
 replay_pid*.log
+
+# Local databases and build caches
+*.db
+*.db-journal
+/android/build/
+

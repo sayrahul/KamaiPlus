@@ -1767,3 +1767,8 @@ Reasoning and code locations live in `DEVELOPMENT_LOG.md`'s
     `invoice_show_tagline` and `invoice_show_owner_phone` on the A4 PDF, and heading /
     footer / GSTIN / tagline / owner-phone on the thermal receipt. A setting that has a
     live preview must change the real bill.
+33. **PWA Reference Parity (POS Billing Screen `1-06.png`)**:
+    - Product Grid Card aspect ratio is locked to `1.55` (from 1.72) to allow comfortable breathing room and avoid clipping.
+    - Product titles support `maxLines: 2` with `height: 1.2` so longer product names (e.g. *Azithromycin 500mg Strip*) display without truncation.
+    - Bottom Floating Cart Bar's "View Cart & Pay" button remains interactive (`onTap: _openCheckoutModal`) even at 0 cart items, matching PWA behavior where cashiers can open the checkout sheet to view tabs or select a customer at any time.
+

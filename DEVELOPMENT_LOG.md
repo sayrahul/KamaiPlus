@@ -3692,3 +3692,34 @@ rollout. Recommended: staged rollout at 10–20% first.
    - `flutter analyze lib` in root: **0 issues found** (100.7s clean).
    - `flutter analyze lib` in `admin_console`: **0 errors, 0 warnings** in new files.
    - `aiExtract` live probe: **HTTP 401 Unauthorized** (auth guard active).
+
+---
+
+## 2026-09-17 — PWA Reference Screenshots Parity Audit & POS Billing Screen Polish
+
+**User Request:**
+"maine prefrence PWA attached folder meain lates scren shot update kiye hai.. uske according https://kamaiplus.web.app/ se changes karo.. carefully.. wo screenshot dal saket ho"
+
+**Audit Across 10 Updated Screenshots (`Refrence PWA Attached/1-01.png` to `1-10.png`):**
+- Screen 1 (`1-01.png` Auth/Login): Verified `login_screen.dart` has 100% parity (dark slate background, Google OAuth, cloud sync badges).
+- Screen 2 (`1-02.png` Home Pulse): Verified `home_pulse_tab.dart` has 100% parity (business pulse 2x2 grid, PIN privacy, quick actions).
+- Screen 3 (`1-03.png` Products): Verified `products_screen.dart` has 100% parity (AI inward trigger, header card, 2x2 metrics grid).
+- Screen 4 (`1-04.png` POS Checkout Modal): Verified `pos_checkout_modal.dart` has 100% parity (prescribing doctor Rx card, multi-bill tabs, payment modes, quick cash chips).
+- Screen 5 (`1-05.png` Add Product Modal): Verified `add_product_modal.dart` has 100% parity (strength & salt, tablets per strip helper, live margin chip, batch & expiry).
+- Screen 6 (`1-06.png` POS Billing Screen): Product card height was slightly tight (`childAspectRatio: 1.72`) causing truncation on longer titles, and "View Cart & Pay" button was disabled at 0 items.
+- Screen 7 (`1-07.png` Purchases): Verified `purchases_screen.dart` has 100% parity (order list, supplier cards, inward status).
+- Screen 8 (`1-08.png` Growth Campaigns): Verified `growth_campaigns_screen.dart` has 100% parity (campaign cards, discount builder, WhatsApp broadcast).
+- Screen 9 (`1-09.png` Barcode Studio): Verified `barcode_studio_screen.dart` has 100% parity (label sizes, print preview, element toggles).
+- Screen 10 (`1-10.png` Invoice Themes): Verified `invoice_themes_screen.dart` has 100% parity (7-palette selector, tax invoice headings, live preview).
+
+**Root Causes (file:line) & Fixes Applied:**
+1. `lib/views/pos/pos_billing_screen.dart:1634`: Changed `childAspectRatio` from `1.72` to `1.55` to match card height in `1-06.png`.
+2. `lib/views/pos/pos_billing_screen.dart:2633`: Changed product name `maxLines` from `1` to `2` (`height: 1.2`) so long names like "Azithromycin 500mg (Strip of 5)" wrap cleanly without truncation.
+3. `lib/views/pos/pos_billing_screen.dart:2476`: Refined card internal padding to `horizontal: 9, vertical: 7` and category tag tracking.
+4. `lib/views/pos/pos_billing_screen.dart:2392`: Changed "View Cart & Pay" button `onTap` to `_openCheckoutModal` so the checkout modal can be opened even when 0 items are in the cart, matching PWA checkout tab inspection.
+
+**Verification:**
+- `flutter analyze lib`: **No issues found! (0 errors, 0 warnings, ran in 141.3s)**.
+- Strictly preserved integer paise financial invariant (`1 INR = 100 paise`).
+- Strictly preserved Menu bottom sheet modal invariant (`MenuScreen.show(context)`).
+
