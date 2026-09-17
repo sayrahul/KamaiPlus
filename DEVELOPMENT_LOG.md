@@ -3723,3 +3723,24 @@ rollout. Recommended: staged rollout at 10–20% first.
 - Strictly preserved integer paise financial invariant (`1 INR = 100 paise`).
 - Strictly preserved Menu bottom sheet modal invariant (`MenuScreen.show(context)`).
 
+---
+
+## 2026-09-17 (Part 2) — In-App Screenshot Assets & Pro Upgrade Feature Showcase Carousel
+
+**User Request:**
+"wo images accordingly app me add karo" (User selected: Pro Upgrade Modal me Feature Showcase / Screenshots carousel add karein taaki merchant ko saare premium features ka visual preview mile)
+
+**Root Causes (file:line) & Fixes Applied:**
+1. `pubspec.yaml:67`: Added `- assets/images/screenshots/` to Flutter assets so screenshot PNGs are bundled with the Android app.
+2. `assets/images/screenshots/`: Copied all 10 high-resolution PWA reference screenshots (`1-01.png` to `1-10.png`).
+3. `lib/views/common/pro_upgrade_modal.dart`: Added `_proShowcaseItems` and `_buildFeatureShowcaseCarousel()` right above the Free vs Pro feature comparison table. Features a smooth horizontal card carousel with:
+   - Screenshot image preview with subtle bottom gradient.
+   - Distinctive category badge pills (e.g. `RAPID BILLING`, `PRESCRIPTION`, `PRO EXCLUSIVE`, `AUTOMATION`, `BRANDING`, `MARKETING`).
+   - Feature title and benefit description.
+   - Tapping any card opens `_showFullImagePreview()` with full-screen zoomed modal preview and close button.
+
+**Verification:**
+- `flutter analyze --no-pub lib/views/common/pro_upgrade_modal.dart`: **No issues found! (0 errors, 0 warnings, 68.1s)**.
+- All assets registered and verified.
+
+

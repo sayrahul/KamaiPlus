@@ -544,7 +544,11 @@ class _ProUpgradeModalState extends State<ProUpgradeModal> {
                             ),
                           ),
                         ),
-                        const SizedBox(height: 12),
+                        const SizedBox(height: 14),
+
+                        // Interactive Pro Feature Showcase Carousel
+                        _buildFeatureShowcaseCarousel(),
+                        const SizedBox(height: 14),
 
                         // Interactive Free vs Pro Feature Comparison Dropdown
                         _buildFreeVsProComparison(),
@@ -729,6 +733,330 @@ class _ProUpgradeModalState extends State<ProUpgradeModal> {
                 ),
               ],
             ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  static const List<Map<String, String>> _proShowcaseItems = [
+    {
+      'title': 'High-Speed Counter POS',
+      'tag': 'RAPID BILLING',
+      'tagColor': '0xFF10B981',
+      'desc': '1-Tap billing with multi-bill tabs & barcode scanner.',
+      'image': 'assets/images/screenshots/1-06.png',
+    },
+    {
+      'title': 'Doctor Rx & Smart Checkout',
+      'tag': 'PRESCRIPTION',
+      'tagColor': '0xFF3B82F6',
+      'desc': 'Doctor tagging, split modes & quick tender chips.',
+      'image': 'assets/images/screenshots/1-04.png',
+    },
+    {
+      'title': 'Barcode Studio & Labels',
+      'tag': 'PRO EXCLUSIVE',
+      'tagColor': '0xFFF59E0B',
+      'desc': 'Print custom 50x25mm & 38x25mm thermal stickers.',
+      'image': 'assets/images/screenshots/1-09.png',
+    },
+    {
+      'title': 'AI Inward & Sourcing',
+      'tag': 'AUTOMATION',
+      'tagColor': '0xFF8B5CF6',
+      'desc': 'AI parcha scanner & wholesale vendor orders.',
+      'image': 'assets/images/screenshots/1-07.png',
+    },
+    {
+      'title': 'Custom Invoice Themes',
+      'tag': 'BRANDING',
+      'tagColor': '0xFFEC4899',
+      'desc': '7-Color palettes, custom logo & dynamic UPI QR.',
+      'image': 'assets/images/screenshots/1-10.png',
+    },
+    {
+      'title': 'WhatsApp Growth Hub',
+      'tag': 'MARKETING',
+      'tagColor': '0xFF10B981',
+      'desc': 'Festival discounts, birthday radar & udhar recovery.',
+      'image': 'assets/images/screenshots/1-08.png',
+    },
+    {
+      'title': 'Business Pulse & Profit',
+      'tag': 'ANALYTICS',
+      'tagColor': '0xFF06B6D4',
+      'desc': 'Live net profit, cash till status & voice soundbox.',
+      'image': 'assets/images/screenshots/1-02.png',
+    },
+    {
+      'title': 'Product & Stock Catalog',
+      'tag': 'INVENTORY',
+      'tagColor': '0xFFF97316',
+      'desc': 'Cost valuation, batch expiry & strip tablet count.',
+      'image': 'assets/images/screenshots/1-03.png',
+    },
+  ];
+
+  Widget _buildFeatureShowcaseCarousel() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(5),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF59E0B).withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Icon(Icons.stars_rounded, size: 14, color: Color(0xFFFBBF24)),
+                ),
+                const SizedBox(width: 7),
+                Text(
+                  'PRO FEATURE SHOWCASE',
+                  style: GoogleFonts.outfit(
+                    fontSize: 11.5,
+                    fontWeight: FontWeight.w800,
+                    color: const Color(0xFFFDE68A),
+                    letterSpacing: 0.6,
+                  ),
+                ),
+              ],
+            ),
+            Text(
+              'Swipe to preview ➔',
+              style: GoogleFonts.inter(
+                fontSize: 10,
+                fontWeight: FontWeight.w600,
+                color: Colors.white.withValues(alpha: 0.4),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 10),
+        SizedBox(
+          height: 185,
+          child: ListView.separated(
+            scrollDirection: Axis.horizontal,
+            physics: const BouncingScrollPhysics(),
+            itemCount: _proShowcaseItems.length,
+            separatorBuilder: (context, index) => const SizedBox(width: 10),
+            itemBuilder: (ctx, i) {
+              final item = _proShowcaseItems[i];
+              final tagColor = Color(int.parse(item['tagColor']!));
+              return GestureDetector(
+                onTap: () => _showFullImagePreview(item),
+                child: Container(
+                  width: 200,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF1E293B).withValues(alpha: 0.7),
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(
+                      color: Colors.white.withValues(alpha: 0.1),
+                      width: 1.0,
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.2),
+                        blurRadius: 8,
+                        offset: const Offset(0, 2),
+                      ),
+                    ],
+                  ),
+                  clipBehavior: Clip.antiAlias,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Screenshot image container
+                      Expanded(
+                        child: Stack(
+                          fit: StackFit.expand,
+                          children: [
+                            Image.asset(
+                              item['image']!,
+                              fit: BoxFit.cover,
+                              alignment: Alignment.topCenter,
+                              errorBuilder: (context, error, stackTrace) => Container(
+                                color: const Color(0xFF0F172A),
+                                child: const Center(
+                                  child: Icon(Icons.image_outlined, color: Colors.white24, size: 28),
+                                ),
+                              ),
+                            ),
+                            // Gradient overlay on bottom of image for readability
+                            Positioned(
+                              left: 0,
+                              right: 0,
+                              bottom: 0,
+                              height: 30,
+                              child: Container(
+                                decoration: BoxDecoration(
+                                  gradient: LinearGradient(
+                                    begin: Alignment.topCenter,
+                                    end: Alignment.bottomCenter,
+                                    colors: [
+                                      Colors.transparent,
+                                      const Color(0xFF1E293B).withValues(alpha: 0.95),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ),
+                            // Tag badge top right
+                            Positioned(
+                              top: 8,
+                              right: 8,
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: tagColor.withValues(alpha: 0.9),
+                                  borderRadius: BorderRadius.circular(6),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: Colors.black.withValues(alpha: 0.3),
+                                      blurRadius: 4,
+                                    ),
+                                  ],
+                                ),
+                                child: Text(
+                                  item['tag']!,
+                                  style: GoogleFonts.inter(
+                                    fontSize: 8,
+                                    fontWeight: FontWeight.w900,
+                                    color: Colors.white,
+                                    letterSpacing: 0.3,
+                                  ),
+                                ),
+                              ),
+                            ),
+                            // Tap to zoom hint
+                            Positioned(
+                              bottom: 6,
+                              right: 8,
+                              child: Container(
+                                padding: const EdgeInsets.all(3),
+                                decoration: BoxDecoration(
+                                  color: Colors.black.withValues(alpha: 0.5),
+                                  shape: BoxShape.circle,
+                                ),
+                                child: const Icon(Icons.fullscreen_rounded, size: 12, color: Colors.white70),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      // Text description container
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(10, 6, 10, 8),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              item['title']!,
+                              style: GoogleFonts.outfit(
+                                fontSize: 11.5,
+                                fontWeight: FontWeight.w800,
+                                color: Colors.white,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              item['desc']!,
+                              style: GoogleFonts.inter(
+                                fontSize: 9.5,
+                                fontWeight: FontWeight.w500,
+                                color: const Color(0xFF94A3B8),
+                                height: 1.2,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+      ],
+    );
+  }
+
+  void _showFullImagePreview(Map<String, String> item) {
+    HapticFeedback.mediumImpact();
+    showDialog(
+      context: context,
+      builder: (ctx) => Dialog(
+        backgroundColor: Colors.transparent,
+        insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+        child: Container(
+          decoration: BoxDecoration(
+            color: const Color(0xFF0F172A),
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: const Color(0xFFFBBF24), width: 1.5),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.5),
+                blurRadius: 20,
+              ),
+            ],
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 12, 12, 10),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            item['title']!,
+                            style: GoogleFonts.outfit(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w800,
+                              color: Colors.white,
+                            ),
+                          ),
+                          Text(
+                            item['desc']!,
+                            style: GoogleFonts.inter(
+                              fontSize: 11,
+                              color: const Color(0xFF94A3B8),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.close_rounded, color: Colors.white70),
+                      onPressed: () => Navigator.pop(ctx),
+                    ),
+                  ],
+                ),
+              ),
+              Flexible(
+                child: ClipRRect(
+                  borderRadius: const BorderRadius.vertical(bottom: Radius.circular(19)),
+                  child: Image.asset(
+                    item['image']!,
+                    fit: BoxFit.contain,
+                  ),
+                ),
+              ),
+            ],
           ),
         ),
       ),

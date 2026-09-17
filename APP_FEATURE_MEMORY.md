@@ -1771,4 +1771,9 @@ Reasoning and code locations live in `DEVELOPMENT_LOG.md`'s
     - Product Grid Card aspect ratio is locked to `1.55` (from 1.72) to allow comfortable breathing room and avoid clipping.
     - Product titles support `maxLines: 2` with `height: 1.2` so longer product names (e.g. *Azithromycin 500mg Strip*) display without truncation.
     - Bottom Floating Cart Bar's "View Cart & Pay" button remains interactive (`onTap: _openCheckoutModal`) even at 0 cart items, matching PWA behavior where cashiers can open the checkout sheet to view tabs or select a customer at any time.
+34. **In-App Pro Feature Showcase Carousel (`assets/images/screenshots/` & `ProUpgradeModal`)**:
+    - High-fidelity PWA screenshots bundled into `assets/images/screenshots/` and registered in `pubspec.yaml`.
+    - `ProUpgradeModal` features a horizontal `_buildFeatureShowcaseCarousel()` displaying real visual previews of POS billing, Barcode Studio, Inward Orders, WhatsApp Growth, Custom Invoices, and Business Pulse.
+    - Tapping any card opens `_showFullImagePreview` with high-resolution full-screen modal zoom and close button.
+
 
