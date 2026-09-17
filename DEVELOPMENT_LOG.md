@@ -44,6 +44,27 @@ hits (the screen's data-loading call), not just the data shape. See
 `test/vertical_product_leak_test.dart` (added 2026‑09‑11) for the corrected pattern — it
 drives `LocalDatabase` through a real (in-memory FFI) SQLite database and asserts on what
 `getAllProducts`/`getAllCategories` actually return.
+
+## 2026-09-17 — Google Play Console: Bitmap downsampling & EdgeToEdge backward compatibility
+
+**Symptom:** Google Play Console reported 4 actions recommended and 1 issue needing attention on Release 42204 (4.22.0):
+1. `inSampleSize not set in BitmapFactory.Options` in `MainActivity$12.onMethodCall` (PDF invoice engine).
+2. "Edge-to-edge may not display for all users" — apps targeting SDK 35+ should handle insets and call `enableEdgeToEdge()` for backward compatibility on older devices.
+3. Obfuscation (2%) — below 25% threshold (Fix by Feb 2027).
+4. Deprecated `setStatusBarColor` / `setNavigationBarColor` & orientation restrictions in `com.razorpay.BaseCheckoutActivity.onCreate`.
+
+**Root cause:**
+- `MainActivity.java` decoded merchant store logo (`logoPath`), dynamic UPI QR (`qrBytes`), and launcher icon directly via `BitmapFactory.decode*` without `inSampleSize`, which caused large heap memory allocations when merchants picked 12MP-48MP camera photos as their logo.
+- `MainActivity.java` did not override `onCreate` to call `EdgeToEdge.enable(this)`.
+- Build 42204 was built before commit `b8da2d0`, so `isMinifyEnabled` was `false` in that uploaded bundle.
+- Deprecated status bar calls and portrait orientation locking reside inside the 3rd-party Razorpay Flutter SDK binary (`com.razorpay.BaseCheckoutActivity`).
+
+**Fix:**
+- Added `calculateInSampleSize`, `decodeSampledBitmapFromFile`, `decodeSampledBitmapFromByteArray`, and `decodeSampledBitmapFromResource` in `MainActivity.java`.
+- Updated PDF invoice generator to decode store logos (200x200 max), dynamic UPI QR (250x250 max), and launcher icon (64x64) with calculated `inSampleSize` and memory-efficient `RGB_565` configuration.
+- Added `androidx.activity:activity:1.9.3` to `android/app/build.gradle.kts` and called `EdgeToEdge.enable(this)` in `MainActivity.onCreate()`.
+- Documented that Obfuscation is already configured (`isMinifyEnabled = true` + `proguard-rules.pro`) for all future builds, and Razorpay warnings are non-blocking 3rd-party library notices.
+
 ## 2026-09-16 (final) — Language support made real: 9 languages, generated catalog, voice included
 
 **Symptom:** *"select language wala abhi bas aam ka feature hai"* — the picker worked, the app

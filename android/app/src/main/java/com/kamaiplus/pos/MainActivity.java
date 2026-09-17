@@ -36,6 +36,7 @@ import android.provider.ContactsContract;
 import android.provider.MediaStore;
 import android.database.Cursor;
 import android.speech.tts.TextToSpeech;
+import androidx.activity.EdgeToEdge;
 import androidx.annotation.NonNull;
 import androidx.core.app.NotificationCompat;
 import androidx.core.content.FileProvider;
@@ -81,6 +82,79 @@ public class MainActivity extends FlutterFragmentActivity implements TextToSpeec
     private MethodChannel shortcutMethodChannel;
     private MethodChannel shareMethodChannel;
     private MethodChannel paymentDetectorChannel;
+
+    // =========================================================================
+    // BITMAP DOWNSAMPLING HELPERS (PLAY CONSOLE MEMORY / inSampleSize COMPLIANCE)
+    // =========================================================================
+    private static int calculateInSampleSize(BitmapFactory.Options options, int reqWidth, int reqHeight) {
+        final int height = options.outHeight;
+        final int width = options.outWidth;
+        int inSampleSize = 1;
+
+        if (height > reqHeight || width > reqWidth) {
+            final int halfHeight = height / 2;
+            final int halfWidth = width / 2;
+            while ((halfHeight / inSampleSize) >= reqHeight && (halfWidth / inSampleSize) >= reqWidth) {
+                inSampleSize *= 2;
+            }
+        }
+        return Math.max(1, inSampleSize);
+    }
+
+    private static Bitmap decodeSampledBitmapFromFile(String filePath, int reqWidth, int reqHeight) {
+        try {
+            BitmapFactory.Options options = new BitmapFactory.Options();
+            options.inJustDecodeBounds = true;
+            BitmapFactory.decodeFile(filePath, options);
+            if (options.outWidth <= 0 || options.outHeight <= 0) return null;
+
+            options.inSampleSize = calculateInSampleSize(options, reqWidth, reqHeight);
+            options.inJustDecodeBounds = false;
+            options.inPreferredConfig = Bitmap.Config.RGB_565;
+            return BitmapFactory.decodeFile(filePath, options);
+        } catch (Throwable t) {
+            return null;
+        }
+    }
+
+    private static Bitmap decodeSampledBitmapFromByteArray(byte[] data, int reqWidth, int reqHeight) {
+        try {
+            if (data == null || data.length == 0) return null;
+            BitmapFactory.Options options = new BitmapFactory.Options();
+            options.inJustDecodeBounds = true;
+            BitmapFactory.decodeByteArray(data, 0, data.length, options);
+            if (options.outWidth <= 0 || options.outHeight <= 0) return null;
+
+            options.inSampleSize = calculateInSampleSize(options, reqWidth, reqHeight);
+            options.inJustDecodeBounds = false;
+            options.inPreferredConfig = Bitmap.Config.RGB_565;
+            return BitmapFactory.decodeByteArray(data, 0, data.length, options);
+        } catch (Throwable t) {
+            return null;
+        }
+    }
+
+    private Bitmap decodeSampledBitmapFromResource(int resId, int reqWidth, int reqHeight) {
+        try {
+            BitmapFactory.Options options = new BitmapFactory.Options();
+            options.inJustDecodeBounds = true;
+            BitmapFactory.decodeResource(getResources(), resId, options);
+            if (options.outWidth <= 0 || options.outHeight <= 0) return null;
+
+            options.inSampleSize = calculateInSampleSize(options, reqWidth, reqHeight);
+            options.inJustDecodeBounds = false;
+            options.inPreferredConfig = Bitmap.Config.RGB_565;
+            return BitmapFactory.decodeResource(getResources(), resId, options);
+        } catch (Throwable t) {
+            return null;
+        }
+    }
+
+    @Override
+    protected void onCreate(Bundle savedInstanceState) {
+        EdgeToEdge.enable(this);
+        super.onCreate(savedInstanceState);
+    }
 
     @Override
     protected void onResume() {
@@ -538,11 +612,7 @@ public class MainActivity extends FlutterFragmentActivity implements TextToSpeec
                                 byte[] qrBytes = call.argument("qrBytes");
                                 Bitmap qrBmp = null;
                                 if (qrBytes != null && qrBytes.length > 0) {
-                                    try {
-                                        BitmapFactory.Options qrOpts = new BitmapFactory.Options();
-                                        qrOpts.inPreferredConfig = Bitmap.Config.RGB_565;
-                                        qrBmp = BitmapFactory.decodeByteArray(qrBytes, 0, qrBytes.length, qrOpts);
-                                    } catch (Exception ignored) {}
+                                    qrBmp = decodeSampledBitmapFromByteArray(qrBytes, 250, 250);
                                 }
 
                                 if (invoiceNumber == null) invoiceNumber = "INV-" + System.currentTimeMillis();
@@ -619,24 +689,17 @@ public class MainActivity extends FlutterFragmentActivity implements TextToSpeec
                                 Paint grandTotalBg = new Paint();
                                 grandTotalBg.setColor(themeColor);
 
-                                // Store Logo
+                                // Store Logo (Downsampled to prevent high-res camera photo OOM / Google Play memory warning)
                                 Bitmap logoBmp = null;
                                 if (logoPath != null && !logoPath.trim().isEmpty()) {
-                                    try {
-                                        File lf = new File(logoPath);
-                                        if (lf.exists() && lf.length() > 0) {
-                                            BitmapFactory.Options opts = new BitmapFactory.Options();
-                                            opts.inPreferredConfig = Bitmap.Config.RGB_565;
-                                            logoBmp = BitmapFactory.decodeFile(logoPath, opts);
-                                        }
-                                    } catch (Exception ignored) {}
+                                    File lf = new File(logoPath);
+                                    if (lf.exists() && lf.length() > 0) {
+                                        logoBmp = decodeSampledBitmapFromFile(logoPath, 200, 200);
+                                    }
                                 }
 
                                 // App Icon for Kamai+ Footer Branding
-                                Bitmap appIconBmp = null;
-                                try {
-                                    appIconBmp = BitmapFactory.decodeResource(getResources(), R.mipmap.ic_launcher);
-                                } catch (Exception ignored) {}
+                                Bitmap appIconBmp = decodeSampledBitmapFromResource(R.mipmap.ic_launcher, 64, 64);
 
                                 // Multi-page Calculation (Strict space budgeting to prevent collision)
                                 List<List<Map<String, Object>>> pagesItems = new ArrayList<>();

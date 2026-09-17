@@ -88,6 +88,10 @@ The Bottom Navigation Bar has 5 items. The navigation contract is strictly defin
 
 27. **Voice follows the chosen language, via `AppLanguage.ttsLocale`:** `SoundboxService` must never hardcode a language. It used to speak `'hi'`, so Tamil and Bengali shops heard their takings announced in Hindi — and the soundbox is the one part of this app a busy shopkeeper listens to instead of reading, so getting it wrong matters more than an untranslated label. Announcement text comes from the same catalog, so a new language gets a voice at the same time it gets words.
 
+28. **PDF invoice images are downsampled with `inSampleSize` before decode:** `MainActivity.java` decodes merchant logo (`logoPath`), dynamic UPI QR (`qrBytes`), and launcher icon using `calculateInSampleSize` with `RGB_565` configuration. High-resolution camera photos (e.g. 12MP–48MP) selected by merchants as their store logo must never be loaded into RAM at full resolution, preventing OOM crashes and satisfying Google Play Console memory requirements.
+
+29. **Edge-to-Edge backward compatibility via `EdgeToEdge.enable(this)`:** `MainActivity.onCreate()` calls `EdgeToEdge.enable(this)` backed by `androidx.activity:activity:1.9.3` for consistent system window inset handling across Android 15 (targetSdk 36) and older Android devices.
+
 
 
 ### 1. 🏠 Home Screen (`lib/views/dashboard/home_pulse_tab.dart`)

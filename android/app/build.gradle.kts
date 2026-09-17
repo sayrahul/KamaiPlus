@@ -61,8 +61,25 @@ android {
             signingConfig = signingConfigs.getByName(
                 if (hasReleaseKeystore) "release" else "debug"
             )
-            isMinifyEnabled = false
-            isShrinkResources = false
+
+            // R8 code shrinking + obfuscation.
+            //
+            // Both of these were explicitly false, so no shrinking or
+            // obfuscation ran at all. Play Console reported "No R8 metadata
+            // included", obfuscation 2%, shrinking blank, and warns that
+            // percentages under 25% "may impact your visibility and publishing
+            // capabilities on Google Play". A 35.6 MB uncompressed DEX was
+            // shipping every class of every dependency, used or not.
+            //
+            // The keep rules in proguard-rules.pro are load-bearing: R8
+            // failures surface at RUNTIME, not build time, so read the warning
+            // at the top of that file before changing anything here.
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro"
+            )
         }
     }
 
@@ -99,4 +116,7 @@ dependencies {
     // on a weak connection needs the fallback. The cloud path reads every
     // Indian language already; this is what happens when it cannot be called.
     implementation("com.google.mlkit:text-recognition-devanagari:16.0.1")
+
+    // AndroidX Activity for EdgeToEdge backward compatibility (Android 15+ / older Android)
+    implementation("androidx.activity:activity:1.9.3")
 }
