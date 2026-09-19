@@ -1775,5 +1775,14 @@ Reasoning and code locations live in `DEVELOPMENT_LOG.md`'s
     - High-fidelity PWA screenshots bundled into `assets/images/screenshots/` and registered in `pubspec.yaml`.
     - `ProUpgradeModal` features a horizontal `_buildFeatureShowcaseCarousel()` displaying real visual previews of POS billing, Barcode Studio, Inward Orders, WhatsApp Growth, Custom Invoices, and Business Pulse.
     - Tapping any card opens `_showFullImagePreview` with high-resolution full-screen modal zoom and close button.
+35. **Advanced Sales Analytics (`advanced_sales_reports_screen.dart`, `party_report_detail_screen.dart`, `category_report_detail_screen.dart`, `reports_repository.dart`, `advanced_report_pdf_service.dart`)**:
+    - **Tabs:** Parties, Categories, Items, Dead Stock. Periods come from `ReportPeriod` (half-open ranges: Today, Yesterday, 7 Days, This Month, Last Month). Sorting is by sales, profit, or quantity.
+    - **Figures:** Revenue is net of returns (`netAmountPaise`, with `returned_quantity` prorated per line). Profit covers only lines with a frozen buying price, with a "Partial" badge otherwise. This is the same rule as Home's `getDayProfitSummary`. Dead stock is scoped to the active business vertical.
+    - **Owner PIN:** All profit and margin figures stay masked until `OwnerPrivacyModal` is unlocked (eye icon or tapping the profit tile), just like Home's profit tile.
+    - **Party detail:** Tapping an invoice opens `SaleDetailModal.show` (the same as Transactions), with Print and WhatsApp on each card. After a return, the header totals are recomputed via `ReportsRepository.summarizeParty`.
+    - **PDFs:** There are two. The period report (profit included only when unlocked) and the customer account statement (itemized bills, bill totals, paid vs udhar, never cost or profit). Both are themed with `invoice_theme_color_hex` and shared via `Printing.sharePdf`. They use the built-in Latin-1 fonts, so every string passes through `pdfSafe` and money prints as `Rs.`.
+36. **Home Dashboard Featured Banner Replaced with Advanced Analytics (`home_pulse_tab.dart`)**:
+    - **Replaced Fast Counter Card:** The vertical-specific fast counter banner (`_buildFastCounterBanner()`) in Section 3 of the Home screen was redundant with the prominent bottom navigation center billing button and quick action hero card.
+    - **Advanced Analytics Banner:** Replaced with a sleek dark midnight-indigo banner (`_buildAdvancedAnalyticsBanner()`), featuring `Icons.insights_rounded`, `PRO INTEL` badge, and direct 1-tap navigation into `AdvancedSalesReportsScreen()`.
 
 

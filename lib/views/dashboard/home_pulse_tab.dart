@@ -17,6 +17,7 @@ import '../purchases/purchases_screen.dart';
 import '../inventory/inventory_screen.dart';
 import '../customers/customers_screen.dart';
 import '../growth/growth_campaigns_screen.dart';
+import '../reports/advanced_sales_reports_screen.dart';
 import '../reports/gst_reports_screen.dart';
 import '../tools/barcode_studio_screen.dart';
 import '../settings/bluetooth_printer_dialog.dart';
@@ -233,8 +234,8 @@ class _HomePulseTabState extends State<HomePulseTab> with DataBusRefresh<HomePul
                   _buildDaySummaryAndTallyRow(),
                   const SizedBox(height: 18),
 
-                  // SECTION 3: Kirana Fast Counter & Loose Staples Banner
-                  _buildFastCounterBanner(),
+                  // SECTION 3: Advanced Business Analytics & Intel Banner
+                  _buildAdvancedAnalyticsBanner(),
                   const SizedBox(height: 18),
 
                   // SECTION 4: DAILY COUNTER & OPS
@@ -740,115 +741,70 @@ class _HomePulseTabState extends State<HomePulseTab> with DataBusRefresh<HomePul
   }
 
   // -------------------------------------------------------------
-  // SECTION 3: FAST COUNTER BANNER
+  // SECTION 3: ADVANCED ANALYTICS BANNER
   // -------------------------------------------------------------
-  Widget _buildFastCounterBanner() {
-    return ValueListenableBuilder<String>(
-      valueListenable: BusinessVerticals.activeBusinessTypeNotifier,
-      builder: (context, verticalId, _) {
-        final vert = BusinessVerticals.resolve(verticalId);
-
-        String counterTitle;
-        String counterTag;
-        String counterDesk;
-        String counterSub;
-        IconData counterIcon;
-        List<Color> gradientColors;
-        Color accentColor;
-        Color tagBg;
-        Color tagColor;
-
-        switch (vert.id) {
-          case 'pharmacy':
-            counterTitle = 'Prescription Counter';
-            counterTag = 'PHARMACY';
-            counterDesk = 'Rx & OTC Quick Checkout';
-            counterSub = 'Batch & expiry tracked • Instant dosage bill';
-            counterIcon = Icons.medication_rounded;
-            gradientColors = const [Color(0xFF0C4A6E), Color(0xFF082F49)];
-            accentColor = const Color(0xFF0284C7);
-            tagBg = const Color(0xFF0284C7).withValues(alpha: 0.3);
-            tagColor = const Color(0xFF7DD3FC);
-            break;
-          case 'restaurant':
-            counterTitle = 'Table & Dine-in Express';
-            counterTag = 'RESTAURANT';
-            counterDesk = 'KOT & Table Billing';
-            counterSub = 'Quick dish punch • Dine-in & parcel billing';
-            counterIcon = Icons.restaurant_rounded;
-            gradientColors = const [Color(0xFF7C2D12), Color(0xFF451A03)];
-            accentColor = const Color(0xFFEA580C);
-            tagBg = const Color(0xFFEA580C).withValues(alpha: 0.3);
-            tagColor = const Color(0xFFFDBA74);
-            break;
-          case 'clothing':
-            counterTitle = 'Tag & Barcode Express';
-            counterTag = 'APPAREL';
-            counterDesk = 'Garment & Footwear Billing';
-            counterSub = 'Size & color variants • Rapid tag scan';
-            counterIcon = Icons.checkroom_rounded;
-            gradientColors = const [Color(0xFF581C87), Color(0xFF3B0764)];
-            accentColor = const Color(0xFF9333EA);
-            tagBg = const Color(0xFF9333EA).withValues(alpha: 0.3);
-            tagColor = const Color(0xFFD8B4FE);
-            break;
-          case 'hardware':
-            counterTitle = 'Contractor & Retail Counter';
-            counterTag = 'HARDWARE';
-            counterDesk = 'Fast Measurement & Estimate Billing';
-            counterSub = 'Unit conversions • Quick proforma bill';
-            counterIcon = Icons.handyman_rounded;
-            gradientColors = const [Color(0xFF1E293B), Color(0xFF0F172A)];
-            accentColor = const Color(0xFF2563EB);
-            tagBg = const Color(0xFF2563EB).withValues(alpha: 0.3);
-            tagColor = const Color(0xFF93C5FD);
-            break;
-          case 'grocery':
-          default:
-            counterTitle = 'Quick Kirana Counter';
-            counterTag = 'GROCERY';
-            counterDesk = 'Loose Staples & FMCG Desk';
-            counterSub = 'Rapid weigh items • Scanner auto-focus';
-            counterIcon = Icons.scale_rounded;
-            gradientColors = const [Color(0xFF064E3B), Color(0xFF042F2E)];
-            accentColor = const Color(0xFF10B981);
-            tagBg = const Color(0xFF10B981).withValues(alpha: 0.3);
-            tagColor = const Color(0xFF6EE7B7);
-            break;
-        }
-
-        return Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+  Widget _buildAdvancedAnalyticsBanner() {
+    return Material(
+      color: Colors.transparent,
+      borderRadius: BorderRadius.circular(16),
+      child: InkWell(
+        onTap: () {
+          HapticFeedback.lightImpact();
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => const AdvancedSalesReportsScreen(),
+            ),
+          );
+        },
+        borderRadius: BorderRadius.circular(16),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
           decoration: BoxDecoration(
-            gradient: LinearGradient(
-              colors: gradientColors,
+            gradient: const LinearGradient(
+              colors: [Color(0xFF0F172A), Color(0xFF1E293B)],
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
             ),
-            borderRadius: BorderRadius.circular(14),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+              color: const Color(0xFF4F46E5).withValues(alpha: 0.35),
+              width: 1.2,
+            ),
             boxShadow: [
               BoxShadow(
-                color: gradientColors.first.withValues(alpha: 0.25),
-                blurRadius: 8,
-                offset: const Offset(0, 2),
+                color: const Color(0xFF0F172A).withValues(alpha: 0.25),
+                blurRadius: 10,
+                offset: const Offset(0, 3),
               ),
             ],
           ),
           child: Row(
             children: [
               Container(
-                padding: const EdgeInsets.all(7),
+                padding: const EdgeInsets.all(9),
                 decoration: BoxDecoration(
-                  color: accentColor.withValues(alpha: 0.2),
-                  borderRadius: BorderRadius.circular(8),
+                  gradient: const LinearGradient(
+                    colors: [Color(0xFF4F46E5), Color(0xFF3730A3)],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                  borderRadius: BorderRadius.circular(10),
+                  boxShadow: [
+                    BoxShadow(
+                      color: const Color(0xFF4F46E5).withValues(alpha: 0.4),
+                      blurRadius: 6,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
                 ),
-                child: Icon(
-                  counterIcon,
-                  color: tagColor,
-                  size: 20,
+                child: const Icon(
+                  Icons.insights_rounded,
+                  color: Colors.white,
+                  size: 22,
                 ),
               ),
-              const SizedBox(width: 8),
+              const SizedBox(width: 12),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -859,46 +815,53 @@ class _HomePulseTabState extends State<HomePulseTab> with DataBusRefresh<HomePul
                       children: [
                         Flexible(
                           child: Text(
-                            counterTitle,
+                            'Advanced Analytics',
                             style: GoogleFonts.outfit(
-                              fontSize: 12,
+                              fontSize: 13,
                               fontWeight: FontWeight.w700,
                               color: Colors.white,
+                              letterSpacing: 0.2,
                             ),
                             overflow: TextOverflow.ellipsis,
                           ),
                         ),
-                        const SizedBox(width: 4),
+                        const SizedBox(width: 6),
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                          padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
                           decoration: BoxDecoration(
-                            color: tagBg,
+                            color: const Color(0xFF4F46E5).withValues(alpha: 0.35),
                             borderRadius: BorderRadius.circular(4),
+                            border: Border.all(
+                              color: const Color(0xFF818CF8).withValues(alpha: 0.4),
+                              width: 0.8,
+                            ),
                           ),
                           child: Text(
-                            counterTag,
+                            'PRO INTEL',
                             style: GoogleFonts.inter(
                               fontSize: 8,
-                              fontWeight: FontWeight.w700,
-                              color: tagColor,
+                              fontWeight: FontWeight.w800,
+                              color: const Color(0xFFA5B4FC),
+                              letterSpacing: 0.4,
                             ),
                           ),
                         ),
                       ],
                     ),
+                    const SizedBox(height: 2),
                     Text(
-                      counterDesk,
+                      'Parties, Categories & Dead Stock',
                       style: GoogleFonts.outfit(
-                        fontSize: 11,
+                        fontSize: 11.5,
                         fontWeight: FontWeight.w600,
-                        color: Colors.white,
+                        color: const Color(0xFFE2E8F0),
                       ),
                       overflow: TextOverflow.ellipsis,
                     ),
                     Text(
-                      counterSub,
+                      'Deep sales reports • Customer udhar & margins',
                       style: GoogleFonts.inter(
-                        fontSize: 9,
+                        fontSize: 9.5,
                         color: const Color(0xFF94A3B8),
                       ),
                       overflow: TextOverflow.ellipsis,
@@ -906,32 +869,44 @@ class _HomePulseTabState extends State<HomePulseTab> with DataBusRefresh<HomePul
                   ],
                 ),
               ),
-              const SizedBox(width: 6),
-              ElevatedButton(
-                onPressed: widget.onNavigateToPos,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: accentColor,
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                  elevation: 0,
+              const SizedBox(width: 8),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF4F46E5),
+                  borderRadius: BorderRadius.circular(8),
+                  boxShadow: [
+                    BoxShadow(
+                      color: const Color(0xFF4F46E5).withValues(alpha: 0.3),
+                      blurRadius: 4,
+                      offset: const Offset(0, 1),
+                    ),
+                  ],
                 ),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Text(
-                      'Counter',
-                      style: GoogleFonts.outfit(fontSize: 10.5, fontWeight: FontWeight.w700),
+                      'View',
+                      style: GoogleFonts.outfit(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                        color: Colors.white,
+                      ),
                     ),
-                    const SizedBox(width: 2),
-                    const Icon(Icons.arrow_forward_rounded, size: 12),
+                    const SizedBox(width: 3),
+                    const Icon(
+                      Icons.arrow_forward_rounded,
+                      size: 13,
+                      color: Colors.white,
+                    ),
                   ],
                 ),
               ),
             ],
           ),
-        );
-      },
+        ),
+      ),
     );
   }
 

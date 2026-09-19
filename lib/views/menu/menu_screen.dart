@@ -10,6 +10,7 @@ import '../inventory/inventory_screen.dart';
 import '../purchases/purchases_screen.dart';
 import '../customers/customers_screen.dart';
 import '../reports/gst_reports_screen.dart';
+import '../reports/advanced_sales_reports_screen.dart';
 import '../settings/invoice_themes_screen.dart';
 import '../settings/backup_restore_screen.dart';
 import '../settings/store_profile_screen.dart';
@@ -718,6 +719,19 @@ class _MenuScreenState extends State<MenuScreen> {
                         ),
                       ),
                     ],
+                  ),
+                  const SizedBox(height: 10),
+                  _buildNavCard(
+                    title: 'Advanced Sales Reports',
+                    subtitle: 'Party-wise, Category & Item Summary',
+                    icon: Icons.insights_rounded,
+                    iconColor: const Color(0xFF4F46E5),
+                    iconBg: const Color(0xFFEEF2FF),
+                    borderColor: const Color(0xFFC7D2FE),
+                    badgeText: 'ANALYTICS',
+                    badgeBg: const Color(0xFFEEF2FF),
+                    badgeColor: const Color(0xFF4338CA),
+                    onTap: () => _handleScreenPush(const AdvancedSalesReportsScreen()),
                   ),
                   const SizedBox(height: 10),
                   Row(

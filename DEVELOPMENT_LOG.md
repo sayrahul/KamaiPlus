@@ -45,6 +45,83 @@ hits (the screen's data-loading call), not just the data shape. See
 drives `LocalDatabase` through a real (in-memory FFI) SQLite database and asserts on what
 `getAllProducts`/`getAllCategories` actually return.
 
+## 2026-09-19 — Advanced Sales Reports: audit, rebuilt PDF service, 7 data/UI fixes
+
+**Symptom:** asked to verify the new Advanced Sales Report & Analytics end to end (wiring,
+connections, functions). The app **did not compile**.
+
+**Root causes and fixes:**
+
+1. **Three files had been truncated to 0 bytes** at the same moment (09:07 on 2026-09-19):
+   `lib/services/advanced_report_pdf_service.dart`, `test/advanced_report_pdf_test.dart`, and
+   this file. Both report screens call `AdvancedReportPdfService`, so the build failed with
+   `Undefined name 'AdvancedReportPdfService'`. This log was restored from `HEAD`. Any
+   uncommitted entries written before the truncation are lost; nothing else was recoverable.
+   The PDF service and its test were rewritten from scratch (see 7).
+2. **Partially returned bills were counted at full value** (`reports_repository.dart`). The
+   query only excluded `refunded`/`returned`, and `partially_refunded` bills were summed from
+   `total_amount_paise` and the full line quantities. Now every line uses
+   `quantity - returned_quantity` (revenue prorated), and the bill uses `SaleModel.netAmountPaise`
+   and `net{Cash,Upi,Credit}AmountPaise`.
+3. **Uncosted lines were counted as 100% profit.** `cost_price_paise == 0` means "cost unknown"
+   (see `CartItemModel.toMap`), and `getDayProfitSummary` already excludes those lines. The
+   report didn't, so a shop without buying prices saw its whole turnover as "Est. Net Profit".
+   The report now follows the same rule, via `ProfitCoverage` in `report_models.dart`: margin is
+   over costed revenue only, with a "Partial — N line(s) lack buying price" badge. The tile was
+   also renamed from "Net" to "Est. Profit", since expenses are not deducted.
+4. **Dead Stock listed every vertical's products.** It called `getAllProducts()` with no
+   `businessType`, which is the same leak as this file's case study. Dead stock is now scoped to
+   `BusinessVerticals.activeBusinessTypeNotifier.value`, and variant parents (`hasVariants`) are
+   skipped. Category lookup still uses the full catalogue, so every sold line resolves.
+5. **Date ranges.** The ranges were closed ("now" or 23:59:59.999), which dropped sales stamped
+   in the last sub-millisecond, and "7 Days" spanned 8 calendar days. The new `ReportPeriod` in
+   `report_models.dart` is half-open (`start <= created_at < end`), the same as
+   `getSalesBetween`.
+6. **Profit was visible without the owner PIN.** Home hides today's profit behind
+   `OwnerPrivacyModal`, but this screen, one tap from Home, showed every party's, category's and
+   item's margin. Profit is now masked until the PIN is entered, on all three screens. The
+   period PDF includes profit only when unlocked. The customer statement PDF never shows cost
+   or profit.
+7. **UI wiring.**
+   - A period-switch race could let an older load overwrite a newer one; each load now carries
+     a token.
+   - Load errors were swallowed; they now show a notification and a Retry button.
+   - Returning a bill from the party screen now recomputes the party header
+     (`ReportsRepository.summarizeParty`) and refreshes the report on the way back.
+   - `_SliverAppBarDelegate.shouldRebuild` returned `false`, so tab counts could go stale.
+     Tabs are also now scrollable, because four labels with counts don't fit on 360dp.
+   - Sorting moved out of `build()`.
+   - Loose quantities rendered with `toStringAsFixed(0)` (2.5 kg showed as "3"); they now use
+     `formatReportQty`.
+   - Hero tiles could overflow on narrow phones; values are now `Flexible` with ellipsis.
+   - The category detail screen claimed "sorted by sales" but kept the caller's sort; it now
+     sorts by sales.
+   - The WhatsApp phone fallback ignored an empty `customer_phone`; it now falls back to the
+     party's phone.
+
+**PDF service notes (`advanced_report_pdf_service.dart`):** it uses the pure-Dart `pdf`/`printing`
+packages and the built-in Helvetica font, which covers **Latin-1 only**. Any rune above
+U+00FF throws `Unable to display U+...` (checked in `pdf` 3.12 `type1_font.dart`). This includes
+the rupee sign, bullets, en dashes, and Hindi product names. Every string therefore goes through
+`AdvancedReportPdfService.pdfSafe`, and money prints as `Rs.`. **Do not pass raw text into a
+`pw.Text` in this file.** Devanagari names degrade to `?` or to a fallback such as "Item";
+real Devanagari output would need a bundled Noto TTF. `MultiPage.maxPages` is set to 1000,
+because a long statement table otherwise trips the 20-page assert in debug builds and tests.
+
+**Verified:**
+- New `test/advanced_sales_report_test.dart` (5 tests, real FFI SQLite through
+  `ReportsRepository`) covers partial returns, uncosted profit, half-open periods and
+  "7 Days", dead-stock vertical isolation, and walk-in grouping.
+- New `test/advanced_report_pdf_test.dart` (7 tests) covers `pdfSafe`, a 120-bill statement
+  with Devanagari, rupee signs and curly quotes, and a 400-item report with and without profit.
+- Full suite: 306/306 pass. `flutter analyze` reports 0 errors; the only 4 infos are
+  pre-existing, in `admin_console`.
+
+**Known, not fixed here:** `LocalDatabase.getDayProfitSummary` (Home's "today's profit") reduces
+**cost** for partially returned lines but keeps the full `gross_total_paise` as **revenue**, so
+Home overstates profit on days with partial returns. It is out of this change's scope. The fix
+is to prorate `lineRevenue` by `qty / rawQty`, the same way `ReportsRepository._linesOf` does.
+
 ## 2026-09-17 — Google Play Console: Bitmap downsampling & EdgeToEdge backward compatibility
 
 **Symptom:** Google Play Console reported 4 actions recommended and 1 issue needing attention on Release 42204 (4.22.0):
