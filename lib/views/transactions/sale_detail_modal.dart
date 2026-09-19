@@ -34,7 +34,7 @@ class SaleDetailModal extends StatelessWidget {
     return showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      backgroundColor: Colors.white,
+      backgroundColor: Colors.transparent,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
@@ -1325,18 +1325,33 @@ class SaleDetailModal extends StatelessWidget {
                 ? const Color(0xFF6366F1)
                 : (isUdhar ? const Color(0xFFDC2626) : (isUpi ? const Color(0xFF0284C7) : const Color(0xFF059669)))));
 
-    return Padding(
-      padding: EdgeInsets.only(
-        left: 18,
-        right: 18,
-        top: 16,
-        bottom: MediaQuery.of(context).viewInsets.bottom + 24,
+    final bottomInset = MediaQuery.of(context).viewInsets.bottom;
+    final navBarPadding = MediaQuery.paddingOf(context).bottom;
+
+    return Container(
+      constraints: BoxConstraints(
+        maxHeight: MediaQuery.of(context).size.height * 0.90,
       ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Drag handle
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      child: SafeArea(
+        top: false,
+        bottom: true,
+        child: SingleChildScrollView(
+          physics: const BouncingScrollPhysics(),
+          padding: EdgeInsets.only(
+            left: 18,
+            right: 18,
+            top: 16,
+            bottom: bottomInset + (navBarPadding > 0 ? navBarPadding + 12 : 24),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Drag handle
           Center(
             child: Container(
               width: 36,
@@ -1966,6 +1981,8 @@ class SaleDetailModal extends StatelessWidget {
           ],
         ],
       ),
-    );
+    ),
+  ),
+);
   }
 }

@@ -172,30 +172,58 @@ class _CustomersScreenState extends State<CustomersScreen> with DataBusRefresh<C
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      backgroundColor: Colors.white,
+      backgroundColor: Colors.transparent,
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
       builder: (ctx) => StatefulBuilder(
-        builder: (modalCtx, setModalState) => Padding(
-          padding: EdgeInsets.only(
-            left: 20,
-            right: 20,
-            top: 20,
-            bottom: MediaQuery.of(modalCtx).viewInsets.bottom + 24,
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text(isEditing ? 'Edit Customer' : 'Add New Customer', style: GoogleFonts.outfit(fontSize: 18, fontWeight: FontWeight.w700)),
-                  IconButton(icon: const Icon(Icons.close_rounded), onPressed: () => Navigator.pop(modalCtx)),
-                ],
-              ),
-              const SizedBox(height: 12),
-              InkWell(
-                onTap: () async {
+        builder: (modalCtx, setModalState) {
+          final bottomInset = MediaQuery.of(modalCtx).viewInsets.bottom;
+          final navBarPadding = MediaQuery.paddingOf(modalCtx).bottom;
+
+          return Container(
+            constraints: BoxConstraints(
+              maxHeight: MediaQuery.of(modalCtx).size.height * 0.90,
+            ),
+            decoration: const BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+            ),
+            child: SafeArea(
+              top: false,
+              bottom: true,
+              child: Padding(
+                padding: EdgeInsets.fromLTRB(20, 14, 20, bottomInset + (navBarPadding > 0 ? navBarPadding + 10 : 18)),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Top Drag Handle
+                    Center(
+                      child: Container(
+                        width: 36,
+                        height: 4,
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFCBD5E1),
+                          borderRadius: BorderRadius.circular(2),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(isEditing ? 'Edit Customer' : 'Add New Customer', style: GoogleFonts.outfit(fontSize: 18, fontWeight: FontWeight.w700)),
+                        IconButton(icon: const Icon(Icons.close_rounded), onPressed: () => Navigator.pop(modalCtx)),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    Expanded(
+                      child: SingleChildScrollView(
+                        physics: const BouncingScrollPhysics(),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            InkWell(
+                              onTap: () async {
                   final contact = await ContactsService.instance.pickContact();
                   if (contact != null) {
                     setModalState(() {
@@ -465,75 +493,83 @@ class _CustomersScreenState extends State<CustomersScreen> with DataBusRefresh<C
                   ],
                 ),
               ),
-              const SizedBox(height: 18),
-              SizedBox(
-                width: double.infinity,
-                height: 48,
-                child: ElevatedButton(
-                  onPressed: () async {
-                    final name = nameCtrl.text.trim();
-                    if (name.isEmpty) {
-                      InAppNotification.error('Please enter customer full name', context: context);
-                      return;
-                    }
-                    final phoneErr = AppValidators.validatePhone(phoneCtrl.text.trim());
-                    if (phoneErr != null) {
-                      InAppNotification.error(phoneErr, context: context);
-                      return;
-                    }
-                    final cleanPhone = AppValidators.cleanPhone(phoneCtrl.text.trim());
-                    final clash = await LocalDatabase.instance.findCustomerByPhone(cleanPhone);
-                    // When editing, finding YOURSELF on this number is not a clash.
-                    if (clash != null && clash.id != existing?.id) {
-                      if (modalCtx.mounted) {
-                        InAppNotification.error('Customer with mobile $cleanPhone already exists (${clash.name})!', context: modalCtx);
-                      }
-                      return;
-                    }
-                    final limit = int.tryParse(limitCtrl.text.trim()) ?? 5000;
-                    final rawGstin = gstinCtrl.text.trim().toUpperCase();
-                    final saved = CustomerModel(
-                      // Keep the id when editing, or upsertCustomer would insert
-                      // a duplicate and strand the original's khata ledger.
-                      id: existing?.id ?? const Uuid().v4(),
-                      businessId: existing?.businessId ??
-                          FirestoreSyncService.instance.activeBusinessId,
-                      name: name,
-                      phone: cleanPhone,
-                      // Not editable on this form — carry it forward rather than
-                      // letting a full-row replace blank it.
-                      address: existing?.address,
-                      gstin: rawGstin.isNotEmpty ? rawGstin : null,
-                      stateCode: rawGstin.length >= 2 ? rawGstin.substring(0, 2) : null,
-                      // Udhaar owed is ledger-derived money. An edit to a name or
-                      // credit limit must never rewrite it.
-                      currentBalancePaise: existing?.currentBalancePaise ?? 0,
-                      creditLimitPaise: limit * 100,
-                      isVip: isVip,
-                      birthday: birthdayMmDd,
-                      syncStatus: 'pending',
-                    );
-                    await LocalDatabase.instance.upsertCustomer(saved);
-                    FirestoreSyncService.instance
-                        .pushCustomerToCloud(saved)
-                        .catchError((_) {});
-                    if (!modalCtx.mounted) return;
-                    Navigator.pop(modalCtx);
-                    _loadCustomers();
-                  },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF0F172A),
-                    foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                  ),
-                  child: Text(isEditing ? 'Save Changes' : 'Save Customer Account', style: GoogleFonts.outfit(fontSize: 15, fontWeight: FontWeight.w700)),
-                ),
-              ),
+              const SizedBox(height: 8),
             ],
           ),
         ),
       ),
-    );
+      const SizedBox(height: 12),
+      SizedBox(
+        width: double.infinity,
+        height: 48,
+        child: ElevatedButton(
+          onPressed: () async {
+            final name = nameCtrl.text.trim();
+            if (name.isEmpty) {
+              InAppNotification.error('Please enter customer full name', context: context);
+              return;
+            }
+            final phoneErr = AppValidators.validatePhone(phoneCtrl.text.trim());
+            if (phoneErr != null) {
+              InAppNotification.error(phoneErr, context: context);
+              return;
+            }
+            final cleanPhone = AppValidators.cleanPhone(phoneCtrl.text.trim());
+            final clash = await LocalDatabase.instance.findCustomerByPhone(cleanPhone);
+            // When editing, finding YOURSELF on this number is not a clash.
+            if (clash != null && clash.id != existing?.id) {
+              if (modalCtx.mounted) {
+                InAppNotification.error('Customer with mobile $cleanPhone already exists (${clash.name})!', context: modalCtx);
+              }
+              return;
+            }
+            final limit = int.tryParse(limitCtrl.text.trim()) ?? 5000;
+            final rawGstin = gstinCtrl.text.trim().toUpperCase();
+            final saved = CustomerModel(
+              // Keep the id when editing, or upsertCustomer would insert
+              // a duplicate and strand the original's khata ledger.
+              id: existing?.id ?? const Uuid().v4(),
+              businessId: existing?.businessId ??
+                  FirestoreSyncService.instance.activeBusinessId,
+              name: name,
+              phone: cleanPhone,
+              // Not editable on this form — carry it forward rather than
+              // letting a full-row replace blank it.
+              address: existing?.address,
+              gstin: rawGstin.isNotEmpty ? rawGstin : null,
+              stateCode: rawGstin.length >= 2 ? rawGstin.substring(0, 2) : null,
+              // Udhaar owed is ledger-derived money. An edit to a name or
+              // credit limit must never rewrite it.
+              currentBalancePaise: existing?.currentBalancePaise ?? 0,
+              creditLimitPaise: limit * 100,
+              isVip: isVip,
+              birthday: birthdayMmDd,
+              syncStatus: 'pending',
+            );
+            await LocalDatabase.instance.upsertCustomer(saved);
+            FirestoreSyncService.instance
+                .pushCustomerToCloud(saved)
+                .catchError((_) {});
+            if (!modalCtx.mounted) return;
+            Navigator.pop(modalCtx);
+            _loadCustomers();
+          },
+          style: ElevatedButton.styleFrom(
+            backgroundColor: const Color(0xFF0F172A),
+            foregroundColor: Colors.white,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          ),
+          child: Text(isEditing ? 'Save Changes' : 'Save Customer Account', style: GoogleFonts.outfit(fontSize: 15, fontWeight: FontWeight.w700)),
+        ),
+      ),
+    ],
+  ),
+),
+),
+);
+},
+),
+);
   }
 
   void _showCustomerDetailsModal(CustomerModel customer) async {

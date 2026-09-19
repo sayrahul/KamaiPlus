@@ -9,13 +9,14 @@ import '../../models/models.dart';
 import '../../core/database/local_database.dart';
 import '../../core/utils/money_formatter.dart';
 import '../../core/utils/expiry_utils.dart';
+import '../../core/utils/scan_rules.dart';
 import '../../services/firestore_sync_service.dart';
 import '../../services/home_widget_service.dart';
 import '../../services/cloud_barcode_resolver_service.dart';
 import '../common/in_app_notification.dart';
 import '../common/pro_upgrade_modal.dart';
 import 'pos_checkout_modal.dart';
-import 'barcode_scanner_view.dart';
+import 'rapid_scan_billing_screen.dart';
 
 class PosBillingScreen extends StatefulWidget {
   final bool autoOpenCheckout;
@@ -78,6 +79,11 @@ class _PosBillingScreenState extends State<PosBillingScreen>
   // POS Catalog Filter Mode: 'all', 'in_stock', 'favorites'
   String _posFilterMode = 'all';
 
+  /// Bumped on every cart change, so an open Rapid Scan screen refreshes its
+  /// list even when the change came from a USB/Bluetooth scanner gun.
+  final ValueNotifier<int> _cartRevision = ValueNotifier<int>(0);
+  void _cartChanged() => _cartRevision.value++;
+
   int get _inStockCount => _allProducts.where((p) => !p.isVariant && (p.isUnlimitedStock || p.stockQuantity > 0)).length;
   int get _favoritesCount => _allProducts.where((p) => !p.isVariant && p.isFavorite).length;
   int get _totalCatalogCount => _allProducts.where((p) => !p.isVariant).length;
@@ -139,53 +145,60 @@ class _PosBillingScreenState extends State<PosBillingScreen>
 
   Future<void> _processHardwareScannedBarcode(String barcode) async {
     HapticFeedback.mediumImpact();
-    // 1. Search in loaded active store products
-    ProductModel? match;
-    for (final p in _allProducts) {
-      if (p.barcode != null && p.barcode!.trim() == barcode) {
-        match = p;
-        break;
-      }
-    }
-
-    // 2. If not in memory, query SQLite
-    if (match == null) {
-      final activeType = BusinessVerticals.activeBusinessTypeNotifier.value;
-      match = await LocalDatabase.instance.findProductByBarcode(barcode, businessType: activeType);
-    }
-
-    if (match != null) {
-      _addToCart(match);
-      if (mounted) {
+    final r = await _addScannedBarcode(barcode);
+    if (!mounted) return;
+    switch (r.status) {
+      case ScanAddStatus.added:
         InAppNotification.show(
           context: context,
-          message: '🔫 Scanned: ${match.name}',
+          message: r.message.isNotEmpty ? r.message : '🔫 Scanned: ${r.product!.name}',
           customIcon: Icons.qr_code_scanner_rounded,
           customColor: const Color(0xFF10B981),
           duration: const Duration(milliseconds: 1400),
         );
-      }
-      return;
+        break;
+      case ScanAddStatus.blocked:
+      case ScanAddStatus.notFound:
+        HapticFeedback.heavyImpact();
+        InAppNotification.error(r.message, context: context);
+        break;
+      case ScanAddStatus.cancelled:
+        break;
     }
+  }
 
-    // 3. Check master catalog or cloud resolver
+  /// The single barcode funnel — scanner gun and Rapid Scan camera alike:
+  /// this store's catalogue first (in memory, then SQLite), then the offline
+  /// master catalogue, then the cloud resolver. It used to be copied three
+  /// times in this file, and the copies had already started to drift.
+  Future<ScanAddResult> _addScannedBarcode(String barcode, {double quantity = 1}) async {
+    final code = barcode.trim();
+    final activeType = BusinessVerticals.activeBusinessTypeNotifier.value;
+
+    ProductModel? match;
+    for (final p in _allProducts) {
+      if (p.barcode != null && p.barcode!.trim() == code) {
+        match = p;
+        break;
+      }
+    }
+    match ??= await LocalDatabase.instance.findProductByBarcode(code, businessType: activeType);
+    if (!mounted) return const ScanAddResult(status: ScanAddStatus.cancelled);
+    if (match != null) return _addProductInteractive(match, quantity: quantity);
+
+    // Only the lookups are guarded: an offline cloud resolver is "not found",
+    // but a failure while importing must not be passed off as one.
+    MasterProductModel? master;
     try {
-      final activeType = BusinessVerticals.activeBusinessTypeNotifier.value;
-      final master = await LocalDatabase.instance.findMasterProductByBarcode(barcode, businessType: activeType);
-      if (master != null) {
-        await _importAndAddToCart(master);
-        return;
-      }
-      final cloudItem = await CloudBarcodeResolverService.instance.resolveBarcode(barcode, businessType: activeType);
-      if (cloudItem != null) {
-        await _importAndAddToCart(cloudItem);
-        return;
-      }
+      master = await LocalDatabase.instance.findMasterProductByBarcode(code, businessType: activeType) ??
+          await CloudBarcodeResolverService.instance.resolveBarcode(code, businessType: activeType);
     } catch (_) {}
+    if (master != null && mounted) return _importMasterAndAdd(master, quantity: quantity);
 
-    if (mounted) {
-      InAppNotification.error('Barcode "$barcode" not found in store catalog', context: context);
-    }
+    return ScanAddResult(
+      status: ScanAddStatus.notFound,
+      message: 'Barcode "$code" not found in store catalog',
+    );
   }
 
   Future<void> _loadBusinessType() async {
@@ -217,6 +230,7 @@ class _PosBillingScreenState extends State<PosBillingScreen>
   @override
   void dispose() {
     HardwareKeyboard.instance.removeHandler(_handleHardwareBarcodeScan);
+    _cartRevision.dispose();
     BusinessVerticals.activeBusinessTypeNotifier.removeListener(_onBusinessTypeChanged);
     FirestoreSyncService.instance.liveSyncCounter.removeListener(_handleCloudSyncUpdate);
     FirestoreSyncService.isProNotifier.removeListener(_handleProStatusUpdate);
@@ -362,13 +376,30 @@ class _PosBillingScreenState extends State<PosBillingScreen>
   Future<void> _importAndAddToCart(MasterProductModel masterItem, {String? sourceLabel}) async {
     if (!mounted) return;
     HapticFeedback.selectionClick();
+    final r = await _importMasterAndAdd(masterItem);
+    if (!mounted) return;
+    if (r.status == ScanAddStatus.added) {
+      InAppNotification.show(
+        context: context,
+        message: '${sourceLabel ?? 'Added to Bill'}: ${r.product!.name}',
+        customIcon: Icons.auto_awesome,
+        customColor: Colors.amber,
+        duration: const Duration(milliseconds: 1200),
+      );
+    } else if (r.status == ScanAddStatus.blocked) {
+      InAppNotification.error(r.message, context: context);
+    }
+  }
+
+  /// Imports a master/cloud item into this store's catalogue and bills it.
+  Future<ScanAddResult> _importMasterAndAdd(MasterProductModel masterItem, {double quantity = 1}) async {
     final activeType = BusinessVerticals.activeBusinessTypeNotifier.value;
 
     int? priceOverride;
     if (masterItem.sellingPricePaise <= 0 && masterItem.mrpPaise <= 0) {
       priceOverride = await _promptSellingPriceForNewScan(masterItem);
-      if (priceOverride == null) return; // Cashier cancelled — bill nothing.
-      if (!mounted) return;
+      // Cashier cancelled — bill nothing.
+      if (priceOverride == null || !mounted) return const ScanAddResult(status: ScanAddStatus.cancelled);
     }
 
     final imported = await LocalDatabase.instance.importMasterProductToStore(
@@ -376,17 +407,18 @@ class _PosBillingScreenState extends State<PosBillingScreen>
       targetVertical: activeType,
       customSellingPricePaise: priceOverride,
     );
-    _addToCart(imported);
     await _loadData();
-    if (mounted) {
-      InAppNotification.show(
-        context: context,
-        message: '${sourceLabel ?? 'Added to Bill'}: ${imported.name}',
-        customIcon: Icons.auto_awesome,
-        customColor: Colors.amber,
-        duration: const Duration(milliseconds: 1200),
-      );
-    }
+    if (!mounted) return const ScanAddResult(status: ScanAddStatus.cancelled);
+
+    final r = await _addProductInteractive(imported, quantity: quantity);
+    if (r.status != ScanAddStatus.added) return r;
+    return ScanAddResult(
+      status: ScanAddStatus.added,
+      product: r.product,
+      quantityNow: r.quantityNow,
+      addedQuantity: r.addedQuantity,
+      message: 'New item saved & billed: ${imported.name}',
+    );
   }
 
   /// Asks the cashier for a selling price for a barcode that resolved online
@@ -500,22 +532,51 @@ class _PosBillingScreenState extends State<PosBillingScreen>
     return _allProducts.where((p) => p.categoryId == catId).length;
   }
 
+  /// Grid tap / search result: add one, and say so if the stock limit refuses.
   void _addToCart(ProductModel product) {
-    if (product.hasVariants) {
-      _showVariantPicker(product);
-      return;
-    }
-    final exp = parseProductExpiry(product);
-    if (exp != null && exp.isExpired) {
-      _showExpiredWarningModal(product);
-      return;
-    }
-    _addProductDirectlyToCart(product);
+    _addProductInteractive(product).then((r) {
+      if (!mounted) return;
+      if (r.status == ScanAddStatus.added) {
+        // Subtle tactile mechanical "tick" feel on add to cart
+        HapticFeedback.selectionClick();
+      } else if (r.status == ScanAddStatus.blocked) {
+        HapticFeedback.heavyImpact();
+        InAppNotification.error(r.message, context: context);
+      }
+    });
   }
 
-  void _showExpiredWarningModal(ProductModel product) {
+  /// Every way an item enters the bill — grid tap, search result, scanner
+  /// gun, Rapid Scan camera — ends here, so the variant picker, the expired
+  /// warning and the stock limit apply identically. Awaitable, so the Rapid
+  /// Scan screen can hold the camera while a picker or warning is open.
+  Future<ScanAddResult> _addProductInteractive(ProductModel product, {double quantity = 1}) async {
+    var target = product;
+    if (target.hasVariants) {
+      final picked = await _pickVariant(target);
+      if (picked == null || !mounted) return const ScanAddResult(status: ScanAddStatus.cancelled);
+      target = picked;
+    }
+    final exp = parseProductExpiry(target);
+    if (exp != null && exp.isExpired) {
+      final addAnyway = await _confirmExpiredProduct(target);
+      if (!addAnyway || !mounted) return const ScanAddResult(status: ScanAddStatus.cancelled);
+    }
+    final error = _tryAddToCart(target, quantity: quantity);
+    if (error != null) {
+      return ScanAddResult(status: ScanAddStatus.blocked, message: error, product: target);
+    }
+    return ScanAddResult(
+      status: ScanAddStatus.added,
+      product: target,
+      quantityNow: _cart[target.id]?.quantity ?? quantity,
+      addedQuantity: quantity,
+    );
+  }
+
+  Future<bool> _confirmExpiredProduct(ProductModel product) async {
     HapticFeedback.heavyImpact();
-    showDialog(
+    final addAnyway = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
@@ -532,33 +593,29 @@ class _PosBillingScreenState extends State<PosBillingScreen>
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(ctx),
+            onPressed: () => Navigator.pop(ctx, false),
             child: const Text('Cancel', style: TextStyle(color: Color(0xFF64748B))),
           ),
           ElevatedButton(
-            onPressed: () {
-              Navigator.pop(ctx);
-              _addProductDirectlyToCart(product);
-            },
+            onPressed: () => Navigator.pop(ctx, true),
             style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFDC2626), foregroundColor: Colors.white),
             child: const Text('Add Anyway'),
           ),
         ],
       ),
     );
+    return addAnyway ?? false;
   }
 
-  void _showVariantPicker(ProductModel parent) async {
+  /// Opens the variant sheet and returns the chosen variant, or null.
+  Future<ProductModel?> _pickVariant(ProductModel parent) async {
     HapticFeedback.mediumImpact();
     final variants = await LocalDatabase.instance.getVariantsForProduct(parent.id);
-    if (!mounted) return;
+    if (!mounted) return null;
 
-    if (variants.isEmpty) {
-      _addProductDirectlyToCart(parent);
-      return;
-    }
+    if (variants.isEmpty) return parent;
 
-    showModalBottomSheet(
+    return showModalBottomSheet<ProductModel>(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.white,
@@ -631,10 +688,7 @@ class _PosBillingScreenState extends State<PosBillingScreen>
                       return InkWell(
                         onTap: isOutOfStock
                             ? null
-                            : () {
-                                Navigator.pop(ctx);
-                                _addProductDirectlyToCart(v);
-                              },
+                            : () => Navigator.pop(ctx, v),
                         borderRadius: BorderRadius.circular(12),
                         child: Container(
                           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
@@ -713,28 +767,51 @@ class _PosBillingScreenState extends State<PosBillingScreen>
     );
   }
 
-  void _addProductDirectlyToCart(ProductModel product) {
-    final currentQty = _cart[product.id]?.quantity.toInt() ?? 0;
-    final isUnlimited = product.isUnlimitedStock;
-
-    if (!isUnlimited && (product.stockQuantity <= 0 || currentQty >= product.stockQuantity)) {
-      HapticFeedback.heavyImpact();
-      InAppNotification.error(
-        '"${product.name}" is Out of Stock! (Available: ${product.stockQuantity.toInt()})',
-        context: context,
-      );
-      return;
+  /// The latest copy of [product] (stock changes after a sale or an edit).
+  ProductModel _latest(ProductModel product) {
+    for (final p in _allProducts) {
+      if (p.id == product.id) return p;
     }
+    return product;
+  }
 
-    // Subtle tactile mechanical "tick" feel on add to cart
-    HapticFeedback.selectionClick();
+  /// Adds [quantity] of [product]; returns why not, or null on success.
+  String? _tryAddToCart(ProductModel product, {double quantity = 1}) {
+    final next = (_cart[product.id]?.quantity ?? 0) + quantity;
+    final error = stockErrorFor(_latest(product), next);
+    if (error != null) return error;
     setState(() {
-      if (_cart.containsKey(product.id)) {
-        _cart[product.id]!.quantity += 1;
+      final existing = _cart[product.id];
+      if (existing != null) {
+        existing.quantity = next;
       } else {
-        _cart[product.id] = CartItemModel(product: product, quantity: 1);
+        _cart[product.id] = CartItemModel(product: product, quantity: quantity);
       }
     });
+    _cartChanged();
+    return null;
+  }
+
+  /// Sets a line's quantity from Rapid Scan (0 removes it), under the same
+  /// stock rule as adding. Returns why not, or null on success.
+  String? _setCartQuantity(String productId, double quantity) {
+    final item = _cart[productId];
+    if (item == null) return null;
+    if (quantity <= 0) {
+      setState(() => _cart.remove(productId));
+      _cartChanged();
+      return null;
+    }
+    final error = stockErrorFor(_latest(item.product), quantity);
+    if (error != null) return error;
+    setState(() => item.quantity = quantity);
+    _cartChanged();
+    return null;
+  }
+
+  void _restoreCartItem(CartItemModel item) {
+    setState(() => _cart[item.product.id] = item);
+    _cartChanged();
   }
 
   void _updateItemQuantity(CartItemModel item, int newQty) {
@@ -746,6 +823,7 @@ class _PosBillingScreenState extends State<PosBillingScreen>
         item.quantity = newQty.toDouble();
       }
     });
+    _cartChanged();
   }
 
   void _removeItem(CartItemModel item) {
@@ -753,6 +831,7 @@ class _PosBillingScreenState extends State<PosBillingScreen>
     setState(() {
       _cart.remove(item.product.id);
     });
+    _cartChanged();
   }
 
   void _clearCart() {
@@ -761,6 +840,7 @@ class _PosBillingScreenState extends State<PosBillingScreen>
       _cart.clear();
       currentTab.customer = null;
     });
+    _cartChanged();
   }
 
   void _holdBillAndNew() {
@@ -849,6 +929,7 @@ class _PosBillingScreenState extends State<PosBillingScreen>
             currentTab.customer = null;
           }
         });
+        _cartChanged();
         _loadData(); // refresh stock numbers
         HomeWidgetService.instance.updateTodayMetrics();
       },
@@ -857,54 +938,26 @@ class _PosBillingScreenState extends State<PosBillingScreen>
     );
   }
 
-  Future<void> _openCameraBarcodeScanner() async {
-    final barcode = await Navigator.push<String>(
+  /// Continuous camera billing: every scanned pack lands in the current
+  /// bill without reopening the camera (the old button scanned ONE code and
+  /// closed, so a 20-item basket meant 20 round trips).
+  Future<void> _openRapidScanner() async {
+    HapticFeedback.selectionClick();
+    final exit = await RapidScanBillingScreen.show(
       context,
-      MaterialPageRoute(builder: (context) => const BarcodeScannerView()),
+      bridge: RapidScanBridge(
+        billTitle: () => currentTab.name,
+        cartItems: () => _cart.values.toList(),
+        totalPaise: () => cartTotalPaise,
+        addBarcode: (code) => _addScannedBarcode(code),
+        setQuantity: _setCartQuantity,
+        restoreItem: _restoreCartItem,
+        cartChanges: _cartRevision,
+      ),
     );
-
-    if (barcode != null && barcode.isNotEmpty && mounted) {
-      final activeType = BusinessVerticals.activeBusinessTypeNotifier.value;
-      final matched = await LocalDatabase.instance.findProductByBarcode(barcode, businessType: activeType);
-      if (matched != null) {
-        _addToCart(matched);
-        if (mounted) {
-          InAppNotification.success(
-            'Scanned: ${matched.name}',
-            context: context,
-          );
-        }
-      } else {
-        // Fallback 1: Check Local Master Catalog (<2ms) with vertical filter
-        final masterMatch = await LocalDatabase.instance.findMasterProductByBarcode(
-          barcode,
-          businessType: activeType,
-        );
-        if (masterMatch != null && mounted) {
-          // Routed through _importAndAddToCart so the zero-price guard and
-          // the active-vertical tag apply here too, exactly as they do on
-          // the hardware-scanner path.
-          await _importAndAddToCart(masterMatch, sourceLabel: 'Master SKU Added');
-        } else {
-          // Fallback 2: Cloud Barcode Resolver (Open Food Facts & Indian Barcode DB)
-          final cloudMatch = await CloudBarcodeResolverService.instance.resolveBarcode(
-            barcode,
-            businessType: activeType,
-          );
-          if (cloudMatch != null && mounted) {
-            await _importAndAddToCart(cloudMatch, sourceLabel: 'Cloud SKU Added');
-          } else {
-            if (mounted) {
-              InAppNotification.show(
-                context: context,
-                message: 'No item found with barcode: $barcode',
-                type: NotificationType.warning,
-              );
-            }
-          }
-        }
-      }
-    }
+    if (!mounted) return;
+    setState(() {});
+    if (exit == RapidScanExit.checkout && _cart.isNotEmpty) _openCheckoutModal();
   }
 
   @override
@@ -1007,7 +1060,7 @@ class _PosBillingScreenState extends State<PosBillingScreen>
           ),
           const SizedBox(width: 8),
 
-          // Camera Barcode Button (or Dine-In / Parcel Toggle for Restaurants)
+          // Rapid Scan Barcode Button (or Dine-In / Parcel Toggle for Restaurants)
           if (BusinessVerticals.activeBusinessTypeNotifier.value == 'restaurant')
             InkWell(
               onTap: () {
@@ -1048,18 +1101,21 @@ class _PosBillingScreenState extends State<PosBillingScreen>
               ),
             )
           else
-            InkWell(
-              onTap: _openCameraBarcodeScanner,
-              borderRadius: BorderRadius.circular(12),
-              child: Container(
-                width: 48,
-                height: 48,
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: const Color(0xFFCBD5E1)),
+            Tooltip(
+              message: 'Rapid barcode scan',
+              child: InkWell(
+                onTap: _openRapidScanner,
+                borderRadius: BorderRadius.circular(12),
+                child: Container(
+                  width: 48,
+                  height: 48,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF0F172A),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: const Color(0xFF0F172A)),
+                  ),
+                  child: const Icon(Icons.barcode_reader, size: 22, color: Color(0xFFFBBF24)),
                 ),
-                child: const Icon(Icons.camera_alt_outlined, size: 22, color: Color(0xFF334155)),
               ),
             ),
           const SizedBox(width: 8),

@@ -2230,198 +2230,257 @@ class _KhataScreenState extends State<KhataScreen> with DataBusRefresh<KhataScre
     final addressCtrl = TextEditingController();
     final balanceCtrl = TextEditingController(text: '0.00');
 
-    showDialog(
+    showModalBottomSheet(
       context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
       builder: (ctx) {
-        return AlertDialog(
-          backgroundColor: Colors.white,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-          contentPadding: const EdgeInsets.fromLTRB(20, 20, 20, 16),
-          title: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Row(
+        final bottomInset = MediaQuery.of(ctx).viewInsets.bottom;
+        final navBarPadding = MediaQuery.paddingOf(ctx).bottom;
+
+        return Container(
+          constraints: BoxConstraints(
+            maxHeight: MediaQuery.of(ctx).size.height * 0.90,
+          ),
+          decoration: const BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+          ),
+          child: SafeArea(
+            top: false,
+            bottom: true,
+            child: Padding(
+              padding: EdgeInsets.fromLTRB(20, 14, 20, bottomInset + (navBarPadding > 0 ? navBarPadding + 10 : 18)),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Icon(Icons.person_add_alt_1_rounded, color: Color(0xFFD97706), size: 22),
-                  const SizedBox(width: 8),
+                  // Top Drag Handle
+                  Center(
+                    child: Container(
+                      width: 36,
+                      height: 4,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFCBD5E1),
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(7),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFFEF3C7),
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: const Icon(Icons.person_add_alt_1_rounded, color: Color(0xFFD97706), size: 20),
+                          ),
+                          const SizedBox(width: 10),
+                          Text(
+                            'Add New Customer to Khata',
+                            style: GoogleFonts.outfit(fontSize: 17, fontWeight: FontWeight.w800, color: const Color(0xFF0F172A)),
+                          ),
+                        ],
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.close_rounded, size: 20, color: Color(0xFF64748B)),
+                        onPressed: () => Navigator.pop(ctx),
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 4),
                   Text(
-                    'Add New Customer to Khata',
-                    style: GoogleFonts.outfit(fontSize: 17, fontWeight: FontWeight.w800, color: const Color(0xFF0F172A)),
+                    'Create a new customer account to track credit and payment transactions.',
+                    style: GoogleFonts.inter(fontSize: 11.5, color: const Color(0xFF64748B)),
+                  ),
+                  const SizedBox(height: 12),
+                  Expanded(
+                    child: SingleChildScrollView(
+                      physics: const BouncingScrollPhysics(),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          InkWell(
+                            onTap: () async {
+                              final contact = await ContactsService.instance.pickContact();
+                              if (contact != null) {
+                                if (contact['name']?.isNotEmpty == true) {
+                                  nameCtrl.text = contact['name']!;
+                                }
+                                if (contact['phone']?.isNotEmpty == true) {
+                                  phoneCtrl.text = contact['phone']!;
+                                }
+                              }
+                            },
+                            borderRadius: BorderRadius.circular(10),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFEFF6FF),
+                                borderRadius: BorderRadius.circular(10),
+                                border: Border.all(color: const Color(0xFFBFDBFE)),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  const Icon(Icons.contacts_rounded, size: 16, color: Color(0xFF2563EB)),
+                                  const SizedBox(width: 8),
+                                  Text(
+                                    'Import from Contacts',
+                                    style: GoogleFonts.plusJakartaSans(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w700,
+                                      color: const Color(0xFF2563EB),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 14),
+
+                          // Customer Name
+                          _buildModalTextField(
+                            label: 'Customer Name *',
+                            hint: 'e.g. Ramesh Kumar',
+                            controller: nameCtrl,
+                          ),
+                          const SizedBox(height: 12),
+
+                          // Phone Number
+                          _buildModalTextField(
+                            label: 'Phone Number (For WhatsApp Statement & Reminders) *',
+                            hint: '9876543210',
+                            controller: phoneCtrl,
+                            keyboardType: TextInputType.phone,
+                          ),
+                          const SizedBox(height: 12),
+
+                          // Address / Locality
+                          _buildModalTextField(
+                            label: 'Address / Locality (Optional)',
+                            hint: 'e.g. Shop 4, Main Bazaar',
+                            controller: addressCtrl,
+                          ),
+                          const SizedBox(height: 12),
+
+                          // Opening Balance
+                          _buildModalTextField(
+                            label: 'Opening Balance (Due Credit / Advance) (₹)',
+                            hint: '0.00',
+                            controller: balanceCtrl,
+                            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                            helper: 'Enter existing due balance if customer already owes money.',
+                          ),
+                          const SizedBox(height: 8),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton(
+                          onPressed: () => Navigator.pop(ctx),
+                          style: OutlinedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                            side: const BorderSide(color: Color(0xFFCBD5E1)),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          ),
+                          child: Text('Cancel', style: GoogleFonts.outfit(fontWeight: FontWeight.w600, color: const Color(0xFF64748B))),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        flex: 2,
+                        child: ElevatedButton(
+                          onPressed: () async {
+                            final name = nameCtrl.text.trim();
+                            final phone = phoneCtrl.text.trim();
+                            final address = addressCtrl.text.trim();
+                            final double openBalRupees = double.tryParse(balanceCtrl.text.trim()) ?? 0.0;
+                            final int openBalPaise = (openBalRupees * 100).round();
+
+                            if (name.isEmpty) {
+                              InAppNotification.error('Please enter customer full name.', context: context);
+                              return;
+                            }
+                            final phoneErr = AppValidators.validatePhone(phone);
+                            if (phoneErr != null) {
+                              InAppNotification.error(phoneErr, context: context);
+                              return;
+                            }
+                            final cleanPhone = AppValidators.cleanPhone(phone);
+
+                            final existingCust = await LocalDatabase.instance.findCustomerByPhone(cleanPhone);
+                            if (existingCust != null) {
+                              if (ctx.mounted) {
+                                InAppNotification.error('Customer with mobile $cleanPhone already exists (${existingCust.name})!', context: ctx);
+                              }
+                              return;
+                            }
+
+                            final newCustomer = CustomerModel(
+                              id: 'cust_${const Uuid().v4().substring(0, 8)}',
+                              businessId: FirestoreSyncService.instance.activeBusinessId,
+                              name: name,
+                              phone: cleanPhone,
+                              address: address.isNotEmpty ? address : null,
+                              currentBalancePaise: openBalPaise,
+                              creditLimitPaise: 500000,
+                              syncStatus: 'pending',
+                            );
+
+                            await LocalDatabase.instance.upsertCustomer(newCustomer);
+
+                            // If opening balance > 0, insert opening balance ledger record
+                            if (openBalPaise > 0) {
+                              final db = await LocalDatabase.instance.database;
+                              await db.insert('ledger_transactions', {
+                                'id': const Uuid().v4(),
+                                'business_id': newCustomer.businessId,
+                                'customer_id': newCustomer.id,
+                                'type': 'credit',
+                                'amount_paise': openBalPaise,
+                                'balance_after_paise': openBalPaise,
+                                'description': 'Initial opening balance',
+                                'reference_id': null,
+                                'created_at': DateTime.now().toIso8601String(),
+                                'sync_status': 'pending',
+                              });
+                            }
+
+                            if (!ctx.mounted) return;
+                            Navigator.pop(ctx);
+                            if (!mounted) return;
+                            _loadData();
+
+                            InAppNotification.success('Khata account opened for $name!', context: context);
+                          },
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFFF59E0B),
+                            foregroundColor: const Color(0xFF0F172A),
+                            elevation: 0,
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          ),
+                          child: Text('Save Customer', style: GoogleFonts.outfit(fontWeight: FontWeight.w800)),
+                        ),
+                      ),
+                    ],
                   ),
                 ],
               ),
-              IconButton(
-                icon: const Icon(Icons.close_rounded, size: 20, color: Color(0xFF64748B)),
-                onPressed: () => Navigator.pop(ctx),
-                padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(),
-              ),
-            ],
-          ),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Create a new customer account to track credit and payment transactions.',
-                  style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF64748B)),
-                ),
-                const SizedBox(height: 14),
-
-                InkWell(
-                  onTap: () async {
-                    final contact = await ContactsService.instance.pickContact();
-                    if (contact != null) {
-                      if (contact['name']?.isNotEmpty == true) {
-                        nameCtrl.text = contact['name']!;
-                      }
-                      if (contact['phone']?.isNotEmpty == true) {
-                        phoneCtrl.text = contact['phone']!;
-                      }
-                    }
-                  },
-                  borderRadius: BorderRadius.circular(10),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFEFF6FF),
-                      borderRadius: BorderRadius.circular(10),
-                      border: Border.all(color: const Color(0xFFBFDBFE)),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const Icon(Icons.contacts_rounded, size: 16, color: Color(0xFF2563EB)),
-                        const SizedBox(width: 8),
-                        Text(
-                          'Import from Contacts',
-                          style: GoogleFonts.plusJakartaSans(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w700,
-                            color: const Color(0xFF2563EB),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 14),
-
-                // Customer Name
-                _buildModalTextField(
-                  label: 'Customer Name *',
-                  hint: 'e.g. Ramesh Kumar',
-                  controller: nameCtrl,
-                ),
-                const SizedBox(height: 12),
-
-                // Phone Number
-                _buildModalTextField(
-                  label: 'Phone Number (For WhatsApp Statement & Reminders) *',
-                  hint: '9876543210',
-                  controller: phoneCtrl,
-                  keyboardType: TextInputType.phone,
-                ),
-                const SizedBox(height: 12),
-
-                // Address / Locality
-                _buildModalTextField(
-                  label: 'Address / Locality (Optional)',
-                  hint: 'e.g. Shop 4, Main Bazaar',
-                  controller: addressCtrl,
-                ),
-                const SizedBox(height: 12),
-
-                // Opening Balance
-                _buildModalTextField(
-                  label: 'Opening Balance (Due Credit / Advance) (₹)',
-                  hint: '0.00',
-                  controller: balanceCtrl,
-                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                  helper: 'Enter existing due balance if customer already owes money.',
-                ),
-              ],
             ),
           ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: Text('Cancel', style: GoogleFonts.outfit(fontWeight: FontWeight.w600, color: const Color(0xFF64748B))),
-            ),
-            ElevatedButton(
-              onPressed: () async {
-                final name = nameCtrl.text.trim();
-                final phone = phoneCtrl.text.trim();
-                final address = addressCtrl.text.trim();
-                final double openBalRupees = double.tryParse(balanceCtrl.text.trim()) ?? 0.0;
-                final int openBalPaise = (openBalRupees * 100).round();
-
-                if (name.isEmpty) {
-                  InAppNotification.error('Please enter customer full name.', context: context);
-                  return;
-                }
-                final phoneErr = AppValidators.validatePhone(phone);
-                if (phoneErr != null) {
-                  InAppNotification.error(phoneErr, context: context);
-                  return;
-                }
-                final cleanPhone = AppValidators.cleanPhone(phone);
-
-                final existingCust = await LocalDatabase.instance.findCustomerByPhone(cleanPhone);
-                if (existingCust != null) {
-                  if (ctx.mounted) {
-                    InAppNotification.error('Customer with mobile $cleanPhone already exists (${existingCust.name})!', context: ctx);
-                  }
-                  return;
-                }
-
-                final newCustomer = CustomerModel(
-                  id: 'cust_${const Uuid().v4().substring(0, 8)}',
-                  businessId: FirestoreSyncService.instance.activeBusinessId,
-                  name: name,
-                  phone: cleanPhone,
-                  address: address.isNotEmpty ? address : null,
-                  currentBalancePaise: openBalPaise,
-                  creditLimitPaise: 500000,
-                  syncStatus: 'pending',
-                );
-
-                await LocalDatabase.instance.upsertCustomer(newCustomer);
-
-                // If opening balance > 0, insert opening balance ledger record
-                if (openBalPaise > 0) {
-                  final db = await LocalDatabase.instance.database;
-                  await db.insert('ledger_transactions', {
-                    'id': const Uuid().v4(),
-                    'business_id': newCustomer.businessId,
-                    'customer_id': newCustomer.id,
-                    'type': 'credit',
-                    'amount_paise': openBalPaise,
-                    'balance_after_paise': openBalPaise,
-                    'description': 'Initial opening balance',
-                    'reference_id': null,
-                    'created_at': DateTime.now().toIso8601String(),
-                    'sync_status': 'pending',
-                  });
-                }
-
-                if (!ctx.mounted) return;
-                Navigator.pop(ctx);
-                if (!mounted) return;
-                _loadData();
-
-                InAppNotification.success('Khata account opened for $name!', context: context);
-              },
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFFF59E0B),
-                foregroundColor: const Color(0xFF0F172A),
-                elevation: 0,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-              ),
-              child: Text('Save Customer', style: GoogleFonts.outfit(fontWeight: FontWeight.w800)),
-            ),
-          ],
         );
       },
     );

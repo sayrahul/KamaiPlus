@@ -45,6 +45,120 @@ hits (the screen's data-loading call), not just the data shape. See
 drives `LocalDatabase` through a real (in-memory FFI) SQLite database and asserts on what
 `getAllProducts`/`getAllCategories` actually return.
 
+## 2026-09-19 — 3-Button Navigation Bar Inset Safety & Modal Bottom Sheet Standardization
+
+**Symptom / User Request:** "kabhi kabhi koi koi devices me jisme nevigation panel hota hai, Menu Home, Back us phone me koi koi modal screen nichese cut ho rahe hai. jaise ki transection main inoivce par click hone ke baad jo nichese modal ata hai wo, cut ho raha hai. Ai Inward ok hai. Record New Inward Bill crop hoo raha hai nichese. wholeser sale inward & Restock wala bhi cut ho raha hai. Barcode Studio wala bhi nichese ka puro button crop ho raha hai. Add new Customer wala modal bhi nichese ana chahiye, jaise ye ate hai"
+
+**Root Causes & Fixes:**
+1. **Transaction Invoice Detail Modal (`sale_detail_modal.dart`):**
+   - Modal was rendered in a non-scrollable `Column` with only keyboard insets (`viewInsets.bottom`), omitting `MediaQuery.paddingOf(context).bottom` (system 3-button bar). On 720p/1080p devices with navigation panels, bottom action buttons ("Return Items (टुकड़ों में वापसी)" and "Full Void") were clipped behind the system buttons.
+   - Fix: Added `constraints: BoxConstraints(maxHeight: 0.90 * screenHeight)`, wrapped with `SafeArea(top: false, bottom: true)`, and enclosed content in a `SingleChildScrollView(physics: BouncingScrollPhysics())` with `bottomInset + (navBarPadding > 0 ? navBarPadding + 12 : 24)`.
+2. **Record New Inward Bill & Purchases Orders (`purchases_screen.dart`):**
+   - `_showCreatePurchaseSheet()` and sticky action bars had fixed bottom padding without `SafeArea` or navigation insets, cropping the "Save & Update Wholesale Inward" button.
+   - Fix: Added `SafeArea(top: false, bottom: true)` and dynamic padding incorporating `MediaQuery.paddingOf(context).bottom + 10`.
+3. **Wholesale Restock Orders (`low_stock_reorder_modal.dart`):**
+   - Fixed Bottom Summary & Action Bar lacked navigation bar padding, pushing the WhatsApp dispatch button under the system navigation panel.
+   - Fix: Added `SafeArea(top: false, bottom: true)` and dynamic bottom insets.
+4. **Barcode Studio Screen (`barcode_studio_screen.dart`):**
+   - Bottom print button was attached using `Scaffold(bottomSheet: ...)` which does not push screen content or adapt to system navigation bars automatically.
+   - Fix: Switched to `Scaffold(bottomNavigationBar: ...)` with `SafeArea(top: false, bottom: true)`, elevating the button properly above the navigation bar.
+5. **Add New Customer Modal (`khata_screen.dart`, `customers_screen.dart`, `pos_checkout_modal.dart`):**
+   - In `khata_screen.dart` and `pos_checkout_modal.dart`, "Add Customer" opened a desktop-like center `AlertDialog` (`showDialog`) instead of a bottom sheet. In `customers_screen.dart`, the modal was a non-scrollable column with no `SafeArea`.
+   - Fix: Standardized to `showModalBottomSheet(isScrollControlled: true)` with top drag handle, scrollable inputs (`SingleChildScrollView`), contact import buttons, validation, and full `SafeArea` inset handling.
+
+**Verified:**
+- `analyze_files` across all modified files (`sale_detail_modal.dart`, `purchases_screen.dart`, `low_stock_reorder_modal.dart`, `barcode_studio_screen.dart`, `khata_screen.dart`, `customers_screen.dart`, `pos_checkout_modal.dart`): **0 errors**.
+
+## 2026-09-19 — Menu Screen: Removed Help & Support Card
+
+**Symptom / User Request:** "menu page se sabse last wala card Help & Support remove kardo"
+- Removed the last card ("Help & Support") from the cards list in `lib/views/menu/menu_screen.dart`.
+- Cleaned up unused private helper methods `_showSupportSheet` and `_buildSupportOption` to maintain 0 linter warnings.
+- Verified: Dart analysis server and `flutter analyze` reported 0 issues in the main app.
+
+## 2026-09-19 — PDF Invoice: Redesign, Devanagari & Indian Languages Support, Right-Aligned Numbers
+
+**Symptom / User Request:** Improve and modernize the PDF invoice design with full Devanagari and Indian regional languages support.
+
+**Root causes and fixes:**
+1. **Devanagari & Complex Script Shaping:**
+   - In `MainActivity.java`, text paints were previously using `setFakeBoldText(true)` with default unconfigured fonts. On Android's Skia engine, `setFakeBoldText` shears glyphs horizontally, which severely damaged complex Devanagari ligatures (संयुक्ताक्षर) and matras, sometimes falling back to tofu boxes on OEM devices.
+   - Replaced fake bold with proper `Typeface.create("sans-serif", Typeface.BOLD)` / `mediumTypeface` / `regularTypeface` with `subpixelText` and `linearText` enabled. Android's native FontMgr fallback chain (`NotoSansDevanagari`, `NotoSansTamil`, `NotoSansBengali`, etc.) now handles all 9 Indian languages crisply.
+   - Removed naive substring slicing (`name.substring(0, 24)`), which was severing multi-byte UTF-16 characters and grapheme clusters mid-consonant. Replaced with `safeEllipsize` using Android's `TextUtils.ellipsize`.
+   - Prevented non-ASCII string damage from `storeName.toUpperCase()`.
+2. **Financial Right-Alignment:**
+   - Numbers (Quantities, Rates, Taxable values, Taxes, Totals) were previously drawn at fixed left X coordinates. Implemented `drawRightAlignedText()` so numbers and column headers align strictly to the right boundary, aligning decimals vertically like standard retail accounting software.
+3. **Modern Visual Fintech Design:**
+   - Added a clean top theme accent bar (3.5pt).
+   - Replaced heavy solid ink-heavy header with a modern structured header: Logo frame, crisp store typography, and a styled document title pill badge.
+   - Added modern Customer Billed To card with theme accent pip, customer details, and a dynamic payment status badge (`● PAID (CASH/UPI)` or `● UNPAID (CREDIT)`).
+   - Added subtle zebra striping (`#FFFFFF` and `#F8FAFC`) with hairline row dividers (`#F1F5F9`).
+   - Upgraded GST tax slab breakup table, Amount in Words card, Dynamic UPI QR box, and Authorised Signatory section.
+
+**Verification:**
+- `flutter analyze` passed with 0 compile errors.
+- Unit tests (`trial_and_settlement_cash_test.dart`) passed (+2).
+- Fresh release APK compiled and streamed to physical device via ADB (`Success`).
+
+## 2026-09-19 — POS Rapid Scan: continuous camera billing with quick quantity
+
+**Asked for:** products already have a rapid barcode inward, so billing should too. Replace
+the camera icon with a barcode icon. Items should go into the cart as the customer's packs
+are scanned, one after another, with the quantity adjustable right there.
+
+**Measured first:** the POS camera button (`_openCameraBarcodeScanner`) opened
+`BarcodeScannerView`, which scanned **one** code and closed. A 20-item basket meant 20
+round trips. A USB/Bluetooth scanner gun already worked continuously. The barcode lookup
+was copied three times (gun, camera, search) and the copies had drifted.
+
+**Built:**
+- **`rapid_scan_billing_screen.dart`:** camera on top, the current bill's live item list
+  below.
+  - Each scan beeps and flashes; only codes inside the viewfinder are read (`scanWindow`).
+  - The "last scanned" card has −/+ and quick ×1/×2/×3/×5/×10 chips (in a `Wrap`, so they
+    all show at 360dp), plus Custom, which uses the unit-aware chips from
+    `quantity_config.dart`.
+  - Undo for the last scan, swipe to remove (with UNDO), and a "Type code" field for
+    damaged labels.
+  - Torch, close-up zoom, pause, beep on/off (saved), and a clear message when camera
+    permission is denied.
+  - Done / Checkout; Checkout opens the checkout modal.
+- **`scan_rules.dart`:**
+  - `ScanDebouncer`: a pack counts again only after it has left the view for 900 ms. It
+    tracks each code separately, so two packs in view can't alternate into the bill.
+  - `normalizeScannedCode` ignores UPI/URL/WiFi QRs. The counter's own payment QR would
+    otherwise be looked up every frame.
+  - `stockErrorFor` is the shared stock limit.
+- **`pos_billing_screen.dart`:** one awaitable funnel.
+  - `_addScannedBarcode` looks up the store catalogue (memory, then SQLite), then the
+    master catalogue, then the cloud resolver.
+  - `_addProductInteractive` applies the variant picker, the expired warning and the stock
+    limit.
+  - The grid, search, scanner gun and Rapid Scan all use it. The variant picker and expired
+    dialog now return their answer, so the camera waits on them.
+  - `_cartRevision` keeps the Rapid Scan list live when the scanner gun adds while it is
+    open.
+  - The button is now `Icons.barcode_reader`.
+- **`ScanFeedbackService`** plus a `beep` method on the soundbox channel
+  (`MainActivity.playScanBeep`, `ToneGenerator`), with a system-click fallback.
+
+**Also fixed:** `BarcodeScannerView`'s zoom chips passed 1.0 / 2.0 to `setZoomScale`, which
+in mobile_scanner 7 is **linear 0.0–1.0**. So "1x" opened at **maximum** zoom. It is now
+0.0 / 0.35 ("Standard" / "Close-up").
+
+**Verified:**
+- `test/rapid_scan_rules_test.dart` (9 tests).
+- `test/rapid_scan_billing_screen_test.dart` (6 widget tests at 360dp). They swap
+  `MobileScannerPlatform` for `test/helpers/fake_scanner_platform.dart` and push barcodes
+  into the real screen. They caught 3 overflows and the off-screen chips before shipping.
+- `test/pos_barcode_scan_test.dart` (5 tests). They run the real `PosBillingScreen` on FFI
+  SQLite: scanner-gun keystrokes, the stock limit, an unknown code, and barcode button →
+  Rapid Scan → ×3 → Done → the POS cart shows 3 items and Rs 42.
+
+**Not done:** weighing-scale barcodes with the price or weight embedded (EAN-13 prefix 2x)
+are not decoded. Unknown barcodes offer no inline "create product"; use Rapid Inward on the
+Products tab.
+
 ## 2026-09-19 — Refer & Earn made real: server-side grants for both merchants
 
 **Asked for:** the merchant who **sends** an invite gets more Pro days (+30, the number the
@@ -3898,6 +4012,31 @@ rollout. Recommended: staged rollout at 10–20% first.
 
 **Verification:**
 - `flutter analyze --no-pub lib/views/common/pro_upgrade_modal.dart`: **No issues found! (0 errors, 0 warnings, 68.1s)**.
-- All assets registered and verified.
+---
+
+## 2026-09-19 — Primary Logo Replacement Across Entire Project
+
+**User Request:**
+"use this logo everyehere as our primary logo, compulsry, relace this with exisiting logo" (Provided high-res artwork with brand yellow `#FEC703`, deep charcoal "क", and red "+").
+
+**Assets Replaced & Generated:**
+1. **Core Flutter App Assets:**
+   - `assets/images/app_icon.png` (512x512)
+   - `assets/images/logo.png` (512x512)
+   - Screen usages automatically refreshed: Splash Screen (`splash_screen.dart`), Login (`login_screen.dart`), Store Profile Setup (`signup_store_screen.dart`), and Menu (`menu_screen.dart`).
+2. **Google Play Store Asset:**
+   - `play_store_assets/hi_res_icon_512.png` (512x512)
+3. **Android Native Launcher Icons (`android/app/src/main/res/`):**
+   - Transparent adaptive icon foregrounds (`ic_launcher_foreground.png`) with safe area centering across `mdpi` (108px), `hdpi` (162px), `xhdpi` (216px), `xxhdpi` (324px), and `xxxhdpi` (432px).
+   - Legacy square icons (`ic_launcher.png`) across `mdpi` (48px), `hdpi` (72px), `xhdpi` (96px), `xxhdpi` (144px), and `xxxhdpi` (192px).
+   - Circular icons (`ic_launcher_round.png`) with circular mask and safety padding across `mdpi` (48px), `hdpi` (72px), `xhdpi` (96px), `xxhdpi` (144px), and `xxxhdpi` (192px).
+4. **Web & Admin Console Platforms:**
+   - `website/assets/logo.png` & `website/assets/favicon.png`
+   - `admin_console/web/icons/` (Icon-192, Icon-512, Icon-maskable-192, Icon-maskable-512, favicon.png)
+   - `.widget_preview/web/icons/` (Icon-192, Icon-512, Icon-maskable-192, Icon-maskable-512, favicon.png)
+
+**Verification:**
+- Verified all PNG files via PIL: dimensions, color modes (RGBA), and zero file corruption.
+- `flutter analyze`: **0 errors**.
 
 

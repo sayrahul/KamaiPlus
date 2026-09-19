@@ -36,6 +36,10 @@ import android.provider.ContactsContract;
 import android.provider.MediaStore;
 import android.database.Cursor;
 import android.speech.tts.TextToSpeech;
+import android.media.AudioManager;
+import android.media.ToneGenerator;
+import android.text.TextUtils;
+import android.text.TextPaint;
 import androidx.activity.EdgeToEdge;
 import androidx.annotation.NonNull;
 import androidx.core.app.NotificationCompat;
@@ -74,6 +78,8 @@ public class MainActivity extends FlutterFragmentActivity implements TextToSpeec
 
     private TextToSpeech tts;
     private boolean isTtsReady = false;
+    // Counter-scanner beep for rapid barcode billing (scan_feedback_service.dart).
+    private ToneGenerator scanTone;
     private String pendingSpeakText = null;
     private String pendingSpeakLang = null;
     private MethodChannel.Result pendingContactResult;
@@ -148,6 +154,22 @@ public class MainActivity extends FlutterFragmentActivity implements TextToSpeec
         } catch (Throwable t) {
             return null;
         }
+    }
+
+    private static String safeEllipsize(String text, Paint paint, float maxPixelWidth) {
+        if (text == null || text.isEmpty()) return "";
+        try {
+            CharSequence ellipsized = TextUtils.ellipsize(text, new TextPaint(paint), maxPixelWidth, TextUtils.TruncateAt.END);
+            return ellipsized.toString();
+        } catch (Throwable ignored) {
+            return text;
+        }
+    }
+
+    private static void drawRightAlignedText(Canvas canvas, String text, float rightX, float y, Paint paint) {
+        if (text == null || text.isEmpty()) return;
+        float width = paint.measureText(text);
+        canvas.drawText(text, rightX - width, y, paint);
     }
 
     @Override
@@ -442,6 +464,8 @@ public class MainActivity extends FlutterFragmentActivity implements TextToSpeec
                             } else {
                                 result.success(false);
                             }
+                        } else if ("beep".equals(call.method)) {
+                            result.success(playScanBeep("error".equals(call.argument("kind"))));
                         } else {
                             result.notImplemented();
                         }
@@ -637,42 +661,101 @@ public class MainActivity extends FlutterFragmentActivity implements TextToSpeec
                                     themeColor = Color.parseColor(themeColorHex);
                                 } catch (Exception ignored) {}
 
-                                // Paints
-                                Paint darkPaint = new Paint();
-                                darkPaint.setColor(Color.rgb(15, 23, 42)); // Slate 900
-                                darkPaint.setTextSize(14);
-                                darkPaint.setFakeBoldText(true);
-                                darkPaint.setAntiAlias(true);
+                                // Native PDF Fonts Hierarchy & Configuration (Clean Unicode & Indic Shaping)
+                                Typeface regularTypeface = Typeface.create("sans-serif", Typeface.NORMAL);
+                                Typeface mediumTypeface = Typeface.create("sans-serif-medium", Typeface.NORMAL);
+                                Typeface boldTypeface = Typeface.create("sans-serif", Typeface.BOLD);
 
-                                Paint subPaint = new Paint();
-                                subPaint.setColor(Color.rgb(100, 116, 139)); // Slate 500
-                                subPaint.setTextSize(8.5f);
-                                subPaint.setAntiAlias(true);
+                                Paint storeNamePaint = new Paint();
+                                storeNamePaint.setColor(Color.rgb(15, 23, 42)); // Slate 900
+                                storeNamePaint.setTextSize(14.5f);
+                                storeNamePaint.setTypeface(boldTypeface);
+                                storeNamePaint.setAntiAlias(true);
+                                storeNamePaint.setSubpixelText(true);
+                                storeNamePaint.setLinearText(true);
+
+                                Paint taglinePaint = new Paint();
+                                taglinePaint.setColor(Color.rgb(100, 116, 139)); // Slate 500
+                                taglinePaint.setTextSize(8f);
+                                taglinePaint.setTypeface(mediumTypeface);
+                                taglinePaint.setAntiAlias(true);
+                                taglinePaint.setSubpixelText(true);
+                                taglinePaint.setLinearText(true);
+
+                                Paint storeMetaPaint = new Paint();
+                                storeMetaPaint.setColor(Color.rgb(71, 85, 105)); // Slate 600
+                                storeMetaPaint.setTextSize(8f);
+                                storeMetaPaint.setTypeface(regularTypeface);
+                                storeMetaPaint.setAntiAlias(true);
+                                storeMetaPaint.setSubpixelText(true);
+                                storeMetaPaint.setLinearText(true);
+
+                                Paint docTitlePaint = new Paint();
+                                docTitlePaint.setColor(themeColor);
+                                docTitlePaint.setTextSize(9f);
+                                docTitlePaint.setTypeface(boldTypeface);
+                                docTitlePaint.setAntiAlias(true);
+                                docTitlePaint.setSubpixelText(true);
+                                docTitlePaint.setLinearText(true);
+
+                                Paint docMetaBoldPaint = new Paint();
+                                docMetaBoldPaint.setColor(Color.rgb(15, 23, 42));
+                                docMetaBoldPaint.setTextSize(9.5f);
+                                docMetaBoldPaint.setTypeface(boldTypeface);
+                                docMetaBoldPaint.setAntiAlias(true);
+                                docMetaBoldPaint.setSubpixelText(true);
+                                docMetaBoldPaint.setLinearText(true);
+
+                                Paint docMetaSubPaint = new Paint();
+                                docMetaSubPaint.setColor(Color.rgb(100, 116, 139));
+                                docMetaSubPaint.setTextSize(8f);
+                                docMetaSubPaint.setTypeface(regularTypeface);
+                                docMetaSubPaint.setAntiAlias(true);
+                                docMetaSubPaint.setSubpixelText(true);
+                                docMetaSubPaint.setLinearText(true);
 
                                 Paint bodyPaint = new Paint();
-                                bodyPaint.setColor(Color.rgb(30, 41, 59)); // Slate 800
+                                bodyPaint.setColor(Color.rgb(51, 65, 85)); // Slate 700
                                 bodyPaint.setTextSize(8.5f);
+                                bodyPaint.setTypeface(regularTypeface);
                                 bodyPaint.setAntiAlias(true);
+                                bodyPaint.setSubpixelText(true);
+                                bodyPaint.setLinearText(true);
 
                                 Paint boldTextPaint = new Paint();
                                 boldTextPaint.setColor(Color.rgb(15, 23, 42));
                                 boldTextPaint.setTextSize(8.5f);
-                                boldTextPaint.setTypeface(Typeface.create(Typeface.DEFAULT, Typeface.BOLD));
+                                boldTextPaint.setTypeface(boldTypeface);
                                 boldTextPaint.setAntiAlias(true);
+                                boldTextPaint.setSubpixelText(true);
+                                boldTextPaint.setLinearText(true);
 
                                 Paint itemNamePaint = new Paint();
                                 itemNamePaint.setColor(Color.rgb(15, 23, 42));
                                 itemNamePaint.setTextSize(8.5f);
-                                itemNamePaint.setTypeface(Typeface.create(Typeface.DEFAULT, Typeface.BOLD));
+                                itemNamePaint.setTypeface(mediumTypeface);
                                 itemNamePaint.setAntiAlias(true);
+                                itemNamePaint.setSubpixelText(true);
+                                itemNamePaint.setLinearText(true);
+
+                                Paint subPaint = new Paint();
+                                subPaint.setColor(Color.rgb(100, 116, 139)); // Slate 500
+                                subPaint.setTextSize(8f);
+                                subPaint.setTypeface(regularTypeface);
+                                subPaint.setAntiAlias(true);
+                                subPaint.setSubpixelText(true);
+                                subPaint.setLinearText(true);
 
                                 Paint linePaint = new Paint();
                                 linePaint.setColor(Color.rgb(226, 232, 240)); // Slate 200
-                                linePaint.setStrokeWidth(0.8f);
+                                linePaint.setStrokeWidth(0.75f);
 
                                 Paint rowLinePaint = new Paint();
                                 rowLinePaint.setColor(Color.rgb(241, 245, 249)); // Slate 100
                                 rowLinePaint.setStrokeWidth(0.6f);
+
+                                Paint rowAltBgPaint = new Paint();
+                                rowAltBgPaint.setColor(Color.rgb(248, 250, 252));
 
                                 Paint thBgPaint = new Paint();
                                 thBgPaint.setColor(themeColor);
@@ -680,11 +763,52 @@ public class MainActivity extends FlutterFragmentActivity implements TextToSpeec
                                 Paint thTextPaint = new Paint();
                                 thTextPaint.setColor(Color.WHITE);
                                 thTextPaint.setTextSize(8f);
-                                thTextPaint.setFakeBoldText(true);
+                                thTextPaint.setTypeface(boldTypeface);
                                 thTextPaint.setAntiAlias(true);
+                                thTextPaint.setSubpixelText(true);
+                                thTextPaint.setLinearText(true);
 
-                                Paint badgeBg = new Paint();
-                                badgeBg.setColor(Color.rgb(248, 250, 252));
+                                Paint cardBgPaint = new Paint();
+                                cardBgPaint.setColor(Color.rgb(248, 250, 252));
+
+                                Paint cardBorderPaint = new Paint();
+                                cardBorderPaint.setColor(Color.rgb(226, 232, 240));
+                                cardBorderPaint.setStyle(Paint.Style.STROKE);
+                                cardBorderPaint.setStrokeWidth(0.75f);
+
+                                Paint statusPaidBgPaint = new Paint();
+                                statusPaidBgPaint.setColor(Color.rgb(236, 253, 245));
+
+                                Paint statusPaidBorderPaint = new Paint();
+                                statusPaidBorderPaint.setColor(Color.rgb(167, 243, 208));
+                                statusPaidBorderPaint.setStyle(Paint.Style.STROKE);
+                                statusPaidBorderPaint.setStrokeWidth(0.7f);
+
+                                Paint statusPaidTextPaint = new Paint();
+                                statusPaidTextPaint.setColor(Color.rgb(5, 150, 105));
+                                statusPaidTextPaint.setTextSize(7.5f);
+                                statusPaidTextPaint.setTypeface(boldTypeface);
+                                statusPaidTextPaint.setAntiAlias(true);
+
+                                Paint statusUnpaidBgPaint = new Paint();
+                                statusUnpaidBgPaint.setColor(Color.rgb(254, 243, 199));
+
+                                Paint statusUnpaidBorderPaint = new Paint();
+                                statusUnpaidBorderPaint.setColor(Color.rgb(253, 230, 138));
+                                statusUnpaidBorderPaint.setStyle(Paint.Style.STROKE);
+                                statusUnpaidBorderPaint.setStrokeWidth(0.7f);
+
+                                Paint statusUnpaidTextPaint = new Paint();
+                                statusUnpaidTextPaint.setColor(Color.rgb(180, 83, 9));
+                                statusUnpaidTextPaint.setTextSize(7.5f);
+                                statusUnpaidTextPaint.setTypeface(boldTypeface);
+                                statusUnpaidTextPaint.setAntiAlias(true);
+
+                                Paint discountTextPaint = new Paint();
+                                discountTextPaint.setColor(Color.rgb(220, 38, 38));
+                                discountTextPaint.setTextSize(8.5f);
+                                discountTextPaint.setTypeface(mediumTypeface);
+                                discountTextPaint.setAntiAlias(true);
 
                                 Paint grandTotalBg = new Paint();
                                 grandTotalBg.setColor(themeColor);
@@ -736,85 +860,84 @@ public class MainActivity extends FlutterFragmentActivity implements TextToSpeec
                                 PdfDocument document = new PdfDocument();
                                 int globalSNo = 1;
 
+                                float leftX = 36f;
+                                float rightX = 559f;
+
                                 for (int pageIdx = 1; pageIdx <= totalPages; pageIdx++) {
                                     PdfDocument.PageInfo pageInfo = new PdfDocument.PageInfo.Builder(595, 842, pageIdx).create();
                                     PdfDocument.Page page = document.startPage(pageInfo);
                                     Canvas canvas = page.getCanvas();
 
+                                    // Top Accent Bar
+                                    RectF topAccent = new RectF(leftX, 24, rightX, 27.5f);
+                                    canvas.drawRoundRect(topAccent, 1.5f, 1.5f, thBgPaint);
+
                                     float currentY;
 
                                     if (pageIdx == 1) {
                                         // =========================================================================
-                                        // PAGE 1 HEADER (STATUTORY GST STORE BANNER)
+                                        // PAGE 1 HEADER (MODERN RETAIL STORE & DOCUMENT IDENTIFIER)
                                         // =========================================================================
-                                        RectF headerBanner = new RectF(36, 36, 559, 104);
-                                        canvas.drawRoundRect(headerBanner, 8, 8, thBgPaint);
-
-                                        float textLeft = 48;
+                                        float headerTop = 36f;
+                                        float textLeft = leftX;
                                         if (logoBmp != null) {
-                                            RectF logoRect = new RectF(46, 44, 86, 84);
+                                            float logoSize = 44f;
+                                            RectF logoCard = new RectF(leftX, headerTop, leftX + logoSize, headerTop + logoSize);
+                                            canvas.drawRoundRect(logoCard, 6, 6, cardBgPaint);
+                                            canvas.drawRoundRect(logoCard, 6, 6, cardBorderPaint);
+                                            RectF logoInner = new RectF(leftX + 2, headerTop + 2, leftX + logoSize - 2, headerTop + logoSize - 2);
                                             Paint bmpPaint = new Paint(Paint.FILTER_BITMAP_FLAG);
-                                            canvas.drawBitmap(logoBmp, null, logoRect, bmpPaint);
-                                            textLeft = 96;
+                                            canvas.drawBitmap(logoBmp, null, logoInner, bmpPaint);
+                                            textLeft = leftX + logoSize + 10;
                                         }
 
-                                        Paint whiteStoreName = new Paint();
-                                        whiteStoreName.setColor(Color.WHITE);
-                                        whiteStoreName.setTextSize(13.5f);
-                                        whiteStoreName.setFakeBoldText(true);
-                                        whiteStoreName.setAntiAlias(true);
-
-                                        Paint whiteSubPaint = new Paint();
-                                        whiteSubPaint.setColor(Color.argb(230, 255, 255, 255));
-                                        whiteSubPaint.setTextSize(8f);
-                                        whiteSubPaint.setAntiAlias(true);
-
-                                        canvas.drawText(storeName.toUpperCase(), textLeft, 54, whiteStoreName);
-                                        float storeSubY = 67;
+                                        canvas.drawText(safeEllipsize(storeName, storeNamePaint, 270), textLeft, headerTop + 13, storeNamePaint);
+                                        float storeMetaY = headerTop + 25;
                                         if (storeTagline != null && !storeTagline.trim().isEmpty()) {
-                                            String tag = storeTagline.length() > 46 ? storeTagline.substring(0, 46) + "..." : storeTagline;
-                                            Paint taglinePaint = new Paint(whiteSubPaint);
-                                            taglinePaint.setTextSize(7.5f);
-                                            canvas.drawText(tag, textLeft, storeSubY, taglinePaint);
-                                            storeSubY += 10;
+                                            canvas.drawText(safeEllipsize(storeTagline, taglinePaint, 250), textLeft, storeMetaY, taglinePaint);
+                                            storeMetaY += 10.5f;
                                         }
                                         if (storeAddress != null && !storeAddress.trim().isEmpty()) {
-                                            String addr = storeAddress.length() > 42 ? storeAddress.substring(0, 42) + "..." : storeAddress;
-                                            canvas.drawText(addr, textLeft, storeSubY, whiteSubPaint);
-                                            storeSubY += 11;
+                                            canvas.drawText(safeEllipsize(storeAddress, storeMetaPaint, 250), textLeft, storeMetaY, storeMetaPaint);
+                                            storeMetaY += 10.5f;
                                         }
                                         String contactInfo = "";
                                         if (storePhone != null && !storePhone.trim().isEmpty()) contactInfo += "Ph: " + storePhone + "   ";
                                         if (gstin != null && !gstin.trim().isEmpty()) contactInfo += "GSTIN: " + gstin;
                                         if (storeState != null && !storeState.trim().isEmpty()) contactInfo += " (" + storeState + ")";
                                         if (!contactInfo.isEmpty()) {
-                                            canvas.drawText(contactInfo, textLeft, storeSubY, whiteSubPaint);
+                                            canvas.drawText(safeEllipsize(contactInfo, storeMetaPaint, 260), textLeft, storeMetaY, storeMetaPaint);
+                                            storeMetaY += 10.5f;
                                         }
 
-                                        // Top Right Header Card inside banner
-                                        RectF invBadge = new RectF(415, 42, 549, 61);
-                                        Paint translucentBadgeBg = new Paint();
-                                        translucentBadgeBg.setColor(Color.argb(60, 255, 255, 255));
-                                        canvas.drawRoundRect(invBadge, 4, 4, translucentBadgeBg);
+                                        // Top Right Header Card (Pill badge & Invoice Numbers)
+                                        float pillRight = rightX;
+                                        float pillWidth = 145f;
+                                        float pillLeft = pillRight - pillWidth;
+                                        RectF headingPill = new RectF(pillLeft, headerTop, pillRight, headerTop + 19);
+                                        Paint pillBg = new Paint();
+                                        pillBg.setColor(Color.argb(24, Color.red(themeColor), Color.green(themeColor), Color.blue(themeColor)));
+                                        canvas.drawRoundRect(headingPill, 4, 4, pillBg);
+                                        Paint pillBorder = new Paint();
+                                        pillBorder.setColor(Color.argb(70, Color.red(themeColor), Color.green(themeColor), Color.blue(themeColor)));
+                                        pillBorder.setStyle(Paint.Style.STROKE);
+                                        pillBorder.setStrokeWidth(0.75f);
+                                        canvas.drawRoundRect(headingPill, 4, 4, pillBorder);
 
-                                        Paint invBadgeText = new Paint(thTextPaint);
-                                        invBadgeText.setTextSize(9f);
-                                        canvas.drawText(headingText, 425, 55, invBadgeText);
+                                        float titleW = docTitlePaint.measureText(headingText);
+                                        canvas.drawText(headingText, pillRight - 10 - titleW, headerTop + 13.5f, docTitlePaint);
 
-                                        Paint whiteInvNum = new Paint();
-                                        whiteInvNum.setColor(Color.WHITE);
-                                        whiteInvNum.setTextSize(9f);
-                                        whiteInvNum.setFakeBoldText(true);
-                                        whiteInvNum.setAntiAlias(true);
-
-                                        canvas.drawText("#" + invoiceNumber, 425, 73, whiteInvNum);
-                                        canvas.drawText(dateStr, 425, 84, whiteSubPaint);
+                                        drawRightAlignedText(canvas, "#" + invoiceNumber, rightX, headerTop + 33, docMetaBoldPaint);
+                                        drawRightAlignedText(canvas, "Date: " + dateStr, rightX, headerTop + 45, docMetaSubPaint);
                                         if (placeOfSupply != null && !placeOfSupply.trim().isEmpty()) {
-                                            canvas.drawText("POS: " + placeOfSupply, 425, 95, whiteSubPaint);
+                                            drawRightAlignedText(canvas, "POS: " + placeOfSupply, rightX, headerTop + 56, docMetaSubPaint);
                                         }
+
+                                        float headerBottom = Math.max(storeMetaY + 4, headerTop + 62);
+                                        canvas.drawLine(leftX, headerBottom, rightX, headerBottom, linePaint);
 
                                         // =========================================================================
-                                        // 2. BILLED TO (BUYER / CUSTOMER B2B CARD)
+                                        // 2. BILLED TO (BUYER / CUSTOMER B2B & RETAIL CARD)
                                         // =========================================================================
                                         boolean isB2B = customerGstin != null && !customerGstin.trim().isEmpty();
                                         boolean hasTaxBreakup = taxBreakup != null && !taxBreakup.isEmpty();
@@ -824,91 +947,107 @@ public class MainActivity extends FlutterFragmentActivity implements TextToSpeec
                                         }
                                         boolean showStatutoryGstColumns = isB2B || hasTaxBreakup || hasGst;
 
-                                        RectF custBanner = new RectF(36, 110, 559, isB2B ? 138 : 130);
-                                        canvas.drawRoundRect(custBanner, 6, 6, badgeBg);
-                                        canvas.drawRoundRect(custBanner, 6, 6, linePaint);
+                                        float custTop = headerBottom + 7;
+                                        float custHeight = isB2B ? 36 : 28;
+                                        RectF custRect = new RectF(leftX, custTop, rightX, custTop + custHeight);
+                                        canvas.drawRoundRect(custRect, 5, 5, cardBgPaint);
+                                        canvas.drawRoundRect(custRect, 5, 5, cardBorderPaint);
 
-                                        String custStr = "BILLED TO: " + (customerName != null && !customerName.trim().isEmpty() ? customerName : "Cash Customer");
-                                        if (tableNumber != null && !tableNumber.trim().isEmpty()) custStr += "  •  Tbl: " + tableNumber;
-                                        if (customerPhone != null && !customerPhone.trim().isEmpty()) custStr += "  •  Ph: " + customerPhone;
-                                        if (doctorName != null && !doctorName.trim().isEmpty()) custStr += "  •  Dr: " + doctorName;
-                                        canvas.drawText(custStr, 44, isB2B ? 122 : 123, boldTextPaint);
+                                        // Left accent bar
+                                        RectF custAccent = new RectF(leftX, custTop + 3, leftX + 3, custTop + custHeight - 3);
+                                        canvas.drawRoundRect(custAccent, 1.5f, 1.5f, thBgPaint);
 
-                                        if (isB2B) {
-                                            String b2bSub = "Buyer GSTIN: " + customerGstin;
-                                            if (placeOfSupply != null && !placeOfSupply.trim().isEmpty()) b2bSub += "  •  State: " + placeOfSupply;
-                                            canvas.drawText(b2bSub, 44, 133, subPaint);
+                                        String cName = (customerName != null && !customerName.trim().isEmpty()) ? customerName : "Cash Customer";
+                                        Paint billedLabelPaint = new Paint(subPaint);
+                                        billedLabelPaint.setTextSize(7f);
+                                        billedLabelPaint.setTypeface(boldTypeface);
+                                        canvas.drawText("BILLED TO:", leftX + 10, custTop + 11.5f, billedLabelPaint);
+                                        canvas.drawText(safeEllipsize(cName, boldTextPaint, 240), leftX + 62, custTop + 12f, boldTextPaint);
+
+                                        String custDetails = "";
+                                        if (customerPhone != null && !customerPhone.trim().isEmpty()) custDetails += "Ph: " + customerPhone + "   ";
+                                        if (tableNumber != null && !tableNumber.trim().isEmpty()) custDetails += "Table: " + tableNumber + "   ";
+                                        if (doctorName != null && !doctorName.trim().isEmpty()) custDetails += "Dr: " + doctorName;
+                                        if (!custDetails.isEmpty()) {
+                                            canvas.drawText(safeEllipsize(custDetails.trim(), subPaint, 280), leftX + 10, custTop + 22.5f, subPaint);
                                         }
 
-                                        // Payment Badge on right
-                                        String paidText = "PAID (" + paymentMode.toUpperCase() + ")";
-                                        RectF paidBadge = new RectF(465, isB2B ? 115 : 114, 550, isB2B ? 132 : 126);
-                                        Paint paidBgPaint = new Paint();
-                                        paidBgPaint.setColor(Color.rgb(236, 253, 245));
-                                        canvas.drawRoundRect(paidBadge, 4, 4, paidBgPaint);
-                                        Paint paidTextPaint = new Paint();
-                                        paidTextPaint.setColor(Color.rgb(5, 150, 105));
-                                        paidTextPaint.setTextSize(7.5f);
-                                        paidTextPaint.setFakeBoldText(true);
-                                        paidTextPaint.setAntiAlias(true);
-                                        canvas.drawText(paidText, 474, isB2B ? 126.5f : 122.5f, paidTextPaint);
+                                        if (isB2B) {
+                                            String b2bStr = "Buyer GSTIN: " + customerGstin;
+                                            if (placeOfSupply != null && !placeOfSupply.trim().isEmpty()) b2bStr += "  •  State: " + placeOfSupply;
+                                            canvas.drawText(safeEllipsize(b2bStr, subPaint, 280), leftX + 10, custTop + 32f, subPaint);
+                                        }
+
+                                        // Payment Status Pill Badge on right
+                                        boolean isCredit = paymentMode.equalsIgnoreCase("UDHAR") || paymentMode.equalsIgnoreCase("CREDIT");
+                                        String badgeText = isCredit ? "● UNPAID (CREDIT)" : "● PAID (" + paymentMode.toUpperCase(Locale.ENGLISH) + ")";
+                                        Paint payTextPaint = new Paint(isCredit ? statusUnpaidTextPaint : statusPaidTextPaint);
+                                        float badgeW = payTextPaint.measureText(badgeText) + 14;
+                                        float badgeH = 15;
+                                        RectF badgeRect = new RectF(rightX - 8 - badgeW, custTop + (custHeight - badgeH) / 2, rightX - 8, custTop + (custHeight + badgeH) / 2);
+                                        canvas.drawRoundRect(badgeRect, 3.5f, 3.5f, isCredit ? statusUnpaidBgPaint : statusPaidBgPaint);
+                                        canvas.drawRoundRect(badgeRect, 3.5f, 3.5f, isCredit ? statusUnpaidBorderPaint : statusPaidBorderPaint);
+                                        canvas.drawText(badgeText, badgeRect.left + 7, badgeRect.top + 10.5f, payTextPaint);
 
                                         // =========================================================================
                                         // 3. TABLE HEADER BAR (CLEAN 5-COL FOR RETAIL, 8-COL FOR GST)
                                         // =========================================================================
-                                        float thTop = isB2B ? 144 : 136;
-                                        RectF thRect = new RectF(36, thTop, 559, thTop + 20);
-                                        canvas.drawRoundRect(thRect, 5, 5, thBgPaint);
+                                        float thTop = custTop + custHeight + 8;
+                                        float thHeight = 20;
+                                        RectF thRect = new RectF(leftX, thTop, rightX, thTop + thHeight);
+                                        canvas.drawRoundRect(thRect, 4, 4, thBgPaint);
                                         if (showStatutoryGstColumns) {
                                             canvas.drawText("#", 42, thTop + 13, thTextPaint);
-                                            canvas.drawText("ITEM DESCRIPTION", 60, thTop + 13, thTextPaint);
-                                            canvas.drawText("HSN", 242, thTop + 13, thTextPaint);
-                                            canvas.drawText("QTY", 290, thTop + 13, thTextPaint);
-                                            canvas.drawText("RATE", 336, thTop + 13, thTextPaint);
-                                            canvas.drawText("TAXABLE", 392, thTop + 13, thTextPaint);
-                                            canvas.drawText("GST (C+S)", 448, thTop + 13, thTextPaint);
-                                            canvas.drawText("TOTAL (₹)", 510, thTop + 13, thTextPaint);
+                                            canvas.drawText("ITEM DESCRIPTION", 58, thTop + 13, thTextPaint);
+                                            canvas.drawText("HSN", 232, thTop + 13, thTextPaint);
+                                            drawRightAlignedText(canvas, "QTY", 295, thTop + 13, thTextPaint);
+                                            drawRightAlignedText(canvas, "RATE", 350, thTop + 13, thTextPaint);
+                                            drawRightAlignedText(canvas, "TAXABLE", 415, thTop + 13, thTextPaint);
+                                            drawRightAlignedText(canvas, "GST", 480, thTop + 13, thTextPaint);
+                                            drawRightAlignedText(canvas, "TOTAL (₹)", rightX - 8, thTop + 13, thTextPaint);
                                         } else {
                                             canvas.drawText("#", 44, thTop + 13, thTextPaint);
-                                            canvas.drawText("ITEM DESCRIPTION", 65, thTop + 13, thTextPaint);
-                                            canvas.drawText("QTY", 335, thTop + 13, thTextPaint);
-                                            canvas.drawText("RATE", 415, thTop + 13, thTextPaint);
-                                            canvas.drawText("TOTAL (₹)", 495, thTop + 13, thTextPaint);
+                                            canvas.drawText("ITEM DESCRIPTION", 64, thTop + 13, thTextPaint);
+                                            drawRightAlignedText(canvas, "QTY", 360, thTop + 13, thTextPaint);
+                                            drawRightAlignedText(canvas, "RATE", 445, thTop + 13, thTextPaint);
+                                            drawRightAlignedText(canvas, "TOTAL (₹)", rightX - 8, thTop + 13, thTextPaint);
                                         }
 
-                                        currentY = thTop + 33;
+                                        currentY = thTop + thHeight + 14;
                                     } else {
                                         // --- CONTINUATION PAGES (PAGE 2+) ---
-                                        canvas.drawText(storeName.toUpperCase(), 36, 46, darkPaint);
-                                        canvas.drawText(headingText + " (Continued - Page " + pageIdx + " of " + totalPages + ")", 210, 46, subPaint);
-                                        canvas.drawText("#" + invoiceNumber, 480, 46, boldTextPaint);
-                                        canvas.drawLine(36, 54, 559, 54, linePaint);
+                                        canvas.drawText(safeEllipsize(storeName, storeNamePaint, 200), leftX, 46, storeNamePaint);
+                                        canvas.drawText(headingText + " (Continued - Page " + pageIdx + " of " + totalPages + ")", 215, 46, subPaint);
+                                        drawRightAlignedText(canvas, "#" + invoiceNumber, rightX, 46, docMetaBoldPaint);
+                                        canvas.drawLine(leftX, 54, rightX, 54, linePaint);
 
                                         boolean isB2B = customerGstin != null && !customerGstin.trim().isEmpty();
                                         boolean hasTaxBreakup = taxBreakup != null && !taxBreakup.isEmpty();
                                         boolean hasGst = taxAmount != null && !taxAmount.trim().isEmpty() && !taxAmount.equals("₹0.00") && !taxAmount.equals("₹0");
                                         boolean showStatutoryGstColumns = isB2B || hasTaxBreakup || hasGst;
 
-                                        RectF thRect = new RectF(36, 60, 559, 80);
-                                        canvas.drawRoundRect(thRect, 5, 5, thBgPaint);
+                                        float thTop = 60;
+                                        float thHeight = 20;
+                                        RectF thRect = new RectF(leftX, thTop, rightX, thTop + thHeight);
+                                        canvas.drawRoundRect(thRect, 4, 4, thBgPaint);
                                         if (showStatutoryGstColumns) {
-                                            canvas.drawText("#", 42, 73, thTextPaint);
-                                            canvas.drawText("ITEM DESCRIPTION", 60, 73, thTextPaint);
-                                            canvas.drawText("HSN", 242, 73, thTextPaint);
-                                            canvas.drawText("QTY", 290, 73, thTextPaint);
-                                            canvas.drawText("RATE", 336, 73, thTextPaint);
-                                            canvas.drawText("TAXABLE", 392, 73, thTextPaint);
-                                            canvas.drawText("GST (C+S)", 448, 73, thTextPaint);
-                                            canvas.drawText("TOTAL (₹)", 510, 73, thTextPaint);
+                                            canvas.drawText("#", 42, thTop + 13, thTextPaint);
+                                            canvas.drawText("ITEM DESCRIPTION", 58, thTop + 13, thTextPaint);
+                                            canvas.drawText("HSN", 232, thTop + 13, thTextPaint);
+                                            drawRightAlignedText(canvas, "QTY", 295, thTop + 13, thTextPaint);
+                                            drawRightAlignedText(canvas, "RATE", 350, thTop + 13, thTextPaint);
+                                            drawRightAlignedText(canvas, "TAXABLE", 415, thTop + 13, thTextPaint);
+                                            drawRightAlignedText(canvas, "GST", 480, thTop + 13, thTextPaint);
+                                            drawRightAlignedText(canvas, "TOTAL (₹)", rightX - 8, thTop + 13, thTextPaint);
                                         } else {
-                                            canvas.drawText("#", 44, 73, thTextPaint);
-                                            canvas.drawText("ITEM DESCRIPTION", 65, 73, thTextPaint);
-                                            canvas.drawText("QTY", 335, 73, thTextPaint);
-                                            canvas.drawText("RATE", 415, 73, thTextPaint);
-                                            canvas.drawText("TOTAL (₹)", 495, 73, thTextPaint);
+                                            canvas.drawText("#", 44, thTop + 13, thTextPaint);
+                                            canvas.drawText("ITEM DESCRIPTION", 64, thTop + 13, thTextPaint);
+                                            drawRightAlignedText(canvas, "QTY", 360, thTop + 13, thTextPaint);
+                                            drawRightAlignedText(canvas, "RATE", 445, thTop + 13, thTextPaint);
+                                            drawRightAlignedText(canvas, "TOTAL (₹)", rightX - 8, thTop + 13, thTextPaint);
                                         }
 
-                                        currentY = 94;
+                                        currentY = thTop + thHeight + 14;
                                     }
 
                                     boolean isB2B = customerGstin != null && !customerGstin.trim().isEmpty();
@@ -916,8 +1055,11 @@ public class MainActivity extends FlutterFragmentActivity implements TextToSpeec
                                     boolean hasGst = taxAmount != null && !taxAmount.trim().isEmpty() && !taxAmount.equals("₹0.00") && !taxAmount.equals("₹0");
                                     boolean showStatutoryGstColumns = isB2B || hasTaxBreakup || hasGst;
 
-                                    // Render Items for this page
+                                    // Render Items for this page with Unicode/Indic safe wrapping & right-aligned numbers
                                     List<Map<String, Object>> pageItems = pagesItems.get(pageIdx - 1);
+                                    int rowCount = 0;
+                                    float rowHeight = 19.5f;
+
                                     for (Map<String, Object> item : pageItems) {
                                         String name = String.valueOf(item.get("name"));
                                         String hsn = item.containsKey("hsn") && item.get("hsn") != null ? String.valueOf(item.get("hsn")) : "-";
@@ -927,68 +1069,74 @@ public class MainActivity extends FlutterFragmentActivity implements TextToSpeec
                                         String taxAmt = item.containsKey("taxAmt") && item.get("taxAmt") != null ? String.valueOf(item.get("taxAmt")) : "₹0.00";
                                         String amt = String.valueOf(item.get("amount"));
 
-                                        if (showStatutoryGstColumns) {
-                                            canvas.drawText(String.valueOf(globalSNo++), 42, currentY, subPaint);
-                                            if (name.length() > 26) name = name.substring(0, 24) + "...";
-                                            canvas.drawText(name, 60, currentY, itemNamePaint);
-                                            canvas.drawText(hsn, 242, currentY, bodyPaint);
-                                            canvas.drawText(qty, 292, currentY, bodyPaint);
-                                            canvas.drawText(rate, 336, currentY, bodyPaint);
-                                            canvas.drawText(taxable, 392, currentY, bodyPaint);
-                                            canvas.drawText(taxAmt, 448, currentY, subPaint);
-                                            canvas.drawText(amt, 510, currentY, boldTextPaint);
-                                        } else {
-                                            canvas.drawText(String.valueOf(globalSNo++), 44, currentY, subPaint);
-                                            if (name.length() > 42) name = name.substring(0, 40) + "...";
-                                            canvas.drawText(name, 65, currentY, itemNamePaint);
-                                            canvas.drawText(qty, 335, currentY, bodyPaint);
-                                            canvas.drawText(rate, 415, currentY, bodyPaint);
-                                            canvas.drawText(amt, 495, currentY, boldTextPaint);
+                                        if (rowCount % 2 == 1) {
+                                            RectF altBg = new RectF(leftX, currentY - 10.5f, rightX, currentY + 7.5f);
+                                            canvas.drawRect(altBg, rowAltBgPaint);
                                         }
 
-                                        canvas.drawLine(36, currentY + 5, 559, currentY + 5, rowLinePaint);
-                                        currentY += 19;
+                                        if (showStatutoryGstColumns) {
+                                            canvas.drawText(String.valueOf(globalSNo++), 42, currentY, subPaint);
+                                            canvas.drawText(safeEllipsize(name, itemNamePaint, 170), 58, currentY, itemNamePaint);
+                                            canvas.drawText(safeEllipsize(hsn, bodyPaint, 45), 232, currentY, bodyPaint);
+                                            drawRightAlignedText(canvas, qty, 295, currentY, bodyPaint);
+                                            drawRightAlignedText(canvas, rate, 350, currentY, bodyPaint);
+                                            drawRightAlignedText(canvas, taxable, 415, currentY, bodyPaint);
+                                            drawRightAlignedText(canvas, taxAmt, 480, currentY, subPaint);
+                                            drawRightAlignedText(canvas, amt, rightX - 8, currentY, boldTextPaint);
+                                        } else {
+                                            canvas.drawText(String.valueOf(globalSNo++), 44, currentY, subPaint);
+                                            canvas.drawText(safeEllipsize(name, itemNamePaint, 280), 64, currentY, itemNamePaint);
+                                            drawRightAlignedText(canvas, qty, 360, currentY, bodyPaint);
+                                            drawRightAlignedText(canvas, rate, 445, currentY, bodyPaint);
+                                            drawRightAlignedText(canvas, amt, rightX - 8, currentY, boldTextPaint);
+                                        }
+
+                                        canvas.drawLine(leftX, currentY + 7.5f, rightX, currentY + 7.5f, rowLinePaint);
+                                        currentY += rowHeight;
+                                        rowCount++;
                                     }
 
                                     // =========================================================================
                                     // LAST PAGE: STATUTORY GST SUMMARY, TOTALS, UPI, TERMS & SIGNATORY
                                     // =========================================================================
                                     if (pageIdx == totalPages) {
-                                        canvas.drawLine(36, currentY, 559, currentY, linePaint);
-                                        currentY += 10;
+                                        canvas.drawLine(leftX, currentY, rightX, currentY, linePaint);
+                                        currentY += 9;
 
                                         // 1. Amount in Words Box
                                         if (amountInWords != null && !amountInWords.trim().isEmpty()) {
-                                            RectF wordsBox = new RectF(36, currentY, 559, currentY + 16);
-                                            canvas.drawRoundRect(wordsBox, 4, 4, badgeBg);
-                                            canvas.drawRoundRect(wordsBox, 4, 4, linePaint);
+                                            RectF wordsBox = new RectF(leftX, currentY, rightX, currentY + 17);
+                                            canvas.drawRoundRect(wordsBox, 4, 4, cardBgPaint);
+                                            canvas.drawRoundRect(wordsBox, 4, 4, cardBorderPaint);
+                                            Paint wordsLabel = new Paint(boldTextPaint);
+                                            wordsLabel.setTextSize(7.5f);
+                                            canvas.drawText("Amount in Words: ", leftX + 8, currentY + 11.5f, wordsLabel);
+                                            float prefixW = wordsLabel.measureText("Amount in Words: ");
                                             Paint wordsPaint = new Paint(bodyPaint);
-                                            wordsPaint.setTextSize(8f);
-                                            String displayWords = "Amount in Words: " + amountInWords;
-                                            if (displayWords.length() > 95) displayWords = displayWords.substring(0, 93) + "...";
-                                            canvas.drawText(displayWords, 44, currentY + 11.5f, wordsPaint);
-                                            currentY += 21;
+                                            wordsPaint.setTextSize(7.5f);
+                                            canvas.drawText(safeEllipsize(amountInWords, wordsPaint, rightX - leftX - prefixW - 20), leftX + 8 + prefixW, currentY + 11.5f, wordsPaint);
+                                            currentY += 23;
                                         }
 
                                         // 2. Statutory GST Tax Slab Breakup Table (if taxBreakup available)
                                         if (taxBreakup != null && !taxBreakup.isEmpty()) {
                                             Paint gstThPaint = new Paint();
                                             gstThPaint.setColor(Color.rgb(241, 245, 249));
-                                            RectF gstThRect = new RectF(36, currentY, 559, currentY + 14);
+                                            RectF gstThRect = new RectF(leftX, currentY, rightX, currentY + 14);
                                             canvas.drawRoundRect(gstThRect, 3, 3, gstThPaint);
 
                                             Paint gstLabelPaint = new Paint(subPaint);
-                                            gstLabelPaint.setTextSize(7.2f);
-                                            gstLabelPaint.setFakeBoldText(true);
-                                            canvas.drawText("HSN/SAC (RATE)", 42, currentY + 10.5f, gstLabelPaint);
-                                            canvas.drawText("TAXABLE VAL", 155, currentY + 10.5f, gstLabelPaint);
-                                            canvas.drawText("CGST RATE", 240, currentY + 10.5f, gstLabelPaint);
-                                            canvas.drawText("CGST AMT", 310, currentY + 10.5f, gstLabelPaint);
-                                            canvas.drawText("SGST RATE", 380, currentY + 10.5f, gstLabelPaint);
-                                            canvas.drawText("SGST AMT", 450, currentY + 10.5f, gstLabelPaint);
-                                            canvas.drawText("TOTAL TAX", 512, currentY + 10.5f, gstLabelPaint);
+                                            gstLabelPaint.setTextSize(7f);
+                                            gstLabelPaint.setTypeface(boldTypeface);
+                                            canvas.drawText("HSN/SAC (RATE)", leftX + 6, currentY + 10f, gstLabelPaint);
+                                            drawRightAlignedText(canvas, "TAXABLE VAL", 215, currentY + 10f, gstLabelPaint);
+                                            drawRightAlignedText(canvas, "CGST RATE", 280, currentY + 10f, gstLabelPaint);
+                                            drawRightAlignedText(canvas, "CGST AMT", 350, currentY + 10f, gstLabelPaint);
+                                            drawRightAlignedText(canvas, "SGST RATE", 415, currentY + 10f, gstLabelPaint);
+                                            drawRightAlignedText(canvas, "SGST AMT", 485, currentY + 10f, gstLabelPaint);
+                                            drawRightAlignedText(canvas, "TOTAL TAX", rightX - 8, currentY + 10f, gstLabelPaint);
 
-                                            currentY += 17;
+                                            currentY += 16;
                                             Paint gstRowPaint = new Paint(bodyPaint);
                                             gstRowPaint.setTextSize(7.5f);
 
@@ -1001,15 +1149,15 @@ public class MainActivity extends FlutterFragmentActivity implements TextToSpeec
                                                 String sSgstAmt = String.valueOf(slab.get("sgstAmt"));
                                                 String sTotTax = String.valueOf(slab.get("totalTax"));
 
-                                                canvas.drawText(sHsn, 42, currentY, gstRowPaint);
-                                                canvas.drawText(sTaxable, 155, currentY, gstRowPaint);
-                                                canvas.drawText(sCgstRate, 240, currentY, gstRowPaint);
-                                                canvas.drawText(sCgstAmt, 310, currentY, gstRowPaint);
-                                                canvas.drawText(sSgstRate, 380, currentY, gstRowPaint);
-                                                canvas.drawText(sSgstAmt, 450, currentY, gstRowPaint);
-                                                canvas.drawText(sTotTax, 512, currentY, gstRowPaint);
+                                                canvas.drawText(safeEllipsize(sHsn, gstRowPaint, 110), leftX + 6, currentY, gstRowPaint);
+                                                drawRightAlignedText(canvas, sTaxable, 215, currentY, gstRowPaint);
+                                                drawRightAlignedText(canvas, sCgstRate, 280, currentY, gstRowPaint);
+                                                drawRightAlignedText(canvas, sCgstAmt, 350, currentY, gstRowPaint);
+                                                drawRightAlignedText(canvas, sSgstRate, 415, currentY, gstRowPaint);
+                                                drawRightAlignedText(canvas, sSgstAmt, 485, currentY, gstRowPaint);
+                                                drawRightAlignedText(canvas, sTotTax, rightX - 8, currentY, gstRowPaint);
 
-                                                currentY += 11;
+                                                currentY += 11.5f;
                                             }
                                             currentY += 4;
                                         }
@@ -1017,151 +1165,136 @@ public class MainActivity extends FlutterFragmentActivity implements TextToSpeec
                                         // 3. Bottom Two-Column Split (Left: UPI QR & Terms, Right: Totals & Signatory)
                                         float sectionTopY = currentY;
 
-                                        // --- LEFT COLUMN (X: 36 to 305) ---
+                                        // --- LEFT COLUMN (X: leftX to leftX + 270) ---
                                         float afterUpiY = sectionTopY;
                                         if (showDynamicUpiQr && !upiId.trim().isEmpty()) {
                                             float upiBoxHeight = 52;
-                                            RectF upiBox = new RectF(36, sectionTopY, 305, sectionTopY + upiBoxHeight);
-                                            canvas.drawRoundRect(upiBox, 6, 6, badgeBg);
-                                            canvas.drawRoundRect(upiBox, 6, 6, linePaint);
+                                            float upiBoxWidth = 270;
+                                            RectF upiBox = new RectF(leftX, sectionTopY, leftX + upiBoxWidth, sectionTopY + upiBoxHeight);
+                                            canvas.drawRoundRect(upiBox, 6, 6, cardBgPaint);
+                                            canvas.drawRoundRect(upiBox, 6, 6, cardBorderPaint);
 
-                                            float textStartX = 46;
+                                            float textStartX = leftX + 10;
                                             if (qrBmp != null) {
-                                                RectF qrRect = new RectF(44, sectionTopY + 5, 88, sectionTopY + 47);
+                                                RectF qrRect = new RectF(leftX + 6, sectionTopY + 5, leftX + 48, sectionTopY + 47);
                                                 Paint bmpPaint = new Paint(Paint.FILTER_BITMAP_FLAG);
                                                 canvas.drawBitmap(qrBmp, null, qrRect, bmpPaint);
-                                                textStartX = 94;
+                                                textStartX = leftX + 54;
                                             }
 
                                             Paint upiTitlePaint = new Paint(boldTextPaint);
                                             upiTitlePaint.setTextSize(8.5f);
-                                            canvas.drawText("Instant UPI Payment", textStartX, sectionTopY + 15, upiTitlePaint);
+                                            canvas.drawText("Scan & Pay via UPI", textStartX, sectionTopY + 15, upiTitlePaint);
 
                                             Paint upiIdPaint = new Paint(subPaint);
                                             upiIdPaint.setTextSize(7.5f);
                                             String displayUpi = upiId.length() > 28 ? upiId.substring(0, 26) + "..." : upiId;
                                             canvas.drawText("UPI VPA: " + displayUpi, textStartX, sectionTopY + 27, upiIdPaint);
 
-                                            Paint upiFree = new Paint(subPaint);
-                                            upiFree.setColor(Color.rgb(5, 150, 105));
+                                            Paint upiFree = new Paint(statusPaidTextPaint);
                                             upiFree.setTextSize(7f);
-                                            upiFree.setFakeBoldText(true);
-                                            canvas.drawText("✓ Verified Merchant • Zero Charges", textStartX, sectionTopY + 39, upiFree);
+                                            canvas.drawText("✓ Verified Merchant • GPay/PhonePe/Paytm", textStartX, sectionTopY + 39, upiFree);
 
                                             afterUpiY = sectionTopY + upiBoxHeight + 6;
                                         }
 
-                                        canvas.drawText("Terms & Conditions:", 36, afterUpiY + 10, boldTextPaint);
+                                        canvas.drawText("Terms & Conditions:", leftX, afterUpiY + 10, boldTextPaint);
                                         String[] termLines = termsText.split("\n");
                                         float tY = afterUpiY + 21;
                                         for (int tl = 0; tl < termLines.length && tl < 2; tl++) {
                                             String line = termLines[tl];
-                                            if (line.length() > 56) line = line.substring(0, 54) + "...";
-                                            canvas.drawText(line, 36, tY, subPaint);
+                                            canvas.drawText(safeEllipsize(line, subPaint, 260), leftX, tY, subPaint);
                                             tY += 10;
                                         }
                                         if (footerNote != null && !footerNote.trim().isEmpty()) {
                                             Paint notePaint = new Paint(subPaint);
                                             notePaint.setTextSize(7.5f);
-                                            notePaint.setColor(Color.rgb(100, 116, 139));
-                                            canvas.drawText("♥ " + footerNote, 36, tY + 8, notePaint);
+                                            notePaint.setColor(Color.rgb(71, 85, 105));
+                                            canvas.drawText("♥ " + safeEllipsize(footerNote, notePaint, 260), leftX, tY + 8, notePaint);
                                         }
 
-                                        // --- RIGHT COLUMN (X: 330 to 559) ---
+                                        // --- RIGHT COLUMN (Totals & Signatory) ---
                                         float totalsX = 330;
                                         float totalsY = sectionTopY;
 
                                         // Subtotal
                                         String subtotalLabel = showStatutoryGstColumns ? "Taxable Value:" : "Subtotal:";
                                         canvas.drawText(subtotalLabel, totalsX, totalsY + 9, subPaint);
-                                        float subW = bodyPaint.measureText(taxableSubtotal);
-                                        canvas.drawText(taxableSubtotal, 555 - subW, totalsY + 9, bodyPaint);
+                                        drawRightAlignedText(canvas, taxableSubtotal, rightX - 8, totalsY + 9, bodyPaint);
                                         totalsY += 13;
 
                                         if (discountAmount != null && !discountAmount.isEmpty() && !discountAmount.equals("₹0.00") && !discountAmount.equals("0")) {
                                             canvas.drawText("Discount:", totalsX, totalsY + 9, subPaint);
-                                            Paint discPaint = new Paint(bodyPaint);
-                                            discPaint.setColor(Color.rgb(220, 38, 38));
                                             String discStr = "-" + discountAmount;
-                                            float discW = discPaint.measureText(discStr);
-                                            canvas.drawText(discStr, 555 - discW, totalsY + 9, discPaint);
+                                            drawRightAlignedText(canvas, discStr, rightX - 8, totalsY + 9, discountTextPaint);
                                             totalsY += 13;
                                         }
 
                                         if (taxAmount != null && !taxAmount.isEmpty() && !taxAmount.equals("₹0.00") && !taxAmount.equals("0")) {
                                             canvas.drawText("Total GST Tax:", totalsX, totalsY + 9, subPaint);
-                                            float taxW = bodyPaint.measureText(taxAmount);
-                                            canvas.drawText(taxAmount, 555 - taxW, totalsY + 9, bodyPaint);
+                                            drawRightAlignedText(canvas, taxAmount, rightX - 8, totalsY + 9, bodyPaint);
                                             totalsY += 13;
                                         }
 
                                         // Grand Total Box
-                                        RectF gtBox = new RectF(330, totalsY + 2, 559, totalsY + 30);
-                                        canvas.drawRoundRect(gtBox, 6, 6, grandTotalBg);
+                                        RectF gtBox = new RectF(totalsX - 4, totalsY + 2, rightX, totalsY + 32);
+                                        canvas.drawRoundRect(gtBox, 5, 5, grandTotalBg);
 
                                         Paint gtLabel = new Paint(thTextPaint);
-                                        gtLabel.setTextSize(9.5f);
-                                        canvas.drawText("GRAND TOTAL", 340, totalsY + 19, gtLabel);
+                                        gtLabel.setTextSize(9f);
+                                        canvas.drawText("GRAND TOTAL", totalsX + 8, totalsY + 20, gtLabel);
 
                                         Paint gtVal = new Paint();
                                         gtVal.setColor(Color.WHITE);
-                                        gtVal.setTextSize(12.5f);
-                                        gtVal.setFakeBoldText(true);
+                                        gtVal.setTextSize(13f);
+                                        gtVal.setTypeface(boldTypeface);
                                         gtVal.setAntiAlias(true);
-                                        float totalValW = gtVal.measureText(totalAmount);
-                                        canvas.drawText(totalAmount, 550 - totalValW, totalsY + 20, gtVal);
+                                        gtVal.setSubpixelText(true);
+                                        gtVal.setLinearText(true);
+                                        drawRightAlignedText(canvas, totalAmount, rightX - 10, totalsY + 21, gtVal);
 
                                         // Authorised Signatory
-                                        float signY = totalsY + 44;
+                                        float signY = totalsY + 46;
                                         Paint signStoreName = new Paint(boldTextPaint);
-                                        signStoreName.setTextSize(8f);
-                                        signStoreName.setColor(Color.rgb(30, 41, 59));
-                                        canvas.drawText("For " + storeName.toUpperCase(), 390, signY, signStoreName);
+                                        signStoreName.setTextSize(7.5f);
+                                        canvas.drawText("For " + safeEllipsize(storeName, signStoreName, 170), 380, signY, signStoreName);
 
-                                        canvas.drawLine(380, signY + 24, 559, signY + 24, linePaint);
+                                        canvas.drawLine(370, signY + 22, rightX, signY + 22, linePaint);
                                         Paint signLabel = new Paint(subPaint);
                                         signLabel.setTextSize(7f);
-                                        signLabel.setFakeBoldText(true);
-                                        canvas.drawText("AUTHORISED SIGNATORY", 416, signY + 33, signLabel);
+                                        signLabel.setTypeface(boldTypeface);
+                                        drawRightAlignedText(canvas, "AUTHORISED SIGNATORY", rightX, signY + 31, signLabel);
                                     }
 
                                     // =========================================================================
                                     // KAMAI+ BRANDING STRIP WITH LOGO (ON EVERY PAGE)
                                     // =========================================================================
                                     float brandY = 776;
-                                    RectF brandStrip = new RectF(36, brandY, 559, brandY + 24);
+                                    RectF brandStrip = new RectF(leftX, brandY, rightX, brandY + 24);
+                                    canvas.drawRoundRect(brandStrip, 5, 5, cardBgPaint);
+                                    canvas.drawRoundRect(brandStrip, 5, 5, cardBorderPaint);
 
-                                    Paint brandBg = new Paint();
-                                    brandBg.setColor(Color.rgb(248, 250, 252));
-                                    canvas.drawRoundRect(brandStrip, 5, 5, brandBg);
-
-                                    Paint brandBorder = new Paint();
-                                    brandBorder.setColor(Color.rgb(226, 232, 240));
-                                    brandBorder.setStyle(Paint.Style.STROKE);
-                                    brandBorder.setStrokeWidth(0.7f);
-                                    canvas.drawRoundRect(brandStrip, 5, 5, brandBorder);
-
-                                    float brandContentX = 44;
+                                    float brandContentX = leftX + 8;
                                     if (appIconBmp != null) {
-                                        RectF iconRect = new RectF(42, brandY + 4, 58, brandY + 20);
+                                        RectF iconRect = new RectF(leftX + 6, brandY + 4, leftX + 22, brandY + 20);
                                         Paint iconPaint = new Paint(Paint.FILTER_BITMAP_FLAG);
                                         canvas.drawBitmap(appIconBmp, null, iconRect, iconPaint);
-                                        brandContentX = 64;
+                                        brandContentX = leftX + 28;
                                     }
 
                                     Paint brandTitle = new Paint();
                                     brandTitle.setColor(themeColor);
                                     brandTitle.setTextSize(8f);
-                                    brandTitle.setFakeBoldText(true);
+                                    brandTitle.setTypeface(boldTypeface);
                                     brandTitle.setAntiAlias(true);
                                     canvas.drawText("⚡ KAMAI+ POS", brandContentX, brandY + 15, brandTitle);
 
                                     Paint brandDesc = new Paint();
                                     brandDesc.setColor(Color.rgb(71, 85, 105));
                                     brandDesc.setTextSize(7.5f);
+                                    brandDesc.setTypeface(regularTypeface);
                                     brandDesc.setAntiAlias(true);
-                                    canvas.drawText("India's #1 Retail POS & GST Billing App", brandContentX + 70, brandY + 15, brandDesc);
-
+                                    canvas.drawText("• India's #1 Retail POS & GST Billing App", brandContentX + 66, brandY + 15, brandDesc);
 
                                     // Page Number Footer
                                     Paint pageNumPaint = new Paint(subPaint);
@@ -1732,9 +1865,35 @@ public class MainActivity extends FlutterFragmentActivity implements TextToSpeec
         }
     }
 
+    /**
+     * Short high beep for a good scan, low buzz for a problem. ToneGenerator
+     * can throw if the audio system is busy; the Dart side then falls back to
+     * the system click, so a scan never fails because of sound.
+     */
+    private boolean playScanBeep(boolean isError) {
+        try {
+            if (scanTone == null) {
+                scanTone = new ToneGenerator(AudioManager.STREAM_MUSIC, 85);
+            }
+            if (isError) {
+                scanTone.startTone(ToneGenerator.TONE_SUP_ERROR, 280);
+            } else {
+                scanTone.startTone(ToneGenerator.TONE_PROP_BEEP, 120);
+            }
+            return true;
+        } catch (RuntimeException e) {
+            scanTone = null;
+            return false;
+        }
+    }
+
     @Override
     protected void onDestroy() {
         PaymentNotificationListener.setCallback(null);
+        if (scanTone != null) {
+            scanTone.release();
+            scanTone = null;
+        }
         if (tts != null) {
             tts.stop();
             tts.shutdown();

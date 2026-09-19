@@ -628,54 +628,34 @@ class _LowStockReorderModalState extends State<LowStockReorderModal> {
             ),
 
             // Fixed Bottom Summary & Action Bar
-            Container(
-              padding: const EdgeInsets.fromLTRB(18, 12, 18, 16),
-              decoration: const BoxDecoration(
-                color: Colors.white,
-                border: Border(top: BorderSide(color: Color(0xFFE2E8F0))),
-                boxShadow: [
-                  BoxShadow(
-                    color: Color(0x08000000),
-                    blurRadius: 10,
-                    offset: Offset(0, -3),
-                  ),
-                ],
-              ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  // Valuation & Counts
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'ORDER SUMMARY',
-                            style: GoogleFonts.inter(
-                              fontSize: 9.5,
-                              fontWeight: FontWeight.w800,
-                              color: const Color(0xFF94A3B8),
-                            ),
-                          ),
-                          const SizedBox(height: 2),
-                          Text(
-                            '${_selectedItems.length} SKUs • $_totalSelectedUnits Units',
-                            style: GoogleFonts.outfit(
-                              fontSize: 14,
-                              fontWeight: FontWeight.w800,
-                              color: const Color(0xFF0F172A),
-                            ),
-                          ),
-                        ],
-                      ),
-                      if (_estimatedValuationPaise > 0)
+            SafeArea(
+              top: false,
+              bottom: true,
+              child: Container(
+                padding: EdgeInsets.fromLTRB(18, 12, 18, MediaQuery.paddingOf(context).bottom > 0 ? MediaQuery.paddingOf(context).bottom + 10 : 16),
+                decoration: const BoxDecoration(
+                  color: Colors.white,
+                  border: Border(top: BorderSide(color: Color(0xFFE2E8F0))),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Color(0x08000000),
+                      blurRadius: 10,
+                      offset: Offset(0, -3),
+                    ),
+                  ],
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // Valuation & Counts
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
                         Column(
-                          crossAxisAlignment: CrossAxisAlignment.end,
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              'EST. VALUE (~)',
+                              'ORDER SUMMARY',
                               style: GoogleFonts.inter(
                                 fontSize: 9.5,
                                 fontWeight: FontWeight.w800,
@@ -684,75 +664,99 @@ class _LowStockReorderModalState extends State<LowStockReorderModal> {
                             ),
                             const SizedBox(height: 2),
                             Text(
-                              MoneyFormatter.formatINR(_estimatedValuationPaise),
-                              style: GoogleFonts.robotoMono(
+                              '${_selectedItems.length} SKUs • $_totalSelectedUnits Units',
+                              style: GoogleFonts.outfit(
                                 fontSize: 14,
                                 fontWeight: FontWeight.w800,
-                                color: const Color(0xFF059669),
+                                color: const Color(0xFF0F172A),
                               ),
                             ),
                           ],
                         ),
-                    ],
-                  ),
-                  const SizedBox(height: 10),
+                        if (_estimatedValuationPaise > 0)
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.end,
+                            children: [
+                              Text(
+                                'EST. VALUE (~)',
+                                style: GoogleFonts.inter(
+                                  fontSize: 9.5,
+                                  fontWeight: FontWeight.w800,
+                                  color: const Color(0xFF94A3B8),
+                                ),
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                MoneyFormatter.formatINR(_estimatedValuationPaise),
+                                style: GoogleFonts.robotoMono(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w800,
+                                  color: const Color(0xFF059669),
+                                ),
+                              ),
+                            ],
+                          ),
+                      ],
+                    ),
+                    const SizedBox(height: 10),
 
-                  // Actions Row
-                  Row(
-                    children: [
-                      // Copy Button
-                      IconButton(
-                        onPressed: _copyToClipboard,
-                        tooltip: 'Copy Order Text',
-                        icon: Container(
-                          padding: const EdgeInsets.all(8),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFFF1F5F9),
-                            borderRadius: BorderRadius.circular(10),
-                            border:
-                                Border.all(color: const Color(0xFFCBD5E1)),
-                          ),
-                          child: const Icon(Icons.copy_rounded,
-                              size: 18, color: Color(0xFF334155)),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-
-                      // WhatsApp Dispatch Primary Button
-                      Expanded(
-                        child: ElevatedButton.icon(
-                          onPressed: _dispatchWhatsApp,
-                          icon: Image.asset(
-                            'assets/images/whatsapp_logo.png',
-                            width: 18,
-                            height: 18,
-                            errorBuilder: (context, error, stackTrace) => const Icon(
-                              Icons.send_rounded,
-                              color: Colors.white,
-                              size: 16,
+                    // Actions Row
+                    Row(
+                      children: [
+                        // Copy Button
+                        IconButton(
+                          onPressed: _copyToClipboard,
+                          tooltip: 'Copy Order Text',
+                          icon: Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFF1F5F9),
+                              borderRadius: BorderRadius.circular(10),
+                              border:
+                                  Border.all(color: const Color(0xFFCBD5E1)),
                             ),
-                          ),
-                          label: Text(
-                            'Send via WhatsApp',
-                            style: GoogleFonts.outfit(
-                              fontSize: 14.5,
-                              fontWeight: FontWeight.w900,
-                              color: Colors.white,
-                            ),
-                          ),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: const Color(0xFF16A34A),
-                            elevation: 0,
-                            padding: const EdgeInsets.symmetric(vertical: 12),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
+                            child: const Icon(Icons.copy_rounded,
+                                size: 18, color: Color(0xFF334155)),
                           ),
                         ),
-                      ),
-                    ],
-                  ),
-                ],
+                        const SizedBox(width: 8),
+
+                        // WhatsApp Dispatch Primary Button
+                        Expanded(
+                          child: ElevatedButton.icon(
+                            onPressed: _dispatchWhatsApp,
+                            icon: Image.asset(
+                              'assets/images/whatsapp_logo.png',
+                              width: 18,
+                              height: 18,
+                              errorBuilder: (context, error, stackTrace) => const Icon(
+                                Icons.send_rounded,
+                                color: Colors.white,
+                                size: 16,
+                              ),
+                            ),
+                            label: Text(
+                              'Send via WhatsApp',
+                              style: GoogleFonts.outfit(
+                                fontSize: 14.5,
+                                fontWeight: FontWeight.w900,
+                                color: Colors.white,
+                              ),
+                            ),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: const Color(0xFF16A34A),
+                              elevation: 0,
+                              padding: const EdgeInsets.symmetric(vertical: 12),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
               ),
             ),
           ],

@@ -130,7 +130,7 @@ class _BarcodeStudioScreenState extends State<BarcodeStudioScreen> {
           ? const Center(child: CircularProgressIndicator(color: Color(0xFF10B981)))
           : SingleChildScrollView(
               physics: const BouncingScrollPhysics(parent: AlwaysScrollableScrollPhysics()),
-              padding: const EdgeInsets.fromLTRB(16, 14, 16, 100),
+              padding: const EdgeInsets.fromLTRB(16, 14, 16, 24),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -168,7 +168,7 @@ class _BarcodeStudioScreenState extends State<BarcodeStudioScreen> {
                 ],
               ),
             ),
-      bottomSheet: _buildBottomActionBar(),
+      bottomNavigationBar: _buildBottomActionBar(),
     );
   }
 
@@ -746,7 +746,6 @@ class _BarcodeStudioScreenState extends State<BarcodeStudioScreen> {
   // =========================================================================
   Widget _buildBottomActionBar() {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       decoration: BoxDecoration(
         color: Colors.white,
         boxShadow: [
@@ -759,28 +758,33 @@ class _BarcodeStudioScreenState extends State<BarcodeStudioScreen> {
         border: const Border(top: BorderSide(color: Color(0xFFEEF2F6))),
       ),
       child: SafeArea(
-        child: Row(
-          children: [
-            Expanded(
-              child: ElevatedButton.icon(
-                onPressed: _dispatchPrint,
-                icon: Icon(_isPro ? Icons.print_rounded : Icons.lock_rounded, size: 18),
-                label: Text(
-                  _isPro
-                      ? 'Print $_copies Sticker(s) via Bluetooth'
-                      : '🔒 Upgrade to Pro to Print Stickers',
-                  style: GoogleFonts.plusJakartaSans(fontSize: 13.5, fontWeight: FontWeight.w800),
-                ),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: _isPro ? const Color(0xFF0F172A) : const Color(0xFFD97706),
-                  foregroundColor: Colors.white,
-                  elevation: 0,
-                  minimumSize: const Size.fromHeight(48),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        top: false,
+        bottom: true,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          child: Row(
+            children: [
+              Expanded(
+                child: ElevatedButton.icon(
+                  onPressed: _dispatchPrint,
+                  icon: Icon(_isPro ? Icons.print_rounded : Icons.lock_rounded, size: 18),
+                  label: Text(
+                    _isPro
+                        ? 'Print $_copies Sticker(s) via Bluetooth'
+                        : '🔒 Upgrade to Pro to Print Stickers',
+                    style: GoogleFonts.plusJakartaSans(fontSize: 13.5, fontWeight: FontWeight.w800),
+                  ),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: _isPro ? const Color(0xFF0F172A) : const Color(0xFFD97706),
+                    foregroundColor: Colors.white,
+                    elevation: 0,
+                    minimumSize: const Size.fromHeight(48),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
                 ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );

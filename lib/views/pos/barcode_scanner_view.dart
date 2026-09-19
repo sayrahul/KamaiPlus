@@ -14,7 +14,10 @@ class _BarcodeScannerViewState extends State<BarcodeScannerView> with SingleTick
   late final AnimationController _animController;
   bool _isScanned = false;
   bool _torchEnabled = false;
-  double _zoomScale = 1.0;
+  // mobile_scanner 7 takes a LINEAR zoom from 0.0 (widest) to 1.0 (maximum).
+  // This used to pass 1.0 for "1x" and 2.0 for "2x", so the scanner opened
+  // at maximum zoom and small barcodes held close went out of focus.
+  double _zoomScale = 0.0;
 
   @override
   void initState() {
@@ -242,9 +245,9 @@ class _BarcodeScannerViewState extends State<BarcodeScannerView> with SingleTick
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    _buildZoomChip(1.0, '1.0x (Standard)'),
+                    _buildZoomChip(0.0, 'Standard'),
                     const SizedBox(width: 4),
-                    _buildZoomChip(2.0, '🔍 2.0x (Small Barcode)'),
+                    _buildZoomChip(0.35, '🔍 Close-up (Small Barcode)'),
                   ],
                 ),
               ),

@@ -468,113 +468,169 @@ class _PosCheckoutModalState extends State<PosCheckoutModal> {
     final nameCtrl = TextEditingController();
     final phoneCtrl = TextEditingController();
 
-    showDialog(
+    showModalBottomSheet(
       context: context,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: Text(
-          'Add New Customer',
-          style: GoogleFonts.plusJakartaSans(fontSize: 16, fontWeight: FontWeight.w700),
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: nameCtrl,
-              decoration: InputDecoration(
-                labelText: 'Customer Name *',
-                labelStyle: GoogleFonts.plusJakartaSans(fontSize: 12),
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) {
+        final bottomInset = MediaQuery.of(ctx).viewInsets.bottom;
+        final navBarPadding = MediaQuery.paddingOf(ctx).bottom;
+
+        return Container(
+          decoration: const BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+          ),
+          child: SafeArea(
+            top: false,
+            bottom: true,
+            child: Padding(
+              padding: EdgeInsets.fromLTRB(20, 14, 20, bottomInset + (navBarPadding > 0 ? navBarPadding + 10 : 18)),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Center(
+                    child: Container(
+                      width: 36,
+                      height: 4,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFCBD5E1),
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        'Add New Customer',
+                        style: GoogleFonts.plusJakartaSans(fontSize: 17, fontWeight: FontWeight.w800, color: const Color(0xFF0F172A)),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.close_rounded, size: 20, color: Color(0xFF64748B)),
+                        onPressed: () => Navigator.pop(ctx),
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 14),
+                  TextField(
+                    controller: nameCtrl,
+                    decoration: InputDecoration(
+                      labelText: 'Customer Name *',
+                      labelStyle: GoogleFonts.plusJakartaSans(fontSize: 12),
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: phoneCtrl,
+                    keyboardType: TextInputType.phone,
+                    decoration: InputDecoration(
+                      labelText: 'Phone Number (Optional)',
+                      labelStyle: GoogleFonts.plusJakartaSans(fontSize: 12),
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                    ),
+                  ),
+                  const SizedBox(height: 18),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton(
+                          onPressed: () => Navigator.of(ctx).pop(),
+                          style: OutlinedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                            side: const BorderSide(color: Color(0xFFCBD5E1)),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                          ),
+                          child: Text('Cancel', style: GoogleFonts.plusJakartaSans(color: const Color(0xFF64748B), fontWeight: FontWeight.w600)),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        flex: 2,
+                        child: ElevatedButton(
+                          onPressed: () async {
+                            final name = nameCtrl.text.trim();
+                            if (name.isEmpty) {
+                              InAppNotification.error('Customer name is required', context: context);
+                              return;
+                            }
+
+                            // Check Free plan customer limit (100 customers)
+                            final profile = await LocalDatabase.instance.getStoreProfile();
+                            if (!mounted) return;
+                            if (!profile.isPro && widget.allCustomers.length >= 100) {
+                              if (ctx.mounted) Navigator.of(ctx).pop();
+                              _showCustomerLimitReachedDialog();
+                              return;
+                            }
+
+                            final rawPhone = phoneCtrl.text.trim();
+                            String cleanPhone = '';
+                            if (rawPhone.isNotEmpty) {
+                              final phoneErr = AppValidators.validatePhone(rawPhone);
+                              if (phoneErr != null) {
+                                InAppNotification.error(phoneErr, context: context);
+                                return;
+                              }
+                              cleanPhone = AppValidators.cleanPhone(rawPhone);
+                              final existingCust = await LocalDatabase.instance.findCustomerByPhone(cleanPhone);
+                              if (existingCust != null) {
+                                if (ctx.mounted) Navigator.of(ctx).pop();
+                                if (mounted) {
+                                  _selectCustomer(existingCust);
+                                  InAppNotification.show(
+                                    context: context,
+                                    message: 'Selected existing customer: ${existingCust.name}',
+                                    customIcon: Icons.check_circle_rounded,
+                                    customColor: Colors.green,
+                                  );
+                                }
+                                return;
+                              }
+                            }
+
+                            final newCust = CustomerModel(
+                              id: const Uuid().v4(),
+                              businessId: FirestoreSyncService.instance.activeBusinessId,
+                              name: name,
+                              phone: cleanPhone,
+                            );
+                            await LocalDatabase.instance.upsertCustomer(newCust);
+                            if (!_liveCustomers.any((c) => c.id == newCust.id)) {
+                              _liveCustomers.add(newCust);
+                            }
+                            if (ctx.mounted) {
+                              Navigator.of(ctx).pop();
+                            }
+                            if (mounted) {
+                              _selectCustomer(newCust);
+                            }
+                          },
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFFFBBF24),
+                            foregroundColor: const Color(0xFF0F172A),
+                            elevation: 0,
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                          ),
+                          child: Text('Save & Select', style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700)),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
               ),
             ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: phoneCtrl,
-              keyboardType: TextInputType.phone,
-              decoration: InputDecoration(
-                labelText: 'Phone Number (Optional)',
-                labelStyle: GoogleFonts.plusJakartaSans(fontSize: 12),
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-              ),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(),
-            child: Text('Cancel', style: GoogleFonts.plusJakartaSans(color: const Color(0xFF64748B))),
           ),
-          ElevatedButton(
-            onPressed: () async {
-              final name = nameCtrl.text.trim();
-              if (name.isEmpty) {
-                InAppNotification.error('Customer name is required', context: context);
-                return;
-              }
-
-              // Check Free plan customer limit (100 customers)
-              final profile = await LocalDatabase.instance.getStoreProfile();
-              if (!mounted) return;
-              if (!profile.isPro && widget.allCustomers.length >= 100) {
-                if (ctx.mounted) Navigator.of(ctx).pop();
-                _showCustomerLimitReachedDialog();
-                return;
-              }
-
-              final rawPhone = phoneCtrl.text.trim();
-              String cleanPhone = '';
-              if (rawPhone.isNotEmpty) {
-                final phoneErr = AppValidators.validatePhone(rawPhone);
-                if (phoneErr != null) {
-                  InAppNotification.error(phoneErr, context: context);
-                  return;
-                }
-                cleanPhone = AppValidators.cleanPhone(rawPhone);
-                final existingCust = await LocalDatabase.instance.findCustomerByPhone(cleanPhone);
-                if (existingCust != null) {
-                  if (ctx.mounted) Navigator.of(ctx).pop();
-                  if (mounted) {
-                    _selectCustomer(existingCust);
-                    InAppNotification.show(
-                      context: context,
-                      message: 'Selected existing customer: ${existingCust.name}',
-                      customIcon: Icons.check_circle_rounded,
-                      customColor: Colors.green,
-                    );
-                  }
-                  return;
-                }
-              }
-
-              final newCust = CustomerModel(
-                id: const Uuid().v4(),
-                businessId: FirestoreSyncService.instance.activeBusinessId,
-                name: name,
-                phone: cleanPhone,
-              );
-              await LocalDatabase.instance.upsertCustomer(newCust);
-              if (!_liveCustomers.any((c) => c.id == newCust.id)) {
-                _liveCustomers.add(newCust);
-              }
-              if (ctx.mounted) {
-                Navigator.of(ctx).pop();
-              }
-              if (mounted) {
-                _selectCustomer(newCust);
-              }
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFFFBBF24),
-              foregroundColor: const Color(0xFF0F172A),
-              elevation: 0,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-            ),
-            child: Text('Save & Select', style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700)),
-          ),
-        ],
-      ),
+        );
+      },
     );
   }
 

@@ -1784,5 +1784,29 @@ Reasoning and code locations live in `DEVELOPMENT_LOG.md`'s
 36. **Home Dashboard Featured Banner Replaced with Advanced Analytics (`home_pulse_tab.dart`)**:
     - **Replaced Fast Counter Card:** The vertical-specific fast counter banner (`_buildFastCounterBanner()`) in Section 3 of the Home screen was redundant with the prominent bottom navigation center billing button and quick action hero card.
     - **Advanced Analytics Banner:** Replaced with a sleek dark midnight-indigo banner (`_buildAdvancedAnalyticsBanner()`), featuring `Icons.insights_rounded`, `PRO INTEL` badge, and direct 1-tap navigation into `AdvancedSalesReportsScreen()`.
-
-
+37. **Native PDF Invoice Engine Redesign & Full Indian Languages / Devanagari Support (`MainActivity.java`)**:
+    - **Indian Languages & Complex Script Shaping:** Removed fake bold dilation (`setFakeBoldText`), configuring paints with `Typeface.create("sans-serif", Typeface.BOLD)` / `mediumTypeface` / `regularTypeface`, `subpixelText`, and `linearText`. Android's Skia FontMgr fallback system (`NotoSansDevanagari`, `NotoSansTamil`, `NotoSansBengali`, `NotoSansTelugu`, `NotoSansGujarati`, `NotoSansKannada`, `NotoSansMalayalam`, `NotoSansOriya`, `NotoSansGurmukhi`) now renders all 9 Indian languages crisply with zero ligature or matra damage.
+    - **Grapheme-Safe Ellipsizing:** Naive character slicing (`substring(0, 24)`) is strictly eliminated in favor of `safeEllipsize` via Android's `TextUtils.ellipsize`. Indic grapheme clusters, multi-byte code points, and conjuncts are never cut in half.
+    - **Strict Financial Right-Alignment:** Rates, quantities, taxable amounts, GST amounts, and total sums are drawn with `drawRightAlignedText` against their respective column bounds. Decimal points align vertically.
+    - **Modern Fintech Aesthetics:** Features a top 3.5pt theme accent stripe, framed store logo, structured store header, styled pill document title (`TAX INVOICE`), modern customer card with payment badge (`● PAID (CASH/UPI)` or `● UNPAID (CREDIT)`), zebra striping (`#FFFFFF` and `#F8FAFC`), Amount in Words box, statutory GST slab table, dynamic UPI QR card, and authorized signatory box.
+38. **Menu Screen (`menu_screen.dart`)**:
+    - Removed the bottom "Help & Support" card as requested by the user. The final card before the bottom footer is now "Printer & Hardware Setup".
+39. **3-Button Navigation Bar Inset Safety & Modal Bottom Sheet Standardization**:
+    - **Hardware/Software 3-Button Nav Bar Protection**: On Android devices with physical or software navigation panels (Back, Home, Menu), bottom sheets and sticky action bars must include `SafeArea(top: false, bottom: true)` and incorporate `MediaQuery.paddingOf(context).bottom` into bottom padding to eliminate button and content cropping.
+    - **Transaction Invoice Detail (`sale_detail_modal.dart`)**: Constrained with `maxHeight: 0.90 * screenHeight`, wrapped with `SafeArea(top: false, bottom: true)`, and enclosed in a `SingleChildScrollView(physics: BouncingScrollPhysics())` so Return/Void/Print actions sit safely above the navigation panel.
+    - **Purchases & Restock (`purchases_screen.dart` & `low_stock_reorder_modal.dart`)**: "Save & Update Wholesale Inward", order sticky action bars, and "Send via WhatsApp" now include `SafeArea(top: false, bottom: true)` with dynamic bottom insets.
+    - **Barcode Studio (`barcode_studio_screen.dart`)**: Moved sticky print button from `bottomSheet` to `bottomNavigationBar` with `SafeArea` so the primary action button floats cleanly above the system navigation panel.
+    - **Add Customer Modal (`khata_screen.dart`, `customers_screen.dart`, `pos_checkout_modal.dart`)**: Upgraded from center `AlertDialog` (`showDialog`) to modern, full-featured bottom-sheet modals (`showModalBottomSheet`) with top drag handles, scrollable inputs, contact import chips, and safe bottom padding.
+40. **POS Rapid Scan — continuous camera billing (`rapid_scan_billing_screen.dart`, `scan_rules.dart`, `pos_billing_screen.dart`)**:
+    - The POS search row's barcode button (`Icons.barcode_reader`, dark tile) opens Rapid Scan. The camera stays open and every scanned pack goes straight into the current bill with a beep. Restaurants keep the Dine-In/Parcel toggle in that slot.
+    - A pack counts again only after it leaves the viewfinder (`ScanDebouncer`, 900 ms, per code). Payment/URL QRs are ignored, and only codes inside the scan window are read.
+    - Quantity is set in place: −/+ steppers, ×1/×2/×3/×5/×10 chips, and Custom (unit-aware chips from `quantity_config.dart`). There is undo for the last scan, swipe-to-remove with UNDO, a Type-code fallback, torch, close-up zoom, pause, and a saved beep on/off (`ScanFeedbackService`, native `ToneGenerator` beep).
+    - Every add path (grid, search, scanner gun, Rapid Scan) goes through `_addProductInteractive`, so the variant picker, expired warning and stock limit (`stockErrorFor`) always apply. Barcode lookup order: store catalogue, then master catalogue, then cloud resolver (`_addScannedBarcode`).
+41. **New Primary Logo Replacement Everywhere (LOCKED)**:
+    - **Source Asset:** Clean, crisp new 512x512 logo artwork with `#FEC703` brand yellow field, deep charcoal/black `(35, 35, 35)` "क" letterform, and vibrant red `(255, 0, 0)` "+" emblem.
+    - **Flutter App Core Assets:** Mirrored 1:1 to `assets/images/app_icon.png` and `assets/images/logo.png`. Used across Splash screen, Login, Store Profile Setup, and Menu Screen.
+    - **Google Play Store Asset:** Replaced `play_store_assets/hi_res_icon_512.png` with the new 512x512 asset.
+    - **Android Native Launcher Mipmaps (`android/app/src/main/res/`):**
+      - Rendered ultra-crisp transparent foregrounds (`ic_launcher_foreground.png`) with mathematically un-blended edge anti-aliasing centered in the 72dp safe area across all densities (`mdpi` 108px, `hdpi` 162px, `xhdpi` 216px, `xxhdpi` 324px, `xxxhdpi` 432px).
+      - Generated matching legacy square (`ic_launcher.png`) and circular (`ic_launcher_round.png`) icons across all densities (`mdpi` 48px, `hdpi` 72px, `xhdpi` 96px, `xxhdpi` 144px, `xxxhdpi` 192px).
+    - **Web Platforms & Admin Console:** Updated `website/assets/logo.png`, `website/assets/favicon.png`, `admin_console/web/icons/`, and `.widget_preview/web/icons/` (Icon-192, Icon-512, maskable icons, and favicons).

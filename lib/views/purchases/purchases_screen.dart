@@ -543,14 +543,17 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
                 ),
 
                 // Sheet Bottom Sticky Actions
-                Container(
-                  padding: const EdgeInsets.fromLTRB(18, 12, 18, 20),
-                  decoration: const BoxDecoration(
-                    color: Colors.white,
-                    boxShadow: [BoxShadow(color: Color(0x0A000000), blurRadius: 10, offset: Offset(0, -4))],
-                  ),
-                  child: Row(
-                    children: [
+                SafeArea(
+                  top: false,
+                  bottom: true,
+                  child: Container(
+                    padding: EdgeInsets.fromLTRB(18, 12, 18, MediaQuery.paddingOf(context).bottom > 0 ? MediaQuery.paddingOf(context).bottom + 10 : 20),
+                    decoration: const BoxDecoration(
+                      color: Colors.white,
+                      boxShadow: [BoxShadow(color: Color(0x0A000000), blurRadius: 10, offset: Offset(0, -4))],
+                    ),
+                    child: Row(
+                      children: [
                       if (!isReceived) ...[
                         Expanded(
                           child: ElevatedButton.icon(
@@ -609,6 +612,7 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
                     ],
                   ),
                 ),
+              ),
               ],
             ),
           );
@@ -629,18 +633,22 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
       backgroundColor: Colors.transparent,
       builder: (ctx) => StatefulBuilder(
         builder: (context, setModalState) {
-          return Padding(
-            padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
-            child: Container(
-              padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
-              decoration: const BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-              ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
+          final bottomInset = MediaQuery.of(context).viewInsets.bottom;
+          final navBarPadding = MediaQuery.paddingOf(context).bottom;
+          return Container(
+            decoration: const BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+            ),
+            child: SafeArea(
+              top: false,
+              bottom: true,
+              child: Padding(
+                padding: EdgeInsets.fromLTRB(20, 16, 20, bottomInset + (navBarPadding > 0 ? navBarPadding + 10 : 20)),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
                   Center(
                     child: Container(
                       width: 40,
@@ -775,7 +783,8 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
                 ],
               ),
             ),
-          );
+          ),
+        );
         },
       ),
     );
@@ -812,19 +821,24 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
       backgroundColor: Colors.transparent,
       builder: (ctx) => StatefulBuilder(
         builder: (context, setModalState) {
-          return Padding(
-            padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
-            child: Container(
-              constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.85),
-              padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
-              decoration: const BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-              ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
+          final bottomInset = MediaQuery.of(context).viewInsets.bottom;
+          final navBarPadding = MediaQuery.paddingOf(context).bottom;
+
+          return Container(
+            constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.90),
+            decoration: const BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+            ),
+            child: SafeArea(
+              top: false,
+              bottom: true,
+              child: Padding(
+                padding: EdgeInsets.fromLTRB(20, 16, 20, bottomInset + (navBarPadding > 0 ? navBarPadding + 10 : 20)),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
                   Center(
                     child: Container(
                       width: 40,
@@ -1121,7 +1135,8 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
                 ],
               ),
             ),
-          );
+          ),
+        );
         },
       ),
     );

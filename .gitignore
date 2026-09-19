@@ -80,4 +80,5 @@ replay_pid*.log
 *.db
 *.db-journal
 /android/build/
+.scratch/
 
