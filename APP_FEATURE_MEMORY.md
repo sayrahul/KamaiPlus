@@ -119,6 +119,7 @@ The Bottom Navigation Bar has 5 items. The navigation contract is strictly defin
 * **Firestore Variant Sync:** `parent_id`, `has_variants`, `variant_label`, `sub_units_per_pack`, and `fit_notes` are synchronized to/from Cloud Firestore with `repairVariantRelationships()` fallback.
 * Cart bar at bottom with floating cart summary.
 * Payment checkout modal with rapid cash chips and dynamic UPI QR code.
+* **POS Checkout Modal Inset Safety (`lib/views/pos/pos_checkout_modal.dart`):** Modal is wrapped in `SafeArea(top: false, bottom: true)` with dynamic bottom insets (`bottomInset + (navBarPadding > 0 ? navBarPadding + 16 : 28)`) and top drag handle, ensuring "Complete Sale & Generate Bill" button is never cropped or obscured behind Android 3-button navigation bars.
 
 ### 4. 📖 Digital Khata (`lib/views/khata/khata_screen.dart`)
 * Simple, minimalistic, clean UI named **Digital Khata**.

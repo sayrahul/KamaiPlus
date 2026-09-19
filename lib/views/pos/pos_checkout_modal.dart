@@ -1435,52 +1435,71 @@ class _PosCheckoutModalState extends State<PosCheckoutModal> {
     final grandTotalRupees = grandTotalPaise / 100.0;
     final returnChangeRupees = cashTenderedVal - grandTotalRupees;
 
+    final bottomInset = MediaQuery.of(context).viewInsets.bottom;
+    final navBarPadding = MediaQuery.paddingOf(context).bottom;
+
     return Container(
-      height: MediaQuery.of(context).size.height * 0.88,
+      height: MediaQuery.of(context).size.height * 0.90,
       decoration: const BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
-      child: Column(
-        children: [
-          // Drag Handle & Header
-          Padding(
-            padding: const EdgeInsets.only(left: 20, right: 16, top: 16, bottom: 12),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
-                  'POS Checkout — $currentBillTitle',
-                  style: GoogleFonts.plusJakartaSans(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w800,
-                    color: const Color(0xFF0F172A),
-                  ),
+      child: SafeArea(
+        top: false,
+        bottom: true,
+        child: Column(
+          children: [
+            // Top Drag Handle
+            Center(
+              child: Container(
+                width: 36,
+                height: 4,
+                margin: const EdgeInsets.only(top: 10),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFCBD5E1),
+                  borderRadius: BorderRadius.circular(2),
                 ),
-                IconButton(
-                  onPressed: () => Navigator.of(context).pop(),
-                  icon: const Icon(Icons.close, size: 22, color: Color(0xFF64748B)),
-                  padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints(),
-                ),
-              ],
-            ),
-          ),
-          const Divider(height: 1, color: Color(0xFFF1F5F9)),
-
-          // Scrollable Body
-          Expanded(
-            child: SingleChildScrollView(
-              controller: _bodyScrollController,
-              padding: EdgeInsets.only(
-                left: 16,
-                right: 16,
-                top: 12,
-                bottom: MediaQuery.of(context).viewInsets.bottom + 20,
               ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+            ),
+            // Header
+            Padding(
+              padding: const EdgeInsets.only(left: 20, right: 16, top: 12, bottom: 12),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
+                  Text(
+                    'POS Checkout — $currentBillTitle',
+                    style: GoogleFonts.plusJakartaSans(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w800,
+                      color: const Color(0xFF0F172A),
+                    ),
+                  ),
+                  IconButton(
+                    onPressed: () => Navigator.of(context).pop(),
+                    icon: const Icon(Icons.close, size: 22, color: Color(0xFF64748B)),
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(),
+                  ),
+                ],
+              ),
+            ),
+            const Divider(height: 1, color: Color(0xFFF1F5F9)),
+
+            // Scrollable Body
+            Expanded(
+              child: SingleChildScrollView(
+                controller: _bodyScrollController,
+                physics: const BouncingScrollPhysics(),
+                padding: EdgeInsets.only(
+                  left: 16,
+                  right: 16,
+                  top: 12,
+                  bottom: bottomInset + (navBarPadding > 0 ? navBarPadding + 16 : 28),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
                   // 1. Multi-Bill Draft Tabs (Bill 1, Bill 2, +, etc.)
                   _buildCheckoutDraftTabs(),
                   const SizedBox(height: 16),
@@ -2885,7 +2904,7 @@ class _PosCheckoutModalState extends State<PosCheckoutModal> {
                   // 8. Complete Sale Button
                   SizedBox(
                     width: double.infinity,
-                    height: 48,
+                    height: 50,
                     child: ElevatedButton(
                       onPressed: _isProcessing ? null : _handleCompleteSale,
                       style: ElevatedButton.styleFrom(
@@ -2908,7 +2927,7 @@ class _PosCheckoutModalState extends State<PosCheckoutModal> {
                                 Text(
                                   'Complete Sale & Generate Bill',
                                   style: GoogleFonts.plusJakartaSans(
-                                    fontSize: 14,
+                                    fontSize: 14.5,
                                     fontWeight: FontWeight.w800,
                                     color: const Color(0xFF0F172A),
                                   ),
@@ -2917,13 +2936,15 @@ class _PosCheckoutModalState extends State<PosCheckoutModal> {
                             ),
                     ),
                   ),
+                  const SizedBox(height: 12),
                 ],
               ),
             ),
           ),
         ],
       ),
-    );
+    ),
+  );
   }
 
   Widget _buildPaymentModeButton(String label, String mode, IconData icon) {

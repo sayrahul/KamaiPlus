@@ -45,6 +45,27 @@ hits (the screen's data-loading call), not just the data shape. See
 drives `LocalDatabase` through a real (in-memory FFI) SQLite database and asserts on what
 `getAllProducts`/`getAllCategories` actually return.
 
+## 2026-09-19 — POS Checkout Modal 3-Button Navigation Bar Crop & Bottom Button Safety
+
+**Symptom / User Request:** "ye bhi screen nichese crop ho rahe hai POS chckout ke modal par niche ka button dikh nahi raha"
+
+**Root Cause:**
+- `PosCheckoutModal` (`lib/views/pos/pos_checkout_modal.dart:1438`) was rendering a container at fixed `0.88 * screenHeight` without a `SafeArea(top: false, bottom: true)` wrapper.
+- Its internal `SingleChildScrollView` only padded `bottom: MediaQuery.of(context).viewInsets.bottom + 20`, omitting the system navigation bar insets (`MediaQuery.paddingOf(context).bottom`).
+- On devices with a 3-button navigation panel (Back, Home, Recents, ~48-56dp), Android 15's `EdgeToEdge` draws the navigation panel over the bottom of the modal, clipping the "Complete Sale & Generate Bill" button behind the system buttons.
+
+**Fix:**
+- Added `final bottomInset = MediaQuery.of(context).viewInsets.bottom;` and `final navBarPadding = MediaQuery.paddingOf(context).bottom;`.
+- Wrapped modal contents in `SafeArea(top: false, bottom: true)` so modal contents are always held above the system window insets.
+- Added top drag handle pill matching app modal standards.
+- Updated `SingleChildScrollView` with `physics: const BouncingScrollPhysics()` and dynamic bottom padding `bottomInset + (navBarPadding > 0 ? navBarPadding + 16 : 28)`.
+- Increased button touch target to height 50dp with extra 12dp spacing below it.
+- Increased container height from `0.88` to `0.90` for breathing space on compact displays.
+
+**Verified:**
+- `flutter analyze lib/views/pos/pos_checkout_modal.dart` passed with **0 issues**.
+- Unit tests `test/pos_barcode_scan_test.dart` and `test/rapid_scan_rules_test.dart` passed (14/14 tests).
+
 ## 2026-09-19 — 3-Button Navigation Bar Inset Safety & Modal Bottom Sheet Standardization
 
 **Symptom / User Request:** "kabhi kabhi koi koi devices me jisme nevigation panel hota hai, Menu Home, Back us phone me koi koi modal screen nichese cut ho rahe hai. jaise ki transection main inoivce par click hone ke baad jo nichese modal ata hai wo, cut ho raha hai. Ai Inward ok hai. Record New Inward Bill crop hoo raha hai nichese. wholeser sale inward & Restock wala bhi cut ho raha hai. Barcode Studio wala bhi nichese ka puro button crop ho raha hai. Add new Customer wala modal bhi nichese ana chahiye, jaise ye ate hai"
