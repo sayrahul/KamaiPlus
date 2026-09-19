@@ -1000,7 +1000,7 @@ class _MenuScreenState extends State<MenuScreen> {
                 border: Border.all(color: const Color(0xFFCBD5E1)),
               ),
               child: Text(
-                'v4.28.0',
+                'v4.29.1',
                 style: GoogleFonts.inter(
                   fontSize: 10.5,
                   fontWeight: FontWeight.w600,
