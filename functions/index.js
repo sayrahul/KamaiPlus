@@ -1017,3 +1017,113 @@ exports.resolveBarcode = onRequest(
     }
   }
 );
+
+// ============================================================================
+// REFER & EARN  (referral codes, redemptions, Pro days for BOTH merchants)
+// ----------------------------------------------------------------------------
+// The whole flow used to run on the phone, reading and writing
+// `referral_codes/*` and the REFERRER's `businesses/*` doc directly. The rules
+// deny both (Pro fields are server-only, and `referral_codes` has no rule at
+// all), so every claim failed and no referrer was ever credited. The logic
+// now lives in referral_core.js (unit-tested); this is the HTTPS wrapper.
+//
+// POST { action: "status", preferred_code? }  -> my code + stats
+// POST { action: "redeem", code }             -> credit me and the referrer
+// Authorization: Bearer <Firebase ID token>
+//
+// Deploy:  firebase deploy --only functions:referral
+// ============================================================================
+
+const {
+  ReferralError,
+  rewardDaysFromTemplate,
+  executeStatus,
+  executeRedeem,
+} = require("./referral_core");
+const { getRemoteConfig } = require("firebase-admin/remote-config");
+
+let rewardDaysCache = null;
+let rewardDaysFetchedAt = 0;
+
+/** Reward days from Remote Config, cached for 10 minutes. */
+async function referralRewardDays() {
+  if (rewardDaysCache && Date.now() - rewardDaysFetchedAt < 10 * 60 * 1000) {
+    return rewardDaysCache;
+  }
+  try {
+    rewardDaysCache = rewardDaysFromTemplate(await getRemoteConfig().getTemplate());
+  } catch (e) {
+    console.warn("[REFERRAL] Remote Config unavailable, using defaults:", e.message);
+    rewardDaysCache = rewardDaysFromTemplate(null);
+  }
+  rewardDaysFetchedAt = Date.now();
+  return rewardDaysCache;
+}
+
+exports.referral = onRequest(
+  { cors: true, region: "us-central1" },
+  async (req, res) => {
+    if (req.method !== "POST") {
+      res.status(405).json({ error: "POST only" });
+      return;
+    }
+
+    const header = req.get("Authorization") || "";
+    const idToken = header.startsWith("Bearer ") ? header.slice(7).trim() : "";
+    if (!idToken) {
+      res.status(401).json({ error: "Please sign in again to use referrals." });
+      return;
+    }
+
+    let uid;
+    try {
+      uid = (await getAuth().verifyIdToken(idToken)).uid;
+    } catch (e) {
+      res.status(401).json({ error: "Please sign in again to use referrals." });
+      return;
+    }
+
+    const body = req.body || {};
+    const db = getFirestore();
+    const now = new Date();
+
+    try {
+      if (body.action === "status") {
+        const out = await executeStatus({ db, FieldValue, uid, preferredCode: body.preferred_code, now });
+        const days = await referralRewardDays();
+        res.status(200).json({ ...out, referrer_reward_days: days.referrerDays, referee_bonus_days_offer: days.refereeDays });
+        return;
+      }
+
+      if (body.action === "redeem") {
+        let refereeCreatedAt = null;
+        try {
+          refereeCreatedAt = (await getAuth().getUser(uid)).metadata.creationTime || null;
+        } catch (_) {}
+        const days = await referralRewardDays();
+        const out = await executeRedeem({
+          db,
+          FieldValue,
+          uid,
+          rawCode: body.code,
+          now,
+          refereeCreatedAt,
+          referrerDays: days.referrerDays,
+          refereeDays: days.refereeDays,
+        });
+        console.log(`[REFERRAL] ${uid} redeemed ${out.code} (already=${out.already_redeemed})`);
+        res.status(200).json(out);
+        return;
+      }
+
+      res.status(400).json({ error: `Unknown action "${body.action}"` });
+    } catch (error) {
+      if (error instanceof ReferralError) {
+        res.status(error.httpStatus).json({ error: error.message, code: error.code });
+        return;
+      }
+      console.error("[REFERRAL] failed:", error);
+      res.status(500).json({ error: "Referral service error. Please try again." });
+    }
+  }
+);

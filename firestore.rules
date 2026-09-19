@@ -278,6 +278,24 @@ service cloud.firestore {
     }
 
     // =========================================================================
+    // REFER & EARN — codes and redemptions, written ONLY by the `referral`
+    // Cloud Function (Admin SDK). A redemption grants Pro days to TWO
+    // merchants, so it can never be client-writable: the app calls the
+    // function, which validates the code, credits both businesses and bumps
+    // the counters in one transaction. Merchants read their own code and
+    // stats through that same function, never directly — a code doc names
+    // its owner, and listing them would expose every merchant.
+    // =========================================================================
+    match /referral_codes/{code} {
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+    match /referral_redemptions/{uid} {
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+
+    // =========================================================================
     // ADMIN PUSH NOTIFICATIONS & CAMPAIGN DISPATCH (Admin Console only)
     // =========================================================================
     match /admin_push_notifications/{notificationId} {

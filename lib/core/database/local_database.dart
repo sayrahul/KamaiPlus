@@ -3134,7 +3134,15 @@ class LocalDatabase {
         final isStillValid = DateTime.now().isBefore(expiry);
 
         if (isStillValid) {
-          if (!current.isPro || current.proPlan != 'trial') {
+          // Restore the trial only when the profile has LESS than the trial
+          // left — e.g. it was wiped. This used to fire whenever the plan was
+          // anything but 'trial', so on every launch in the first week it
+          // overwrote a referral bonus (+15/+30 days) and even a PAID plan
+          // back to "trial, ends day 7".
+          final currentExpiry = current.proExpiryDate;
+          final hasLongerPro = current.isProEffective &&
+              (currentExpiry == null || !currentExpiry.isBefore(expiry));
+          if (!hasLongerPro) {
             final updated = StoreProfileModel(
               storeName: current.storeName,
               tagline: current.tagline,
@@ -3172,11 +3180,16 @@ class LocalDatabase {
           // SharedPreferences therefore stayed `true` forever, and anything
           // reading it (invoice_pdf_service) kept treating a lapsed merchant
           // as Pro.
+          //
+          // Only when that free time has actually run out: Refer & Earn days
+          // push `pro_expiry` well past day 7, and deactivating on the trial's
+          // own clock threw those days away the morning after day 7.
           final wasTrial = current.proPlan == 'trial' ||
               current.proPlan == 'referral_trial' ||
+              current.proPlan == 'referral_bonus' ||
               current.razorpayPaymentId == 'free_trial_7d' ||
               current.razorpayPaymentId.startsWith('ref_');
-          if (wasTrial) {
+          if (wasTrial && !current.isProEffective) {
             await deactivateProMembership();
             await prefs.setBool('is_pro', false);
           }

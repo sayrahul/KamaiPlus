@@ -45,6 +45,86 @@ hits (the screen's data-loading call), not just the data shape. See
 drives `LocalDatabase` through a real (in-memory FFI) SQLite database and asserts on what
 `getAllProducts`/`getAllCategories` actually return.
 
+## 2026-09-19 — Refer & Earn made real: server-side grants for both merchants
+
+**Asked for:** the merchant who **sends** an invite gets more Pro days (+30, the number the
+screen shows). The merchant who **accepts** it gets the 7-day trial + 15 days. Both must
+show on the countdown **and** actually be applied.
+
+**Measured before touching anything:** nothing worked end to end. The 2026-09-15 entry
+above moved the flow to Firestore, but only from the phone, and the rules block all of it:
+1. **`firestore.rules` had no rule for `referral_codes`**, so the default deny applied to
+   every read and write. Codes were never registered. "Claim Bonus" always failed with
+   *"Unable to verify… check your internet"*, the stats stayed at 0, and `_rewardReferrer`
+   failed silently.
+2. **The referrer could never be credited from a client.** Pro fields are server-only
+   (`proFields()`/`touchesProFields()`), and one merchant can't write another's
+   `businesses` doc anyway.
+3. **Signup granted "15 days" for any text typed in the code box.** There was no validation,
+   the referrer got nothing, and it was 15 total, not 7 + 15.
+4. **`ensureFreeTrialGranted` (runs on every launch) destroyed whatever was added.** In
+   week one it rewrote any plan other than `'trial'` back to "trial, ends day 7". That
+   covered referral days **and paid plans bought during the trial**. After day 7 it
+   deactivated anything with a `ref_…` payment id, even with weeks left.
+5. **The countdown (`ProUpgradeModal._buildTrialRewardCard`) only showed for plan
+   `'trial'`.** Referral time made the counter disappear, and the headline was hardcoded to
+   "7 Days".
+
+**Fix:**
+- **New `referral` Cloud Function** (`functions/index.js`). Its logic is in
+  `functions/referral_core.js`. It has two actions:
+  - `status` returns (or creates) the merchant's code, plus stats and the applied code. It
+    registers the code already cached on the phone if that code is still free, so codes
+    already shared on WhatsApp keep working.
+  - `redeem` runs as one transaction. It validates the code, then rejects: own code, a
+    second code, and two merchants trading codes. It credits the invitee with
+    `max(now, Pro expiry, trial end) + 15` and the inviter with
+    `max(now, Pro expiry, trial end) + 30`. It bumps `activated_count`/`free_days_earned`,
+    writes `referral_redemptions/{uid}`, and mirrors to `merchants/*`. A retry of the same
+    claim grants nothing twice. Paid plans keep their plan name, and an open-ended admin
+    grant is never shortened.
+  - Reward days come from the Remote Config template: `referral_reward_days` (30) and the
+    new `referral_referee_bonus_days` (15). The server grants what the app displays.
+- **Rules:** `referral_codes` and `referral_redemptions` are explicitly server-write-only,
+  with admin read.
+- **App:** `ReferralService` now calls the function (same HTTPS + ID-token pattern as
+  `verifyRazorpayPayment`) and applies the returned expiry locally at once. The inviter's
+  phone picks up its +30 through `FirestoreSyncService`'s live listener. Offline claims,
+  including a code typed at signup, are saved and finished on the next launch or screen
+  open. Codes "applied" by older builds are sent to the server once; if the server rejects
+  one, it is cleared so a valid code can be entered.
+- **Signup** gives everyone the standard 7-day trial, then claims the code through the
+  server.
+- **`ensureFreeTrialGranted`** restores the trial only when the profile has less than the
+  trial left, and deactivates only free time that has really expired.
+  `StoreProfileModel.isTrialActive` now means "free Pro" (trial or referral), with a new
+  `isPaidPlan` and `proExpiryDate`.
+- **Counters:**
+  - The Pro modal shows the countdown for referral time, with the headline "N Days Free Pro
+    (trial + referral days)".
+  - Refer & Earn has a live "Free PRO valid till … / Nd hh:mm:ss left" card.
+  - All copy was corrected: +30 for the inviter, 7 + 15 for the invitee, and "Friend Joins"
+    instead of "Friend Bills" (nothing ever checked billing).
+
+**Verified:**
+- `functions/test/referral_core.test.js` has 17 tests. They run against an in-memory
+  Firestore fake that enforces "all reads before writes". They cover the 22-day and +30
+  outcomes, stacking per invite, the signup race, a late claim, paid and open-ended plans,
+  and every abuse path. Functions suite: 69/69.
+- `test/referral_service_test.dart` has 12 tests (real FFI SQLite, fake server). Put back
+  against the old `ensureFreeTrialGranted`, **3 of them fail**: referral days wiped, the
+  inviter's days wiped, and the paid plan reset.
+- Flutter suite: 315/315. `flutter analyze`: 0 errors.
+
+**Needs deploy to work in production:** `firebase deploy --only functions:referral,firestore:rules`,
+plus a new app build. Until the function is live, claims are kept as pending and are **not**
+lost.
+
+**Known, not changed:** `verifyRazorpayPayment` sets `pro_expiry = now + plan days`. So
+buying a plan while trial or referral days remain drops those days, even though the button
+says "Extend Pro Validity". The fix is to stack onto `grantBase()` from `referral_core.js`.
+It was left alone because it is the payment path.
+
 ## 2026-09-19 — Advanced Sales Reports: audit, rebuilt PDF service, 7 data/UI fixes
 
 **Symptom:** asked to verify the new Advanced Sales Report & Analytics end to end (wiring,

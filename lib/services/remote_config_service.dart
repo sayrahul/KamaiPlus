@@ -39,7 +39,12 @@ class RemoteConfigService {
     // that floor needs the function's PLAN_RULES updated and redeployed too.
     'pro_monthly_price': 199,
     'pro_annual_price': 1499,
+    // Refer & Earn. The `referral` Cloud Function reads these same two keys
+    // from the Remote Config template, so what the app promises is what the
+    // server grants. reward = days for the merchant who SENT the invite;
+    // referee bonus = days on top of the 7-day trial for the one who joined.
     'referral_reward_days': 30,
+    'referral_referee_bonus_days': 15,
     'gemini_api_key': '',
   };
 
@@ -92,6 +97,7 @@ class RemoteConfigService {
   int get proAnnualPricePaise => proAnnualPrice * 100;
 
   int get referralRewardDays => _int('referral_reward_days');
+  int get referralRefereeBonusDays => _int('referral_referee_bonus_days');
 
   String get geminiApiKey => _remoteConfig?.getString('gemini_api_key') ?? '';
 }

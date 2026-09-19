@@ -1084,11 +1084,16 @@ class StoreProfileModel {
     return DateTime.now().isBefore(exp);
   }
 
-  /// Evaluates whether a 7-day Pro trial is currently active and valid
-  bool get isTrialActive {
-    if (!isProEffective) return false;
-    return proPlan == 'trial' || proPlan == 'referral_trial' || razorpayPaymentId == 'free_trial_7d';
-  }
+  /// A Pro plan the merchant paid for (verified by `verifyRazorpayPayment`).
+  bool get isPaidPlan => proPlan == 'annual' || proPlan == 'monthly';
+
+  /// Free Pro is running: the 7-day welcome trial, or trial time extended by
+  /// Refer & Earn days (`referral_bonus`, granted server-side by the
+  /// `referral` Cloud Function). Anything that is Pro but not paid counts.
+  bool get isTrialActive => isProEffective && !isPaidPlan;
+
+  /// When the current Pro time ends, or null if open-ended / not Pro.
+  DateTime? get proExpiryDate => proExpiry.trim().isEmpty ? null : DateTime.tryParse(proExpiry.trim());
 
   Map<String, dynamic> toMap() => {
     'store_name': storeName,

@@ -12,6 +12,7 @@ import '../../core/utils/app_validators.dart';
 import '../../models/models.dart';
 import '../dashboard/home_dashboard_screen.dart';
 import '../../services/firestore_sync_service.dart';
+import '../../services/referral_service.dart';
 
 class SignupStoreScreen extends StatefulWidget {
   final String? initialPhone;
@@ -134,9 +135,13 @@ class _SignupStoreScreenState extends State<SignupStoreScreen> {
       }
 
       final now = DateTime.now();
-      final enteredRefCode = _referralCodeCtrl.text.trim().toUpperCase();
-      final trialDays = enteredRefCode.isNotEmpty ? 15 : 7;
-      final freeTrialExpiry = now.add(Duration(days: trialDays));
+      final enteredRefCode = ReferralService.normalizeCode(_referralCodeCtrl.text);
+      // Everyone starts on the same 7-day trial. A referral code adds its
+      // bonus days on top through the `referral` Cloud Function, which
+      // validates the code and also credits the merchant who shared it.
+      // (This used to grant 15 days here, on the phone, for ANY text typed
+      // into the box — unvalidated, and the referrer got nothing.)
+      final freeTrialExpiry = now.add(const Duration(days: 7));
 
       final profile = StoreProfileModel(
         storeName: storeName.isNotEmpty ? storeName : 'My Store',
@@ -153,9 +158,9 @@ class _SignupStoreScreenState extends State<SignupStoreScreen> {
         fssai: '',
         upiAccountsJson: jsonEncode(upiAccounts),
         isPro: true,
-        proPlan: enteredRefCode.isNotEmpty ? 'referral_trial' : 'trial',
+        proPlan: 'trial',
         proExpiry: freeTrialExpiry.toIso8601String(),
-        razorpayPaymentId: enteredRefCode.isNotEmpty ? 'ref_$enteredRefCode' : 'free_trial_7d',
+        razorpayPaymentId: 'free_trial_7d',
         trialStartedAt: now.toIso8601String(),
       );
 
@@ -186,7 +191,7 @@ class _SignupStoreScreenState extends State<SignupStoreScreen> {
       await prefs.setString('business_type', businessTypeId);
       await prefs.setString('business_id', businessId);
       if (enteredRefCode.isNotEmpty) {
-        await prefs.setString('referral_applied_code', enteredRefCode);
+        await ReferralService.instance.savePendingReferral(enteredRefCode);
       }
       FirestoreSyncService.instance.initialize(businessId: businessId);
       FirestoreSyncService.syncAllPending();
@@ -196,7 +201,7 @@ class _SignupStoreScreenState extends State<SignupStoreScreen> {
       InAppNotification.show(
         context: context,
         message: enteredRefCode.isNotEmpty
-            ? '🎉 Swagat hai $storeName! Referral bonus: 15 Days FREE Pro activated!'
+            ? '🎉 Swagat hai $storeName! 7 Days FREE Pro activated. Adding your referral bonus...'
             : '🎉 Swagat hai $storeName! 7 Days FREE Pro Membership activated!',
         customIcon: Icons.stars_rounded,
         customColor: const Color(0xFFFBBF24),
@@ -206,6 +211,23 @@ class _SignupStoreScreenState extends State<SignupStoreScreen> {
         context,
         MaterialPageRoute(builder: (_) => HomeDashboardScreen(key: HomeDashboardScreen.dashboardKey)),
       );
+
+      if (enteredRefCode.isNotEmpty) {
+        // Claimed after navigating, so a slow network never holds up setup.
+        // Offline, the code stays saved and main.dart retries on next launch.
+        ReferralService.instance.redeemPendingReferral().then((result) {
+          if (result == null) return;
+          if (result.success) {
+            InAppNotification.show(
+              message: result.message,
+              customIcon: Icons.card_giftcard_rounded,
+              customColor: const Color(0xFF059669),
+            );
+          } else if (!result.retryable) {
+            InAppNotification.error('Referral code not applied: ${result.message} Your 7-day trial is active.');
+          }
+        });
+      }
     } catch (e) {
       if (mounted) {
         setState(() => _isSubmitting = false);
@@ -629,7 +651,7 @@ class _SignupStoreScreenState extends State<SignupStoreScreen> {
                         fillColor: const Color(0xFF070C18),
                         contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
                         prefixIcon: const Icon(Icons.card_giftcard_rounded, color: Color(0xFFF59E0B), size: 20),
-                        hintText: 'e.g. KAMAI9595 (Get 15 Days Free PRO)',
+                        hintText: 'e.g. KAMAI7XK2 (+${ReferralService.instance.refereeBonusDays} days Free PRO)',
                         hintStyle: GoogleFonts.inter(fontSize: 13, color: const Color(0xFF64748B)),
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(12),

@@ -1,8 +1,11 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:intl/intl.dart';
 import '../../core/database/local_database.dart';
-import '../../services/remote_config_service.dart';
+import '../../models/models.dart';
 import '../../services/referral_service.dart';
 import '../common/in_app_notification.dart';
 
@@ -17,41 +20,70 @@ class _ReferAndEarnScreenState extends State<ReferAndEarnScreen> {
   String _referralCode = '';
   String _storeName = '';
   ReferralStats _stats = ReferralStats(totalInvited: 0, storesActivated: 0, freeDaysEarned: 0);
+  StoreProfileModel _profile = StoreProfileModel.empty();
   bool _isLoading = true;
   final TextEditingController _claimCodeCtrl = TextEditingController();
   bool _isClaiming = false;
+
+  /// Ticks the Pro validity countdown.
+  Timer? _ticker;
+
+  int get _referrerDays => ReferralService.instance.referrerRewardDays;
+  int get _refereeDays => ReferralService.instance.refereeBonusDays;
 
   @override
   void initState() {
     super.initState();
     _loadReferralData();
+    _ticker = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (mounted) setState(() {});
+    });
   }
 
   @override
   void dispose() {
+    _ticker?.cancel();
     _claimCodeCtrl.dispose();
     super.dispose();
   }
 
   Future<void> _loadReferralData() async {
     try {
-      final code = await ReferralService.instance.getMerchantReferralCode();
+      // Finish a claim made while offline before showing the numbers.
+      final pending = await ReferralService.instance.redeemPendingReferral();
       final stats = await ReferralService.instance.getStats();
       final profile = await LocalDatabase.instance.getStoreProfile();
       if (mounted) {
         setState(() {
-          _referralCode = code;
+          _referralCode = stats.code;
           _stats = stats;
+          _profile = profile;
           _storeName = profile.storeName;
           _isLoading = false;
         });
+        if (pending != null && pending.success) {
+          InAppNotification.show(
+            context: context,
+            message: pending.message,
+            customIcon: Icons.card_giftcard_rounded,
+            customColor: const Color(0xFF059669),
+          );
+        }
       }
     } catch (_) {
       if (mounted) setState(() => _isLoading = false);
     }
   }
 
+  bool get _hasCode => _referralCode.isNotEmpty;
+
+  void _needCode() {
+    InAppNotification.error('Connect to the internet to get your referral code.', context: context);
+    _loadReferralData();
+  }
+
   Future<void> _copyCode() async {
+    if (!_hasCode) return _needCode();
     HapticFeedback.selectionClick();
     await ReferralService.instance.copyCode(_referralCode);
     if (!mounted) return;
@@ -64,12 +96,14 @@ class _ReferAndEarnScreenState extends State<ReferAndEarnScreen> {
   }
 
   Future<void> _shareWhatsApp() async {
+    if (!_hasCode) return _needCode();
     HapticFeedback.lightImpact();
     await ReferralService.instance.shareOnWhatsApp(_referralCode, storeName: _storeName);
     await _loadReferralData();
   }
 
   Future<void> _shareOther() async {
+    if (!_hasCode) return _needCode();
     HapticFeedback.lightImpact();
     await ReferralService.instance.shareGeneral(_referralCode, storeName: _storeName);
     await _loadReferralData();
@@ -114,6 +148,10 @@ class _ReferAndEarnScreenState extends State<ReferAndEarnScreen> {
           ],
         ),
       );
+    } else if (res.retryable) {
+      await _loadReferralData();
+      if (!mounted) return;
+      InAppNotification.info(res.message, context: context);
     } else {
       InAppNotification.error(res.message, context: context);
     }
@@ -150,7 +188,7 @@ class _ReferAndEarnScreenState extends State<ReferAndEarnScreen> {
                 const Icon(Icons.card_giftcard_rounded, size: 13, color: Color(0xFFB45309)),
                 const SizedBox(width: 4),
                 Text(
-                  '30D FREE PRO',
+                  '+${_referrerDays}D PRO',
                   style: GoogleFonts.outfit(fontSize: 10.5, fontWeight: FontWeight.w900, color: const Color(0xFF92400E)),
                 ),
               ],
@@ -160,9 +198,12 @@ class _ReferAndEarnScreenState extends State<ReferAndEarnScreen> {
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator(color: Color(0xFF059669)))
-          : SingleChildScrollView(
+          : RefreshIndicator(
+              color: const Color(0xFF059669),
+              onRefresh: _loadReferralData,
+              child: SingleChildScrollView(
               padding: const EdgeInsets.fromLTRB(14, 12, 14, 16),
-              physics: const BouncingScrollPhysics(),
+              physics: const BouncingScrollPhysics(parent: AlwaysScrollableScrollPhysics()),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
@@ -203,11 +244,12 @@ class _ReferAndEarnScreenState extends State<ReferAndEarnScreen> {
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   Text(
-                                    'Invite Merchants • Get ${RemoteConfigService.instance.referralRewardDays} Days Free PRO',
+                                    'Invite Merchants • Get +$_referrerDays Days Free PRO',
                                     style: GoogleFonts.outfit(fontSize: 14.5, fontWeight: FontWeight.w800, color: Colors.white),
                                   ),
                                   Text(
-                                    'When referred store starts billing, you earn ${RemoteConfigService.instance.referralRewardDays} days of PRO.',
+                                    'Every store that joins with your code adds $_referrerDays days to your PRO. '
+                                    'Your friend gets the 7-day trial + $_refereeDays bonus days.',
                                     style: GoogleFonts.inter(fontSize: 11, color: const Color(0xFF94A3B8)),
                                   ),
                                 ],
@@ -229,15 +271,19 @@ class _ReferAndEarnScreenState extends State<ReferAndEarnScreen> {
                             children: [
                               _buildMilestonePill('1', 'Share Code', Icons.share_rounded),
                               const Icon(Icons.arrow_forward_rounded, size: 14, color: Color(0xFF64748B)),
-                              _buildMilestonePill('2', 'Friend Bills', Icons.receipt_long_rounded),
+                              _buildMilestonePill('2', 'Friend Joins', Icons.storefront_rounded),
                               const Icon(Icons.arrow_forward_rounded, size: 14, color: Color(0xFF64748B)),
-                              _buildMilestonePill('3', '30d Free PRO', Icons.card_giftcard_rounded, isHighlight: true),
+                              _buildMilestonePill('3', '+${_referrerDays}d PRO', Icons.card_giftcard_rounded, isHighlight: true),
                             ],
                           ),
                         ),
                       ],
                     ),
                   ),
+                  const SizedBox(height: 10),
+
+                  // 1b. PRO VALIDITY COUNTER — moves as referral days land
+                  _buildValidityCard(),
                   const SizedBox(height: 10),
 
                   // 2. REFERRAL CODE & SHARING CARD
@@ -274,7 +320,7 @@ class _ReferAndEarnScreenState extends State<ReferAndEarnScreen> {
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
                               Text(
-                                _referralCode,
+                                _hasCode ? _referralCode : 'OFFLINE',
                                 style: GoogleFonts.spaceMono(
                                   fontSize: 18,
                                   fontWeight: FontWeight.w800,
@@ -354,7 +400,7 @@ class _ReferAndEarnScreenState extends State<ReferAndEarnScreen> {
                     children: [
                       Expanded(child: _buildCompactStat('👥 Invited', '${_stats.totalInvited}', 'Merchants')),
                       const SizedBox(width: 8),
-                      Expanded(child: _buildCompactStat('⚡ Active', '${_stats.storesActivated}', 'Stores Billing')),
+                      Expanded(child: _buildCompactStat('⚡ Joined', '${_stats.storesActivated}', 'With Your Code')),
                       const SizedBox(width: 8),
                       Expanded(child: _buildCompactStat('🎁 Earned', '${_stats.freeDaysEarned}d', 'Free PRO Days', isGold: true)),
                     ],
@@ -383,7 +429,7 @@ class _ReferAndEarnScreenState extends State<ReferAndEarnScreen> {
                               ),
                               const Spacer(),
                               Text(
-                                'GET 30 DAYS FREE',
+                                'GET +$_refereeDays DAYS FREE',
                                 style: GoogleFonts.inter(fontSize: 9, fontWeight: FontWeight.w800, color: const Color(0xFFB45309)),
                               ),
                             ],
@@ -399,7 +445,7 @@ class _ReferAndEarnScreenState extends State<ReferAndEarnScreen> {
                                     textCapitalization: TextCapitalization.characters,
                                     style: GoogleFonts.spaceMono(fontSize: 13, fontWeight: FontWeight.w700),
                                     decoration: InputDecoration(
-                                      hintText: 'Enter friend\'s code (e.g. KAMAI99)',
+                                      hintText: 'Enter friend\'s code (e.g. KAMAI7XK2)',
                                       hintStyle: GoogleFonts.inter(fontSize: 11, color: const Color(0xFF94A3B8)),
                                       filled: true,
                                       fillColor: Colors.white,
@@ -432,6 +478,13 @@ class _ReferAndEarnScreenState extends State<ReferAndEarnScreen> {
                         ],
                       ),
                     ),
+                    if (_stats.pendingReferralCode != null) ...[
+                      const SizedBox(height: 8),
+                      Text(
+                        'Code "${_stats.pendingReferralCode}" will be claimed automatically when you are online.',
+                        style: GoogleFonts.inter(fontSize: 10.5, fontWeight: FontWeight.w600, color: const Color(0xFF92400E)),
+                      ),
+                    ],
                   ] else ...[
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
@@ -446,7 +499,7 @@ class _ReferAndEarnScreenState extends State<ReferAndEarnScreen> {
                           const SizedBox(width: 6),
                           Expanded(
                             child: Text(
-                              'Referral Code "${_stats.appliedReferralCode}" applied • ${RemoteConfigService.instance.referralRewardDays} Days Free PRO Unlocked',
+                              'Referral Code "${_stats.appliedReferralCode}" applied • +$_refereeDays days bonus added to your PRO',
                               style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w700, color: const Color(0xFF065F46)),
                             ),
                           ),
@@ -457,6 +510,63 @@ class _ReferAndEarnScreenState extends State<ReferAndEarnScreen> {
                 ],
               ),
             ),
+            ),
+    );
+  }
+
+  /// Live countdown of the merchant's Pro time. Referral days — both the
+  /// bonus for joining and the reward for inviting — land in `pro_expiry`,
+  /// so this is where a merchant sees them arrive.
+  Widget _buildValidityCard() {
+    final expiry = _profile.isProEffective ? _profile.proExpiryDate : null;
+    final left = expiry?.difference(DateTime.now());
+    final active = left != null && !left.isNegative;
+    final String title;
+    if (!_profile.isProEffective) {
+      title = 'PRO not active';
+    } else if (expiry == null) {
+      title = 'PRO active';
+    } else {
+      title = '${_profile.isPaidPlan ? 'PRO plan' : 'Free PRO'} valid till ${DateFormat('d MMM yyyy').format(expiry)}';
+    }
+    String two(int n) => n.toString().padLeft(2, '0');
+    final countdown = active
+        ? '${left.inDays}d ${two(left.inHours % 24)}:${two(left.inMinutes % 60)}:${two(left.inSeconds % 60)} left'
+        : (_profile.isProEffective ? 'No expiry' : 'Invite friends to earn free PRO days');
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: active ? const Color(0xFFECFDF5) : Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: active ? const Color(0xFFA7F3D0) : const Color(0xFFE2E8F0)),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.timer_outlined, size: 20, color: active ? const Color(0xFF059669) : const Color(0xFF94A3B8)),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: GoogleFonts.outfit(fontSize: 13, fontWeight: FontWeight.w800, color: const Color(0xFF0F172A)),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  countdown,
+                  style: GoogleFonts.jetBrainsMono(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    color: active ? const Color(0xFF047857) : const Color(0xFF64748B),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 

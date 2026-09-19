@@ -19,6 +19,8 @@ import 'services/home_widget_service.dart';
 import 'services/workmanager_sync_service.dart';
 import 'services/in_app_update_service.dart';
 import 'services/razorpay_service.dart';
+import 'services/referral_service.dart';
+import 'views/common/in_app_notification.dart';
 import 'views/splash/splash_screen.dart';
 import 'views/auth/login_screen.dart';
 import 'core/localization/app_language_service.dart';
@@ -167,6 +169,22 @@ void main() async {
   RazorpayService.instance.retryPendingVerification();
 
   runApp(const KamaiPlusApp());
+
+  // 10c. Finish a referral claim that could not reach the server yet — a code
+  // typed at signup while offline, or one "applied" by an older app version
+  // that only ever stored it on the phone. No-op when nothing is pending.
+  if (isLoggedIn) {
+    ReferralService.instance.redeemPendingReferral().then((result) {
+      if (result == null || result.retryable) return;
+      if (result.success) {
+        InAppNotification.show(
+          message: result.message,
+          customIcon: Icons.card_giftcard_rounded,
+          customColor: const Color(0xFF059669),
+        );
+      }
+    }).catchError((Object e) => debugPrint('Pending referral notice: $e'));
+  }
 }
 
 class KamaiPlusApp extends StatelessWidget {

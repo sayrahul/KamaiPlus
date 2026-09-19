@@ -72,14 +72,30 @@ class _ProUpgradeModalState extends State<ProUpgradeModal> {
     }
   }
 
-  bool get _isTrialActive {
-    if (!_profile.isProEffective) return false;
-    return _profile.proPlan == 'trial' || _profile.razorpayPaymentId == 'free_trial_7d';
-  }
+  /// Free Pro is running — the 7-day trial, or trial time extended by Refer
+  /// & Earn days. The countdown card used to appear only for plan 'trial',
+  /// so the moment referral days landed (plan 'referral_bonus') the counter
+  /// vanished instead of showing the longer time.
+  bool get _isTrialActive => _profile.isTrialActive;
 
   bool get _isTrialExpired {
     if (_profile.isProEffective) return false;
-    return _profile.proPlan == 'trial' || _profile.razorpayPaymentId == 'free_trial_7d';
+    return _profile.proPlan == 'trial' ||
+        _profile.proPlan == 'referral_bonus' ||
+        _profile.razorpayPaymentId == 'free_trial_7d';
+  }
+
+  bool get _hasReferralDays =>
+      _profile.proPlan == 'referral_bonus' || _profile.razorpayPaymentId.startsWith('ref_');
+
+  /// Total free days granted: from the trial start to the current expiry
+  /// (7 for the plain trial, 7 + 15 for a referred store, more per invite).
+  int get _freeProTotalDays {
+    final exp = _profile.proExpiryDate;
+    final start = DateTime.tryParse(_profile.trialStartedAt.trim());
+    if (exp == null) return 7;
+    if (start == null) return (_trialRemainingDuration.inHours / 24).ceil();
+    return (exp.difference(start).inHours / 24).round();
   }
 
   Duration get _trialRemainingDuration {
@@ -1795,7 +1811,7 @@ class _ProUpgradeModalState extends State<ProUpgradeModal> {
                     ),
                     const SizedBox(width: 5),
                     Text(
-                      'ACTIVE TRIAL',
+                      _hasReferralDays ? 'REFERRAL BONUS' : 'ACTIVE TRIAL',
                       style: GoogleFonts.jetBrainsMono(
                         fontSize: 9.5,
                         fontWeight: FontWeight.w800,
@@ -1820,7 +1836,9 @@ class _ProUpgradeModalState extends State<ProUpgradeModal> {
           ),
           const SizedBox(height: 2),
           Text(
-            'You got 7 Days Free Pro Membership!',
+            _hasReferralDays
+                ? 'You have $_freeProTotalDays Days Free Pro (trial + referral days)!'
+                : 'You got 7 Days Free Pro Membership!',
             style: GoogleFonts.outfit(
               fontSize: 15,
               fontWeight: FontWeight.w800,
@@ -1845,7 +1863,7 @@ class _ProUpgradeModalState extends State<ProUpgradeModal> {
                     const Icon(Icons.timer_outlined, size: 12, color: Color(0xFF34D399)),
                     const SizedBox(width: 5),
                     Text(
-                      'TRIAL VALIDITY REMAINING',
+                      'FREE PRO VALIDITY REMAINING',
                       style: GoogleFonts.outfit(
                         fontSize: 9.5,
                         fontWeight: FontWeight.w800,
